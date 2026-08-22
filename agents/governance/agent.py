@@ -12,12 +12,11 @@ Governance -> Security -> Governance -> Action (v0.31 strict relay;
 see §3.2 worked example).
 On a Security "Red", loops back to Analytics for revision (§4, §5.1).
 
-v0.32 — Action failures report to Governance (never Sensory; see
-revision notes). Governance retries directly for early failures — it
-commanded the action, so it owns the immediate "try again" call — but
-hands off to Analytics once the failure threshold is reached, so
-Analytics' ownership of loop detection (§5.4/§5.7) is preserved rather
-than Governance silently retrying forever.
+v0.33 — Action failures are reported to Governance. Governance's response
+is deterministic: issue a Prompt action explaining the failure to the
+human. No retry loops, no Analytics escalation, no threshold counting.
+This is the built-in fallback protocol: when execution fails, explain
+why via Prompt (§5.7 v0.33).
 """
 from __future__ import annotations
 
@@ -116,31 +115,23 @@ class GovernanceMock:
         )
         self.bus.publish("events.action", out)
 
-    # ---- v0.32: Action reports a failure directly to Governance -----------
+    # ---- v0.33: Action reports a failure directly to Governance -----------
 
     def _handle_action_failure(self, envelope: Envelope) -> None:
-        if envelope.meta.get("loop_threshold_reached"):
-            # §5.4/§5.7: threshold reached — defer to Analytics, which owns
-            # loop detection and graceful degradation. Governance does not
-            # retry again itself; this is deliberately terminal for the mock.
-            out = envelope.reply(
-                source="Governance",
-                destination="Analytics",
-                type="LoopCheck",
-                content=(f"Action failed {envelope.meta.get('consecutive_failures')} times "
-                         f"in a row for: '{envelope.content}'. Recommend graceful degradation."),
-            )
-            self.bus.publish("events.analytics", out)
-            return
-
-        # Early failure: Governance commanded the action, so it owns the
-        # immediate "try again" call (§5.7's "fall back" in spirit — Phase 0
-        # mock just re-attempts the same content).
+        """
+        Action failed. Governance's fallback protocol: issue a Prompt action
+        instead, letting the persona explain the failure to the human.
+        
+        No retry logic, no Analytics escalation, no threshold counting.
+        This is the built-in answer: when execution fails, ask the persona
+        to tell the human what happened (§5.7 v0.33).
+        """
         out = envelope.reply(
             source="Governance",
             destination="Action",
-            type="Speech",
-            content=envelope.content,
-            meta={"fallback_attempt": envelope.meta.get("consecutive_failures")},
+            type="Prompt",
+            content=(f"The previous action failed. Explain to the human what "
+                     f"was attempted and why it didn't work. "
+                     f"Original request: '{envelope.content}'"),
         )
         self.bus.publish("events.action", out)

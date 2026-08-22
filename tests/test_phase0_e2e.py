@@ -245,54 +245,62 @@ class TestActionFailureHandling:
     retrying again — preserving Analytics' ownership of loop detection
     (§5.4/§5.7) rather than Governance silently retrying forever."""
 
-    def test_single_failure_retried_by_governance_then_succeeds(self, tmp_path):
+    def test_action_failure_triggers_governance_prompt_fallback(self, tmp_path):
+        """v0.33: Action fails → Governance immediately issues Prompt action."""
         manifest_path = _manifest_with_temp_storage(tmp_path)
         eco = Recovery(str(manifest_path)).bootstrap()
         eco.bus.reset_trace()
 
-        eco.action.force_next_failures = 1  # first attempt fails, retry succeeds
+        # Force Action to fail
+        eco.action.force_next_failures = 1
         event_id = eco.sensory.ingest("hello", source_type="prompt")
 
         hops = [(env.source, env.destination, env.type)
                 for env in eco.bus.trace() if env.event_id == event_id]
-        # ...Governance -> Action (1st attempt, fails) -> Action -> Governance
-        # (Failure) -> Governance -> Action (retry, succeeds, silent) -> end.
+
+        # Verify the happy path up to Action
+        assert ("Sensory", "Impulse", "prompt") in hops
+        assert ("Impulse", "Governance", "prompt") in hops
+        assert ("Governance", "Analytics", "Evaluate") in hops
+        assert ("Analytics", "Intent", "Recommend") in hops
+        assert ("Intent", "Governance", "Advise") in hops
+        assert ("Governance", "Security", "Clear") in hops
+        assert ("Security", "Governance", "Verdict") in hops
+
+        # Verify the failure path: Action fails, Governance issues Prompt fallback
+        assert ("Governance", "Action", "Speech") in hops
         assert ("Action", "Governance", "Failure") in hops
-        assert hops.count(("Governance", "Action", "Speech")) == 2  # original + retry
-        # Never touches Sensory at any point in a failure/retry chain.
-        assert all(dst != "Sensory" for _, dst, _ in hops)
+        assert ("Governance", "Action", "Prompt") in hops  # v0.33: deterministic fallback
 
-    def test_failure_never_reaches_sensory_even_at_threshold(self, tmp_path):
+        # Prompt is the last action (no escalation to Analytics)
+        prompt_hops = [hop for hop in hops if hop == ("Governance", "Action", "Prompt")]
+        assert len(prompt_hops) == 1
+
+        # Verify no LoopCheck (that was v0.32; removed in v0.33)
+        assert ("Governance", "Analytics", "LoopCheck") not in hops
+
+        # Verify no retry loop (v0.33 eliminates retries)
+        speech_hops = [hop for hop in hops if hop == ("Governance", "Action", "Speech")]
+        assert len(speech_hops) == 1  # Only one Speech action (the original attempt)
+
+    def test_failure_never_reaches_sensory_even_with_prompt_fallback(self, tmp_path):
+        """v0.33: Failure hops directly to Governance, never via Sensory proprioception."""
         manifest_path = _manifest_with_temp_storage(tmp_path)
         eco = Recovery(str(manifest_path)).bootstrap()
         eco.bus.reset_trace()
 
-        eco.action.force_next_failures = 5  # exceed the loop threshold (3)
+        eco.action.force_next_failures = 1
         event_id = eco.sensory.ingest("hello", source_type="prompt")
 
-        hops = [env for env in eco.bus.trace() if env.event_id == event_id]
-        assert all(env.destination != "Sensory" for env in hops)
-        assert all(env.source != "Action" or env.destination != "Sensory" for env in hops)
+        all_hops = eco.bus.trace()
 
-    def test_loop_threshold_hands_off_to_analytics_not_infinite_retry(self, tmp_path):
-        manifest_path = _manifest_with_temp_storage(tmp_path)
-        eco = Recovery(str(manifest_path)).bootstrap()
-        eco.bus.reset_trace()
+        # Find all Sensory events for this event_id
+        sensory_hops = [env for env in all_hops
+                        if env.event_id == event_id and env.source == "Sensory"]
 
-        eco.action.force_next_failures = 10  # far more than the threshold
-        event_id = eco.sensory.ingest("hello", source_type="prompt")
-
-        hops = [(env.source, env.destination, env.type)
-                for env in eco.bus.trace() if env.event_id == event_id]
-
-        # Exactly 3 failure reports (the threshold), not 10 — Governance
-        # stops retrying once it defers to Analytics, proving this
-        # terminates rather than looping indefinitely.
-        assert hops.count(("Action", "Governance", "Failure")) == 3
-        assert ("Governance", "Analytics", "LoopCheck") in hops
-        # Nothing follows the LoopCheck hop — Analytics' mock is terminal.
-        loop_check_index = hops.index(("Governance", "Analytics", "LoopCheck"))
-        assert loop_check_index == len(hops) - 1
+        # Only one: the original ingest (not a failure re-entry)
+        assert len(sensory_hops) == 1
+        assert sensory_hops[0].type == "prompt"  # original input
 
 
 if __name__ == "__main__":
