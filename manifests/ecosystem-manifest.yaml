@@ -1,4 +1,4 @@
-# ECI-CAS ecosystem manifest — ECI-spec-v0-31.md §10
+# ECI-CAS ecosystem manifest — ECI-spec-v0-32.md §10
 #
 # Phase 0: queue topology validation, 7 mocks + 1 real (Sensory), §13.1.
 # Zero LLM cost — no cognitive-tier role makes a real model call this phase.
@@ -7,7 +7,7 @@
 # between phases (§14) — nothing in Governance, the bus, or this schema
 # changes.
 
-version: "0.31"
+version: "0.32"
 ecosystem_name: "eci-cas-prototype"
 phase: 0                              # 0=mockup, 1=real N=1, 2=N=2, 3=N>=3 multi-substrate
 

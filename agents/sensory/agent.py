@@ -13,10 +13,14 @@ Two roles:
      into Governance; this gives Impulse first look at every input,
      including from future non-text modalities (e.g. a vision agent
      that can itself flag danger), before Governance ever sees it.
-  2. Bus re-entry point — subscribed to events.sensory, which is where
-     Action's outcomes re-enter (proprioception, §4), where feedback
-     signals are ingested (§4.1), and where Recovery's synthetic
-     BootCheck / SystemCheck pings arrive (§9).
+  2. Bus re-entry point — subscribed to events.sensory, kept for
+     protocol completeness (§3's topic list) and any future external
+     source that publishes directly onto the bus rather than calling
+     ingest(). v0.32: Action's outcomes no longer route here (see
+     revision notes) — a failed action reports straight to Governance,
+     which commanded it and owns deciding what happens next; a
+     successful action is silent. This topic is currently a no-op in
+     Phase 0's flow.
 
 Severity (v0.31): Sensory may tag incoming content with a severity from
 the start of the chain (e.g. a vision-modality agent flagging danger).
@@ -79,9 +83,9 @@ class Sensory:
         return eid
 
     def on_reentry(self, envelope: Envelope) -> None:
-        """Bus re-entry: Action outcomes (proprioception), Recovery pings,
-        or feedback signals landing on events.sensory. Phase 0 mock
-        behavior: log-only (already logged by the bus's Archive
-        write-through) — no further fan-out, since an Action outcome is
-        an end-state, not a new prompt requiring a fresh pipeline run."""
+        """v0.32: no-op. events.sensory currently has no real publisher —
+        Action no longer reports here (see revision notes). Kept as a
+        subscribed no-op for protocol completeness and forward
+        compatibility with a future external source publishing directly
+        onto the bus, rather than removing the topic outright."""
         pass

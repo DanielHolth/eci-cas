@@ -44,6 +44,10 @@ class AnalyticsMock:
         return list(self._history).count(content)
 
     def on_event(self, envelope: Envelope) -> None:
+        if envelope.type == "LoopCheck":
+            self._handle_loop_check(envelope)
+            return
+
         content = str(envelope.content)
         self._history.append(content)
 
@@ -60,3 +64,13 @@ class AnalyticsMock:
             triggered_by=envelope.triggered_by,
         )
         self.bus.publish("events.intent", out)
+
+    def _handle_loop_check(self, envelope: Envelope) -> None:
+        """v0.32 — Governance defers here once Action's failure count hits
+        the loop threshold (§5.4/§5.7). Deliberately terminal for the
+        Phase 0 mock: acknowledges and stops, no further publish anywhere.
+        Real graceful-degradation logic (e.g. switch to a text/display
+        fallback action) arrives when this mock is replaced with a live
+        agent per §13.4 — for now this just proves the handoff exists and
+        that a repeated failure doesn't retry forever."""
+        pass

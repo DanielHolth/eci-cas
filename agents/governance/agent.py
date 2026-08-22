@@ -9,8 +9,15 @@ correlation is event_id, carried transparently by Envelope.reply().
 
 Routes: Sensory -> Impulse -> Governance -> Analytics -> Intent ->
 Governance -> Security -> Governance -> Action (v0.31 strict relay;
-see §3.2 worked example, updated in the v0.31 revision).
+see §3.2 worked example).
 On a Security "Red", loops back to Analytics for revision (§4, §5.1).
+
+v0.32 — Action failures report to Governance (never Sensory; see
+revision notes). Governance retries directly for early failures — it
+commanded the action, so it owns the immediate "try again" call — but
+hands off to Analytics once the failure threshold is reached, so
+Analytics' ownership of loop detection (§5.4/§5.7) is preserved rather
+than Governance silently retrying forever.
 """
 from __future__ import annotations
 
@@ -53,6 +60,8 @@ class GovernanceMock:
             self._route_to_security(envelope)
         elif src == "Security":
             self._route_on_security_verdict(envelope)
+        elif src == "Action":
+            self._handle_action_failure(envelope)
         else:
             # Recovery synthetic pings / unexpected sources: log-only mock behavior.
             pass
@@ -107,37 +116,31 @@ class GovernanceMock:
         )
         self.bus.publish("events.action", out)
 
-    # ---- Step 3: Intent's advice comes back to Governance -> Security -----
+    # ---- v0.32: Action reports a failure directly to Governance -----------
 
-    def _route_to_security(self, envelope: Envelope) -> None:
-        out = envelope.reply(
-            source="Governance",
-            destination="Security",
-            type="Clear",
-            content=envelope.content,
-            meta=envelope.meta,   # carry Intent's proposed_action through to Security's verdict
-        )
-        self.bus.publish("events.security", out)
-
-    # ---- Step 5: Security's verdict comes back to Governance --------------
-
-    def _route_on_security_verdict(self, envelope: Envelope) -> None:
-        verdict = str(envelope.content)
-        if verdict.strip().lower().startswith("red"):
-            # Hard "No" -> loop back to Analytics for a revised course (§4, §5.1)
+    def _handle_action_failure(self, envelope: Envelope) -> None:
+        if envelope.meta.get("loop_threshold_reached"):
+            # §5.4/§5.7: threshold reached — defer to Analytics, which owns
+            # loop detection and graceful degradation. Governance does not
+            # retry again itself; this is deliberately terminal for the mock.
             out = envelope.reply(
                 source="Governance",
                 destination="Analytics",
-                type="Revise",
-                content="Security blocked the prior course. Propose a revised response.",
+                type="LoopCheck",
+                content=(f"Action failed {envelope.meta.get('consecutive_failures')} times "
+                         f"in a row for: '{envelope.content}'. Recommend graceful degradation."),
             )
             self.bus.publish("events.analytics", out)
             return
 
+        # Early failure: Governance commanded the action, so it owns the
+        # immediate "try again" call (§5.7's "fall back" in spirit — Phase 0
+        # mock just re-attempts the same content).
         out = envelope.reply(
             source="Governance",
             destination="Action",
             type="Speech",
-            content=envelope.meta.get("proposed_action", envelope.content),
+            content=envelope.content,
+            meta={"fallback_attempt": envelope.meta.get("consecutive_failures")},
         )
         self.bus.publish("events.action", out)
