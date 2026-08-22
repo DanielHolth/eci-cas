@@ -1,15 +1,20 @@
-# ECI-CAS ecosystem manifest — ECI-spec-v0-32.md §10
+# ECI-CAS ecosystem manifest — ECI-spec-v0-34 §10
 #
-# Phase 0: queue topology validation, 7 mocks + 1 real (Sensory), §13.1.
-# Zero LLM cost — no cognitive-tier role makes a real model call this phase.
+# Phase 0.1: 6 mocks + 2 real (Sensory, Governance). Governance is the
+# first mock replaced (§13.4's replacement sequence) — and the exercise
+# established that the role needs no model at all, so it is real and
+# DETERMINISTIC. See docs/ECI-spec-revisions-v0-34.md.
+#
+# The cognitive tier is therefore exactly Analytics and Intent. The
+# substrates table below is declared and credential-checked, but nothing
+# consumes it until Phase 0.2 puts Analytics on it.
 #
 # Only phase, roles.*.mock, storage.profile, and intent.nodes change
-# between phases (§14) — nothing in Governance, the bus, or this schema
-# changes.
+# between phases (§14) — nothing in the bus or this schema changes.
 
-version: "0.32"
+version: "0.34"
 ecosystem_name: "eci-cas-prototype"
-phase: 0                              # 0=mockup, 1=real N=1, 2=N=2, 3=N>=3 multi-substrate
+phase: 0.1                            # 0=mockup, 0.1=real Governance, 1=real N=1, 2=N=2, 3=N>=3
 
 infrastructure:
   deployment_mode: "local-process"    # local-process | docker-nested | azure-bicep
@@ -31,15 +36,57 @@ message_bus:
   type: "embedded-pubsub"             # in-memory for POC
   topics: [ events.*, system.diagnostic, system.control ]
 
-# Substrate classes -> vendor mapping, ONE place (§10.2). Not used in
-# Phase 0 (zero LLM calls). Phase 1 recommendation: a single cheap
-# substrate for both cognitive-tier classes, since Phase 1 mandates
-# "single class for all cognitive roles" anyway (§14) — no diversity
-# decision to make until Phase 3.
+# Substrate classes -> vendor mapping, ONE place (§10.2). Agents ask for
+# a CLASS; only this table knows the vendor. Swapping providers, models
+# or endpoints is a change here and nowhere else.
+#
+#   provider     registry key or alias — anthropic | openai | groq |
+#                together | mistral | openrouter | vllm | ollama |
+#                lmstudio | echo  (see substrates/registry.py)
+#   model        vendor model id, recorded as the forensic source_model (§7.4)
+#   api_key_env  env var holding the credential; null for keyless local
+#                endpoints, which must then set base_url
+#   base_url     override endpoint — gateways, self-hosted, local runtimes
+#   max_tokens   ceiling per call
+#
+# Phase 1 mandates a single class for all cognitive roles (§14), so all
+# three point at the same cheap model for now; real diversity arrives at
+# Phase 3 (§7.5) as a one-line change here.
 substrates:
-  fast-reflex:     { model: "claude-haiku-4-5-20251001", notes: "live duty: concise, cheap, low-latency" }
-  deep-reasoning:  { model: "claude-haiku-4-5-20251001", notes: "Phase 1: same as fast-reflex (single-class rule, §14). Revisit at Phase 3." }
-  orthogonal:      { model: "claude-haiku-4-5-20251001", notes: "unused until Phase 3 multi-substrate diversity, §7.5" }
+  fast-reflex:
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 512
+    notes: "live duty: concise, cheap, low-latency"
+  deep-reasoning:
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 1024
+    notes: "Phase 1: same as fast-reflex (single-class rule, §14). Revisit at Phase 3."
+  orthogonal:
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 1024
+    notes: "unused until Phase 3 multi-substrate diversity, §7.5"
+
+  # Worked examples of the same contract pointed elsewhere — swap a class
+  # above to one of these shapes to change vendor with no code change.
+  #
+  # openai-example:
+  #   provider: "openai"
+  #   model: "gpt-4o-mini"
+  #   api_key_env: "OPENAI_API_KEY"
+  # local-example:                    # Ollama / LM Studio / vLLM
+  #   provider: "ollama"
+  #   model: "llama3.1:8b"
+  #   api_key_env: null               # keyless, so base_url is mandatory
+  #   base_url: "http://localhost:11434/v1"
+  # offline-example:
+  #   provider: "echo"                # no network, no cost; exercises fallbacks
+  #   model: "none"
 
 roles:
   # Deterministic tier — native code (mock: true in Phase 0)
@@ -51,18 +98,18 @@ roles:
   action:    { tier: deterministic, mock: true }
   archive:   { tier: deterministic, mock: true }
 
-  # Cognitive tier — LLM-backed (mock: true in Phase 0; templated responses, zero LLM cost)
+  # Governance — deterministic dispatcher, always real (v0.34). No
+  # substrate, no temperature, no system_instruction: there is no model to
+  # instruct. Every hop is settled by the envelope, and a verdict that
+  # cannot be read goes to Analytics rather than to a model in the router
+  # seat. `mock` is ignored, as it is for Sensory.
   governance:
-    tier: cognitive
-    mock: true
-    substrate: "fast-reflex"
-    temperature: 0.0
+    tier: deterministic
+    mock: false
     context_strategy: "per_event_statutory_reset"
-    system_instruction: |
-      You are GOVERNANCE, the non-thinking backbone and routing engine.
-      NEVER generate opinions, personal answers, or explanations.
-      Route Sensory + Impulse -> Analytics -> Intent -> Security -> Action.
-      If Security responds 'Red', return payload to Analytics for revision.
+
+  # Cognitive tier — LLM-backed. Both still mocked (zero LLM cost) until
+  # §13.4 reaches them; Analytics is next.
   analytics:
     tier: cognitive
     mock: true

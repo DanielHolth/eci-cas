@@ -32,7 +32,7 @@ from bus.pubsub import EmbeddedBus
 from agents.archive.store import ArchiveStore
 from agents.sensory.agent import Sensory
 from agents.impulse.agent import ImpulseMock
-from agents.governance.agent import GovernanceMock
+from agents.governance.agent import Governance
 from agents.analytics.agent import AnalyticsMock
 from agents.intent.agent import IntentMock
 from agents.security.agent import SecurityMock
@@ -54,7 +54,7 @@ class Ecosystem:
     archive: ArchiveStore
     sensory: Sensory
     impulse: ImpulseMock
-    governance: GovernanceMock
+    governance: Governance
     analytics: AnalyticsMock
     intent: IntentMock
     security: SecurityMock
@@ -116,8 +116,10 @@ class Recovery:
         security = SecurityMock(bus)
         action = ActionMock(bus)
 
-        # Step 4: cognitive hydration — register Intent nodes from manifest
-        governance = GovernanceMock(bus)
+        # Step 4: cognitive hydration — load system instructions and resolve
+        # substrate classes for any cognitive role running real, then
+        # register Intent nodes from the manifest.
+        governance = self._provision_governance(bus, manifest)
         analytics = AnalyticsMock(bus)
 
         intent_cfg = roles["intent"]
@@ -131,8 +133,9 @@ class Recovery:
         batch_size = intent_cfg.get("rotation", {}).get("batch_size_events", 25)
         intent = IntentMock(bus, archive, node_id=nodes[0]["id"], batch_size=batch_size)
 
-        print(f"[recovery] provisioned 7 mocks + 1 real (Sensory), "
-              f"Intent node '{nodes[0]['id']}' registered")
+        real_roles = ["Sensory", "Governance"]
+        print(f"[recovery] provisioned {8 - len(real_roles)} mocks + {len(real_roles)} real "
+              f"({', '.join(real_roles)}), Intent node '{nodes[0]['id']}' registered")
 
         # Step 5: bus binding — done (constructors above subscribed to
         # their topics). Watchdog begins passively listening now.
@@ -155,6 +158,34 @@ class Recovery:
             impulse=impulse, governance=governance, analytics=analytics,
             intent=intent, security=security, action=action, watchdog=watchdog,
         )
+
+    # ---- §9.1 step 4: cognitive hydration ---------------------------------
+
+    def _provision_governance(self, bus: EmbeddedBus,
+                              manifest: Dict[str, Any]) -> Governance:
+        """Governance is always real, and always deterministic (v0.34).
+
+        There is one implementation, so `roles.governance.mock` has
+        nothing to select between — same situation as Sensory (§13.1),
+        and handled the same way: warn and ignore rather than pretend the
+        flag does something.
+
+        No substrate is resolved and no credentials are checked, because
+        Governance holds no substrate at all. Recovery's zero-LLM-
+        dependency guarantee (§9) is now trivially true for this role
+        rather than carefully arranged."""
+        role_config = manifest.get("roles", {}).get("governance", {}) or {}
+
+        if role_config.get("mock") is True:
+            print("[recovery] WARNING: manifest marks governance as mocked, but "
+                  "Governance is deterministic and always real per v0.34 — ignoring.")
+        if role_config.get("substrate"):
+            print(f"[recovery] NOTE: manifest assigns governance the substrate class "
+                  f"'{role_config['substrate']}', which is unused — Governance makes "
+                  f"no model calls (v0.34).")
+
+        print("[recovery] governance: deterministic dispatcher (no substrate)")
+        return Governance(bus)
 
     def _health_check(self, bus: EmbeddedBus, sensory: Sensory) -> None:
         received: Dict[str, bool] = {"ok": False}

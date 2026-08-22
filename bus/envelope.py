@@ -50,6 +50,27 @@ def severity_max(a: str, b: str) -> str:
     return a if severity_rank(a) >= severity_rank(b) else b
 
 
+# Security verdict scale (v0.34) — a closed enum, carried as
+# `meta.verdict`, NOT free text. Security is a deterministic rule engine
+# (§5.6); its verdict is data, and Governance dispatches on it without
+# interpreting anything.
+#
+#   green   cleared by rule            -> release to Action
+#   yellow  the rules do not cover it  -> Analytics decides
+#   red     blocked by rule            -> Analytics revises
+#
+# The yellow lane is the point of the enum. Before v0.34 an unreadable
+# verdict left Governance guessing, and its deterministic fallback
+# released — fail-OPEN on the safety path. Now doubt is a value Security
+# can state, and every value that is not `green` routes to the agent that
+# reasons. Anything unrecognised, absent or malformed is treated as
+# yellow, so the failure mode is fail-SAFE by construction.
+VERDICT_GREEN = "green"
+VERDICT_YELLOW = "yellow"
+VERDICT_RED = "red"
+VERDICT_LEVELS = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED]
+
+
 @dataclass
 class Envelope:
     source: str

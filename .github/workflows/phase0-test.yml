@@ -1,9 +1,16 @@
-name: Phase 0 tests
+name: Tests
 
-# Runs the §13.3 exit-criteria suite on every push/PR to main.
-# Fast and cheap by design: Phase 0 makes zero LLM calls and the whole
-# harness runs fully offline once dependencies are installed (embedded
-# pub-sub bus + JSON-files-on-disk Archive, no network needed).
+# Runs the offline suites on every push/PR to main.
+#
+# Fast and cheap by design, and still true at Phase 0.1: the whole
+# harness runs fully offline with no API key and no vendor SDK
+# installed. The Phase 0 exit-criteria suite is pinned to the
+# deterministic tier, and the Phase 0.1 suite drives the live agent
+# through a scripted provider registered into the real substrate
+# registry.
+#
+# The @pytest.mark.live tests hit a real endpoint and are skipped here —
+# they need ECI_LIVE_TESTS=1 plus credentials, and cost money.
 
 on:
   push:
@@ -25,5 +32,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Phase 0 test suite
+      - name: Run test suite (offline)
         run: pytest tests/ -v
+
+      - name: Verify the zero-cost posture still bootstraps
+        run: |
+          python - <<'PY'
+          import yaml, tempfile, os, subprocess, sys
+          m = yaml.safe_load(open("manifests/ecosystem-manifest.yaml"))
+          m["roles"]["governance"]["mock"] = True
+          m["storage"]["root"] = tempfile.mkdtemp()
+          path = os.path.join(tempfile.mkdtemp(), "m.yaml")
+          yaml.safe_dump(m, open(path, "w"))
+          sys.exit(subprocess.run(
+              ["python", "-m", "recovery.bootstrap", "--manifest", path]).returncode)
+          PY

@@ -30,7 +30,15 @@ PROMPT = "Hello there, are you awake?"
 
 def _manifest_with_temp_storage(tmp_path: Path) -> Path:
     """Copy the real manifest but point storage.root at a temp dir, so
-    repeated test runs don't pollute (or depend on) data/archive/."""
+    repeated test runs don't pollute (or depend on) data/archive/.
+
+    v0.34 note — this suite needs no tier pinning any more. Every role in
+    the pipeline is deterministic in Phase 0.1 (Governance included, see
+    docs/ECI-spec-revisions-v0-34.md), so "identical queue traces across
+    two cold bootstraps" is a property of the shipped configuration rather
+    than of a test-only setting. These stay as the permanent topology
+    regression suite.
+    """
     with open(MANIFEST_PATH) as f:
         manifest = yaml.safe_load(f)
     manifest["storage"]["root"] = str(tmp_path / "archive")
