@@ -1,5 +1,5 @@
 """
-Phase 0 test harness — ECI-spec-v0-30.md §13.3.
+Phase 0 test harness — ECI-spec-v0-31.md §13.3.
 
 Exit criteria (quoted from the spec):
     "the full worked example of §3.2 is reproducible from a cold Recovery
@@ -69,17 +69,15 @@ class TestPhase0ExitCriteria:
         assert eco.watchdog.level2_fired is False
 
     def test_worked_example_traverses_full_pipeline(self, tmp_path):
-        """§3.2 — Sensory+Impulse -> Governance -> Analytics -> Intent ->
-        Governance -> Security -> Governance -> Action -> Sensory."""
+        """§3.2 (v0.31) — Sensory -> Impulse -> Governance -> Analytics ->
+        Intent -> Governance -> Security -> Governance -> Action -> Sensory.
+        Strict relay: Impulse is the sole trigger into Governance."""
         manifest_path = _manifest_with_temp_storage(tmp_path)
         eco, event_id = _run_worked_example(manifest_path)
 
         hops = [(env.source, env.destination) for env in eco.bus.trace() if env.event_id == event_id]
-        # Sensory fans out to Impulse and Governance in parallel (§3.2),
-        # so both legitimately appear as separate hops; the rest of the
-        # pipeline follows the worked example exactly.
         assert hops == [
-            ("Sensory", "Impulse"), ("Impulse", "Governance"), ("Sensory", "Governance"),
+            ("Sensory", "Impulse"), ("Impulse", "Governance"),
             ("Governance", "Analytics"), ("Analytics", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"), ("Action", "Sensory"),
@@ -91,9 +89,8 @@ class TestPhase0ExitCriteria:
         eco, event_id = _run_worked_example(manifest_path)
 
         logged = eco.archive.query_queue(predicate=lambda r: r.get("event_id") == event_id)
-        # 10 business hops: Sensory->Impulse, Impulse->Governance,
-        # Sensory->Governance, ...through to Action->Sensory (proprioception).
-        assert len(logged) >= 10
+        # 9 business hops (v0.31 strict relay, see test_worked_example_traverses_full_pipeline).
+        assert len(logged) >= 9
 
     def test_impulse_vectors_present_in_working_tier(self, tmp_path):
         """§13.3 verify #2: Impulse vectors present in /archive/working/."""
@@ -179,6 +176,56 @@ class TestWatchdogEscalation:
         # Action bypassed: no Action hop for this diagnostic exchange.
         action_hops = [env for env in diag_trace if env.destination == "Action"]
         assert action_hops == []
+
+
+class TestSeverityEscalation:
+    """v0.31 — severity is OR-upscale-only along the chain: any agent may
+    raise it, none may lower a tag set upstream. Impulse's own assessment
+    is additionally guardrail-capped at 'Elevated' — internal drive-vector
+    state alone can never manufacture a 'Critical' escalation; only an
+    external signal via Sensory can set that tier."""
+
+    def _final_severity(self, eco, event_id: str) -> str:
+        # Severity propagates unchanged through every hop's reply() once
+        # Impulse sets it, so any downstream hop reflects the combined value.
+        action_hop = [env for env in eco.bus.trace()
+                      if env.event_id == event_id and env.source == "Action"][0]
+        return action_hop.severity
+
+    def test_critical_from_sensory_is_never_downscaled(self, tmp_path):
+        manifest_path = _manifest_with_temp_storage(tmp_path)
+        eco = Recovery(str(manifest_path)).bootstrap()
+        eco.bus.reset_trace()
+
+        # Impulse's own vectors are calm (default urgency=0.0), but Sensory
+        # flagged Critical (e.g. a hypothetical vision-modality danger tag).
+        event_id = eco.sensory.ingest("knife on counter", source_type="prompt",
+                                       severity="Critical")
+
+        assert self._final_severity(eco, event_id) == "Critical"
+
+    def test_impulse_upscales_neutral_to_elevated_on_high_urgency(self, tmp_path):
+        manifest_path = _manifest_with_temp_storage(tmp_path)
+        eco = Recovery(str(manifest_path)).bootstrap()
+        eco.bus.reset_trace()
+
+        eco.impulse.vectors["urgency"] = 0.9  # above URGENCY_ELEVATED_THRESHOLD
+        event_id = eco.sensory.ingest("hurry", source_type="prompt", severity="Neutral")
+
+        assert self._final_severity(eco, event_id) == "Elevated"
+
+    def test_impulse_cannot_reach_critical_from_vectors_alone(self, tmp_path):
+        """The guardrail: even at maximum urgency, Impulse's own assessment
+        is capped — it can raise Neutral to Elevated, never to Critical."""
+        manifest_path = _manifest_with_temp_storage(tmp_path)
+        eco = Recovery(str(manifest_path)).bootstrap()
+        eco.bus.reset_trace()
+
+        eco.impulse.vectors["urgency"] = 1.0  # maximum possible
+        event_id = eco.sensory.ingest("hurry", source_type="prompt", severity="Neutral")
+
+        assert self._final_severity(eco, event_id) == "Elevated"
+        assert self._final_severity(eco, event_id) != "Critical"
 
 
 if __name__ == "__main__":

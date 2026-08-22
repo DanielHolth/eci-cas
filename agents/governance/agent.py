@@ -2,19 +2,17 @@
 Governance — MOCK, cognitive tier substrate "fast-reflex", temp 0.0 (§5.1, §13.1).
 
 No persona, never explains itself, per-event statutory context reset —
-holds no memory ACROSS events. Within a single event's lifecycle it does
-need short-lived correlation state (the Sensory/Impulse merge buffer,
-and knowing where a given event_id currently sits in the pipeline);
-that state is discarded the moment the event completes, so it does not
-violate the "no memory across events" rule.
+holds no memory ACROSS events. v0.31: no per-event merge state either —
+Impulse is now the sole trigger into Governance (see revision notes),
+so each hop is handled independently as it arrives; the only remaining
+correlation is event_id, carried transparently by Envelope.reply().
 
-Routes: Sensory + Impulse -> Analytics -> Intent -> Governance -> Security
--> Governance -> Action, matching the §3.2 worked example exactly.
+Routes: Sensory -> Impulse -> Governance -> Analytics -> Intent ->
+Governance -> Security -> Governance -> Action (v0.31 strict relay;
+see §3.2 worked example, updated in the v0.31 revision).
 On a Security "Red", loops back to Analytics for revision (§4, §5.1).
 """
 from __future__ import annotations
-
-from typing import Dict
 
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
@@ -23,8 +21,6 @@ from bus.pubsub import EmbeddedBus
 class GovernanceMock:
     def __init__(self, bus: EmbeddedBus):
         self.bus = bus
-        self._merge_buffer: Dict[str, Dict[str, Envelope]] = {}
-
         self.bus.subscribe("events.governance", self.on_event)
         self.bus.subscribe("system.diagnostic", self.on_diagnostic)
 
@@ -51,8 +47,8 @@ class GovernanceMock:
     def on_event(self, envelope: Envelope) -> None:
         src = envelope.source
 
-        if src in ("Sensory", "Impulse"):
-            self._merge_and_route_to_analytics(envelope)
+        if src == "Impulse":
+            self._route_to_analytics(envelope)
         elif src == "Intent":
             self._route_to_security(envelope)
         elif src == "Security":
@@ -61,28 +57,55 @@ class GovernanceMock:
             # Recovery synthetic pings / unexpected sources: log-only mock behavior.
             pass
 
-    # ---- Step 1: wait for + merge Sensory & Impulse (§3.2) ----------------
+    # ---- Step 1: Impulse's relay is the sole trigger (v0.31) --------------
 
-    def _merge_and_route_to_analytics(self, envelope: Envelope) -> None:
-        bucket = self._merge_buffer.setdefault(envelope.event_id, {})
-        bucket[envelope.source] = envelope
-
-        if "Sensory" not in bucket or "Impulse" not in bucket:
-            return  # still waiting on the other parallel input
-
-        sensory_env = bucket["Sensory"]
-        impulse_env = bucket["Impulse"]
-        del self._merge_buffer[envelope.event_id]  # per-event state, discard now
-
-        merged = f"Evaluate intent based on the prompt ('{sensory_env.content}') and the reaction ('{impulse_env.content}')."
-        out = sensory_env.reply(
+    def _route_to_analytics(self, envelope: Envelope) -> None:
+        reflex = envelope.meta.get("reflex", "")
+        merged = (f"Evaluate intent based on the prompt ('{envelope.content}') "
+                  f"and the reaction ('{reflex}').")
+        out = envelope.reply(
             source="Governance",
             destination="Analytics",
             type="Evaluate",
             content=merged,
-            triggered_by=sensory_env.triggered_by,
+            triggered_by=envelope.triggered_by,
         )
         self.bus.publish("events.analytics", out)
+
+    # ---- Step 3: Intent's advice comes back to Governance -> Security -----
+
+    def _route_to_security(self, envelope: Envelope) -> None:
+        out = envelope.reply(
+            source="Governance",
+            destination="Security",
+            type="Clear",
+            content=envelope.content,
+            meta=envelope.meta,   # carry Intent's proposed_action through to Security's verdict
+        )
+        self.bus.publish("events.security", out)
+
+    # ---- Step 5: Security's verdict comes back to Governance --------------
+
+    def _route_on_security_verdict(self, envelope: Envelope) -> None:
+        verdict = str(envelope.content)
+        if verdict.strip().lower().startswith("red"):
+            # Hard "No" -> loop back to Analytics for a revised course (§4, §5.1)
+            out = envelope.reply(
+                source="Governance",
+                destination="Analytics",
+                type="Revise",
+                content="Security blocked the prior course. Propose a revised response.",
+            )
+            self.bus.publish("events.analytics", out)
+            return
+
+        out = envelope.reply(
+            source="Governance",
+            destination="Action",
+            type="Speech",
+            content=envelope.meta.get("proposed_action", envelope.content),
+        )
+        self.bus.publish("events.action", out)
 
     # ---- Step 3: Intent's advice comes back to Governance -> Security -----
 

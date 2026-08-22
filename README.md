@@ -7,7 +7,7 @@ interplay of narrowly specialized roles, not from any single agent, and
 every identity change is written as an immutable, source-attributed
 epoch you can audit.
 
-Full architecture: [`docs/ECI-spec-v0-30.md`](docs/ECI-spec-v0-30.md) —
+Full architecture: [`docs/ECI-spec-v0-31.md`](docs/ECI-spec-v0-31.md) —
 the living specification and technical source of truth. Read that
 before touching code; this README is just the map.
 
@@ -21,7 +21,7 @@ phased roadmap in the spec (§14) for what Phase 1+ unlocks.
 
 ```
 eci-cas/
-  docs/                  ECI-spec-v0-30.md — the source of truth
+  docs/                  ECI-spec-v0-31.md — the source of truth (v0.30 kept for history)
   manifests/              ecosystem-manifest.yaml — declarative topology (§10)
   bus/                    embedded pub-sub bus + message envelope (§3)
   agents/
