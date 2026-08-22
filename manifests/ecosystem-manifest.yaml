@@ -1,0 +1,79 @@
+# ECI-CAS ecosystem manifest — ECI-spec-v0-30.md §10
+#
+# Phase 0: queue topology validation, 7 mocks + 1 real (Sensory), §13.1.
+# Zero LLM cost — no cognitive-tier role makes a real model call this phase.
+#
+# Only phase, roles.*.mock, storage.profile, and intent.nodes change
+# between phases (§14) — nothing in Governance, the bus, or this schema
+# changes.
+
+version: "0.30"
+ecosystem_name: "eci-cas-prototype"
+phase: 0                              # 0=mockup, 1=real N=1, 2=N=2, 3=N>=3 multi-substrate
+
+infrastructure:
+  deployment_mode: "local-process"    # local-process | docker-nested | azure-bicep
+  network_name: "agent-bus-net"
+
+timers:                               # two independent clocks — §11.1
+  watchdog:
+    interval_x_sec: 5.0               # Level 1: Deterministic Ping threshold
+    interval_y_sec: 10.0              # Level 2: SystemCheck escalation threshold (X+Y = 15s)
+    max_check_retries: 2
+  impulse:
+    idle_musing_interval_sec: 7200    # organic/social quiet-period timer (§15 default)
+
+storage:
+  profile: "json"                     # json | hybrid-sqlite | hybrid-parquet (phase-coupled, §5.8)
+  root: "data/archive"
+
+message_bus:
+  type: "embedded-pubsub"             # in-memory for POC
+  topics: [ events.*, system.diagnostic, system.control ]
+
+# Substrate classes -> vendor mapping, ONE place (§10.2). Not used in
+# Phase 0 (zero LLM calls). Phase 1 recommendation: a single cheap
+# substrate for both cognitive-tier classes, since Phase 1 mandates
+# "single class for all cognitive roles" anyway (§14) — no diversity
+# decision to make until Phase 3.
+substrates:
+  fast-reflex:     { model: "claude-haiku-4-5-20251001", notes: "live duty: concise, cheap, low-latency" }
+  deep-reasoning:  { model: "claude-haiku-4-5-20251001", notes: "Phase 1: same as fast-reflex (single-class rule, §14). Revisit at Phase 3." }
+  orthogonal:      { model: "claude-haiku-4-5-20251001", notes: "unused until Phase 3 multi-substrate diversity, §7.5" }
+
+roles:
+  # Deterministic tier — native code (mock: true in Phase 0)
+  sensory:   { tier: deterministic, mock: false }   # real from day one, §13.1
+  impulse:   { tier: deterministic, mock: true,
+               initial_vectors: { curiosity: 0.8, fatigue: 0.1, urgency: 0.0, social_drive: 0.5, temperature: 0.4 } }
+  security:  { tier: deterministic, mock: true, rules: "security_rules.json" }
+  action:    { tier: deterministic, mock: true }
+  archive:   { tier: deterministic, mock: true }
+
+  # Cognitive tier — LLM-backed (mock: true in Phase 0; templated responses, zero LLM cost)
+  governance:
+    tier: cognitive
+    mock: true
+    substrate: "fast-reflex"
+    temperature: 0.0
+    context_strategy: "per_event_statutory_reset"
+    system_instruction: |
+      You are GOVERNANCE, the non-thinking backbone and routing engine.
+      NEVER generate opinions, personal answers, or explanations.
+      Route Sensory + Impulse -> Analytics -> Intent -> Security -> Action.
+      If Security responds 'Red', return payload to Analytics for revision.
+  analytics:
+    tier: cognitive
+    mock: true
+    substrate: "deep-reasoning"
+    temperature: 0.2
+  intent:
+    tier: cognitive
+    mock: true
+    temperature: 0.7
+    nodes:                            # N-generic from day one; Phase 0-1 lists exactly one
+      - { id: "node-a", substrate: "fast-reflex" }
+      # - { id: "node-b", substrate: "deep-reasoning" }   # Phase 2
+      # - { id: "node-c", substrate: "orthogonal" }       # Phase 3
+    rotation:
+      batch_size_events: 25           # primary rotation trigger (tunable, §16/§15)

@@ -1,0 +1,29 @@
+name: Phase 0 tests
+
+# Runs the §13.3 exit-criteria suite on every push/PR to main.
+# Fast and cheap by design: Phase 0 makes zero LLM calls and the whole
+# harness runs fully offline once dependencies are installed (embedded
+# pub-sub bus + JSON-files-on-disk Archive, no network needed).
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Phase 0 test suite
+        run: pytest tests/ -v
