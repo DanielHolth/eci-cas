@@ -92,6 +92,7 @@ class GovernanceMock:
             destination="Security",
             type="Clear",
             content=envelope.content,
+            meta=envelope.meta,   # carry Intent's proposed_action through to Security's verdict
         )
         self.bus.publish("events.security", out)
 
