@@ -46,7 +46,11 @@ class ArchiveStore:
         self._knowledge_file = self.knowledge_dir / "knowledge_store.json"
         self._temp_log_file = self.working_dir / "temp_log.json"
         self._drive_vectors_file = self.working_dir / "drive_vectors.json"
-        for f in (self._identity_file, self._knowledge_file, self._temp_log_file):
+        # Phase 0.2.1: budget mode's latch and spend counters. Working-tier
+        # data — operational state, not identity or knowledge (§6).
+        self._budget_file = self.working_dir / "budget_state.json"
+        for f in (self._identity_file, self._knowledge_file, self._temp_log_file,
+                  self._budget_file):
             if not f.exists():
                 f.write_text("[]")
         if not self._drive_vectors_file.exists():
@@ -67,6 +71,7 @@ class ArchiveStore:
             "identity": self._identity_file,
             "knowledge": self._knowledge_file,
             "temp_log": self._temp_log_file,
+            "budget": self._budget_file,
         }.get(kind)
         if target is None:
             raise ValueError(f"Unknown archive kind '{kind}'")
@@ -89,6 +94,7 @@ class ArchiveStore:
             "identity": self._identity_file,
             "knowledge": self._knowledge_file,
             "temp_log": self._temp_log_file,
+            "budget": self._budget_file,
         }.get(kind)
         if target is None:
             raise ValueError(f"Unknown archive kind '{kind}'")

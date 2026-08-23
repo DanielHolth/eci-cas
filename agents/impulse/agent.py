@@ -1,86 +1,247 @@
 """
-Impulse — MOCK, deterministic tier (§5.3, §13.1).
+Impulse — REAL, deterministic tier (§5.3, Phase 0.3).
 
-Phase 0 mock: real drive-vector bookkeeping (it's cheap, deterministic
-code — no LLM call either way), but the reflexive "reaction" text is
-templated rather than reasoned.
+Phase 0's mock proved the topology: real drive-vector bookkeeping behind
+a templated, 2-3-branch reaction. Phase 0.3 makes the reaction itself
+real, while staying on the deterministic tier (§2.1) — no substrate, by
+design, not by default. Two things changed from the mock:
 
-v0.31 — Impulse is now the SOLE trigger into Governance (see revision
-notes / §3.2). It receives the raw Sensory input, computes its own
-reflex and severity assessment, and forwards ONE envelope to Governance
-carrying:
-  - content:      the ORIGINAL verbatim input, unmodified — Analytics
-                   and Intent downstream need what was actually said,
-                   not Impulse's paraphrase of it.
-  - meta.reflex:   Impulse's own reaction text (the "flavor" it adds).
-  - severity:      combined via OR-upscale-only (bus.envelope.severity_max)
-                   with whatever Sensory already tagged. Impulse can
-                   RAISE severity based on its own drive-vector state,
-                   but can never LOWER a tag Sensory set upstream (e.g.
-                   a future vision-modality agent flagging danger).
+  1. Vectors DRIFT. They used to sit wherever they were last poked
+     forever. Now every vector relaxes back toward its baseline (the
+     manifest's initial_vectors) over wall-clock time, exponentially, at
+     its own per-vector rate (`drift_tau_sec`) — urgency snaps back fast
+     (it shouldn't linger after whatever triggered it has passed),
+     temperament-like traits move slowly. See `_drift()`.
 
-Guardrail: Impulse's own severity assessment is capped at "Elevated" —
-drive-vector state alone (urgency spiking from internal causes) can
-never independently produce "Critical". Only an external signal via
-Sensory can set Critical; Impulse can amplify up to Elevated but not
-manufacture a false alarm past that ceiling. This is deliberate, not
-an oversight — see the spec's revision notes for v0.31.
+  2. The reaction is a weighted appraisal, not a lookup on one raw
+     vector. Five drive vectors collapse into three legible axes
+     (alertness, warmth, engagement) via fixed, documented linear
+     combinations — still a formula, not a model, and still fully
+     explainable from the vector state alone. See `_axes()`.
+
+Why this stays deterministic rather than reaching for a substrate: this
+is the one hop every event MUST cross before Governance (v0.31's "sole
+trigger" rule) — it needs to run inline, synchronously, with zero added
+latency and zero added cost on the pipeline's busiest hop, for the same
+reason Governance and Security stayed deterministic. There is a real
+case for a future fast/cheap LLM-backed variant here too — colored by
+Intent's persona over time (Phase 0.4's temperature recalibration), not
+per-event, since the v0.31 relay is one-way — but the plan is to measure
+this deterministic version's actual behaviour first, then decide whether
+an LLM variant earns its cost against a real baseline rather than a
+straw one. See docs/phase-0.3-impulse.md.
+
+What did NOT change from the mock
+----------------------------------
+- Still the sole trigger into Governance; still relays the ORIGINAL
+  verbatim content, never a paraphrase (Analytics/Intent need what was
+  actually said).
+- Still combines its own severity read with whatever Sensory tagged,
+  via OR-upscale-only (bus.envelope.severity_max) — it can raise, never
+  lower, a tag set upstream.
+- The guardrail: Impulse's own severity assessment is hard-capped at
+  "Elevated". Drive-vector state alone — however extreme — can never
+  produce "Critical"; only an external Sensory signal can. Before this
+  phase that cap was tidiness. It is now the actual safety invariant
+  behind the Phase 0.3 Critical reflex (Impulse becomes the sole path
+  that can bypass cognition for a genuine emergency), so it is a code
+  constant, not a manifest knob — see IMPULSE_SEVERITY_CEILING below and
+  recovery.bootstrap._provision_impulse's refusal to let a manifest
+  raise it.
 """
 from __future__ import annotations
+
+import math
+import time
+from typing import Dict, Optional
 
 from bus.envelope import Envelope, severity_max
 from bus.pubsub import EmbeddedBus
 from agents.archive.store import ArchiveStore
 
+#: §15 default seed vectors — also the DEFAULT baseline drift relaxes
+#: toward, when a manifest doesn't declare its own initial_vectors.
 DEFAULT_VECTORS = {
     "curiosity": 0.8,
     "fatigue": 0.1,
     "urgency": 0.0,
     "social_drive": 0.5,
-    "temperature": 0.4,      # §15 default seed vectors
+    "temperature": 0.4,
 }
 
-# Tunable (§15-style): urgency level above which Impulse assesses its
-# own severity contribution as "Elevated" instead of "Neutral".
+#: Per-vector relaxation time constant, in seconds — how long it takes a
+#: displaced vector to fall to ~37% (1/e) of its distance from baseline.
+#: Short tau = snaps back fast; long tau = slow, temperament-like. Purely
+#: a design default: everything here is manifest-tunable
+#: (roles.impulse.drift_tau_sec).
+#:
+#: Deliberately inert at rest: a vector sitting exactly on its baseline
+#: (the normal state for every offline test fixture, which fires an
+#: event within milliseconds of construction) computes (value - baseline)
+#: == 0.0 and stays there bit-for-bit, regardless of elapsed time or tau
+#: — so drift is only ever OBSERVABLE once something has displaced a
+#: vector away from baseline (manual feedback, a test override, or a
+#: future idle-musing/recalibration path). That is what keeps this
+#: compatible with the Phase 0 exit criterion's byte-identical traces
+#: across two independent cold bootstraps (tests/test_phase0_e2e.py).
+DEFAULT_DRIFT_TAU_SEC = {
+    "curiosity": 3600.0,
+    "fatigue": 1800.0,
+    "urgency": 300.0,
+    "social_drive": 3600.0,
+    "temperature": 7200.0,
+}
+
+#: Tunable — how high `alertness` (see _axes) has to read before Impulse
+#: raises its own severity assessment from Neutral to Elevated.
 URGENCY_ELEVATED_THRESHOLD = 0.6
 
-# Guardrail ceiling: Impulse's own assessment NEVER exceeds this,
-# regardless of vector values. Only Sensory can tag "Critical".
+#: HARD invariant, v0.31/§3 — NOT manifest-configurable. Drive-vector
+#: state alone can never produce a "Critical" assessment; only an
+#: external signal via Sensory can. See recovery.bootstrap for the
+#: refusal to let a manifest override this.
 IMPULSE_SEVERITY_CEILING = "Elevated"
 
+#: Appraisal-axis bucket edges. Three buckets keeps the reaction
+#: vocabulary small and every choice traceable to "which third of the
+#: range is this axis in", rather than a continuous, unexplainable slide.
+_BUCKET_EDGES = (0.35, 0.65)
 
-class ImpulseMock:
-    def __init__(self, bus: EmbeddedBus, archive: ArchiveStore):
+#: dominant axis -> bucket -> reflex text. Deliberately larger than the
+#: Phase 0 mock's 3 branches, and keyed on APPRAISAL STATE, never on
+#: parsing the event's actual words — Impulse relays content verbatim
+#: and has no persona or judgment mandate (§5.3); reacting to its own
+#: internal state is the whole of its job, not reading the human's mind.
+REACTION_VOCABULARY: Dict[str, Dict[str, str]] = {
+    "alertness": {
+        "low":  "Calm reaction.",
+        "mid":  "Attentive, slightly quickened reaction.",
+        "high": "Terse, protective reaction.",
+    },
+    "warmth": {
+        "low":  "Reserved, businesslike reaction.",
+        "mid":  "Friendly, even-keeled reaction.",
+        "high": "Warm, engaged reaction.",
+    },
+    "engagement": {
+        "low":  "Flat, low-energy reaction.",
+        "mid":  "Interested reaction.",
+        "high": "Calm, exploratory reaction.",
+    },
+}
+
+
+def _clamp(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def _bucket(score: float) -> str:
+    low, high = _BUCKET_EDGES
+    if score < low:
+        return "low"
+    if score < high:
+        return "mid"
+    return "high"
+
+
+class Impulse:
+    """Real Phase 0.3 Impulse. See the module docstring for the two
+    things that changed from the Phase 0 mock (drift, weighted appraisal)
+    and the one thing that is structurally guaranteed not to (the
+    Elevated ceiling)."""
+
+    def __init__(self, bus: EmbeddedBus, archive: ArchiveStore, *,
+                 initial_vectors: Optional[Dict[str, float]] = None,
+                 urgency_elevated_threshold: float = URGENCY_ELEVATED_THRESHOLD,
+                 drift_tau_sec: Optional[Dict[str, float]] = None):
         self.bus = bus
         self.archive = archive
-        self.vectors = dict(DEFAULT_VECTORS)
+
+        self.vectors: Dict[str, float] = dict(DEFAULT_VECTORS)
+        if initial_vectors:
+            self.vectors.update(initial_vectors)
+        #: What drift relaxes toward. The seeded state IS the baseline —
+        #: a manifest that seeds an unusually anxious or curious persona
+        #: means THAT is what "at rest" looks like for this instance, not
+        #: the code's own DEFAULT_VECTORS.
+        self._baseline: Dict[str, float] = dict(self.vectors)
+
+        self.urgency_elevated_threshold = float(urgency_elevated_threshold)
+        self.drift_tau_sec: Dict[str, float] = dict(DEFAULT_DRIFT_TAU_SEC)
+        if drift_tau_sec:
+            self.drift_tau_sec.update(drift_tau_sec)
+
+        self._last_update = time.monotonic()
         self.archive.set_drive_vectors(self.vectors)
         self.bus.subscribe("events.impulse", self.on_event)
 
-    def _reflex(self) -> str:
-        """Templated reflexive reaction — real reasoning arrives when
-        this mock is replaced with a live agent per §13.4."""
-        if self.vectors["urgency"] > URGENCY_ELEVATED_THRESHOLD:
-            return "Terse, protective reaction."
-        if self.vectors["curiosity"] > 0.6:
-            return "Calm, exploratory reaction."
-        return "Calm reaction."
+    # ---- Drift (§4.1) ------------------------------------------------------
 
-    def _assessed_severity(self) -> str:
-        """Impulse's own severity read from current drive-vector state,
-        hard-capped at IMPULSE_SEVERITY_CEILING (the guardrail)."""
-        if self.vectors["urgency"] > URGENCY_ELEVATED_THRESHOLD:
-            return IMPULSE_SEVERITY_CEILING  # "Elevated" — never higher
-        return "Neutral"
+    def _drift(self) -> None:
+        """Relax every vector toward its baseline by the wall-clock time
+        elapsed since the last update, exponentially, per-vector. See the
+        DEFAULT_DRIFT_TAU_SEC docstring for why this is a no-op at rest."""
+        now = time.monotonic()
+        elapsed = max(0.0, now - self._last_update)
+        self._last_update = now
+        if elapsed <= 0:
+            return
 
-    def apply_feedback(self, valence: float, driver: str) -> None:
-        """Reward path, §4.1: Impulse shifts drive vectors immediately,
-        no Intent pre-approval."""
-        if driver in self.vectors:
-            self.vectors[driver] = max(0.0, min(1.0, self.vectors[driver] + valence))
+        changed = False
+        for name, value in self.vectors.items():
+            baseline = self._baseline.get(name, value)
+            if value == baseline:
+                continue                      # exact no-op, see module docstring
+            tau = self.drift_tau_sec.get(name)
+            if not tau or tau <= 0:
+                continue
+            decay = math.exp(-elapsed / tau)
+            self.vectors[name] = _clamp(baseline + (value - baseline) * decay)
+            changed = True
+        if changed:
             self.archive.set_drive_vectors(self.vectors)
 
+    # ---- Appraisal (the reaction engine) -----------------------------------
+
+    def _axes(self) -> Dict[str, float]:
+        """Five drive vectors collapse into three legible appraisal axes.
+        Fixed, documented linear combinations — a formula, not a model.
+        Weights are a first cut, not tuned against real data; revisit
+        once there's a live LLM-backed variant to compare against."""
+        v = self.vectors
+        return {
+            "alertness":  _clamp(v["urgency"] - 0.3 * v["fatigue"]),
+            "warmth":     _clamp(0.6 * v["social_drive"] + 0.4 * v["temperature"]),
+            "engagement": _clamp(v["curiosity"] - 0.4 * v["fatigue"]),
+        }
+
+    def _reflex(self) -> str:
+        axes = self._axes()
+        dominant, score = max(axes.items(), key=lambda kv: kv[1])
+        return REACTION_VOCABULARY[dominant][_bucket(score)]
+
+    def _assessed_severity(self) -> str:
+        """Impulse's own severity read, from current appraisal state,
+        hard-capped at IMPULSE_SEVERITY_CEILING. See the module docstring
+        — this cap is a safety invariant, not tidiness."""
+        if self._axes()["alertness"] > self.urgency_elevated_threshold:
+            return IMPULSE_SEVERITY_CEILING   # never higher, regardless of score
+        return "Neutral"
+
+    # ---- Feedback (§4.1 reward path) ---------------------------------------
+
+    def apply_feedback(self, valence: float, driver: str) -> None:
+        """Reward path: Impulse shifts drive vectors immediately, no
+        Intent pre-approval. This is the immediate-shift half of §4.1;
+        _drift() is the gradual-relaxation half."""
+        if driver in self.vectors:
+            self.vectors[driver] = _clamp(self.vectors[driver] + valence)
+            self.archive.set_drive_vectors(self.vectors)
+
+    # ---- Bus ----------------------------------------------------------------
+
     def on_event(self, envelope: Envelope) -> None:
+        self._drift()
         reflex = self._reflex()
         combined_severity = severity_max(envelope.severity, self._assessed_severity())
 
@@ -98,3 +259,10 @@ class ImpulseMock:
             },
         )
         self.bus.publish("events.governance", out)
+
+
+__all__ = [
+    "Impulse", "DEFAULT_VECTORS", "DEFAULT_DRIFT_TAU_SEC",
+    "URGENCY_ELEVATED_THRESHOLD", "IMPULSE_SEVERITY_CEILING",
+    "REACTION_VOCABULARY",
+]

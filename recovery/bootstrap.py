@@ -31,13 +31,23 @@ import yaml
 from bus.pubsub import EmbeddedBus
 from agents.archive.store import ArchiveStore
 from agents.sensory.agent import Sensory
-from agents.impulse.agent import ImpulseMock
+from agents.impulse.agent import (
+    Impulse,
+    IMPULSE_SEVERITY_CEILING,
+    URGENCY_ELEVATED_THRESHOLD,
+)
 from agents.governance.agent import Governance
 from agents.analytics.agent import AnalyticsMock
+from agents.analytics.base import AnalyticsBase
+from agents.analytics.live import AnalyticsAgent
 from agents.intent.agent import IntentMock
 from agents.security.agent import SecurityMock
 from agents.action.agent import ActionMock
+from budget.state import BudgetManager, from_manifest as budget_from_manifest
+from budget import tiers as budget_tiers
 from recovery.watchdog import Watchdog
+from substrates.base import SubstrateError
+from substrates.registry import resolve_role_substrate
 
 
 class BootstrapError(RuntimeError):
@@ -53,13 +63,14 @@ class Ecosystem:
     bus: EmbeddedBus
     archive: ArchiveStore
     sensory: Sensory
-    impulse: ImpulseMock
+    impulse: Impulse
     governance: Governance
-    analytics: AnalyticsMock
+    analytics: AnalyticsBase           # AnalyticsMock or AnalyticsAgent (§13.4)
     intent: IntentMock
     security: SecurityMock
     action: ActionMock
     watchdog: Watchdog
+    budget: BudgetManager
 
 
 class Recovery:
@@ -80,6 +91,15 @@ class Recovery:
         missing = required_top_level - manifest.keys()
         if missing:
             raise BootstrapError(f"Manifest missing required keys: {missing}")
+
+        # Phase 0.2.2: budget_tier resolves to concrete roles.* config
+        # before anything else reads it. "custom" (or absent) is a no-op —
+        # see budget/tiers.py for what each named tier overwrites.
+        try:
+            manifest = budget_tiers.apply_tier(manifest)
+        except budget_tiers.UnknownTier as exc:
+            raise BootstrapError(str(exc)) from exc
+
         self.manifest = manifest
         return manifest
 
@@ -89,6 +109,7 @@ class Recovery:
         manifest = self.parse_manifest()
         phase = manifest["phase"]
         print(f"[recovery] parsed manifest '{self.manifest_path}' (phase {phase})")
+        print(f"[recovery] budget tier: {budget_tiers.describe(manifest)}")
 
         # Step 2: storage init
         storage_root = manifest["storage"]["root"]
@@ -107,20 +128,27 @@ class Recovery:
             print("[recovery] WARNING: manifest marks sensory as mocked, "
                   "but Sensory is always real per §13.1 — ignoring.")
 
-        impulse_vectors = roles.get("impulse", {}).get("initial_vectors")
-        impulse = ImpulseMock(bus, archive)
-        if impulse_vectors:
-            impulse.vectors.update(impulse_vectors)
-            archive.set_drive_vectors(impulse.vectors)
+        impulse = self._provision_impulse(bus, archive, manifest)
 
         security = SecurityMock(bus)
         action = ActionMock(bus)
+
+        # Budget mode's state is restored BEFORE any agent that could spend
+        # is provisioned (Phase 0.2.1). A latch has to survive a restart:
+        # coming back live after latching overnight would start spending
+        # again before anyone noticed.
+        budget = budget_from_manifest(manifest, archive)
+        if budget.enabled:
+            cap = ("no cap" if budget.spend_cap_usd is None
+                   else f"${budget.spend_cap_usd:.2f} cap")
+            print(f"[recovery] budget mode: {budget.state.mode} "
+                  f"(${budget.state.spend_usd:.4f} spent, {cap})")
 
         # Step 4: cognitive hydration — load system instructions and resolve
         # substrate classes for any cognitive role running real, then
         # register Intent nodes from the manifest.
         governance = self._provision_governance(bus, manifest)
-        analytics = AnalyticsMock(bus)
+        analytics = self._provision_analytics(bus, manifest, archive, budget)
 
         intent_cfg = roles["intent"]
         nodes = intent_cfg.get("nodes", [])
@@ -133,7 +161,8 @@ class Recovery:
         batch_size = intent_cfg.get("rotation", {}).get("batch_size_events", 25)
         intent = IntentMock(bus, archive, node_id=nodes[0]["id"], batch_size=batch_size)
 
-        real_roles = ["Sensory", "Governance"]
+        real_roles = ["Sensory", "Impulse", "Governance"] + (
+            ["Analytics"] if analytics.tier == "live" else [])
         print(f"[recovery] provisioned {8 - len(real_roles)} mocks + {len(real_roles)} real "
               f"({', '.join(real_roles)}), Intent node '{nodes[0]['id']}' registered")
 
@@ -157,7 +186,52 @@ class Recovery:
             manifest=manifest, bus=bus, archive=archive, sensory=sensory,
             impulse=impulse, governance=governance, analytics=analytics,
             intent=intent, security=security, action=action, watchdog=watchdog,
+            budget=budget,
         )
+
+    # ---- §9.1 step 3: deterministic tier -----------------------------------
+
+    def _provision_impulse(self, bus: EmbeddedBus, archive: ArchiveStore,
+                           manifest: Dict[str, Any]) -> Impulse:
+        """Impulse is deterministic and always real as of Phase 0.3 — same
+        posture as Sensory and Governance (§13.1/v0.34). `mock` has
+        nothing left to select between, so it's warned-and-ignored rather
+        than pretending it does something.
+
+        `severity.ceiling` is READ but never OBEYED if it disagrees with
+        IMPULSE_SEVERITY_CEILING — that cap is the v0.31/§3 safety
+        invariant (drive-vector state alone can never manufacture a
+        Critical escalation), not a tuning knob a manifest can loosen.
+        A manifest trying to raise it gets a loud warning, not silent
+        compliance — the same discipline Governance's verdict dispatch
+        applies to an unreadable Security verdict (v0.34b): doubt, or a
+        value that disagrees with the invariant, does not get the benefit
+        of it."""
+        role_config = manifest.get("roles", {}).get("impulse", {}) or {}
+
+        if role_config.get("mock") is not False:
+            print("[recovery] WARNING: manifest marks impulse as mocked, but "
+                  "Impulse is deterministic and always real per Phase 0.3 — ignoring.")
+
+        severity_cfg = role_config.get("severity", {}) or {}
+        ceiling = severity_cfg.get("ceiling")
+        if ceiling and ceiling != IMPULSE_SEVERITY_CEILING:
+            print(f"[recovery] WARNING: roles.impulse.severity.ceiling is '{ceiling}' "
+                  f"in the manifest, but this is a hard safety invariant (v0.31/§3), "
+                  f"not manifest-configurable — Impulse's own assessment stays capped "
+                  f"at '{IMPULSE_SEVERITY_CEILING}' regardless.")
+
+        impulse = Impulse(
+            bus, archive,
+            initial_vectors=role_config.get("initial_vectors"),
+            urgency_elevated_threshold=float(
+                severity_cfg.get("urgency_elevated_threshold", URGENCY_ELEVATED_THRESHOLD)),
+            drift_tau_sec=role_config.get("drift_tau_sec"),
+        )
+        print(f"[recovery] impulse: deterministic, real "
+              f"(urgency_elevated_threshold={impulse.urgency_elevated_threshold}, "
+              f"severity ceiling={IMPULSE_SEVERITY_CEILING} — hard invariant)")
+        return impulse
 
     # ---- §9.1 step 4: cognitive hydration ---------------------------------
 
@@ -186,6 +260,56 @@ class Recovery:
 
         print("[recovery] governance: deterministic dispatcher (no substrate)")
         return Governance(bus)
+
+    def _provision_analytics(self, bus: EmbeddedBus, manifest: Dict[str, Any],
+                             archive: ArchiveStore,
+                             budget: Optional[BudgetManager] = None) -> AnalyticsBase:
+        """Select Analytics' tier from `roles.analytics.mock` (§13.4).
+
+        mock: true  -> AnalyticsMock, templated reasoning, zero LLM cost.
+        mock: false -> AnalyticsAgent on the substrate class the role
+                       declares (§10.2).
+
+        Unlike Governance, this role genuinely needs a model, so the
+        credential check matters again. It is still OFFLINE — no network
+        call, no token spent — because Recovery must be able to construct
+        and health-check the whole ecosystem with every endpoint
+        unreachable (§9). What it must not do is declare 'system live' on
+        an Analytics with no way to reach its substrate, so a
+        misconfiguration stops the bootstrap deterministically (§9.1
+        step 6): fix the manifest or the environment, re-run."""
+        role_config = manifest.get("roles", {}).get("analytics", {}) or {}
+
+        if role_config.get("mock", True):
+            print("[recovery] analytics: MOCK tier (templated reasoning, zero LLM cost)")
+            return AnalyticsMock(bus, archive)
+
+        try:
+            substrate = resolve_role_substrate(manifest, "analytics")
+            substrate.validate_credentials()
+        except SubstrateError as exc:
+            raise BootstrapError(
+                f"Analytics is declared real (roles.analytics.mock: false) but its "
+                f"substrate is not usable: {exc}"
+            ) from exc
+
+        agent = AnalyticsAgent(
+            bus, substrate, archive,
+            system_instruction=role_config.get("system_instruction", ""),
+            temperature=float(role_config.get("temperature", 0.2)),
+            max_tokens=role_config.get("max_tokens"),
+            strict=bool(role_config.get("strict", False)),
+            budget=budget,
+        )
+        price = ("unpriced — budget mode cannot estimate spend"
+                 if not substrate.has_prices
+                 else f"${substrate.price_per_mtok_in}/${substrate.price_per_mtok_out} per Mtok")
+        print(f"[recovery] analytics: LIVE tier on substrate "
+              f"{substrate.describe()} ({price})")
+        if not substrate.has_prices:
+            print("[recovery] WARNING: no price_per_mtok declared for substrate "
+                  f"'{substrate.substrate_class}'; the spend cap cannot protect you.")
+        return agent
 
     def _health_check(self, bus: EmbeddedBus, sensory: Sensory) -> None:
         received: Dict[str, bool] = {"ok": False}

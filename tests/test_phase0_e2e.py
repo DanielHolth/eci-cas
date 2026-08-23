@@ -32,16 +32,24 @@ def _manifest_with_temp_storage(tmp_path: Path) -> Path:
     """Copy the real manifest but point storage.root at a temp dir, so
     repeated test runs don't pollute (or depend on) data/archive/.
 
-    v0.34 note — this suite needs no tier pinning any more. Every role in
-    the pipeline is deterministic in Phase 0.1 (Governance included, see
-    docs/ECI-spec-revisions-v0-34.md), so "identical queue traces across
-    two cold bootstraps" is a property of the shipped configuration rather
-    than of a test-only setting. These stay as the permanent topology
-    regression suite.
+    Phase 0.2 note — this suite pins roles.analytics.mock to true. These
+    are the EXIT CRITERIA (§13.3): they assert the queue topology is
+    reproducible with byte-identical traces across two cold bootstraps,
+    which is only a meaningful claim about the topology if nothing in the
+    chain is stochastic. Analytics went substrate-backed in Phase 0.2, so
+    it gets pinned back to the deterministic tier here, permanently, the
+    way every cognitive role will be as §13.4 reaches it.
+
+    That also keeps this suite runnable with no API key at all.
+
+    The live tier is covered in tests/test_phase02_analytics.py (offline,
+    against a scripted provider) and tests/test_phase02_analytics_live.py
+    (a real endpoint, behind ECI_LIVE_TESTS=1).
     """
     with open(MANIFEST_PATH) as f:
         manifest = yaml.safe_load(f)
     manifest["storage"]["root"] = str(tmp_path / "archive")
+    manifest["roles"]["analytics"]["mock"] = True
     tmp_path.mkdir(parents=True, exist_ok=True)
     out_path = tmp_path / "ecosystem-manifest.yaml"
     with open(out_path, "w") as f:
