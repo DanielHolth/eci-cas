@@ -43,7 +43,12 @@ from typing import Any, Dict, Optional
 
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
-from substrates.base import CompletionError, FailureKind, Substrate
+from substrates.base import (
+    CompletionError,
+    FailureKind,
+    Substrate,
+    SubstrateError,
+)
 
 from agents.analytics import contract
 from agents.analytics.base import AnalyticsBase
@@ -120,7 +125,7 @@ class AnalyticsAgent(AnalyticsBase):
                 diagnostics=self._diagnostics(latency_ms=latency_ms, usage=usage,
                                               cost_usd=cost),
             )
-        except (CompletionError, ContractViolation, ValueError) as exc:
+        except (SubstrateError, ContractViolation, ValueError) as exc:
             if isinstance(exc, CompletionError) and self.budget is not None:
                 self.budget.record_failure(
                     getattr(exc, "kind", FailureKind.UNKNOWN), str(exc))

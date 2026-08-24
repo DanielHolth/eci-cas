@@ -170,6 +170,16 @@ def _manifest(tmp_path: Path, mode: str = "correct", **role_overrides) -> Path:
     }
     manifest["roles"]["analytics"]["mock"] = False
     manifest["roles"]["analytics"].update(role_overrides)
+    # This suite is about ANALYTICS; hold Intent deterministic so it needs
+    # no credential of its own (Phase 0.4 note — same reasoning as every
+    # other pre-Phase-0.4 fixture pinning roles.intent.mock).
+    manifest["roles"]["intent"]["mock"] = True
+    # Phase 0.6 gave the archive-lookup family a live tier, so the
+    # shipped manifest now declares these real. Mocked here for the
+    # same reason every other cognitive role is: this test is not
+    # about them, and it must run with no credentials.
+    manifest["roles"]["personality"]["mock"] = True
+    manifest["roles"]["knowledge"]["mock"] = True
     tmp_path.mkdir(parents=True, exist_ok=True)
     out = tmp_path / "ecosystem-manifest.yaml"
     with open(out, "w") as f:
@@ -218,14 +228,17 @@ class TestContract:
         assert rec.decided_by == "llm"
 
     def test_a_decline_carries_its_reason(self):
-        rec = contract.parse(_reply_decline(""), Task.REVIEW)
+        """Analytics may still say "I don't think so, and here's why" —
+        that is an ANALYTICAL judgment, and Intent voices it. What v0.35e
+        took away is any power to stop the action itself."""
+        rec = contract.parse(_reply_decline(""), Task.EVALUATE)
         assert rec.proceed is False
         assert "isn't ours to share" in rec.concern
 
     def test_a_decline_without_a_reason_gets_one(self):
         """A refusal with no reason gives Intent nothing to say and the
         human nothing to act on."""
-        rec = contract.parse(_reply_decline_without_reason(""), Task.REVIEW)
+        rec = contract.parse(_reply_decline_without_reason(""), Task.EVALUATE)
         assert rec.proceed is False
         assert rec.concern
 
@@ -237,20 +250,13 @@ class TestContract:
     def test_booleans_are_read_the_way_models_spell_them(self, raw, expected):
         assert coerce_bool(raw, default=not expected) is expected
 
-    def test_an_unreadable_proceed_fails_closed_on_a_gating_task(self):
-        """The heart of it. Analytics was asked precisely because nobody
-        could confirm this was safe; 'it depends' is not confirmation."""
-        rec = contract.parse(_reply_unreadable_proceed(""), Task.REVIEW)
-        assert rec.proceed is False
-
-    def test_an_unreadable_proceed_does_not_halt_an_ordinary_event(self):
-        """Nothing is being gated on an Evaluate, so a model cannot stop
-        one by answering the wrong question."""
+    def test_an_unreadable_proceed_does_not_halt_an_event(self):
+        """Nothing downstream is gated on this value (v0.35e), so a model
+        that answers the wrong question shouldn't be able to make the
+        persona decline. The fail-closed reading of an unreadable
+        `proceed` moved to Intent, which is where the gating went — see
+        tests/test_phase05_intent_veto.py."""
         rec = contract.parse(_reply_unreadable_proceed(""), Task.EVALUATE)
-        assert rec.proceed is True
-
-    def test_an_explicit_decline_cannot_halt_an_ordinary_event_either(self):
-        rec = contract.parse(_reply_decline(""), Task.EVALUATE)
         assert rec.proceed is True
 
     @pytest.mark.parametrize("bad", ["prose", "missing_field"])
@@ -275,11 +281,15 @@ class TestContract:
         assert rec.recommendation == contract.templated_recommendation(env)
         assert rec.diagnostics["degraded"] is True
 
-    @pytest.mark.parametrize("task", [Task.REVIEW, Task.REVISE])
-    def test_gating_tasks_fail_toward_not_acting(self, task):
-        rec = contract.fallback(_envelope(), task, "substrate down")
-        assert rec.proceed is False
-        assert rec.concern
+    def test_there_are_no_gating_tasks_left_here(self):
+        """v0.35e severed Analytics from Security entirely (Daniel,
+        2026-08-24: "analytics is isolated from security in every way").
+        Review and Revise are Intent's now, and this file should carry no
+        trace of them — a fail-closed path with nothing to gate is dead
+        code that reads like a safety property."""
+        assert [t.value for t in Task] == ["Evaluate"]
+        assert not hasattr(contract, "GATING_TASKS")
+        assert not hasattr(contract, "FAIL_CLOSED_TASKS")
 
     def test_the_degraded_evaluate_matches_the_mock_exactly(self):
         """A substrate outage should change the quality of the thinking,
@@ -290,6 +300,17 @@ class TestContract:
 
     def test_unknown_message_types_are_not_tasks(self):
         assert Task.from_envelope(_envelope(type="LoopCheck")) is None
+
+    def test_securitys_old_lanes_are_no_longer_tasks_here(self):
+        for retired in ("Review", "Revise"):
+            assert Task.from_envelope(_envelope(type=retired)) is None
+
+    @pytest.mark.parametrize("modality", ["prompt", "feedback", "vision",
+                                          "audio", "https"])
+    def test_every_sensory_modality_reads_as_evaluate(self, modality):
+        """v0.35a: Sensory fans out to Analytics directly, so the type on
+        the envelope is the modality rather than a task name."""
+        assert Task.from_envelope(_envelope(type=modality)) is Task.EVALUATE
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +333,8 @@ class TestMechanicalWorkIsFree:
         for _ in range(LOOP_THRESHOLD):
             eco.bus.publish("events.analytics", _envelope(content="same thing"))
         last = [e for e in eco.bus.trace() if e.source == "Analytics"][-1]
-        assert last.meta["proceed"] is False
+        assert last.destination == "Governance"
+        assert last.meta["analytics"]["proceed"] is False
         assert last.meta["analytics"]["loop_detected"] is True
 
     def test_the_control_plane_never_calls_a_model(self, tmp_path):
@@ -342,63 +364,47 @@ class TestPipeline:
         hops = [(e.source, e.destination) for e in eco.bus.trace()
                 if e.event_id == event_id]
         assert hops == [
+            # v0.35a: the four-way fan-out, ungated. Impulse first, so an
+            # emergency is on its way to Security before the rest are even
+            # dispatched (v0.35d).
             ("Sensory", "Impulse"), ("Impulse", "Governance"),
-            ("Governance", "Analytics"), ("Analytics", "Intent"),
+            ("Sensory", "Analytics"), ("Analytics", "Governance"),
+            ("Sensory", "Personality"), ("Personality", "Governance"),
+            ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
+            # v0.35c: Governance bundles all four into one message.
+            ("Governance", "Intent"),
             ("Intent", "Governance"), ("Governance", "Security"),
             ("Security", "Governance"), ("Governance", "Action"),
         ]
         assert eco.analytics.metrics["llm_calls"] == 1
 
-    def test_analytics_advises_intent_and_never_speaks(self, tmp_path):
-        """Even when the model forgets and writes the reply, that text
-        reaches Intent as advice — the hop isn't wired to be anything
-        else, so this is structural rather than a rule to keep."""
+    def test_analytics_reports_to_governance_and_never_speaks(self, tmp_path):
+        """v0.35c redirected this hop: Analytics' answer is now one of
+        four inputs Governance bundles, not a message to Intent. Even when
+        the model forgets and writes the reply, that text reaches Intent
+        as one labelled slot in a bundle — structural, not a rule anyone
+        has to keep."""
         eco = _boot(tmp_path, mode="persona_speech")
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
 
         analytics_out = [e for e in eco.bus.trace()
                          if e.event_id == event_id and e.source == "Analytics"][0]
-        assert analytics_out.destination == "Intent"
+        assert analytics_out.destination == "Governance"
         assert analytics_out.type == "Recommend"
         # What Action speaks came from Intent, not from Analytics' text.
         assert "wide awake and happy to chat" not in _spoken(eco, event_id)[0]
 
-    def test_a_yellow_verdict_reaches_analytics_as_a_review(self, tmp_path):
+    def test_analytics_never_hears_from_security_at_all(self, tmp_path):
+        """v0.35e, in its widest form (Daniel, 2026-08-24): Analytics is
+        isolated from Security in every way. Neither non-green lane
+        reaches it — both are Intent's now."""
         eco = _boot(tmp_path)
-        event_id = _verdict(eco, VERDICT_YELLOW, content="rules do not cover this")
-        assert ("Governance", "Analytics", "Review") in _typed_hops(eco, event_id)
-
-    def test_a_declined_review_is_voiced_by_the_persona(self, tmp_path):
-        """The v0.34 refusal path, end to end: Analytics judges, Intent
-        gives it a voice, Security clears it, the human hears it."""
-        eco = _boot(tmp_path, mode="decline")
-        event_id = _verdict(eco, VERDICT_YELLOW, content="borderline")
-
-        hops = _typed_hops(eco, event_id)
-        assert ("Governance", "Analytics", "Review") in hops
-        assert ("Analytics", "Intent", "Recommend") in hops
-        assert ("Intent", "Governance", "Advise") in hops
-
-        spoken = _spoken(eco, event_id)
-        assert spoken, "a refusal must still reach the human"
-        assert "I'd rather not" in spoken[0]
-        assert "isn't ours to share" in spoken[0]
-
-    def test_a_declined_review_never_releases_the_original(self, tmp_path):
-        eco = _boot(tmp_path, mode="decline")
-        event_id = _verdict(eco, VERDICT_YELLOW, proposed="the unapproved thing")
-        assert not [s for s in _spoken(eco, event_id) if "the unapproved thing" in s]
-
-    def test_an_approved_review_proceeds(self, tmp_path):
-        eco = _boot(tmp_path, mode="correct")
-        event_id = _verdict(eco, VERDICT_YELLOW)
-        spoken = _spoken(eco, event_id)
-        assert spoken and "I'd rather not" not in spoken[0]
-
-    def test_a_red_verdict_reaches_analytics_as_a_revise(self, tmp_path):
-        eco = _boot(tmp_path)
-        event_id = _verdict(eco, VERDICT_RED, content="Red — blocked")
-        assert ("Governance", "Analytics", "Revise") in _typed_hops(eco, event_id)
+        for verdict in (VERDICT_YELLOW, VERDICT_RED):
+            eco.bus.reset_trace()
+            event_id = _verdict(eco, verdict)
+            inbound = [e for e in eco.bus.trace()
+                       if e.event_id == event_id and e.destination == "Analytics"]
+            assert inbound == []
 
     def test_severity_still_propagates_untouched(self, tmp_path):
         eco = _boot(tmp_path)
@@ -431,7 +437,11 @@ class TestPipeline:
 
 class TestDegradation:
     @pytest.mark.parametrize("mode", ["boom", "prose", "missing_field"])
-    def test_an_ordinary_event_survives_a_bad_substrate(self, tmp_path, mode):
+    def test_an_event_survives_a_bad_substrate(self, tmp_path, mode):
+        """One posture now: degrade and keep moving. v0.35e took the
+        gating away, so there is no second, stricter path here to
+        contrast this with — see tests/test_phase05_intent_veto.py for
+        where that asymmetry went."""
         eco = _boot(tmp_path / mode, mode=mode)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
 
@@ -440,27 +450,17 @@ class TestDegradation:
         analytics_out = [e for e in eco.bus.trace()
                          if e.event_id == event_id and e.source == "Analytics"][0]
         assert analytics_out.meta["analytics"]["degraded"] is True
-        assert analytics_out.meta["proceed"] is True
+        assert analytics_out.meta["analytics"]["proceed"] is True
 
     @pytest.mark.parametrize("mode", ["boom", "prose", "missing_field"])
-    def test_a_review_declines_when_the_substrate_fails(self, tmp_path, mode):
-        """The asymmetry, end to end. The same outage that merely dulls an
-        ordinary event stops a gated one."""
+    def test_a_degraded_event_still_reaches_the_human(self, tmp_path, mode):
+        """An outage changes the quality of the thinking, not the shape of
+        the trace — and never leaks a stack trace into the persona's
+        mouth."""
         eco = _boot(tmp_path / mode, mode=mode)
-        event_id = _verdict(eco, VERDICT_YELLOW, proposed="the unapproved thing")
-
-        analytics_out = [e for e in eco.bus.trace()
-                         if e.event_id == event_id and e.source == "Analytics"][0]
-        assert analytics_out.meta["proceed"] is False
-        assert not [s for s in _spoken(eco, event_id) if "the unapproved thing" in s]
-
-    def test_a_degraded_refusal_still_says_something_human(self, tmp_path):
-        eco = _boot(tmp_path, mode="boom")
-        event_id = _verdict(eco, VERDICT_YELLOW)
+        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         spoken = _spoken(eco, event_id)
         assert spoken
-        assert "rather not" in spoken[0].lower()
-        # Not an error message or a stack trace.
         assert "CompletionError" not in spoken[0]
 
     def test_strict_mode_surfaces_the_failure_instead(self, tmp_path):
@@ -483,20 +483,6 @@ class TestPrompt:
         user = self._prompt_for(eco).user
         assert "TASK: Evaluate" in user
         assert PROMPT in user
-
-    def test_the_prompt_carries_impulses_reflex(self, tmp_path):
-        """Analytics should see the gut reaction, not just the words —
-        that is what the v0.31 relay exists to deliver."""
-        eco = _boot(tmp_path)
-        eco.sensory.ingest(PROMPT, source_type="prompt")
-        assert "gut reaction" in self._prompt_for(eco).user
-
-    def test_a_review_prompt_names_the_action_under_consideration(self, tmp_path):
-        eco = _boot(tmp_path)
-        _verdict(eco, VERDICT_YELLOW, proposed="do the questionable thing")
-        user = self._prompt_for(eco).user
-        assert "TASK: Review" in user
-        assert "do the questionable thing" in user
 
     def test_the_prompt_does_not_grow_without_bound(self, tmp_path):
         """Flat cost as history grows (§1) depends on the live prompt
@@ -564,6 +550,13 @@ class TestVendorIndependence:
             "options": {"script": [_reply_correct("")]},
         }
         manifest["roles"]["analytics"]["mock"] = False
+        manifest["roles"]["intent"]["mock"] = True
+        # Phase 0.6 gave the archive-lookup family a live tier, so the
+        # shipped manifest now declares these real. Mocked here for the
+        # same reason every other cognitive role is: this test is not
+        # about them, and it must run with no credentials.
+        manifest["roles"]["personality"]["mock"] = True
+        manifest["roles"]["knowledge"]["mock"] = True
         path = tmp_path / "m.yaml"
         tmp_path.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
@@ -590,6 +583,13 @@ class TestBootstrap:
             manifest = yaml.safe_load(f)
         manifest["storage"]["root"] = str(tmp_path / "archive")
         manifest["roles"]["analytics"]["mock"] = True
+        manifest["roles"]["intent"]["mock"] = True
+        # Phase 0.6 gave the archive-lookup family a live tier, so the
+        # shipped manifest now declares these real. Mocked here for the
+        # same reason every other cognitive role is: this test is not
+        # about them, and it must run with no credentials.
+        manifest["roles"]["personality"]["mock"] = True
+        manifest["roles"]["knowledge"]["mock"] = True
         path = tmp_path / "m.yaml"
         tmp_path.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
@@ -624,13 +624,13 @@ class TestBootstrap:
             Recovery(str(path)).bootstrap()
 
     def test_the_shipped_manifest_declares_analytics_real(self):
-        """Phase 0.2 is what the repo ships. If this flips to true by
-        accident, the phase silently stops being what it claims."""
+        """Analytics has been real since Phase 0.2. If this flips to true
+        by accident, that stops being true without anyone noticing."""
         with open(MANIFEST_PATH) as f:
             manifest = yaml.safe_load(f)
         assert manifest["roles"]["analytics"]["mock"] is False
         assert manifest["roles"]["analytics"]["substrate"] == "deep-reasoning"
-        assert manifest["phase"] == 0.2
+        assert manifest["phase"] == 0.5
 
 
 # ---------------------------------------------------------------------------

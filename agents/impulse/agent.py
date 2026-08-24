@@ -19,9 +19,9 @@ design, not by default. Two things changed from the mock:
      combinations — still a formula, not a model, and still fully
      explainable from the vector state alone. See `_axes()`.
 
-Why this stays deterministic rather than reaching for a substrate: this
-is the one hop every event MUST cross before Governance (v0.31's "sole
-trigger" rule) — it needs to run inline, synchronously, with zero added
+Why this stays deterministic rather than reaching for a substrate: it
+runs on every single event, in parallel with three other agents, and it
+gates the Critical fast path — it needs to run inline, synchronously, with zero added
 latency and zero added cost on the pipeline's busiest hop, for the same
 reason Governance and Security stayed deterministic. There is a real
 case for a future fast/cheap LLM-backed variant here too — colored by
@@ -33,9 +33,16 @@ straw one. See docs/phase-0.3-impulse.md.
 
 What did NOT change from the mock
 ----------------------------------
-- Still the sole trigger into Governance; still relays the ORIGINAL
-  verbatim content, never a paraphrase (Analytics/Intent need what was
-  actually said).
+- Still relays the ORIGINAL verbatim content, never a paraphrase
+  (everything downstream needs what was actually said).
+
+  NOT still the sole trigger into Governance — v0.35a ended that. Sensory
+  now fans out to four agents in parallel (Impulse, Analytics,
+  Personality, Knowledge) and Governance buffers all four. What Impulse
+  kept is the part that mattered: it is published to FIRST, and it is
+  still the only role whose severity read can open the Critical fast path
+  past cognition (v0.35d) — which is exactly why the Elevated ceiling
+  below is a hard invariant rather than tidiness.
 - Still combines its own severity read with whatever Sensory tagged,
   via OR-upscale-only (bus.envelope.severity_max) — it can raise, never
   lower, a tag set upstream.
@@ -131,6 +138,32 @@ REACTION_VOCABULARY: Dict[str, Dict[str, str]] = {
 }
 
 
+#: Appraisal state -> a face. Read by Governance when an exchange is
+#: blocked outright (v0.35e's blocked incident), so the expression the
+#: human sees is what the ecosystem ACTUALLY feels at that moment rather
+#: than a canned sad emoji stapled onto an error message.
+#:
+#: Deliberately a small, closed vocabulary: a product layer can map these
+#: onto avatar frames, and a text-only front end can say the word. Adding
+#: a seventh feeling is a design decision, not a tuning knob.
+EXPRESSIONS = ("angry", "scared", "sad", "warm", "alert", "neutral")
+
+#: What a blocked exchange does to the drive vectors (v0.35e). Small,
+#: named and fixed — the same discipline as every other nudge in this
+#: file: something may ASK for a shift, but the number that actually
+#: lands is written here, in code.
+#:
+#: Frustration reads as: more urgency (this mattered and it didn't work),
+#: a little more fatigue (it cost something), slightly less warmth (the
+#: persona is not delighted about it). Nothing here can manufacture a
+#: Critical severity — the ceiling below still holds.
+FRUSTRATION_NUDGE = {
+    "urgency": 0.15,
+    "fatigue": 0.05,
+    "temperature": -0.05,
+}
+
+
 def _clamp(x: float) -> float:
     return max(0.0, min(1.0, x))
 
@@ -172,8 +205,11 @@ class Impulse:
             self.drift_tau_sec.update(drift_tau_sec)
 
         self._last_update = time.monotonic()
+        self.metrics: Dict[str, int] = {"events": 0, "frustrations": 0,
+                                        "criticals": 0}
         self.archive.set_drive_vectors(self.vectors)
         self.bus.subscribe("events.impulse", self.on_event)
+        self.bus.subscribe("system.control", self.on_control)
 
     # ---- Drift (§4.1) ------------------------------------------------------
 
@@ -228,6 +264,31 @@ class Impulse:
             return IMPULSE_SEVERITY_CEILING   # never higher, regardless of score
         return "Neutral"
 
+    def expression(self) -> str:
+        """The face this appraisal state implies. READ-ONLY — nothing is
+        mutated, and Impulse is the only thing that ever decides it.
+
+        Governance asks for this when an exchange has been blocked twice
+        and there is nothing left to say (v0.35e). It is the same
+        appraisal the reflex vocabulary is drawn from, collapsed one step
+        further: three axes, one word."""
+        axes = self._axes()
+        alert, warm, engaged = (axes["alertness"], axes["warmth"],
+                                axes["engagement"])
+        high, low = _BUCKET_EDGES[1], _BUCKET_EDGES[0]
+
+        if alert >= high:
+            # Aroused. Which way it reads depends on whether there is any
+            # warmth behind it.
+            return "angry" if warm < low else "scared"
+        if engaged < low and alert < low:
+            return "sad"
+        if warm >= high:
+            return "warm"
+        if alert >= low:
+            return "alert"
+        return "neutral"
+
     # ---- Feedback (§4.1 reward path) ---------------------------------------
 
     def apply_feedback(self, valence: float, driver: str) -> None:
@@ -238,12 +299,79 @@ class Impulse:
             self.vectors[driver] = _clamp(self.vectors[driver] + valence)
             self.archive.set_drive_vectors(self.vectors)
 
+    # ---- Recalibration (§5.3's "only Intent adjusts temperature, during
+    # consolidation") — Phase 0.4's "slow coloring" coupling -----------------
+
+    def recalibrate_baseline(self, vector: str, delta: float,
+                             rationale: str = "") -> bool:
+        """Shift what a vector DRIFTS BACK TOWARD, not its live value.
+
+        This is the distinction that makes it "slow coloring" rather than
+        a per-event nudge: `_drift()` always relaxes `self.vectors[name]`
+        toward `self._baseline[name]` (see the module docstring's §4.1
+        split — immediate shift vs. gradual relaxation). Moving the
+        BASELINE means every future relaxation settles somewhere new,
+        which is what lets a temperament actually shift across many
+        consolidation cycles instead of jumping once and drifting straight
+        back to where it started.
+
+        Deliberately Intent-only in practice (§5.3: "only Intent adjusts
+        the temperature, during consolidation — a values judgment, not a
+        security one") — nothing else in the ecosystem calls this. Also
+        deliberately small per call: agents/intent/live.py's
+        IntentAgent._parse_consolidation clamps every value to
+        [-0.2, 0.2] before it ever reaches here, the same
+        enforce-it-at-the-boundary discipline as
+        IMPULSE_SEVERITY_CEILING — a manifest or a model can ask for more,
+        but the number that actually lands is capped regardless.
+
+        Returns False (silent no-op) for an unrecognized vector name,
+        matching apply_feedback()'s posture — there's no vector to shift,
+        so there's nothing to raise an error about."""
+        if vector not in self._baseline:
+            return False
+        self._baseline[vector] = _clamp(self._baseline[vector] + delta)
+        # The live value doesn't jump — only where it's headed changes.
+        # _drift() will carry it there over drift_tau_sec, same as any
+        # other displacement from baseline. Nothing in self.vectors
+        # changed, so there's nothing new to persist via
+        # set_drive_vectors() here; the baseline itself isn't yet
+        # persisted across restarts (Phase 0's in-memory posture, same as
+        # every other piece of Impulse's live state — see the module
+        # docstring's "no-op-at-rest" note on why that's fine for now).
+        return True
+
+    # ---- Control plane ------------------------------------------------------
+
+    def on_control(self, envelope: Envelope) -> None:
+        """Governance says an exchange was blocked and dropped (v0.35e).
+
+        A nudge, not a command: Governance publishes the FACT and holds no
+        reference to what happens next — Impulse owns what any signal does
+        to its own drive vectors, exactly as it owns what an event does.
+        The shift is immediate (§4.1's reward path), and `_drift()` will
+        carry it back toward baseline afterwards like any other
+        displacement, so frustration fades rather than accumulating."""
+        if envelope.type != "Frustration" or envelope.destination != "Impulse":
+            return
+        self._drift()
+        for vector, delta in FRUSTRATION_NUDGE.items():
+            self.apply_feedback(delta, vector)
+        self.metrics["frustrations"] += 1
+
     # ---- Bus ----------------------------------------------------------------
 
     def on_event(self, envelope: Envelope) -> None:
+        self.metrics["events"] += 1
         self._drift()
         reflex = self._reflex()
         combined_severity = severity_max(envelope.severity, self._assessed_severity())
+        if combined_severity == "Critical":
+            # Only ever from an upstream Sensory tag — Impulse's own
+            # assessment is capped below that (IMPULSE_SEVERITY_CEILING).
+            # Counted here because this is the one read that opens the
+            # fast path past cognition (v0.35d).
+            self.metrics["criticals"] += 1
 
         out = envelope.reply(
             source="Impulse",
@@ -264,5 +392,5 @@ class Impulse:
 __all__ = [
     "Impulse", "DEFAULT_VECTORS", "DEFAULT_DRIFT_TAU_SEC",
     "URGENCY_ELEVATED_THRESHOLD", "IMPULSE_SEVERITY_CEILING",
-    "REACTION_VOCABULARY",
+    "REACTION_VOCABULARY", "EXPRESSIONS", "FRUSTRATION_NUDGE",
 ]

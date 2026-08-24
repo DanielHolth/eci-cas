@@ -21,16 +21,22 @@ compose: any tier can still latch into budget mode on a failure.
 
 What's wired today
 -------------------
-Analytics is the only cognitive role with a live implementation
-(Phase 0.2) — applying a tier actually changes what it does. Intent's
-live tier doesn't exist until Phase 0.4, and Consolidation isn't its own
-spend point yet either (§7.4's epoch write is still IntentMock's
-templated stub). Applying a tier still records `nodes[*].substrate` and
-`consolidation_substrate` on the manifest for those, so a manifest written
-today keeps working, unmodified, once those roles go real — the same
-"declared in the manifest, credential-checked at boot, waiting" posture
-the substrate layer itself shipped with ahead of Phase 0.2 (v0.34's
-closing note).
+Three cognitive roles have live implementations as of Phase 0.5:
+Analytics (Phase 0.2), Intent (Phase 0.4) and Consolidator (v0.35f — the
+former "Consolidating" mode of Intent, now a role of its own with its own
+substrate slot; what used to be `roles.intent.consolidation_substrate` is
+`roles.consolidator.substrate`). Every named tier sets `mock: false`
+explicitly on all three, the same way it always did for Analytics — an
+operator's stale `mock: true` must not silently survive a tier switch.
+Only Minimal mocks a role at all, and only Analytics.
+
+A tier also scales Intent's conversation window (`context_events`, see
+CONTEXT_EVENTS below). That rides on every live call, so it is charged
+against the same flat-cost claim (§1) as the persona — which makes it a
+tier's business.
+
+Personality and Knowledge (v0.35b) are mock-first and have no substrate
+to allocate yet, so no tier names one for them.
 
 Minimal and Budget name a `local-fast` substrate class. Nothing new had
 to be built for that to work — the substrate layer has taken an
@@ -81,26 +87,46 @@ ANALYTICS_DEFAULT_CLASS = "deep-reasoning"
 #: whatever's declared" — irrelevant while analytics.mock is True, and
 #: there's no reason to clobber an operator's substrate choice for a role
 #: that isn't calling it.
+#: How many concluded events of conversation Intent carries on a live
+#: call (v0.35c, `roles.intent.context_events`). Tier-scaled on Daniel's
+#: call (2026-08-24): this rides on EVERY live call, so it is charged
+#: against the same flat-cost claim (§1) as the persona itself, and a
+#: tier that exists to cap spend should cap this too. Whole events, never
+#: a partial one — see agents/intent/base.py's recent_conversation().
+CONTEXT_EVENTS = {MINIMAL: 1, BUDGET: 5, DEFAULT: 10, SUPER: 15}
+
+#: role -> config, per tier. `analytics.substrate: None` means "leave
+#: whatever's declared" — irrelevant while analytics.mock is True, and
+#: there's no reason to clobber an operator's substrate choice for a role
+#: that isn't calling it.
 TIER_PRESETS: Dict[str, Dict[str, Any]] = {
     MINIMAL: {
         "analytics": {"mock": True, "substrate": None},
+        "lookup": {"mock": True, "substrate": None},
         "intent_live": LOCAL_CLASS,
         "consolidation": LOCAL_CLASS,
+        "context_events": CONTEXT_EVENTS[MINIMAL],
     },
     BUDGET: {
         "analytics": {"mock": False, "substrate": LOCAL_CLASS},
+        "lookup": {"mock": False, "substrate": LOCAL_CLASS},
         "intent_live": LOCAL_CLASS,
         "consolidation": FAST_CLASS,
+        "context_events": CONTEXT_EVENTS[BUDGET],
     },
     DEFAULT: {
         "analytics": {"mock": False, "substrate": ANALYTICS_DEFAULT_CLASS},
+        "lookup": {"mock": False, "substrate": FAST_CLASS},
         "intent_live": FAST_CLASS,
         "consolidation": FAST_CLASS,
+        "context_events": CONTEXT_EVENTS[DEFAULT],
     },
     SUPER: {
         "analytics": {"mock": False, "substrate": ANALYTICS_DEFAULT_CLASS},
+        "lookup": {"mock": False, "substrate": FAST_CLASS},
         "intent_live": FAST_CLASS,
         "consolidation": SPECIALIST_CLASS,
+        "context_events": CONTEXT_EVENTS[SUPER],
     },
 }
 
@@ -172,18 +198,50 @@ def apply_tier(manifest: Dict[str, Any]) -> Dict[str, Any]:
         analytics.pop("substrate", None)
     roles["analytics"] = analytics
 
+    # v0.35f: Intent lost its per-node substrate list along with the
+    # fleet/rotation model, and consolidation became its own ROLE rather
+    # than a second substrate hanging off Intent. A tier now names both
+    # directly, which is simpler than what it replaced.
     intent = dict(roles.get("intent") or {})
-    # Only ANNOTATE existing nodes with a substrate — never fabricate one.
-    # An empty roles.intent.nodes is a real misconfiguration Recovery is
-    # meant to catch and stop on ("nodes is empty — need at least one
-    # node", §9.1 step 6); synthesizing a node here would silently paper
-    # over that fail-stop for every tier except custom/default.
-    nodes: List[Dict[str, Any]] = [dict(n) for n in (intent.get("nodes") or [])]
-    for node in nodes:
-        node["substrate"] = preset["intent_live"]
-    intent["nodes"] = nodes
-    intent["consolidation_substrate"] = preset["consolidation"]
+    # Every named tier runs Intent live — the appendix's four rows all
+    # name a real substrate for it, and only Analytics is ever mocked
+    # (Minimal). So, same as roles.analytics.mock above, a tier states
+    # this explicitly rather than leaving whatever roles.* already had: an
+    # operator's stale `intent.mock: true` sitting next to
+    # `budget_tier: minimal` must not silently keep Intent mocked.
+    intent["mock"] = False
+    intent["substrate"] = preset["intent_live"]
+    intent["context_events"] = preset["context_events"]
     roles["intent"] = intent
+
+    # The archive-lookup family (Personality, Knowledge) got a live tier
+    # in Phase 0.6, which makes it tier-relevant for the first time: two
+    # more substrate calls on EVERY event, in parallel. A tier that exists
+    # to cap spend has to have an opinion about that, and Minimal's
+    # opinion in particular is load-bearing — its promise is that the
+    # whole ecosystem boots with no credentials at all, which a live
+    # lookup on a hosted slot would quietly break.
+    #
+    # Both members always get the same treatment: they are two instances
+    # of one class by design, and a tier that split them would be
+    # asserting a difference the architecture says doesn't exist.
+    l_preset = preset["lookup"]
+    for key in ("personality", "knowledge"):
+        role = dict(roles.get(key) or {})
+        role["mock"] = l_preset["mock"]
+        if l_preset["substrate"] is not None:
+            role["substrate"] = l_preset["substrate"]
+        elif l_preset["mock"]:
+            role.pop("substrate", None)
+        roles[key] = role
+
+    # Consolidator is a role of its own as of v0.35f. Same explicit-flag
+    # discipline: a tier that names a consolidation substrate is also
+    # saying consolidation runs for real on it.
+    consolidator = dict(roles.get("consolidator") or {})
+    consolidator["mock"] = False
+    consolidator["substrate"] = preset["consolidation"]
+    roles["consolidator"] = consolidator
 
     out["roles"] = roles
     return out
@@ -203,18 +261,20 @@ def describe(manifest: Dict[str, Any]) -> str:
     roles = manifest.get("roles") or {}
     analytics = roles.get("analytics") or {}
     intent = roles.get("intent") or {}
-    nodes = intent.get("nodes") or []
-    intent_substrate = nodes[0].get("substrate") if nodes else "unset"
+    consolidator = roles.get("consolidator") or {}
 
     a = "mock (zero cost)" if analytics.get("mock") else f"live/{analytics.get('substrate')}"
-    return (f"{label}{suffix} — analytics={a}, "
-            f"intent(live, Phase 0.4+)={intent_substrate}, "
-            f"consolidation(not yet its own spend point)="
-            f"{intent.get('consolidation_substrate', 'unset')}")
+    i = ("mock (zero cost)" if intent.get("mock")
+         else f"live/{intent.get('substrate', 'unset')}")
+    c = ("mock (zero cost)" if consolidator.get("mock", True)
+         else f"live/{consolidator.get('substrate', 'unset')}")
+    return (f"{label}{suffix} — analytics={a}, intent={i} "
+            f"(context {intent.get('context_events', 'unset')} events), "
+            f"consolidator={c}")
 
 
 __all__ = [
     "TIER_NAMES", "TIER_PRESETS", "UnknownTier", "apply_tier", "describe",
-    "MINIMAL", "BUDGET", "DEFAULT", "SUPER", "CUSTOM",
+    "MINIMAL", "BUDGET", "DEFAULT", "SUPER", "CUSTOM", "CONTEXT_EVENTS",
     "LOCAL_CLASS", "FAST_CLASS", "SPECIALIST_CLASS", "ANALYTICS_DEFAULT_CLASS",
 ]

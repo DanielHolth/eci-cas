@@ -4,10 +4,11 @@ Embedded pub-sub bus — ECI-spec-v0-30.md §3.
 Phase 0 uses an in-memory, synchronous, single-process bus
 (manifest: message_bus.type = "embedded-pubsub"). Topics:
 
-    events.sensory | events.impulse | events.governance | events.analytics
-    events.intent  | events.security | events.action
+    events.sensory | events.impulse      | events.governance | events.analytics
+    events.intent  | events.personality | events.knowledge  | events.security
+    events.action  | events.archive
     system.diagnostic   (BootCheck / SystemCheck synthetic pings, §9)
-    system.control       (Governance -> Intent-node rotation signals, §7.2)
+    system.control       (Consolidator -> Intent persona-refresh pings, v0.35g)
 
 Every publish is:
   1. dispatched synchronously to all subscribers of that topic, and
@@ -29,6 +30,14 @@ from bus.envelope import Envelope
 BUSINESS_TOPICS = {
     "events.sensory", "events.impulse", "events.governance",
     "events.analytics", "events.intent", "events.security", "events.action",
+    # v0.35b: the archive-grounded lookup family. Two topics today
+    # (Personality, Knowledge); the family is expected to grow.
+    "events.personality", "events.knowledge",
+    # Phase 0.6: Archive's bus door. §5.8 always described Archive as two
+    # HTTP-shaped endpoints, and it keeps them — this topic is the
+    # asynchronous half, for a writer that has no reason to hold a
+    # reference to the store and no reason to wait for the append.
+    "events.archive",
 }
 SYSTEM_TOPICS = {"system.diagnostic", "system.control"}
 ALL_TOPICS = BUSINESS_TOPICS | SYSTEM_TOPICS

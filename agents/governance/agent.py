@@ -1,34 +1,33 @@
 """
-Governance — REAL, deterministic tier (§5.1, spec v0.34).
+Governance — REAL, deterministic tier (§5.1, spec v0.35).
 
 The non-thinking backbone, taken at its word. No persona, no opinions,
-never explains itself, and as of v0.34 no substrate: every hop it handles
+never explains itself, and since v0.34 no substrate: every hop it handles
 is settled by the envelope alone, so there is nothing for a model to
 decide and nothing for one to write.
 
-That is a tier change, not a capability cut. v0.33 and earlier listed
-Governance as Cognitive; Phase 0.1 built the LLM-backed version, measured
-what it actually contributed, and found the answer was routing decisions
-that were already determined plus wording nobody downstream could use.
-The one genuinely open case — a safety verdict that couldn't be read
-mechanically — has a better home than a model in the router seat: it goes
-to Analytics, which is the agent that reasons. See the v0.34 revision
-note.
+v0.35 made it the UNIVERSAL ROUTER — every hop in the pipeline passes
+through here except the one Sensory fan-out (v0.35a), which is
+deliberately ungated. See agents/governance/routing.py for the table and
+agents/governance/buffer.py for the one thing this role now holds.
 
-There is consequently one implementation, not a mock and a real one.
-Governance joins Sensory as always-real (§13.1's reasoning applied to a
-second role: there is nothing meaningful to mock about a lookup table).
-`roles.governance.mock` in the manifest is ignored, with a warning.
+Three jobs, all mechanical
+---------------------------
+  1. Buffer and bundle. Four agents answer the same event in parallel;
+     Governance collects all four and sends ONE bundled message to Intent
+     (v0.35c). It assembles the envelope and writes none of its contents.
 
-Routes (v0.31 strict relay, §3.2 worked example):
+  2. Dispatch on Security's verdict. Green releases to Action; yellow and
+     red both go to Intent as of v0.35e (Analytics is isolated from
+     Security in every way — Daniel, 2026-08-24). Anything unreadable is
+     treated as yellow, so the pipeline's one irreversible step is
+     reachable by exactly one value. Every non-green verdict spends one
+     clearance attempt, and when the budget is gone the event is BLOCKED
+     rather than re-asked — the bound that keeps this from live-locking.
 
-    Impulse relay   -> Analytics  Evaluate
-    Intent advice   -> Security   Clear
-    Security green  -> Action     Speech      release
-    Security yellow -> Analytics  Review      rules don't cover it
-    Security red    -> Analytics  Revise      blocked
-    Action failure  -> Action     Prompt      v0.33 fallback, no retries
-    anything else   -> log and drop
+  3. Conclude the event. Once Action has run, Governance hands
+     Consolidator one complete record of what happened (v0.35g) and
+     forgets the event.
 
 Two properties are enforced here rather than trusted to callers:
 
@@ -43,13 +42,25 @@ Two properties are enforced here rather than trusted to callers:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
-from bus.envelope import Envelope
+from bus.envelope import Envelope, new_event_id
 from bus.pubsub import EmbeddedBus
 
 from agents.governance import routing
+from agents.governance.buffer import DEFAULT_WORKERS, BundleBuffer, EventState
 from agents.governance.routing import RoutingDecision
+
+#: Hard cap on entries the buffer will hold. See _evict_stale — this is a
+#: backstop against a misconfigured worker set, not a working limit.
+MAX_IN_FLIGHT_EVENTS = 256
+
+#: How many revision attempts a red verdict buys. Mirrors
+#: agents.intent.contract.MAX_REVISION_PASSES — imported lazily below so
+#: this module keeps no import-time dependency on Intent's package.
+def _max_revision_passes() -> int:
+    from agents.intent.contract import MAX_REVISION_PASSES
+    return MAX_REVISION_PASSES
 
 
 class Governance:
@@ -57,13 +68,28 @@ class Governance:
 
     tier = "deterministic"
 
-    def __init__(self, bus: EmbeddedBus):
+    def __init__(self, bus: EmbeddedBus, *,
+                 expected_workers: Optional[Set[str]] = None,
+                 consolidator=None, impulse=None):
         self.bus = bus
-        # Observability counters ONLY. Never read by decide(); Governance's
+        #: The four parallel answers this router waits for (v0.35a).
+        self.buffer = BundleBuffer(expected_workers or DEFAULT_WORKERS)
+        #: Where a concluded event's record goes (v0.35g). Optional — a
+        #: harness without a Consolidator simply doesn't consolidate.
+        self.consolidator = consolidator
+        #: Read-only use: the blocked incident asks Impulse for the
+        #: expression its CURRENT appraisal state implies. Governance
+        #: never sets a drive vector itself; the frustration nudge goes
+        #: over the control plane like every other cross-agent signal.
+        self.impulse = impulse
+
+        # Observability counters ONLY. Never read by decide(): Governance's
         # per-event statutory context reset (§5.1) means no decision may
         # depend on anything that happened in a previous event.
         self.metrics: Dict[str, int] = {
             "events": 0, "routed": 0, "dropped": 0, "verdicts_inferred": 0,
+            "bundles": 0, "held": 0, "incomplete": 0,
+            "reflexes": 0, "revisions": 0, "blocked": 0, "concluded": 0,
         }
         self.bus.subscribe("events.governance", self.on_event)
         self.bus.subscribe("system.diagnostic", self.on_diagnostic)
@@ -90,49 +116,352 @@ class Governance:
 
     def on_event(self, envelope: Envelope) -> None:
         self.metrics["events"] += 1
-        decision = routing.decide(envelope)
-        if decision is None:
-            # Unroutable source (a Recovery ping that leaked onto events.*,
-            # or an unexpected sender). Log-and-drop.
+        trigger = routing.classify(envelope)
+
+        if trigger is routing.Trigger.UNROUTABLE:
+            # Nothing to hold and nothing to route. Critically, do NOT
+            # create a buffer entry on the way to dropping this: an
+            # unroutable envelope has no event to conclude, so an entry
+            # minted here would never be released. That was a real leak —
+            # unbounded growth, holding verbatim user content, in a
+            # process designed to run 24/7.
             self.metrics["dropped"] += 1
             return
+
+        state = self.buffer.get(envelope.event_id)
+
+        if trigger is routing.Trigger.WORKER_REPORT:
+            self._record_worker(envelope, state)
+        elif trigger is routing.Trigger.INTENT_ADVICE:
+            self._record_intent(envelope, state)
+        elif trigger is routing.Trigger.SECURITY_VERDICT:
+            self._record_verdict(envelope, state)
+
+        decision = routing.decide(
+            envelope,
+            bundle_ready=state.ready(),
+            revision_passes=state.revision_passes,
+            max_revision_passes=_max_revision_passes(),
+            sensory=state.sensory,
+        )
+
+        if decision is None:
+            if trigger is routing.Trigger.WORKER_REPORT and not state.bundled:
+                # Waiting on the other answers. Not a drop — a hold.
+                self.metrics["held"] += 1
+                self._evict_stale(keep=envelope.event_id)
+                return
+            # A duplicate report after bundling, or a worker answering an
+            # event that already short-circuited.
+            self.metrics["dropped"] += 1
+            return
+
         if decision.diagnostics.get("verdict_inferred"):
             self.metrics["verdicts_inferred"] += 1
-        self.emit(envelope, decision)
+
+        self._note_route(decision, state)
+        out = self.emit(envelope, decision)
+
+        # The event is over once something reached Action. Hand
+        # Consolidator the whole arc, then forget it (§5.1).
+        #
+        # emit() publishes synchronously, so a failing Action re-enters
+        # this method and concludes the event from INSIDE the frame above
+        # before we get here. _conclude is therefore idempotent — without
+        # that, an Action failure consolidated the same event twice.
+        if decision.route.topic == "events.action":
+            if state.concludes_on_action():
+                self._conclude(state)
+            else:
+                # A Critical reflex just reached the human. The event is
+                # NOT over: the fan-out is still running behind it and
+                # Intent's considered reply is still to come. Remember
+                # what the reflex did so Intent can speak to it.
+                state.reflex_action = str(decision.content)
+        return out
+
+    # ---- Per-event bookkeeping (v0.35c/g) ---------------------------------
+
+    def _record_worker(self, envelope: Envelope, state: EventState) -> None:
+        """One of the four parallel answers (v0.35a). Governance stores
+        the slot as the worker reported it — it never rewrites, ranks or
+        summarises a contribution."""
+        if state.bundled:
+            return
+        if not state.sensory:
+            state.sensory = str(envelope.content)
+        # §3's OR-upscale-only rule has to survive bundling: see
+        # EventState.severity for why taking the max here is load-bearing
+        # rather than tidy.
+        state.raise_severity(envelope.severity)
+        slot = envelope.meta.get(envelope.source.lower())
+        if slot is None:
+            # Impulse doesn't write a role-named slot; its contribution IS
+            # the reflex and drive vectors it already puts on every hop.
+            slot = {"reflex": envelope.meta.get("reflex"),
+                    "drive_vectors": envelope.meta.get("drive_vectors"),
+                    "severity": envelope.severity}
+        state.slots[envelope.source] = dict(slot) if isinstance(slot, dict) else {
+            "findings": slot}
+
+        # NOTE what does NOT happen here on a Critical: the other three
+        # answers are NOT discarded. The reflex fires immediately (see
+        # _note_route), and the fan-out still completes behind it, so
+        # Intent gets its bundle and voices a second, reflex-aware
+        # reaction. See EventState.reflex_fired.
+
+    def _record_intent(self, envelope: Envelope, state: EventState) -> None:
+        proposal = str(envelope.meta.get("proposed_action") or envelope.content)
+        state.proposals.append(proposal)
+        if not state.sensory:
+            state.sensory = proposal
+
+    def _record_verdict(self, envelope: Envelope, state: EventState) -> None:
+        verdict = routing.read_verdict(envelope)
+        state.verdict = verdict
+        concern = envelope.meta.get("security_concern") or envelope.meta.get("concern")
+        if verdict != "green" and concern:
+            state.security_concern = str(concern)[:300]
+
+    def _note_route(self, decision: RoutingDecision, state: EventState) -> None:
+        route_id = decision.route.id
+        if route_id == routing.BUNDLE.id:
+            state.bundled = True
+            self.metrics["bundles"] += 1
+        elif route_id in (routing.REVISE.id, routing.REVIEW.id):
+            # BOTH non-green lanes spend an attempt. Bounding only REVISE
+            # left the yellow lane unbounded — and Intent's fail-closed
+            # answer on a yellow is a decline sentence that comes straight
+            # back here for clearance, so a rule engine that yellows a
+            # decline yellows it forever.
+            state.revision_passes += 1
+            self.metrics["revisions"] += 1
+        elif route_id == routing.REFLEX.id:
+            state.reflex_fired = True
+            self.metrics["reflexes"] += 1
+        elif route_id == routing.BLOCKED.id:
+            state.blocked = True
+            self.metrics["blocked"] += 1
 
     # ---- Emission ---------------------------------------------------------
+
+    #: Routes that hand off to Security. Security decides "is this against
+    #: the rules" (§5.6) from the proposed action and the event's severity
+    #: alone — it has no business seeing Analytics' recommendation,
+    #: Personality's/Knowledge's findings, or Intent's own diagnostics
+    #: about how it decided (Daniel, 2026-08-24: "why does security need
+    #: to see what analytics, personality and knowledge wrote?"). It
+    #: doesn't, so it isn't shown them.
+    _SECURITY_ROUTES = (routing.CLEAR.id, routing.REFLEX.id)
 
     def emit(self, envelope: Envelope, decision: RoutingDecision) -> Envelope:
         """Publish the decision.
 
         Reading meta.governance in a trace: it describes the hop it sits
         on ONLY where source == "Governance". Routes that carry meta
-        forward (Intent -> Security) hand the whole meta dict to the next
-        agent, and Security echoes meta back on its verdict — so a stale
-        block can ride along on a hop Governance didn't produce. Filter on
-        source."""
+        forward hand the whole meta dict to the next agent, and Security
+        echoes meta back on its verdict — so a stale block can ride along
+        on a hop Governance didn't produce. Filter on source."""
         route = decision.route
+        state = self.buffer.peek(envelope.event_id)
 
-        meta: Dict[str, Any] = dict(envelope.meta) if route.carry_meta else {}
+        if route.id in self._SECURITY_ROUTES:
+            # Minimal by construction, not by convention: only what the
+            # round trip through Security structurally needs to survive
+            # (the proposed action, so SPEAK can resolve Action's content
+            # once a green verdict comes back) rides along. Everything
+            # else Intent still needs on the far side of a yellow/red
+            # verdict — the bundle's recommendations, security's own
+            # concern, the revision count — is re-derived below from
+            # Governance's own per-event state rather than trusted to
+            # survive Security's echo.
+            meta = {}
+            if route.id == routing.REFLEX.id:
+                # On the reflex fast path Intent hasn't run — there is no
+                # Intent-authored proposed_action yet. The thing actually
+                # about to reach the human is the reflex reaction itself
+                # (Impulse's `reflex` phrase, already baked into
+                # decision.content's template), so THAT is what has to
+                # survive Security's echo as `proposed_action`, or SPEAK's
+                # content resolution falls through to Security's own bare
+                # verdict word ("Green") once it clears — a real bug found
+                # 2026-08-24: every Critical reflex was speaking the
+                # literal word "Green" to the human instead of its
+                # reaction.
+                reflex_text = str(envelope.meta.get("reflex") or "").strip()
+                if reflex_text:
+                    meta["proposed_action"] = reflex_text
+            else:
+                proposed_action = envelope.meta.get("proposed_action")
+                if proposed_action is not None:
+                    meta["proposed_action"] = proposed_action
+        elif route.carry_meta:
+            meta = dict(envelope.meta)
+        else:
+            meta = {}
         governance_meta: Dict[str, Any] = {"tier": self.tier}
         governance_meta.update(decision.diagnostics)
         if decision.rationale:
             governance_meta["rationale"] = decision.rationale
         meta["governance"] = governance_meta
 
+        if route.id == routing.BUNDLE.id and state is not None:
+            # The three analytical answers, projected to one shared shape
+            # (Daniel, 2026-08-24) — sender, keywords, proceed, concern.
+            # None of Analytics'/Personality's/Knowledge's own tier or
+            # diagnostics rides along; Intent needs to know who said what,
+            # not how each of them arrived at it. Intent still reads
+            # proceed/concern for its ADVISE/REFUSE choice out of
+            # Analytics specifically — that half of the contract is
+            # unchanged, just better grounded (v0.35c).
+            meta["recommendations"] = state.recommendations()
+            analytics = state.slots.get("Analytics") or {}
+            meta["proceed"] = analytics.get("proceed", True)
+            if analytics.get("concern"):
+                meta["concern"] = analytics["concern"]
+            if analytics.get("recommendation"):
+                meta["recommendation"] = analytics["recommendation"]
+            impulse = state.slots.get("Impulse") or {}
+            if impulse.get("reflex"):
+                meta["reflex"] = impulse["reflex"]
+            if state.reflex_fired:
+                # The human has ALREADY seen something happen. Intent is
+                # about to be the second thing they see, and it should
+                # know that — a persona that talks over its own reflex
+                # reads as two disconnected voices rather than one mind
+                # catching up with its own hands.
+                meta["reflex_already_acted"] = True
+                meta["reflex_action"] = state.reflex_action
+
+        if route.id in (routing.REVIEW.id, routing.REVISE.id):
+            # These two routes carry the ORIGINAL REQUEST as their payload
+            # (see routing.py), because Intent's prompt renders the payload
+            # as "what the human said" and Intent is the agent deciding
+            # here. The router's own instruction rides alongside it rather
+            # than replacing it.
+            meta["router_instruction"] = routing.template_content(envelope, route)
+            if state is not None:
+                # What Security actually said, kept distinct from
+                # Analytics' `concern` so Intent's prompt attributes each
+                # correctly.
+                if state.security_concern:
+                    meta["security_concern"] = state.security_concern
+                meta["revision_passes"] = state.revision_passes
+                # Re-derived from Governance's own state, not trusted to
+                # have survived Security's echo (which no longer carries
+                # it — see _SECURITY_ROUTES above). By the time Security
+                # reds something Intent already has every analytical read
+                # of the event; this is what keeps that true.
+                recommendations = state.recommendations()
+                if recommendations:
+                    meta["recommendations"] = recommendations
+
+        if route.id == routing.BLOCKED.id:
+            meta.update(self._blocked_meta(state))
+
+        # Severity: inherited, never revised (§3). The ONE exception is
+        # the bundle, and it is not Governance forming an opinion — it is
+        # Governance refusing to lose one. The four parallel answers each
+        # carry their own copy's tag; the bundle carries the highest, so
+        # an escalation on any one of them survives being merged. See
+        # EventState.severity.
+        severity = None
+        if route.id == routing.BUNDLE.id and state is not None:
+            severity = state.severity
+
         out = envelope.reply(
             source="Governance",
             destination=route.destination,
             type=route.type,
             content=decision.content,
+            severity=severity,
             triggered_by=envelope.triggered_by,
             meta=meta,
-            # NOTE: severity deliberately omitted — reply() inherits the
-            # upstream tag and Governance never revises it (§3).
         )
         self.bus.publish(route.topic, out)
         self.metrics["routed"] += 1
+
+        if route.id == routing.BLOCKED.id:
+            self._signal_frustration(out)
         return out
+
+    # ---- The blocked incident (Daniel, 2026-08-24) ------------------------
+
+    def _blocked_meta(self, state: Optional[EventState]) -> Dict[str, Any]:
+        """A second red is an OUTCOME, not another loop.
+
+        What reaches the human is deterministic and Governance-templated,
+        because nothing here cleared Security and so nothing model-authored
+        may be spoken. What makes it legible as more than an error message
+        is the expression: Impulse's CURRENT appraisal state, read (never
+        set) at this moment, so the face matches how the ecosystem
+        actually feels rather than a canned sad emoji."""
+        expression = "neutral"
+        reader = getattr(self.impulse, "expression", None)
+        if callable(reader):
+            expression = reader()
+        return {
+            "expression": expression,
+            "security_alert": True,
+            "blocked": True,
+            "revision_passes": state.revision_passes if state else 0,
+            "security_concern": state.security_concern if state else "",
+        }
+
+    def _signal_frustration(self, envelope: Envelope) -> None:
+        """Tell Impulse the exchange was blocked (control plane).
+
+        A nudge, not a command: Impulse owns what a signal does to its own
+        drive vectors, exactly as it owns what an event does. Governance
+        publishes the fact and holds no reference to the result — same
+        no-shared-mutable-state discipline as Consolidator's EpochWritten
+        ping (v0.35g)."""
+        self.bus.publish("system.control", Envelope(
+            source="Governance", destination="Impulse", type="Frustration",
+            content="an action was blocked twice and dropped",
+            event_id=envelope.event_id,
+        ))
+
+    # ---- Concluding an event (v0.35g) -------------------------------------
+
+    def _evict_stale(self, *, keep: str) -> None:
+        """Drop the oldest in-flight entries if the buffer is growing.
+
+        On a synchronous bus every event concludes inside the ingest()
+        call that started it, so this should never fire — an entry that
+        outlives its event means a worker isn't subscribed at all
+        (a misconfiguration). The cap exists so that misconfiguration
+        degrades into a counted diagnostic rather than into unbounded
+        memory growth holding verbatim user content."""
+        while len(self.buffer) > MAX_IN_FLIGHT_EVENTS:
+            for event_id in self.buffer.in_flight:
+                if event_id == keep:
+                    continue
+                self.buffer.release(event_id)
+                self.metrics["incomplete"] += 1
+                break
+            else:                                     # pragma: no cover
+                return
+
+    def _conclude(self, state: EventState) -> None:
+        """Action has run. Hand Consolidator the one bundle per event the
+        v0.35g design settled on, then forget the event.
+
+        This is the hand-off that replaced two rejected designs: a direct
+        Consolidator subscription to the Sensory fan-out (which couldn't
+        know pipeline-final information), and three incremental hand-offs
+        per event (which paid the fixed prompt overhead three times for a
+        component whose whole design point is running rarely)."""
+        if self.buffer.peek(state.event_id) is None:
+            # Already concluded — see the note at the call site. An Action
+            # failure re-enters synchronously and concludes the event
+            # before the outer frame returns.
+            return
+        record = state.consolidation_record()
+        self.buffer.release(state.event_id)
+        self.metrics["concluded"] += 1
+        if self.consolidator is not None:
+            self.consolidator.observe(record)
 
 
 #: Retired alias. Phase 0 had a mock/real split for this role; v0.34

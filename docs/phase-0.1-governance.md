@@ -1,5 +1,15 @@
 # Phase 0.1 — Governance made real
 
+> **Superseded in part by v0.35** (see
+> [`docs/phase-0.5-v0-35.md`](phase-0.5-v0-35.md)). Governance is still the
+> deterministic dispatcher this document describes, and the fail-safe
+> verdict property is intact — but the routing table has changed:
+> Sensory now fans out to four agents with no Governance hop, Governance
+> buffers those four answers and bundles them for Intent, and BOTH
+> non-green verdict lanes route to Intent rather than Analytics. The
+> "Impulse relay is the sole trigger" row in the route table below is
+> historical.
+
 **Status:** implemented
 **Spec:** ECI-spec-v0-34 (§5.1 Governance, §5.6 Security, §10.2 substrates, §13.4)
 **Roster:** 6 mocks + 2 real (Sensory, Governance)

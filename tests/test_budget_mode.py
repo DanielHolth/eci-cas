@@ -79,6 +79,16 @@ def _manifest(tmp_path: Path, *, fail_kind=None, **budget_overrides) -> Path:
         "options": {"fail_kind": fail_kind},
     }
     manifest["roles"]["analytics"]["mock"] = False
+    # This suite is about Analytics + budget mode; hold Intent
+    # deterministic so it needs no credential of its own (Phase 0.4 note,
+    # same reasoning as the analytics.mock pin above).
+    manifest["roles"]["intent"]["mock"] = True
+    # Phase 0.6 gave the archive-lookup family a live tier, so the
+    # shipped manifest now declares these real. Mocked here for the
+    # same reason every other cognitive role is: this test is not
+    # about them, and it must run with no credentials.
+    manifest["roles"]["personality"]["mock"] = True
+    manifest["roles"]["knowledge"]["mock"] = True
     manifest["budget_mode"].update(budget_overrides)
     tmp_path.mkdir(parents=True, exist_ok=True)
     out = tmp_path / "m.yaml"
@@ -295,6 +305,48 @@ class TestPersistence:
         assert s.mode == BUDGET
 
 
+class TestLoggingFields:
+    """timestamp + budget_tier (Daniel, 2026-08-24): the budget log is an
+    append-only snapshot per call, so each entry needs its own "when" and
+    "under which tier" to be worth comparing across runs later — neither
+    field feeds a mode decision."""
+
+    def test_every_saved_snapshot_carries_a_timestamp_and_tier(self, tmp_path):
+        from agents.archive.store import ArchiveStore
+        archive = ArchiveStore(root=str(tmp_path / "archive"))
+        m = BudgetManager(archive, budget_tier="default")
+        m.record_success(cost_usd=0.1)
+
+        record = archive.query("budget")[-1]
+        assert record["budget_tier"] == "default"
+        assert record["timestamp"]
+
+    def test_from_manifest_reads_budget_tier_off_the_manifest(self):
+        m = from_manifest({"budget_tier": "minimal", "budget_mode": {}})
+        assert m.budget_tier == "minimal"
+
+    def test_missing_budget_tier_defaults_to_empty_not_none(self):
+        m = from_manifest({"budget_mode": {}})
+        assert m.budget_tier == ""
+
+    def test_every_call_appends_its_own_stamped_snapshot(self, tmp_path):
+        """Still an append-only log by design (Daniel was fine with that
+        once each entry is self-describing) — every call adds a new row,
+        each with its own timestamp."""
+        from agents.archive.store import ArchiveStore
+        archive = ArchiveStore(root=str(tmp_path / "archive"))
+        m = BudgetManager(archive, budget_tier="super")
+        m.record_success(cost_usd=0.1)
+        m.record_success(cost_usd=0.1)
+        m.record_success(cost_usd=0.1)
+
+        records = archive.query("budget")
+        assert len(records) == 3
+        assert [r["calls"] for r in records] == [1, 2, 3]
+        assert all(r["budget_tier"] == "super" for r in records)
+        assert all(r["timestamp"] for r in records)
+
+
 class TestManifestConfig:
     def test_it_reads_the_shipped_manifest(self):
         with open(MANIFEST_PATH) as f:
@@ -353,18 +405,32 @@ class TestInThePipeline:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
 
         out = _analytics_out(eco, event_id)
-        assert out.meta["proceed"] is True
+        assert out.meta["analytics"]["proceed"] is True
         assert out.meta["analytics"]["decided_by"] == "budget"
 
     def test_a_gated_event_declines_in_budget_mode(self, tmp_path):
         """The asymmetry that matters. Budget mode is most likely to be on
         when something is already wrong; approving a gate because the
-        reasoner is unavailable would be worse than having no gate."""
+        reasoner is unavailable would be worse than having no gate.
+
+        v0.35e moved the gate: Security's yellow lane goes to INTENT now,
+        not Analytics, so this is Intent's budget-mode fallback being
+        asserted rather than Analytics' — but the property under test is
+        the same one, and it is exactly why the gating registers had to
+        get a fail-closed fallback when they moved."""
         eco = _boot(tmp_path)
         eco.budget.switch_manual("budget")
         event_id = _yellow(eco, proposed="the unapproved thing")
 
-        assert _analytics_out(eco, event_id).meta["proceed"] is False
+        intent_out = [e for e in eco.bus.trace()
+                      if e.event_id == event_id and e.source == "Intent"][0]
+        # This suite pins Intent to its mock tier, which declines a gating
+        # register outright (it cannot judge, so it says so) — the same
+        # outcome budget mode produces on the live tier, reported honestly
+        # as deterministic rather than as a degraded call. The live tier's
+        # budget-mode path is asserted in tests/test_phase05_intent_veto.py.
+        assert intent_out.meta["proceed"] is False
+        assert intent_out.meta["intent"]["failed_closed"] is True
         assert not [s for s in _spoken(eco, event_id) if "the unapproved thing" in s]
 
     def test_a_terminal_failure_latches_mid_run(self, tmp_path):

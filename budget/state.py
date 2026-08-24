@@ -91,6 +91,15 @@ class BudgetState:
     spend_usd: float = 0.0
     warned_at_fraction: bool = False
 
+    #: When this snapshot was written (ISO-8601 UTC) and which budget_tier
+    #: was active. Neither drives a decision — decisions are made from the
+    #: counters above — they exist so the append-only budget log (each
+    #: call appends a fresh snapshot; see BudgetManager.save()) can be
+    #: read back and compared across runs/tiers later, per Daniel's
+    #: 2026-08-24 request, without cross-referencing the manifest by hand.
+    timestamp: Optional[str] = None
+    budget_tier: str = ""
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -119,11 +128,16 @@ class BudgetManager:
                  warn_at: float = DEFAULT_WARN_AT,
                  enabled: bool = True,
                  initial_mode: str = LIVE,
+                 budget_tier: str = "",
                  on_change: Optional[Callable[[str, "BudgetState"], None]] = None):
         self.archive = archive
         self.failure_threshold = max(1, int(failure_threshold))
         self.spend_cap_usd = spend_cap_usd
         self.warn_at = warn_at
+        #: Which budget_tier preset (minimal/budget/default/super/custom)
+        #: was applied to the manifest this manager was built from — stamped
+        #: onto every saved snapshot, not used in any decision here.
+        self.budget_tier = str(budget_tier or "")
         self.enabled = enabled
         self.on_change = on_change
 
@@ -157,6 +171,12 @@ class BudgetManager:
     def save(self) -> None:
         if self.archive is None:
             return
+        # Stamped fresh on every save (Daniel, 2026-08-24) — this is an
+        # append-only log (see agents/archive/store.py's write()), so each
+        # entry needs its own "when" and "under which tier" to be worth
+        # comparing later; neither field feeds a decision above.
+        self.state.timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self.state.budget_tier = self.budget_tier
         try:
             self.archive.write("budget", self.state.to_dict())
         except Exception:
@@ -312,6 +332,7 @@ def from_manifest(manifest: Dict[str, Any], archive=None, **kwargs) -> BudgetMan
         failure_threshold=int(config.get("failure_threshold", DEFAULT_FAILURE_THRESHOLD)),
         spend_cap_usd=None if cap in (None, False) else float(cap),
         warn_at=float(config.get("warn_at_fraction", DEFAULT_WARN_AT)),
+        budget_tier=str((manifest or {}).get("budget_tier") or ""),
         **kwargs,
     )
 

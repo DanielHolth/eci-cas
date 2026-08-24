@@ -1,5 +1,16 @@
 # Phase 0.3 — Impulse (real), as built
 
+> **Superseded in part by v0.35** (see
+> [`docs/phase-0.5-v0-35.md`](phase-0.5-v0-35.md)). Everything about
+> drift, appraisal and the severity ceiling is unchanged. What changed is
+> Impulse's position: it is no longer "the sole trigger into Governance"
+> — Sensory fans out to four agents in parallel (v0.35a) and Impulse is
+> simply first among them. The Critical reflex this document calls
+> deferred is now BUILT (v0.35d), and the Elevated ceiling is what keeps
+> it honest. Impulse also gained two things: `expression()`, read by
+> Governance when an exchange is blocked, and a frustration nudge on the
+> control plane.
+
 **Status:** implemented, offline-tested (21 dedicated tests + full suite green)
 **Scope:** drive-vector drift + weighted appraisal reaction engine only.
 **Explicitly deferred to later Phase 0.3 work:** the Critical reflex (bypass path

@@ -1,5 +1,14 @@
 # Phase 0.2.2 — Budget Tiers, as built
 
+> **Superseded in part by v0.35** (see
+> [`docs/phase-0.5-v0-35.md`](phase-0.5-v0-35.md)). The four tiers and
+> what they mean are unchanged, but two manifest keys they write moved:
+> `roles.intent.nodes[*].substrate` is now the flat
+> `roles.intent.substrate` (the fleet/rotation model is gone), and
+> `roles.intent.consolidation_substrate` is now
+> `roles.consolidator.substrate` (consolidation is its own role). Tiers
+> also now scale `roles.intent.context_events` — 1 / 5 / 10 / 15.
+
 **Status:** implemented, offline-tested, additive (zero breaking changes)
 **Source:** `docs/budget-tiers-appendix.md` (Minimal / Budget / Default / Super)
 **Depends on:** the substrate layer (§10.2, Phase 0.2) and budget mode (Phase 0.2.1) — this

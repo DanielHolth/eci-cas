@@ -39,7 +39,7 @@ from substrates.registry import resolve_substrate
 #: skipped even if the manifest leaves a stale `substrate` key on them —
 #: Governance in particular carries one for historical reasons and never
 #: uses it (v0.34).
-COGNITIVE_ROLES = ("analytics", "intent")
+COGNITIVE_ROLES = ("analytics", "intent", "consolidator")
 
 OK = "  ok   "
 SKIP = " skip  "
@@ -69,13 +69,12 @@ def _iter_required_substrates(
             continue
         required = config.get("mock", True) is False
 
-        if role == "intent":
-            # Intent declares its substrate per node (§7.5), not on the role.
-            for node in config.get("nodes", []) or []:
-                if node.get("substrate"):
-                    out.append((f"{role}[{node.get('id', '?')}]",
-                                node["substrate"], required))
-            continue
+        if role == "intent" and config.get("nodes"):
+            # v0.35f removed the fleet/rotation model, and with it Intent's
+            # per-node substrate list. A manifest still carrying `nodes:`
+            # is stale — Recovery says so at boot; report it here too
+            # rather than silently resolving something nothing will use.
+            out.append(("intent[stale nodes:]", None, False))
 
         if config.get("substrate"):
             out.append((role, config["substrate"], required))
@@ -139,7 +138,7 @@ def main(argv: Optional[list] = None) -> int:
 
     print(f"Preflight — {args.manifest} (phase {manifest.get('phase')}, "
           f"budget tier: {budget_tiers.describe(manifest)})")
-    print(f"{'':7}{'role':<16}{'substrate':<16}{'resolved to'}")
+    print(f"{'':7}{'role':<22}{'substrate':<16}{'resolved to'}")
     print("-" * 72)
 
     failures = 0
@@ -151,13 +150,13 @@ def main(argv: Optional[list] = None) -> int:
             # Analytics) — nothing to resolve or check. Say so plainly
             # rather than printing a leftover value that implies a
             # substrate identity the tier never claimed.
-            print(f"{OK}{role:<16}{'mocked':<16}(no substrate — role is fully mocked)")
+            print(f"{OK}{role:<22}{'mocked':<16}(no substrate — role is fully mocked)")
             continue
 
         try:
             substrate = resolve_substrate(manifest, substrate_class)
         except SubstrateError as exc:
-            print(f"{FAIL}{role:<16}{substrate_class:<16}{exc}")
+            print(f"{FAIL}{role:<22}{substrate_class:<16}{exc}")
             failures += is_required
             continue
 
@@ -168,12 +167,12 @@ def main(argv: Optional[list] = None) -> int:
         except SubstrateError as exc:
             marker = FAIL if is_required else SKIP
             note = "" if is_required else " (role is mocked — informational)"
-            print(f"{marker}{role:<16}{substrate_class:<16}{target}")
+            print(f"{marker}{role:<22}{substrate_class:<16}{target}")
             print(f"{'':7}{'':<32}{exc}{note}")
             failures += is_required
             continue
 
-        print(f"{OK}{role:<16}{substrate_class:<16}{target}"
+        print(f"{OK}{role:<22}{substrate_class:<16}{target}"
               + ("" if is_required else "   (role is mocked)"))
 
         if args.live and is_required:

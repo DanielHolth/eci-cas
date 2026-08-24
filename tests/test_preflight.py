@@ -46,7 +46,7 @@ class TestPreflightAppliesTheTier:
         # there implying an identity the tier never claimed) — preflight
         # must say "mocked" plainly, not report a stale substrate/model
         # name, and must not fail preflight over it.
-        assert "analytics       mocked" in out
+        assert "analytics             mocked" in out
         assert "role is fully mocked" in out
         assert "deep-reasoning" not in out
         assert "gpt-5.4-nano" not in out

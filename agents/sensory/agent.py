@@ -7,12 +7,29 @@ meaningful to mock. It is also the injection point for every test."
 Two roles:
   1. External injection point — ingest(content, source_type) is called
      directly (by the test harness, a CLI, or later a real UI/webhook)
-     with a human prompt or a feedback signal (§3.1). Sensory tags it
-     and forwards it to Impulse ONLY (v0.31: strict relay, not a
-     parallel merge — see revision notes). Impulse is the sole trigger
-     into Governance; this gives Impulse first look at every input,
-     including from future non-text modalities (e.g. a vision agent
-     that can itself flag danger), before Governance ever sees it.
+     with a human prompt or a feedback signal (§3.1). Sensory tags it and
+     FANS IT OUT to four agents in parallel (v0.35a): Impulse,
+     Analytics, Personality and Knowledge, each receiving its own copy
+     of the same event.
+
+     This is the one hop in the whole pipeline with no Governance in
+     between — deliberate, confirmed repeatedly during the v0.35 design
+     pass, and the single exception to Governance's otherwise-universal
+     routing (v0.35c). The reason is latency: four short, cheap,
+     independent calls racing in parallel beat one long call, or a serial
+     chain, doing all four jobs. Nothing is lost by fanning them out,
+     because none of the four needs to see another's answer to do its
+     own job — every cognitive call in this system is stateless anyway.
+
+     Governance picks the four answers back up, buffers them, and sends
+     ONE bundled message to Intent.
+
+     This replaces v0.31's strict relay, where Sensory forwarded to
+     Impulse alone and Impulse was "the sole trigger into Governance".
+     Impulse still gets first look in the sense that matters — it is
+     still the only agent that can open the Critical fast path (v0.35d),
+     and it is still published to first below, so its reflex is on the
+     wire before the other three are even dispatched.
   2. Bus re-entry point — subscribed to events.sensory, kept for
      protocol completeness (§3's topic list) and any future external
      source that publishes directly onto the bus rather than calling
@@ -36,6 +53,18 @@ from bus.pubsub import EmbeddedBus
 
 VALID_SOURCE_TYPES = {"prompt", "feedback", "vision", "audio", "https"}
 
+#: The v0.35a fan-out, in publish order. Impulse first — see ingest().
+#: Order is otherwise irrelevant to correctness (Governance bundles on
+#: completeness, not arrival order) but it is fixed rather than derived
+#: so a trace reads the same way every run, which is what the Phase 0
+#: byte-identical-trace exit criterion depends on.
+FAN_OUT = (
+    ("Impulse", "events.impulse"),
+    ("Analytics", "events.analytics"),
+    ("Personality", "events.personality"),
+    ("Knowledge", "events.knowledge"),
+)
+
 
 class Sensory:
     def __init__(self, bus: EmbeddedBus):
@@ -54,14 +83,22 @@ class Sensory:
 
         eid = event_id or new_event_id()
 
-        # v0.31: single hop to Impulse — Impulse is the sole trigger into
-        # Governance (see agents/impulse/agent.py). No parallel fan-out.
-        to_impulse = Envelope(
-            source="Sensory", destination="Impulse", type=source_type,
-            content=content, severity=severity, event_id=eid, triggered_by=triggered_by,
-            meta={"source_type": source_type},
-        )
-        self.bus.publish("events.impulse", to_impulse)
+        # v0.35a: the four-way fan-out. Each worker gets its OWN envelope
+        # — same event_id, same verbatim content, its own destination —
+        # so Governance can tell four answers to one event apart from one
+        # answer to four events.
+        #
+        # Impulse is published to first, deliberately: it is the only
+        # agent that can open the Critical fast path (v0.35d), and on a
+        # synchronous bus that means an emergency is already on its way to
+        # Security before the other three are dispatched at all.
+        for destination, topic in FAN_OUT:
+            self.bus.publish(topic, Envelope(
+                source="Sensory", destination=destination, type=source_type,
+                content=content, severity=severity, event_id=eid,
+                triggered_by=triggered_by,
+                meta={"source_type": source_type},
+            ))
         return eid
 
     def inject_diagnostic_ping(self, kind: str, event_id: Optional[str] = None) -> str:

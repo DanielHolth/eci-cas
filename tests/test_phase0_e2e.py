@@ -40,16 +40,25 @@ def _manifest_with_temp_storage(tmp_path: Path) -> Path:
     it gets pinned back to the deterministic tier here, permanently, the
     way every cognitive role will be as §13.4 reaches it.
 
+    Phase 0.4 note — same reasoning, same pin, now for roles.intent.mock.
+
     That also keeps this suite runnable with no API key at all.
 
-    The live tier is covered in tests/test_phase02_analytics.py (offline,
-    against a scripted provider) and tests/test_phase02_analytics_live.py
-    (a real endpoint, behind ECI_LIVE_TESTS=1).
+    The live tiers are covered in tests/test_phase02_analytics.py /
+    tests/test_phase04_intent.py (offline, against scripted providers) and
+    their *_live.py counterparts (a real endpoint, behind ECI_LIVE_TESTS=1).
     """
     with open(MANIFEST_PATH) as f:
         manifest = yaml.safe_load(f)
     manifest["storage"]["root"] = str(tmp_path / "archive")
     manifest["roles"]["analytics"]["mock"] = True
+    manifest["roles"]["intent"]["mock"] = True
+    # Phase 0.6 gave the archive-lookup family a live tier, so the
+    # shipped manifest now declares these real. Mocked here for the
+    # same reason every other cognitive role is: this test is not
+    # about them, and it must run with no credentials.
+    manifest["roles"]["personality"]["mock"] = True
+    manifest["roles"]["knowledge"]["mock"] = True
     tmp_path.mkdir(parents=True, exist_ok=True)
     out_path = tmp_path / "ecosystem-manifest.yaml"
     with open(out_path, "w") as f:
@@ -85,17 +94,21 @@ class TestPhase0ExitCriteria:
         assert eco.watchdog.level2_fired is False
 
     def test_worked_example_traverses_full_pipeline(self, tmp_path):
-        """§3.2 (v0.32) — Sensory -> Impulse -> Governance -> Analytics ->
-        Intent -> Governance -> Security -> Governance -> Action. Terminal
-        at Action on success (v0.32: no proprioception loop through
-        Sensory — see revision notes)."""
+        """§3.2, as rewritten by v0.35a/c — Sensory fans out to four
+        agents in parallel with no Governance hop, Governance buffers all
+        four and bundles them for Intent, and every hop after that passes
+        through Governance. Terminal at Action on success (v0.32: no
+        proprioception loop through Sensory)."""
         manifest_path = _manifest_with_temp_storage(tmp_path)
         eco, event_id = _run_worked_example(manifest_path)
 
         hops = [(env.source, env.destination) for env in eco.bus.trace() if env.event_id == event_id]
         assert hops == [
             ("Sensory", "Impulse"), ("Impulse", "Governance"),
-            ("Governance", "Analytics"), ("Analytics", "Intent"), ("Intent", "Governance"),
+            ("Sensory", "Analytics"), ("Analytics", "Governance"),
+            ("Sensory", "Personality"), ("Personality", "Governance"),
+            ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
+            ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),
         ]
@@ -106,9 +119,10 @@ class TestPhase0ExitCriteria:
         eco, event_id = _run_worked_example(manifest_path)
 
         logged = eco.archive.query_queue(predicate=lambda r: r.get("event_id") == event_id)
-        # 8 business hops (v0.32 terminal-on-success, see
-        # test_worked_example_traverses_full_pipeline).
-        assert len(logged) >= 8
+        # 13 business hops as of v0.35a/c (was 8 — the fan-out adds four
+        # inbound copies and their four answers, and replaces one relay).
+        # See test_worked_example_traverses_full_pipeline.
+        assert len(logged) >= 13
 
     def test_impulse_vectors_present_in_working_tier(self, tmp_path):
         """§13.3 verify #2: Impulse vectors present in /archive/working/."""
@@ -277,8 +291,9 @@ class TestActionFailureHandling:
         # Verify the happy path up to Action
         assert ("Sensory", "Impulse", "prompt") in hops
         assert ("Impulse", "Governance", "prompt") in hops
-        assert ("Governance", "Analytics", "Evaluate") in hops
-        assert ("Analytics", "Intent", "Recommend") in hops
+        assert ("Sensory", "Analytics", "prompt") in hops
+        assert ("Analytics", "Governance", "Recommend") in hops
+        assert ("Governance", "Intent", "Bundle") in hops
         assert ("Intent", "Governance", "Advise") in hops
         assert ("Governance", "Security", "Clear") in hops
         assert ("Security", "Governance", "Verdict") in hops
@@ -310,13 +325,19 @@ class TestActionFailureHandling:
 
         all_hops = eco.bus.trace()
 
-        # Find all Sensory events for this event_id
+        # Every hop Sensory published for this event.
         sensory_hops = [env for env in all_hops
                         if env.event_id == event_id and env.source == "Sensory"]
 
-        # Only one: the original ingest (not a failure re-entry)
-        assert len(sensory_hops) == 1
-        assert sensory_hops[0].type == "prompt"  # original input
+        # Four: the v0.35a fan-out, all from the ONE original ingest. What
+        # matters here is unchanged — none of them is a failure re-entry,
+        # and nothing was published back INTO Sensory.
+        assert len(sensory_hops) == 4
+        assert {env.type for env in sensory_hops} == {"prompt"}
+        assert [env.destination for env in sensory_hops] == [
+            "Impulse", "Analytics", "Personality", "Knowledge"]
+        assert not [env for env in all_hops
+                    if env.event_id == event_id and env.destination == "Sensory"]
 
 
 if __name__ == "__main__":

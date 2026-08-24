@@ -1,5 +1,13 @@
 # Phase 0.2 — Analytics goes live
 
+> **Superseded in part by v0.35** (see
+> [`docs/phase-0.5-v0-35.md`](phase-0.5-v0-35.md)). Analytics still
+> reasons exactly as described here, but v0.35e cut the role back to its
+> bare minimum: it answers ONE task (Evaluate), its output goes to
+> Governance as one of four bundled inputs rather than to Intent, and it
+> is isolated from Security in every way — the Review and Revise tasks
+> and their fail-closed fallbacks moved to Intent with the gating.
+
 **Status:** implemented, **not yet run against a real endpoint**
 **Spec:** ECI-spec-v0-34 (§5.4 Analytics, §5.5 Intent, §10.2 substrates, §13.4)
 **Roster:** 5 mocks + 3 real (Sensory, Governance, Analytics)

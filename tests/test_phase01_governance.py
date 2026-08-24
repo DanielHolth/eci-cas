@@ -45,9 +45,14 @@ MANIFEST_PATH = Path(__file__).parent.parent / "manifests" / "ecosystem-manifest
 PROMPT = "Hello there, are you awake?"
 PROPOSED = "Hey there! I'm awake."
 
+#: The v0.35 topology: a four-way ungated fan-out, then Governance on
+#: every hop that follows.
 HAPPY_PATH_HOPS = [
     ("Sensory", "Impulse"), ("Impulse", "Governance"),
-    ("Governance", "Analytics"), ("Analytics", "Intent"), ("Intent", "Governance"),
+    ("Sensory", "Analytics"), ("Analytics", "Governance"),
+    ("Sensory", "Personality"), ("Personality", "Governance"),
+    ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
+    ("Governance", "Intent"), ("Intent", "Governance"),
     ("Governance", "Security"), ("Security", "Governance"),
     ("Governance", "Action"),
 ]
@@ -61,14 +66,22 @@ def _manifest(tmp_path: Path, **governance_overrides) -> Path:
     """The shipped manifest with storage redirected and Analytics pinned
     to its mock tier.
 
-    Phase 0.2 made Analytics substrate-backed; this suite is about
-    GOVERNANCE, so it holds everything downstream deterministic and needs
-    no API key. Analytics' own tier is exercised in
-    tests/test_phase02_analytics.py."""
+    Phase 0.2 made Analytics substrate-backed and Phase 0.4 did the same
+    for Intent; this suite is about GOVERNANCE, so it holds everything
+    downstream deterministic and needs no API key. Analytics' and
+    Intent's own live tiers are exercised in tests/test_phase02_analytics.py
+    and tests/test_phase04_intent.py."""
     with open(MANIFEST_PATH) as f:
         manifest = yaml.safe_load(f)
     manifest["storage"]["root"] = str(tmp_path / "archive")
     manifest["roles"]["analytics"]["mock"] = True
+    manifest["roles"]["intent"]["mock"] = True
+    # Phase 0.6 gave the archive-lookup family a live tier, so the
+    # shipped manifest now declares these real. Mocked here for the
+    # same reason every other cognitive role is: this test is not
+    # about them, and it must run with no credentials.
+    manifest["roles"]["personality"]["mock"] = True
+    manifest["roles"]["knowledge"]["mock"] = True
     if governance_overrides:
         manifest["roles"]["governance"].update(governance_overrides)
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -129,7 +142,9 @@ class TestRoutingContract:
                         content=content, **kw)
 
     def test_classification_covers_every_trigger(self):
-        assert routing.classify(self._envelope(source="Impulse")) is Trigger.IMPULSE_RELAY
+        for worker in routing.WORKERS:
+            assert routing.classify(
+                self._envelope(source=worker)) is Trigger.WORKER_REPORT
         assert routing.classify(self._envelope(source="Intent")) is Trigger.INTENT_ADVICE
         assert routing.classify(self._envelope(source="Security")) is Trigger.SECURITY_VERDICT
         assert routing.classify(
@@ -171,14 +186,16 @@ class TestRoutingContract:
         ({"verdict": ["green"]}, "hmm"),                 # structurally wrong
     ], ids=["absent", "empty-event", "unknown", "blank", "null", "wrong-type",
             "near-miss", "wrong-shape"])
-    def test_anything_that_is_not_green_goes_to_analytics(self, meta, content):
-        """The v0.34 safety property. Before this, an unreadable verdict
-        fell through to `release` — fail-open on the safety path. Action is
-        now reachable by exactly one value, spelled correctly."""
+    def test_anything_that_is_not_green_goes_to_intent(self, meta, content):
+        """The v0.34 safety property, intact through v0.35e's rerouting.
+        Before v0.34 an unreadable verdict fell through to `release` —
+        fail-open on the safety path. Action is still reachable by exactly
+        one value, spelled correctly; what changed is only WHICH agent
+        picks up the doubt (Intent, not Analytics)."""
         env = self._envelope(source="Security", content=content, meta=meta)
         route = routing.route_for(env)
         assert route is routing.REVIEW
-        assert route.destination == "Analytics"
+        assert route.destination == "Intent"
 
     def test_only_green_reaches_action(self):
         verdict_routes = routing.VERDICT_ROUTES
@@ -199,11 +216,14 @@ class TestRoutingContract:
                              meta={"verdict": VERDICT_GREEN, "proposed_action": PROPOSED})
         assert routing.decide(env).content == PROPOSED
 
-    def test_the_evaluate_instruction_quotes_the_human_verbatim(self):
+    def test_the_bundle_carries_the_human_verbatim(self):
+        """v0.35c: the bundle's payload is the original Sensory content,
+        untouched. The four answers ride in meta — Intent must see what
+        was actually said, never a worker's restatement of it."""
         env = self._envelope(source="Impulse", meta={"reflex": "Calm reaction."})
-        content = routing.decide(env).content
-        assert PROMPT in content
-        assert "Calm reaction." in content
+        decision = routing.decide(env, bundle_ready=True, sensory=PROMPT)
+        assert decision.route is routing.BUNDLE
+        assert decision.content == PROMPT
 
     def test_the_revision_request_quotes_what_security_said(self):
         env = self._envelope(source="Security", content="Red — profanity",
@@ -212,14 +232,43 @@ class TestRoutingContract:
 
     def test_the_review_request_does_not_claim_a_block(self):
         """Yellow means the rules didn't cover it, not that it was blocked.
-        Telling Analytics otherwise would be Governance putting words in
-        Security's mouth."""
+        Telling Intent otherwise would be Governance putting words in
+        Security's mouth.
+
+        v0.35e note: the payload of a REVIEW is now the original request
+        (Intent's prompt renders it as "what the human said", and Intent
+        is the one deciding). The instruction itself is what this asserts
+        on, and it rides in meta.router_instruction."""
         env = self._envelope(source="Security", content="unclear",
                              meta={"verdict": VERDICT_YELLOW, "proposed_action": PROPOSED})
-        content = routing.decide(env).content
-        assert "could not clear or block" in content
-        assert PROPOSED in content
-        assert "blocked the prior course" not in content
+        instruction = routing.template_content(env, routing.REVIEW)
+        assert "could not clear or block" in instruction
+        assert PROPOSED in instruction
+        assert "blocked the prior course" not in instruction
+
+    def test_the_revision_request_quotes_the_proposal_not_the_verdict(self):
+        """What is being revised is what INTENT said, not what Security
+        said about it. Quoting the verdict envelope's content here sent
+        Intent off to revise the phrase "Red — profanity"."""
+        env = self._envelope(source="Security", content="Red — profanity",
+                             meta={"verdict": VERDICT_RED, "proposed_action": PROPOSED})
+        instruction = routing.template_content(env, routing.REVISE)
+        assert PROPOSED in instruction
+        assert "Red — profanity" not in instruction
+
+    def test_the_gating_registers_carry_the_original_request(self):
+        """Intent now holds the veto on these two lanes, and its prompt
+        renders the payload as what the human said. Handing it the
+        router's instruction instead would ask it to decide "unsure means
+        no" about a request it was never shown."""
+        for verdict, route in ((VERDICT_YELLOW, routing.REVIEW),
+                               (VERDICT_RED, routing.REVISE)):
+            env = self._envelope(source="Security", content="verdict prose",
+                                 meta={"verdict": verdict,
+                                       "proposed_action": PROPOSED})
+            decision = routing.decide(env, sensory=PROMPT)
+            assert decision.route is route
+            assert decision.content == PROMPT
 
     def test_intent_advice_passes_through_untouched(self):
         env = self._envelope(source="Intent", content="Give a warm response.")
@@ -227,7 +276,7 @@ class TestRoutingContract:
 
     def test_every_route_has_a_deterministic_payload(self):
         assert {r.content_policy for r in routing.ROUTES.values()} <= {
-            "template", "verbatim", "proposed_action"}
+            "template", "verbatim", "proposed_action", "bundle", "sensory"}
 
     def test_an_inferred_verdict_is_flagged_for_the_log(self):
         env = self._envelope(source="Security", content="who knows")
@@ -281,18 +330,19 @@ class TestGovernanceInThePipeline:
         assert speech.type == "Speech"
         assert speech.content == PROPOSED
 
-    def test_a_yellow_verdict_goes_to_analytics_to_decide(self, tmp_path):
+    def test_a_yellow_verdict_goes_to_intent_to_decide(self, tmp_path):
+        """v0.35e: both non-green lanes are Intent's now."""
         eco = _boot(tmp_path)
         event_id = _verdict(eco, VERDICT_YELLOW, content="rules do not cover this")
         first = _governance_hops(eco, event_id)[0]
-        assert (first.destination, first.type) == ("Analytics", "Review")
+        assert (first.destination, first.type) == ("Intent", "Review")
 
-    def test_a_red_verdict_goes_back_for_revision(self, tmp_path):
+    def test_a_red_verdict_goes_back_to_intent_for_revision(self, tmp_path):
         eco = _boot(tmp_path)
         event_id = _verdict(eco, VERDICT_RED, content="Red — blocked",
                             proposed="something unwise")
         first = _governance_hops(eco, event_id)[0]
-        assert (first.destination, first.type) == ("Analytics", "Revise")
+        assert (first.destination, first.type) == ("Intent", "Revise")
 
     @pytest.mark.parametrize("verdict", [VERDICT_YELLOW, VERDICT_RED])
     def test_an_unreleased_proposal_never_reaches_action(self, tmp_path, verdict):
@@ -396,17 +446,28 @@ class TestBootstrap:
         eco = _boot(tmp_path)
         assert eco.governance is not None
 
-    def test_an_empty_intent_node_list_still_stops_the_bootstrap(self, tmp_path):
+    def test_a_live_intent_with_no_substrate_still_stops_the_bootstrap(self, tmp_path):
+        """v0.35f replaced roles.intent.nodes with a flat `substrate`, so
+        the old "nodes is empty" fail-stop became this one. Recovery must
+        still refuse to declare 'system live' on a cognitive role with
+        nothing behind it (§9.1 step 6)."""
         with open(MANIFEST_PATH) as f:
             manifest = yaml.safe_load(f)
         manifest["storage"]["root"] = str(tmp_path / "archive")
-        manifest["roles"]["intent"]["nodes"] = []
         manifest["roles"]["analytics"]["mock"] = True
+        # Phase 0.6 gave the archive-lookup family a live tier, so the
+        # shipped manifest now declares these real. Mocked here for the
+        # same reason every other cognitive role is: this test is not
+        # about them, and it must run with no credentials.
+        manifest["roles"]["personality"]["mock"] = True
+        manifest["roles"]["knowledge"]["mock"] = True
+        manifest["roles"]["intent"]["mock"] = False
+        manifest["roles"]["intent"].pop("substrate", None)
         path = tmp_path / "m.yaml"
         tmp_path.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             yaml.safe_dump(manifest, f)
-        with pytest.raises(BootstrapError, match="nodes is empty"):
+        with pytest.raises(BootstrapError, match="no 'substrate' class"):
             Recovery(str(path)).bootstrap()
 
 

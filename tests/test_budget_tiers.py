@@ -72,9 +72,9 @@ def test_minimal_mocks_analytics_and_points_intent_local():
     out = budget_tiers.apply_tier(manifest)
 
     assert out["roles"]["analytics"]["mock"] is True
-    nodes = out["roles"]["intent"]["nodes"]
-    assert all(n["substrate"] == budget_tiers.LOCAL_CLASS for n in nodes)
-    assert out["roles"]["intent"]["consolidation_substrate"] == budget_tiers.LOCAL_CLASS
+    assert out["roles"]["intent"]["substrate"] == budget_tiers.LOCAL_CLASS
+    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.LOCAL_CLASS
+    assert out["roles"]["intent"]["context_events"] == budget_tiers.CONTEXT_EVENTS["minimal"]
 
 
 def test_budget_tier_runs_analytics_live_on_local_substrate():
@@ -83,11 +83,10 @@ def test_budget_tier_runs_analytics_live_on_local_substrate():
 
     assert out["roles"]["analytics"]["mock"] is False
     assert out["roles"]["analytics"]["substrate"] == budget_tiers.LOCAL_CLASS
-    nodes = out["roles"]["intent"]["nodes"]
-    assert all(n["substrate"] == budget_tiers.LOCAL_CLASS for n in nodes)
+    assert out["roles"]["intent"]["substrate"] == budget_tiers.LOCAL_CLASS
     # Budget tier's consolidation is the one row that's NOT local — a
     # once-a-day hosted call is still cheap enough to afford (appendix).
-    assert out["roles"]["intent"]["consolidation_substrate"] == budget_tiers.FAST_CLASS
+    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.FAST_CLASS
 
 
 def test_default_tier_is_a_noop_because_the_shipped_manifest_already_is_default():
@@ -113,9 +112,8 @@ def test_super_tier_reserves_specialist_for_consolidation_only():
     # The live pipeline stays on the cheap model — only consolidation
     # (rare, async, high-value) spends on the specialist.
     assert out["roles"]["analytics"]["substrate"] == budget_tiers.ANALYTICS_DEFAULT_CLASS
-    nodes = out["roles"]["intent"]["nodes"]
-    assert all(n["substrate"] == budget_tiers.FAST_CLASS for n in nodes)
-    assert out["roles"]["intent"]["consolidation_substrate"] == budget_tiers.SPECIALIST_CLASS
+    assert out["roles"]["intent"]["substrate"] == budget_tiers.FAST_CLASS
+    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.SPECIALIST_CLASS
 
 
 # ---------------------------------------------------------------------------
@@ -144,31 +142,61 @@ def test_apply_tier_does_not_mutate_the_input():
     assert manifest["roles"]["analytics"]["mock"] == original_mock
 
 
-def test_apply_tier_never_fabricates_an_intent_node():
-    """An empty roles.intent.nodes is a real misconfiguration Recovery is
-    supposed to catch and stop the bootstrap on (§9.1 step 6, "nodes is
-    empty — need at least one node"). apply_tier() must only ANNOTATE
-    existing nodes with a substrate, never synthesize one to fill a gap —
-    doing so would silently swallow that fail-stop for every tier except
-    custom/default, which is worse than the tier doing nothing at all."""
-    manifest = _with_tier(_load_manifest(), "minimal")
-    manifest["roles"]["intent"]["nodes"] = []
+def test_every_tier_scales_intents_conversation_window():
+    """v0.35c's conversation window rides on every live call, so it is
+    charged against the same flat-cost claim (§1) as the persona — which
+    makes it a tier's business (Daniel, 2026-08-24). Whole events, so the
+    number is events, not tokens or turns."""
+    for tier in ("minimal", "budget", "super"):
+        out = budget_tiers.apply_tier(_with_tier(_load_manifest(), tier))
+        assert out["roles"]["intent"]["context_events"] == \
+            budget_tiers.CONTEXT_EVENTS[tier]
+    # Default is a no-op tier, so the manifest's own value stands.
+    assert _load_manifest()["roles"]["intent"]["context_events"] == \
+        budget_tiers.CONTEXT_EVENTS["default"]
 
-    out = budget_tiers.apply_tier(manifest)
 
-    assert out["roles"]["intent"]["nodes"] == []
+def test_every_tier_states_the_consolidator_mock_flag_explicitly():
+    """Same stale-flag discipline the tiers already apply to
+    roles.analytics.mock and roles.intent.mock: an operator's leftover
+    `consolidator.mock: true` must not silently survive a tier switch and
+    quietly stop long-term memory from ever being written."""
+    for tier in ("minimal", "budget", "super"):
+        manifest = _with_tier(_load_manifest(), tier)
+        manifest["roles"]["consolidator"]["mock"] = True
+        # Phase 0.6 gave the archive-lookup family a live tier, so the
+        # shipped manifest now declares these real. Mocked here for the
+        # same reason every other cognitive role is: this test is not
+        # about them, and it must run with no credentials.
+        manifest["roles"]["personality"]["mock"] = True
+        manifest["roles"]["knowledge"]["mock"] = True
+        out = budget_tiers.apply_tier(manifest)
+        assert out["roles"]["consolidator"]["mock"] is False
 
 
-def test_a_tier_with_an_empty_node_list_still_stops_the_bootstrap(tmp_path):
+def test_a_live_intent_with_no_substrate_still_stops_the_bootstrap(tmp_path):
+    """The surviving half of the old "nodes is empty" fail-stop. v0.35f
+    removed the node list, so the misconfiguration it guarded against is
+    now simply "declared real, names no substrate" — and Recovery must
+    still stop deterministically on it (§9.1 step 6) rather than booting
+    a cognitive role with nothing behind it."""
     manifest = _load_manifest()
     manifest["storage"]["root"] = str(tmp_path / "archive")
-    manifest["budget_tier"] = "minimal"
-    manifest["roles"]["intent"]["nodes"] = []
+    manifest["budget_tier"] = "custom"
+    manifest["roles"]["analytics"]["mock"] = True
+    # Phase 0.6 gave the archive-lookup family a live tier, so the
+    # shipped manifest now declares these real. Mocked here for the
+    # same reason every other cognitive role is: this test is not
+    # about them, and it must run with no credentials.
+    manifest["roles"]["personality"]["mock"] = True
+    manifest["roles"]["knowledge"]["mock"] = True
+    manifest["roles"]["intent"]["mock"] = False
+    manifest["roles"]["intent"].pop("substrate", None)
     path = tmp_path / "m.yaml"
     with open(path, "w") as f:
         yaml.safe_dump(manifest, f)
 
-    with pytest.raises(BootstrapError, match="nodes is empty"):
+    with pytest.raises(BootstrapError, match="no 'substrate' class"):
         Recovery(str(path)).bootstrap()
 
 

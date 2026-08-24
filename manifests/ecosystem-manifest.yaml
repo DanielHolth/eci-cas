@@ -1,6 +1,7 @@
-# ECI-CAS ecosystem manifest — ECI-spec-v0-34 §10
+# ECI-CAS ecosystem manifest — ECI-spec-v0-35 §10
 #
-# Phase 0.2: 5 mocks + 3 real (Sensory, Governance, Analytics).
+# Phase 0.5: real Sensory, Governance, Analytics, Impulse, Intent, Consolidator;
+# Personality/Knowledge mocked; Security and Action still mocked.
 #
 #   Sensory     real, deterministic since Phase 0 (§13.1)
 #   Governance  real, deterministic since Phase 0.1 — the role turned out
@@ -8,17 +9,22 @@
 #   Analytics   real and SUBSTRATE-BACKED as of Phase 0.2 — the first role
 #               that genuinely reasons, and the first consumer of the
 #               substrates table below
+#   Impulse     real, deterministic drift + weighted appraisal since Phase 0.3
+#   Intent      real and SUBSTRATE-BACKED as of Phase 0.4 — the first role
+#               with a persona (docs/phase-0.4-intent.md). Core Anchors
+#               live in Archive as data (data/archive/identity/), not in
+#               this manifest — see agents/intent/contract.py.
 #
-# Analytics needs a credential. Check yours before booting:
+# Analytics and Intent both need a credential. Check yours before booting:
 #     python -m tools.preflight --manifest manifests/ecosystem-manifest.yaml
-# Set roles.analytics.mock: true to run the whole ecosystem at zero cost.
+# Set roles.analytics.mock / roles.intent.mock: true to run at zero cost.
 #
 # Only phase, roles.*.mock, storage.profile, and intent.nodes change
 # between phases (§14) — nothing in the bus or this schema changes.
 
-version: "0.34"
+version: "0.35"
 ecosystem_name: "eci-cas-prototype"
-phase: 0.2                            # 0=mockup, 0.1=Governance, 0.2=Analytics, 1=real N=1, 2=N=2, 3=N>=3
+phase: 0.5                            # 0=mockup, 0.1=Governance, 0.2=Analytics, 0.3=Impulse, 0.4=Intent, 0.5=v0.35 (Consolidator split, fan-out, Intent veto)
 
 # Budget tier (Phase 0.2.2, docs/budget-tiers-appendix.md) — which vendor
 # backs each cognitive role, structurally. Orthogonal to budget_mode below:
@@ -118,22 +124,29 @@ substrates:
   # Normal shape: Ollama/LM Studio/vLLM, keyless, base_url pointed at a
   # local runtime — that's the whole point of the Minimal tier being $0.
   #
-  # PREPROD STRESS TEST (deliberate, temporary): pointed at OpenAI's
-  # hosted gpt-4o-mini instead, as a stand-in for the real self-hosted
-  # model, to exercise Minimal/Budget's code paths against an actual
-  # cheap-tier API before the real local runtime exists. This is NOT
-  # self-hosted right now and NOT free — swap back to a local base_url
-  # (keyless, api_key_env: null) before production; see docs/phase-0.2.2-
-  # budget-tiers.md.
+  # REVERTED 2026-08-23 (Phase 0.4): this was pointed at OpenAI's hosted
+  # gpt-4o-mini during the preprod stress test, as a stand-in for the real
+  # self-hosted model. That was harmless while Intent was still mocked —
+  # nothing called local-fast yet. Phase 0.4 makes Intent live, and
+  # Minimal's whole point is Analytics mocked + Intent live on a genuinely
+  # free, keyless local model — so leaving this pointed at a metered
+  # OpenAI endpoint would silently break Minimal's "$0, no credentials"
+  # claim the moment anything actually used it (flagged as exactly this
+  # trigger condition in docs/phase-0.2.2-budget-tiers.md: "once it is
+  # live, this entry needs to point at an actual local runtime"). Point
+  # base_url at a real Ollama/LM Studio/vLLM endpoint before running
+  # Minimal for real; until then Minimal tier will fail preflight/bootstrap
+  # with a clear "connection refused", which is honest — better than a
+  # silent charge to a hosted model.
   local-fast:
-    provider: "openai"                # OpenAI-compatible adapter, §10.2
-    model: "gpt-4o-mini"
-    api_key_env: "OPENAI_API_KEY"     # TEMP — real local runtime is keyless (api_key_env: null)
-    base_url: null                    # TEMP — was "http://localhost:11434/v1"
+    provider: "ollama"                # openai-compatible adapter, §10.2
+    model: "llama3.1:8b"
+    api_key_env: null                 # keyless — a local runtime needs no key
+    base_url: "http://localhost:11434/v1"
     max_tokens: 512
-    timeout_sec: 120                  # kept generous; real local inference is slower than this
-    price_per_mtok: { input: 0.15, output: 0.60 }   # checked 2026-08-23, verify before relying on it
-    notes: "PREPROD STRESS TEST — hosted gpt-4o-mini standing in for the eventual self-hosted model. Swap before prod."
+    timeout_sec: 120                  # kept generous; local inference is slower than a hosted API
+    price_per_mtok: { input: 0.00, output: 0.00 }   # self-hosted — genuinely free
+    notes: "Minimal/Budget tiers' local model. Point base_url at your actual Ollama/LM Studio/vLLM endpoint."
 
   # Named by the Super preset's consolidation slot only (budget/tiers.py) —
   # deliberately expensive, deliberately rare: once-a-day epoch writing,
@@ -193,9 +206,39 @@ roles:
   impulse:   { tier: deterministic, mock: true,
                initial_vectors: { curiosity: 0.8, fatigue: 0.1, urgency: 0.0, social_drive: 0.5, temperature: 0.4 },
                severity:        { urgency_elevated_threshold: 0.6, ceiling: "Elevated" } }  # v0.31 guardrail: Impulse alone can never assess above this
-  security:  { tier: deterministic, mock: true, rules: "security_rules.json" }
-  action:    { tier: deterministic, mock: true }
-  archive:   { tier: deterministic, mock: true }
+  # Security — deterministic rule engine, real as of Phase 0.6. No
+  # substrate and no credential: the "real" tier here costs nothing to
+  # run, it just needs its rules. A missing or unreadable rules file
+  # STOPS the bootstrap rather than degrading, because a Security that
+  # can't load its rules answers green, which is the mock wearing the
+  # real one's name. Set mock: true to get that deliberately.
+  # `rules` is resolved relative to the manifest, ./config, or the repo
+  # root — a bare filename doesn't depend on the working directory.
+  security:  { tier: deterministic, mock: false, rules: "security_rules.json" }
+  # Action — deterministic executor, real as of Phase 0.6. Sinks are the
+  # only thing that changes between mock and real: the role's logic,
+  # failure contract and silence-on-success are identical either way.
+  # Types: stdout | stderr | file (path required) | null. `callback` is
+  # deliberately NOT manifest-configurable — a deployment file naming a
+  # Python callable to import would make the manifest an execution
+  # vector, and Action is the one role whose job is to affect the world.
+  # An unknown type stops the bootstrap; an empty list warns loudly and
+  # runs a null sink, because a mute system is easy to ship and hard to
+  # notice.
+  action:
+    tier: deterministic
+    mock: false
+    sinks:
+      - { type: stdout }
+      # Relative paths land under storage.root (see bootstrap).
+      - { type: file, path: "spoken.jsonl" }
+  # Archive — the store is always real (step 2 constructs it before any
+  # role exists). `mock` here selects only whether Archive also has a BUS
+  # door: a write topic for agents that have no business holding the
+  # store, plus a receipt on system.control so that a write to long-term
+  # memory is observable from outside Archive at all. Live as of Phase
+  # 0.6; set true to return to store-only.
+  archive:   { tier: deterministic, mock: false }
 
   # Governance — deterministic dispatcher, always real (v0.34). No
   # substrate, no temperature, no system_instruction: there is no model to
@@ -234,11 +277,85 @@ roles:
       sentence.
   intent:
     tier: cognitive
-    mock: true
+    mock: false                       # set true for a zero-cost ecosystem
+    substrate: "fast-reflex"          # v0.35f: flat, like Analytics — the
+                                      # per-node `nodes:` list went away with
+                                      # the fleet/rotation model (§7 superseded)
     temperature: 0.7
-    nodes:                            # N-generic from day one; Phase 0-1 lists exactly one
-      - { id: "node-a", substrate: "fast-reflex" }
-      # - { id: "node-b", substrate: "deep-reasoning" }   # Phase 2
-      # - { id: "node-c", substrate: "orthogonal" }       # Phase 3
-    rotation:
-      batch_size_events: 25           # primary rotation trigger (tunable, §16/§15)
+    # How many CONCLUDED EVENTS of conversation Intent sees on a live call
+    # (v0.35c). Whole events, never a partial one — one temp-log entry is
+    # one event, so a window can't be cut mid-event. Tier-scaled by
+    # budget/tiers.py (minimal 1, budget 5, default 10, super 15); this
+    # value is what a `custom`/`default` tier uses as written.
+    context_events: 10
+    # Short and structural on purpose — same discipline as Analytics'
+    # condensed instruction (docs/phase-0.2-analytics.md): the response
+    # shape lives in contract.py's code-fixed RESPONSE_CONTRACTS as a
+    # backstop, and the actual character (Core Anchors: stance, values,
+    # boundaries) lives in Archive as data (agents/intent/contract.py's
+    # DEFAULT_CORE_ANCHORS, seeded once into data/archive/identity/), not
+    # here — this field states the role and nothing else.
+    #
+    # v0.35e: no longer says "advisory only". Security's yellow and red
+    # lanes both route here now, so Intent decides `proceed` on those two
+    # registers and the instruction must not tell it otherwise.
+    system_instruction: |
+      You are INTENT: the persona of a multi-agent system, speaking
+      directly to the human. Security is a hard stop you never argue
+      with; where it cannot decide, the judgment is yours, and unsure
+      means no.
+
+  # Personality and Knowledge — NEW in v0.35b. One reusable agent CLASS
+  # (agents/archive_lookup/), two configurations: same shape, same output
+  # contract, same never-write posture, differing only in which Archive
+  # store they read and the wording of their brief. Expected to become a
+  # family — a third member is one more entry here, not one more file.
+  #
+  # Read-only by construction: they are handed a query-only view of
+  # Archive, so there is no write surface on the object they hold.
+  # Writing long-term memory is Consolidator's job alone (§6, v0.35g).
+  #
+  # Live as of Phase 0.6. The mock proved the wiring at zero cost; what
+  # it could not do is judge which of N records BEARS on the event in
+  # front of it, which is the one thing here that isn't expressible as a
+  # rule. Both run on the cheap slot on purpose: this is two extra calls
+  # on EVERY event, in parallel with Impulse and Analytics.
+  #
+  # An empty store short-circuits before the call — reasoning over zero
+  # records costs money to be told there is nothing there. Set mock: true
+  # for a zero-cost ecosystem; both degrade to silence, never invention.
+  personality:
+    tier: cognitive
+    mock: false                       # set true for a zero-cost ecosystem
+    substrate: "fast-reflex"
+    temperature: 0.2
+    query_limit: 8                    # bounded read — this runs on every event
+  knowledge:
+    tier: cognitive
+    mock: false
+    substrate: "fast-reflex"
+    temperature: 0.2
+    query_limit: 8
+
+  # Consolidator — NEW in v0.35f. The entire former "Consolidating" mode
+  # of Intent, on its own: batches concluded events, reasons over the
+  # batch in ONE call, and emits N mechanical Archive writes (v0.35g's
+  # Option B taken to its conclusion). Sole writer of long-term memory.
+  #
+  # Runs OFF the live dispatch path on a background worker thread
+  # (`synchronous: false`), so the one event per batch that trips the
+  # threshold doesn't make the human wait on a slow reconciliation call.
+  # Set `synchronous: true` to make a run deterministic for debugging —
+  # which is also what every offline test fixture does.
+  consolidator:
+    tier: cognitive
+    mock: false                       # set true for a zero-cost ecosystem
+    substrate: "fast-reflex"          # was roles.intent.consolidation_substrate
+    temperature: 0.3
+    batch_size_events: 25             # was roles.intent.rotation.batch_size_events
+    synchronous: false
+    system_instruction: |
+      You are CONSOLIDATOR: the memory-writing agent of a multi-agent
+      system. You reason over a batch of concluded events and decide what
+      is worth remembering, and where it belongs. You never speak to the
+      human and you never gate anything.

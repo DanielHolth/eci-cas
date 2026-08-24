@@ -1,36 +1,76 @@
 """
 Governance's routing contract — the one source of truth for what
-Governance is structurally allowed to do (§5.1, §4, spec v0.34).
+Governance is structurally allowed to do (§5.1, §4, spec v0.35).
 
 Governance is a dispatcher
 --------------------------
 Phase 0.1 set out to put a model behind Governance and ended up proving
 it doesn't need one. Every hop turned out to be settled by the envelope
-alone, and the single case that wasn't — a safety verdict that couldn't
-be read mechanically — had a better answer than "ask a model in the
-router seat": send it to the agent that reasons.
+alone. So the table below is the whole of Governance. It is data, it is
+total, and it is evaluated without a substrate, a prompt, or a network
+call. Governance decides nothing (§2.1), holds no memory ACROSS events
+(§5.1 — see agents/governance/buffer.py on the one thing it now holds
+within one), and spends nothing.
 
-So the table below is the whole of Governance. It is data, it is total,
-and it is evaluated without a substrate, a prompt, or a network call.
-Governance decides nothing (§2.1), holds no memory across events (§5.1),
-and now also spends nothing.
+v0.35 made it the universal router: every hop passes through here except
+the one Sensory fan-out (v0.35a), which is deliberately ungated.
 
-The three lanes
----------------
-Security states its verdict as data (`meta.verdict`, enum in
-bus/envelope.py), and Governance dispatches on it:
+The topology
+------------
+    Sensory ──┬─→ Impulse      ─┐
+              ├─→ Analytics    ─┤  (parallel, NO Governance hop —
+              ├─→ Personality  ─┤   the one deliberate exception)
+              └─→ Knowledge    ─┘
+                                 └─→ Governance buffers all four,
+                                     bundles them, sends ONE message
+                                     to Intent
+    Intent  → Governance → Security
+    Security green  → Governance → Action     (release)
+    Security yellow → Governance → Intent     (Review — Intent decides)
+    Security red    → Governance → Intent     (Revise — one chance)
+    Security red    → Governance → Action     (Blocked, on the second red)
+    Action failure  → Governance → Action     (Prompt, v0.33 fallback)
 
-    green   -> Action      release the cleared action
-    yellow  -> Analytics   the rules do not cover this; you decide
-    red     -> Analytics   blocked; propose a revised course
-    (any other value, or none) -> treated as yellow
+Two lanes changed in v0.35e, and the second is wider than the spec draft
+--------------------------------------------------------------------------
+Before v0.35: Security's yellow and red both went to ANALYTICS, and
+Intent was "advisory only... holds no veto" (§5.5).
 
-The last line is the safety property. Before v0.34 an unreadable verdict
-left Governance guessing and its fallback RELEASED — fail-open, on the
-safety path, in the degraded case. Now only an explicit `green` reaches
-Action. Doubt, corruption, an unrecognised value, a field Security forgot
-to set: all of them route to Analytics. The pipeline's one irreversible
-step is reachable by exactly one value.
+After v0.35e, as confirmed by Daniel on 2026-08-24: **Analytics is
+isolated from Security in every way.** Both non-green lanes route to
+Intent, which now decides `proceed` on them — a real veto. Analytics is
+cut back to its bare minimum: unbiased analytical keywords, contributed
+into Intent's bundle, gating nothing.
+
+The reasoning, recorded because it reverses a documented safety property:
+by the time Security says anything, Intent already holds every analytical
+read of the event (its own bundle) PLUS the broader conversation window
+none of the single-event agents ever see. A fresh Analytics call would be
+strictly less grounded than the agent that already has all of it.
+
+Anything that is not an explicit `green` still routes away from Action.
+That property is unchanged and is what keeps the dispatch fail-safe: to
+reach the pipeline's one irreversible step you must say `green` and mean
+it. What changed is only WHICH agent picks up the doubt.
+
+One chance to clear, then blocked
+----------------------------------
+A non-green verdict buys exactly ONE more attempt
+(contract.MAX_REVISION_PASSES, Daniel 2026-08-24). If the next verdict is
+also non-green, the event does not loop: it becomes a BLOCKED incident —
+a deterministic notice to Action carrying an expression drawn from
+Impulse's live appraisal, plus a frustration nudge back into Impulse on
+the control plane. Nothing about that notice is model-authored, because
+nothing about it cleared Security.
+
+The budget deliberately covers YELLOW as well as red, and that is not
+over-engineering — it is the only thing standing between this router and
+a live-lock. Governance forwards whatever Intent writes to Security
+(INTENT_ADVICE -> CLEAR, unconditionally), including a fail-closed
+DECLINE. A rule engine that yellows a decline will yellow it again, every
+time, forever — and on a synchronous bus that is not a slow loop, it is
+stack exhaustion inside a single ingest() call. Bounding red alone left
+that door open.
 
 Content policy per route
 ------------------------
@@ -38,27 +78,37 @@ No payload is Governance's to write:
 
   template         An instruction to another agent, generated from a
                    fixed template that quotes the relevant payload
-                   verbatim. Analytics and Intent downstream see what was
-                   actually said, never Governance's summary of it —
-                   Impulse's relay discipline (§5.3) one hop later.
+                   verbatim. Downstream agents see what was actually
+                   said, never Governance's summary of it.
   verbatim         The payload passes through untouched.
   proposed_action  The PERSONA'S words (Intent's proposal, cleared by
                    Security). §5.1's "no persona, no opinions" would be a
                    dead letter if the router could rewrite the line
                    before Action speaks it.
+  bundle           The four parallel answers, carried as structured meta
+                   with the original Sensory content verbatim as the
+                   payload. Governance assembles the envelope; it writes
+                   none of its contents.
+  sensory          The original human request, verbatim, for the two
+                   registers where Intent now holds the veto. The router's
+                   instruction and the blocked proposal ride in meta
+                   instead of replacing it — see below.
 
-`carry_meta` is what a route hands forward besides its payload. Every
-route into Analytics carries it (Phase 0.2): Analytics is the reasoner,
-and §5.4 gives it "Sensory + Impulse input" — so it needs Impulse's
-reflex and drive vectors as DATA, not merely quoted inside the
-instruction text. Routes into Action carry nothing extra: Action
-executes, it does not deliberate.
+Why REVIEW and REVISE carry the request rather than the instruction
+--------------------------------------------------------------------
+Both were `template` routes before v0.35e, when they went to Analytics
+and the payload was "here is the situation, judge it". Now they go to the
+agent that HOLDS THE VETO, and its prompt renders the payload as "THE
+HUMAN SAID". Sending the router's own instruction there would ask Intent
+to decide "unsure means no" about a request it was never shown — and on
+REVISE it would have quoted Security's verdict text as the thing to
+revise. So both routes now carry `state.sensory` (the original words),
+and the instruction, the blocked proposal and Security's concern ride in
+meta where they can be attributed correctly.
 
 Severity is never routed either. It is computed upstream and propagates
 untouched (§3's OR-upscale-only rule); Governance inherits it via
-Envelope.reply() and no code path here can set it. Note that as of v0.34
-severity's Critical tier is handled as a reflex in Impulse (§5.3), before
-Governance is ever reached — see the v0.34 revision note.
+Envelope.reply() and no code path here can set it.
 """
 from __future__ import annotations
 
@@ -74,16 +124,23 @@ from bus.envelope import (
     Envelope,
 )
 
+#: Impulse's severity read that skips cognition entirely (v0.35d).
+CRITICAL = "Critical"
+
 
 class Trigger(str, Enum):
     """What kind of inbound hop Governance is holding. Derived from the
     envelope alone — Governance keeps no cross-event state (§5.1)."""
 
-    IMPULSE_RELAY = "impulse_relay"      # v0.31: the sole trigger into Governance
+    WORKER_REPORT = "worker_report"      # v0.35a/c: one of the four parallel answers
     INTENT_ADVICE = "intent_advice"
     SECURITY_VERDICT = "security_verdict"
     ACTION_FAILURE = "action_failure"    # v0.33
     UNROUTABLE = "unroutable"
+
+
+#: The four agents whose answers Governance bundles (v0.35a).
+WORKERS = ("Impulse", "Analytics", "Personality", "Knowledge")
 
 
 @dataclass(frozen=True)
@@ -94,18 +151,21 @@ class Route:
     topic: str
     destination: str
     type: str
-    content_policy: str            # template | verbatim | proposed_action
+    content_policy: str            # template | verbatim | proposed_action | bundle
     carry_meta: bool = False
 
 
 # --- The table -------------------------------------------------------------
 
-EVALUATE = Route(
-    id="evaluate",
-    topic="events.analytics",
-    destination="Analytics",
-    type="Evaluate",
-    content_policy="template",
+#: The four parallel answers, assembled. Replaces v0.34's EVALUATE route
+#: into Analytics — Analytics is now an input to this, not the recipient
+#: of a relay.
+BUNDLE = Route(
+    id="bundle",
+    topic="events.intent",
+    destination="Intent",
+    type="Bundle",
+    content_policy="bundle",
     carry_meta=True,
 )
 
@@ -126,20 +186,43 @@ SPEAK = Route(
     content_policy="proposed_action",
 )
 
+#: The YELLOW lane. v0.35e: Intent, not Analytics.
 REVIEW = Route(
     id="review",
-    topic="events.analytics",
-    destination="Analytics",
+    topic="events.intent",
+    destination="Intent",
     type="Review",
+    content_policy="sensory",
+    carry_meta=True,
+)
+
+#: The RED lane. v0.35e: Intent, not Analytics. One attempt only.
+REVISE = Route(
+    id="revise",
+    topic="events.intent",
+    destination="Intent",
+    type="Revise",
+    content_policy="sensory",
+    carry_meta=True,
+)
+
+#: The second red. Not a loop — an outcome (Daniel, 2026-08-24).
+BLOCKED = Route(
+    id="blocked",
+    topic="events.action",
+    destination="Action",
+    type="Blocked",
     content_policy="template",
     carry_meta=True,
 )
 
-REVISE = Route(
-    id="revise",
-    topic="events.analytics",
-    destination="Analytics",
-    type="Revise",
+#: v0.35d's Critical fast path: straight to Security, skipping the bundle
+#: and Intent's voicing on the way in.
+REFLEX = Route(
+    id="reflex",
+    topic="events.security",
+    destination="Security",
+    type="Clear",
     content_policy="template",
     carry_meta=True,
 )
@@ -153,20 +236,23 @@ FALLBACK_PROMPT = Route(
 )
 
 ROUTES: Dict[str, Route] = {
-    r.id: r for r in (EVALUATE, CLEAR, SPEAK, REVIEW, REVISE, FALLBACK_PROMPT)
+    r.id: r for r in (BUNDLE, CLEAR, SPEAK, REVIEW, REVISE, BLOCKED, REFLEX,
+                      FALLBACK_PROMPT)
 }
 
 #: Which routes are legal for which inbound trigger. Anything not listed
 #: here is a topology violation by construction.
 LEGAL_ROUTES: Dict[Trigger, Tuple[Route, ...]] = {
-    Trigger.IMPULSE_RELAY: (EVALUATE,),
+    Trigger.WORKER_REPORT: (BUNDLE, REFLEX),
     Trigger.INTENT_ADVICE: (CLEAR,),
-    Trigger.SECURITY_VERDICT: (SPEAK, REVIEW, REVISE),
+    Trigger.SECURITY_VERDICT: (SPEAK, REVIEW, REVISE, BLOCKED),
     Trigger.ACTION_FAILURE: (FALLBACK_PROMPT,),
     Trigger.UNROUTABLE: (),
 }
 
-#: Verdict value -> route. The ONLY entry that reaches Action is `green`.
+#: Verdict value -> route. The ONLY entry that reaches Action's SPEAK is
+#: `green`. Red resolves to REVISE or BLOCKED depending on how many
+#: attempts have already been spent — see route_for().
 VERDICT_ROUTES: Dict[str, Route] = {
     VERDICT_GREEN: SPEAK,
     VERDICT_YELLOW: REVIEW,
@@ -193,8 +279,8 @@ class RoutingDecision:
 def classify(envelope: Envelope) -> Trigger:
     """Which trigger is this inbound hop? Envelope-only, no state."""
     source = (envelope.source or "").strip()
-    if source == "Impulse":
-        return Trigger.IMPULSE_RELAY
+    if source in WORKERS:
+        return Trigger.WORKER_REPORT
     if source == "Intent":
         return Trigger.INTENT_ADVICE
     if source == "Security":
@@ -223,8 +309,7 @@ def read_verdict(envelope: Envelope) -> str:
     `meta.verdict` is the contract (v0.34). The prose fallback exists for
     envelopes that predate the enum or were injected by hand. Everything
     unrecognised resolves to `yellow`, which is what makes the whole
-    dispatch fail-safe: to reach Action you must say `green` and mean it.
-    """
+    dispatch fail-safe: to reach Action you must say `green` and mean it."""
     structured = envelope.meta.get("verdict")
     if isinstance(structured, str):
         normalized = structured.strip().lower()
@@ -239,14 +324,46 @@ def read_verdict(envelope: Envelope) -> str:
     return VERDICT_YELLOW
 
 
-def route_for(envelope: Envelope) -> Optional[Route]:
-    """The route this envelope takes. None means log-and-drop.
+def is_critical(envelope: Envelope) -> bool:
+    """v0.35d's fast path: Impulse read this as a genuine emergency.
 
-    Total for every routable envelope: there is no ambiguous case left to
-    resolve, because ambiguity is itself one of the three lanes."""
+    Only Impulse's own hop can open it, and only because Sensory tagged
+    the event Critical upstream — Impulse's own assessment is hard-capped
+    at Elevated (agents/impulse/agent.py's IMPULSE_SEVERITY_CEILING), so
+    drive-vector state alone can never manufacture this."""
+    return (envelope.source == "Impulse"
+            and str(envelope.severity).strip() == CRITICAL)
+
+
+def route_for(envelope: Envelope, *, bundle_ready: bool = False,
+              revision_passes: int = 0,
+              max_revision_passes: int = 1) -> Optional[Route]:
+    """The route this envelope takes. None means hold or drop.
+
+    `bundle_ready` is Governance's buffer telling the table whether the
+    other three answers are in yet: a worker report with an incomplete
+    bundle routes nowhere and is held (see agents/governance/buffer.py).
+
+    `revision_passes` is how many clearance attempts this event has
+    already spent. A non-green verdict with the budget exhausted becomes
+    BLOCKED rather than being re-asked."""
     trigger = classify(envelope)
+
+    if trigger is Trigger.WORKER_REPORT:
+        if is_critical(envelope):
+            return REFLEX
+        return BUNDLE if bundle_ready else None
+
     if trigger is Trigger.SECURITY_VERDICT:
-        return VERDICT_ROUTES[read_verdict(envelope)]
+        verdict = read_verdict(envelope)
+        # Green is the only value that leaves the loop by clearing. Every
+        # other value spends an attempt, and when the budget is gone the
+        # event is blocked rather than re-asked. See the module docstring
+        # on why this covers yellow too.
+        if verdict != VERDICT_GREEN and revision_passes >= max_revision_passes:
+            return BLOCKED
+        return VERDICT_ROUTES[verdict]
+
     routes = LEGAL_ROUTES[trigger]
     return routes[0] if routes else None
 
@@ -256,37 +373,57 @@ def route_for(envelope: Envelope) -> Optional[Route]:
 def template_content(envelope: Envelope, route: Route) -> str:
     """The payload for a route. Every template quotes verbatim; none of
     them summarise, and none of them are Governance's opinion."""
-    if route.id == EVALUATE.id:
-        reflex = envelope.meta.get("reflex", "")
-        return (f"Evaluate intent based on the prompt ('{envelope.content}') "
-                f"and the reaction ('{reflex}').")
     if route.id == REVIEW.id:
-        # The yellow lane. Say plainly that nothing was blocked — Analytics
+        # The yellow lane. Say plainly that nothing was blocked — Intent
         # is being asked for a judgment, not a fix, and telling it
         # otherwise would be Governance putting words in Security's mouth.
-        proposed = envelope.meta.get("proposed_action", envelope.content)
-        return (f"Security could not clear or block this by rule "
-                f"('{envelope.content}'). Decide whether it should proceed. "
-                f"The proposed action was: '{proposed}'.")
+        proposed = envelope.meta.get("proposed_action", "")
+        return (f"Security could not clear or block this by rule. Decide "
+                f"whether it should proceed. The proposed action was: "
+                f"'{proposed}'.")
     if route.id == REVISE.id:
-        return (f"Security blocked the prior course ('{envelope.content}'). "
-                f"Propose a revised response.")
+        # Quote the PROPOSAL, not the verdict envelope's content — the
+        # thing being revised is what Intent said, not what Security said
+        # about it.
+        proposed = envelope.meta.get("proposed_action", "")
+        return (f"Security blocked the prior course ('{proposed}'). "
+                f"Propose a revised response. This is the only revision "
+                f"available — if it is blocked again the exchange is dropped.")
+    if route.id == BLOCKED.id:
+        # Nothing model-authored reaches the human here: nothing cleared.
+        return ("That one was blocked, and my attempt to put it another way "
+                "was blocked too. I'm going to leave it there.")
+    if route.id == REFLEX.id:
+        reflex = envelope.meta.get("reflex", "")
+        return (f"Critical severity reflex. Original input: "
+                f"'{envelope.content}'. Reaction: '{reflex}'.")
     if route.id == FALLBACK_PROMPT.id:
         return (f"The previous action failed. Explain to the human what "
                 f"was attempted and why it didn't work. "
                 f"Original request: '{envelope.content}'")
     if route.id == SPEAK.id:
         return envelope.meta.get("proposed_action", envelope.content)
-    if route.id == CLEAR.id:
+    if route.id in (CLEAR.id, BUNDLE.id):
         return envelope.content
     raise ValueError(f"No template for route '{route.id}'")
 
 
-def resolve_content(envelope: Envelope, route: Route) -> str:
+def resolve_content(envelope: Envelope, route: Route,
+                    sensory: str = "") -> str:
     if route.content_policy == "proposed_action":
         return envelope.meta.get("proposed_action", envelope.content)
     if route.content_policy == "verbatim":
         return envelope.content
+    if route.content_policy == "sensory":
+        # The original human request. See the module docstring on why the
+        # two gating registers carry this rather than the instruction —
+        # the instruction rides in meta.router_instruction instead.
+        return sensory or envelope.meta.get("proposed_action") or envelope.content
+    if route.content_policy == "bundle":
+        # The original Sensory content, verbatim — the four answers ride
+        # in meta.bundle. Intent must see what was actually said, not any
+        # worker's restatement of it.
+        return sensory or envelope.content
     if route.content_policy == "template":
         return template_content(envelope, route)
     raise ValueError(f"Unknown content policy '{route.content_policy}'")
@@ -294,15 +431,20 @@ def resolve_content(envelope: Envelope, route: Route) -> str:
 
 # --- Decision --------------------------------------------------------------
 
-def decide(envelope: Envelope) -> Optional[RoutingDecision]:
+def decide(envelope: Envelope, *, bundle_ready: bool = False,
+           revision_passes: int = 0, max_revision_passes: int = 1,
+           sensory: str = "") -> Optional[RoutingDecision]:
     """Governance's entire decision procedure. Returns None for an
-    envelope nothing routes from — the log-and-drop case."""
-    route = route_for(envelope)
+    envelope nothing routes from — the hold-or-drop case."""
+    route = route_for(envelope, bundle_ready=bundle_ready,
+                      revision_passes=revision_passes,
+                      max_revision_passes=max_revision_passes)
     if route is None:
         return None
 
     diagnostics: Dict[str, Any] = {"route": route.id}
-    if classify(envelope) is Trigger.SECURITY_VERDICT:
+    trigger = classify(envelope)
+    if trigger is Trigger.SECURITY_VERDICT:
         verdict = read_verdict(envelope)
         diagnostics["verdict"] = verdict
         # Record when a verdict had to be inferred rather than read. A
@@ -311,9 +453,22 @@ def decide(envelope: Envelope) -> Optional[RoutingDecision]:
         # than silently absorbing.
         if envelope.meta.get("verdict") not in VERDICT_LEVELS:
             diagnostics["verdict_inferred"] = True
+        if route.id == BLOCKED.id:
+            diagnostics["revision_passes"] = revision_passes
+    if route.id == REFLEX.id:
+        diagnostics["critical_reflex"] = True
 
     return RoutingDecision(
         route=route,
-        content=resolve_content(envelope, route),
+        content=resolve_content(envelope, route, sensory=sensory),
         diagnostics=diagnostics,
     )
+
+
+__all__ = [
+    "Trigger", "Route", "RoutingDecision", "WORKERS", "CRITICAL",
+    "BUNDLE", "CLEAR", "SPEAK", "REVIEW", "REVISE", "BLOCKED", "REFLEX",
+    "FALLBACK_PROMPT", "ROUTES", "LEGAL_ROUTES", "VERDICT_ROUTES",
+    "classify", "legal_routes", "read_verdict", "is_critical", "route_for",
+    "template_content", "resolve_content", "decide",
+]

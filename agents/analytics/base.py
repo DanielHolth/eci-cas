@@ -97,6 +97,10 @@ class AnalyticsBase:
     # ---- Business events --------------------------------------------------
 
     def on_event(self, envelope: Envelope) -> None:
+        # v0.35a: this arrives straight from Sensory's fan-out now, in
+        # parallel with Impulse, Personality and Knowledge — not relayed
+        # by Governance. Nothing about the handling changes; only who
+        # published it.
         self.metrics["events"] += 1
 
         task = Task.from_envelope(envelope)
@@ -123,13 +127,23 @@ class AnalyticsBase:
     # ---- Emission ---------------------------------------------------------
 
     def emit(self, envelope: Envelope, recommendation: Recommendation) -> Envelope:
-        """Analytics replies to Intent, never straight back to Governance
-        (§3.2's worked example) — Governance re-enters the loop only once
-        Intent has spoken.
+        """Analytics reports to GOVERNANCE, which buffers this alongside
+        the other three parallel answers and bundles them for Intent
+        (v0.35a/c).
 
-        That holds for a refusal too. When Analytics declines, Intent is
-        the one that phrases it, so the human hears the persona's own
-        voice rather than a router's template (v0.34 refusal path)."""
+        This is the one thing about Analytics that v0.35 changed. Before,
+        it replied straight to Intent, and its `proceed: false` was what
+        told Governance to route toward a decline. Now its answer is one
+        of four inputs to a bundle, and it gates nothing — the judgment it
+        contributes is analytical, and Intent is the one that decides what
+        to do about it (v0.35e). Same reasoning, same output shape, a
+        different recipient.
+
+        The findings ride in `meta.analytics`, the same role-named slot
+        shape the archive-lookup family uses (agents/archive_lookup/) —
+        one shape across all three analytical slots, so Governance
+        bundles them uniformly and Intent pattern-matches one format
+        rather than parsing three."""
         if recommendation.decided_by == "fallback":
             self.metrics["fallbacks"] += 1
         if not recommendation.proceed:
@@ -137,23 +151,21 @@ class AnalyticsBase:
 
         meta: Dict[str, Any] = dict(envelope.meta)
         meta.pop("governance", None)      # not ours to forward
-        meta["analytics"] = {"tier": self.tier, **recommendation.to_meta()}
-        meta["proceed"] = recommendation.proceed
-        if recommendation.concern:
-            meta["concern"] = recommendation.concern
+        meta["analytics"] = {"tier": self.tier,
+                             "recommendation": recommendation.recommendation,
+                             **recommendation.to_meta()}
 
         out = envelope.reply(
             source="Analytics",
-            destination="Intent",
+            destination="Governance",
             type="Recommend",
             content=recommendation.recommendation,
             triggered_by=envelope.triggered_by,
             meta=meta,
             # Severity deliberately omitted — inherited untouched (§3).
             # Whether Analytics should be able to RAISE severity is a real
-            # question the spec permits but Phase 0.2 does not exercise;
-            # see the Phase 0.2 notes.
+            # question the spec permits but no phase has exercised.
         )
-        self.bus.publish("events.intent", out)
+        self.bus.publish("events.governance", out)
         self.metrics["recommended"] += 1
         return out

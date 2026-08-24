@@ -79,6 +79,46 @@ class ArchiveStore:
         data.append(record)
         target.write_text(json.dumps(data, indent=2))
 
+    def execute_writes(self, instructions: List[Dict[str, Any]]) -> Dict[str, int]:
+        """Execute N fully-specified write instructions (v0.35g).
+
+        Option B, taken to its conclusion: one reasoning pass upstream
+        (Consolidator) emits several writes, each already naming its own
+        destination and carrying its own content, and Archive does the
+        one thing it has ever done — append what it was handed, where it
+        was told. Nothing here decides anything: an instruction naming a
+        store that doesn't exist is counted and skipped, not rerouted to
+        a guess.
+
+        Each instruction: {"store": <kind>, "tag": str, "content": str}.
+        Returns {"executed": n, "dropped": n}."""
+        executed = dropped = 0
+        for instruction in instructions or []:
+            store = str((instruction or {}).get("store") or "")
+            content = str((instruction or {}).get("content") or "")
+            if not content:
+                dropped += 1
+                continue
+            record = {
+                "kind": "note" if store == "identity" else "entry",
+                "tag": str(instruction.get("tag") or "general")[:40],
+                "content": content[:1000],
+                "source": "consolidator",
+                "written_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+            extra = instruction.get("meta")
+            if isinstance(extra, dict):
+                record.update(extra)
+            try:
+                self.write(store, record)
+                executed += 1
+            except ValueError:
+                # Unknown store. Counted, never rerouted — a misfiled
+                # memory is worse than a dropped one, and the count is
+                # what tells us the contract drifted.
+                dropped += 1
+        return {"executed": executed, "dropped": dropped}
+
     def set_drive_vectors(self, vectors: Dict[str, float]) -> None:
         self._drive_vectors_file.write_text(json.dumps(vectors, indent=2))
 

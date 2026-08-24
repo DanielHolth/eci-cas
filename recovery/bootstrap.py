@@ -24,11 +24,13 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
 
 from bus.pubsub import EmbeddedBus
+from agents.archive.agent import ArchiveAgent
 from agents.archive.store import ArchiveStore
 from agents.sensory.agent import Sensory
 from agents.impulse.agent import (
@@ -41,13 +43,24 @@ from agents.analytics.agent import AnalyticsMock
 from agents.analytics.base import AnalyticsBase
 from agents.analytics.live import AnalyticsAgent
 from agents.intent.agent import IntentMock
-from agents.security.agent import SecurityMock
-from agents.action.agent import ActionMock
+from agents.intent.base import DEFAULT_CONTEXT_EVENTS, IntentBase
+from agents.intent.live import IntentAgent
+from agents.archive_lookup.agent import ArchiveLookupMock
+from agents.archive_lookup.live import ArchiveLookupAgent
+from agents.archive_lookup import contract as lookup_contract
+from agents.archive_lookup.base import ArchiveLookupBase
+from agents.consolidator.agent import ConsolidatorMock
+from agents.consolidator.base import DEFAULT_BATCH_SIZE, ConsolidatorBase
+from agents.consolidator.live import ConsolidatorAgent
+from agents.security.agent import SecurityAgent, SecurityMock
+from agents.security.rules import RuleSet, RulesError
+from agents.action.agent import ActionAgent, ActionMock
+from agents.action import sinks as action_sinks
 from budget.state import BudgetManager, from_manifest as budget_from_manifest
 from budget import tiers as budget_tiers
 from recovery.watchdog import Watchdog
 from substrates.base import SubstrateError
-from substrates.registry import resolve_role_substrate
+from substrates.registry import resolve_role_substrate, resolve_substrate
 
 
 class BootstrapError(RuntimeError):
@@ -61,14 +74,18 @@ class Ecosystem:
     convenience bag for the test harness / caller."""
     manifest: Dict[str, Any]
     bus: EmbeddedBus
-    archive: ArchiveStore
+    archive: ArchiveStore               # the store — §5.8's two endpoints
+    archive_agent: Any                  # ArchiveAgent, the bus door (Phase 0.6)
     sensory: Sensory
     impulse: Impulse
     governance: Governance
     analytics: AnalyticsBase           # AnalyticsMock or AnalyticsAgent (§13.4)
-    intent: IntentMock
-    security: SecurityMock
-    action: ActionMock
+    intent: IntentBase                 # IntentMock or IntentAgent (§13.4, Phase 0.4)
+    consolidator: ConsolidatorBase     # ConsolidatorMock or ConsolidatorAgent (v0.35f)
+    personality: ArchiveLookupBase     # archive-grounded lookup, identity store (v0.35b)
+    knowledge: ArchiveLookupBase       # archive-grounded lookup, knowledge store (v0.35b)
+    security: Any                      # SecurityMock or SecurityAgent (Phase 0.6)
+    action: Any                        # ActionMock or ActionAgent (Phase 0.6)
     watchdog: Watchdog
     budget: BudgetManager
 
@@ -121,6 +138,14 @@ class Recovery:
         # in its own constructor below. Bus must exist first.
         bus = EmbeddedBus(archive=archive)
 
+        # Phase 0.6: Archive gains a bus door beside its two endpoints.
+        # The store is passed to roles exactly as before — this does not
+        # move any existing caller onto messaging (see the agent's header
+        # for why Consolidator in particular stays direct). What it adds
+        # is a write path for agents that have no business holding the
+        # store, and a receipt so that writes are observable at all.
+        archive_agent = self._provision_archive(bus, manifest, archive)
+
         # Step 3: provision deterministic tier (mock or real per manifest)
         roles = manifest["roles"]
         sensory = Sensory(bus)  # real from day one, §13.1 — mock flag ignored by design
@@ -130,8 +155,8 @@ class Recovery:
 
         impulse = self._provision_impulse(bus, archive, manifest)
 
-        security = SecurityMock(bus)
-        action = ActionMock(bus)
+        security = self._provision_security(bus, manifest)
+        action = self._provision_action(bus, manifest)
 
         # Budget mode's state is restored BEFORE any agent that could spend
         # is provisioned (Phase 0.2.1). A latch has to survive a restart:
@@ -147,24 +172,43 @@ class Recovery:
         # Step 4: cognitive hydration — load system instructions and resolve
         # substrate classes for any cognitive role running real, then
         # register Intent nodes from the manifest.
-        governance = self._provision_governance(bus, manifest)
         analytics = self._provision_analytics(bus, manifest, archive, budget)
 
-        intent_cfg = roles["intent"]
-        nodes = intent_cfg.get("nodes", [])
-        if not nodes:
-            raise BootstrapError("Manifest roles.intent.nodes is empty — need at least one node")
-        if len(nodes) > 1:
-            print(f"[recovery] NOTE: manifest declares {len(nodes)} Intent nodes; "
-                  f"Phase 0/1 mock only runs the first ('{nodes[0]['id']}'). "
-                  f"Rotation across nodes arrives in Phase 2+ (§7.3).")
-        batch_size = intent_cfg.get("rotation", {}).get("batch_size_events", 25)
-        intent = IntentMock(bus, archive, node_id=nodes[0]["id"], batch_size=batch_size)
+        # v0.35f: Consolidator is provisioned BEFORE Intent, because Intent
+        # holds the reference it hands concluded events to. Nothing flows
+        # the other way — Consolidator never calls Intent, it only pings
+        # the control plane when it has written an epoch.
+        personality = self._provision_lookup(bus, manifest, archive,
+                                             "Personality", budget)
+        knowledge = self._provision_lookup(bus, manifest, archive,
+                                           "Knowledge", budget)
+
+        consolidator = self._provision_consolidator(bus, manifest, archive,
+                                                    budget, impulse)
+        intent = self._provision_intent(bus, manifest, archive, budget)
+
+        # Governance is provisioned LAST because it is the only role that
+        # holds references to others: Consolidator (to hand a concluded
+        # event to, v0.35g) and Impulse (to READ an expression from when
+        # an exchange is blocked, v0.35e). Nothing flows back the other
+        # way — both couplings are one-directional, and the frustration
+        # nudge that answers a block goes over the control plane rather
+        # than through a reference.
+        governance = self._provision_governance(bus, manifest,
+                                                consolidator=consolidator,
+                                                impulse=impulse)
 
         real_roles = ["Sensory", "Impulse", "Governance"] + (
-            ["Analytics"] if analytics.tier == "live" else [])
-        print(f"[recovery] provisioned {8 - len(real_roles)} mocks + {len(real_roles)} real "
-              f"({', '.join(real_roles)}), Intent node '{nodes[0]['id']}' registered")
+            ["Archive"] if archive_agent is not None else []) + (
+            ["Security"] if getattr(security, "tier", "mock") == "live" else []) + (
+            ["Action"] if getattr(action, "tier", "mock") == "live" else []) + (
+            ["Analytics"] if analytics.tier == "live" else []) + (
+            ["Intent"] if intent.tier == "live" else []) + (
+            ["Consolidator"] if consolidator.tier == "live" else []) + (
+            ["Personality"] if personality.tier == "live" else []) + (
+            ["Knowledge"] if knowledge.tier == "live" else [])
+        print(f"[recovery] provisioned {11 - len(real_roles)} mocks + {len(real_roles)} real "
+              f"({', '.join(real_roles)})")
 
         # Step 5: bus binding — done (constructors above subscribed to
         # their topics). Watchdog begins passively listening now.
@@ -183,10 +227,12 @@ class Recovery:
 
         print("[recovery] system live.")
         return Ecosystem(
-            manifest=manifest, bus=bus, archive=archive, sensory=sensory,
+            manifest=manifest, bus=bus, archive=archive,
+            archive_agent=archive_agent, sensory=sensory,
             impulse=impulse, governance=governance, analytics=analytics,
-            intent=intent, security=security, action=action, watchdog=watchdog,
-            budget=budget,
+            intent=intent, consolidator=consolidator, personality=personality,
+            knowledge=knowledge, security=security, action=action,
+            watchdog=watchdog, budget=budget,
         )
 
     # ---- §9.1 step 3: deterministic tier -----------------------------------
@@ -233,10 +279,153 @@ class Recovery:
               f"severity ceiling={IMPULSE_SEVERITY_CEILING} — hard invariant)")
         return impulse
 
+    def _provision_archive(self, bus: EmbeddedBus, manifest: Dict[str, Any],
+                           archive: ArchiveStore):
+        """Provision Archive's bus door (Phase 0.6).
+
+        `roles.archive.mock` selects whether the door exists, not whether
+        memory works: the store is constructed in step 2 either way, and
+        every direct caller is unaffected. Mocked here therefore means
+        "no bus door", which is precisely the pre-0.6 state — worth being
+        able to return to in one manifest line while this is new."""
+        role_config = manifest.get("roles", {}).get("archive", {}) or {}
+
+        if role_config.get("mock", True):
+            print("[recovery] archive: store only, no bus door "
+                  "(roles.archive.mock: true) — writes must hold the store.")
+            return None
+
+        agent = ArchiveAgent(bus, archive)
+        print(f"[recovery] archive: LIVE — store at '{archive.root}' plus a "
+              f"bus door on '{agent.topic}' (receipts on system.control)")
+        return agent
+
+    def _provision_security(self, bus: EmbeddedBus,
+                            manifest: Dict[str, Any]):
+        """Select Security's tier from `roles.security.mock` (Phase 0.6).
+
+        Deterministic either way — there is no substrate to resolve and no
+        credential to check, so this is the one role whose "real" tier
+        costs nothing to run. What it needs instead is a rules file, and
+        that is treated exactly as a credential is elsewhere: missing or
+        unreadable stops the bootstrap (§9.1 step 6) rather than
+        degrading.
+
+        The degradation this refuses to do is the whole point. Security's
+        only failure mode that matters is answering green when it
+        shouldn't, and that is indistinguishable from the mock — so a
+        Security that cannot load its rules must not boot at all."""
+        role_config = manifest.get("roles", {}).get("security", {}) or {}
+
+        if role_config.get("mock") is not False:
+            print("[recovery] security: MOCK tier — every action clears green "
+                  "(§13.1). Nothing is being enforced.")
+            return SecurityMock(bus)
+
+        rules_path = role_config.get("rules")
+        if not rules_path:
+            raise BootstrapError(
+                "roles.security.mock is false but roles.security.rules names "
+                "no rules file. Security cannot run real without rules.")
+
+        resolved = self._resolve_config_path(str(rules_path))
+        try:
+            rules = RuleSet.load(resolved)
+        except RulesError as exc:
+            raise BootstrapError(f"security rules: {exc}") from exc
+
+        agent = SecurityAgent(bus, rules)
+        print(f"[recovery] security: LIVE tier — {len(rules)} rules from "
+              f"'{resolved}' (v{rules.version or 'unversioned'}), "
+              f"deterministic, no substrate")
+        return agent
+
+    def _provision_action(self, bus: EmbeddedBus, manifest: Dict[str, Any]):
+        """Select Action's tier from `roles.action.mock` (Phase 0.6).
+
+        Unlike Security, a misconfigured Action is NOT a bootstrap
+        failure in only one direction: an unknown sink type stops the
+        boot (a typo must not silently become silence), but an empty sink
+        list is allowed and says so loudly. The difference is what the
+        two failures cost. A Security that can't enforce looks identical
+        to one that can; an Action that emits nowhere is discovered by
+        the first person who says hello and hears nothing back."""
+        role_config = manifest.get("roles", {}).get("action", {}) or {}
+
+        if role_config.get("mock") is not False:
+            print("[recovery] action: MOCK tier — executed actions are "
+                  "recorded, not emitted anywhere (§13.1).")
+            return ActionMock(bus)
+
+        # A relative file-sink path is resolved against the storage root,
+        # not the working directory. The transcript of what this system
+        # actually said is archive-tier data; scattering copies of it
+        # wherever the process happened to start is how two deployments
+        # end up disagreeing about what was said.
+        configs = role_config.get("sinks")
+        storage_root = Path(manifest.get("storage", {}).get("root", "data/archive"))
+        if isinstance(configs, list):
+            resolved = []
+            for entry in configs:
+                if (isinstance(entry, dict)
+                        and str(entry.get("type", "")).lower() == "file"
+                        and entry.get("path")
+                        and not Path(str(entry["path"])).is_absolute()):
+                    entry = {**entry,
+                             "path": str(storage_root / Path(str(entry["path"])).name)}
+                resolved.append(entry)
+            configs = resolved
+
+        try:
+            sinks = action_sinks.build_sinks(configs)
+        except ValueError as exc:
+            raise BootstrapError(f"action sinks: {exc}") from exc
+
+        if not sinks:
+            # Legal, and loud. Somebody may genuinely want a headless
+            # deployment; nobody wants an accidentally mute one.
+            sinks = [action_sinks.NullSink()]
+            print("[recovery] WARNING: action is real but roles.action.sinks "
+                  "is empty — nothing this system says will reach anyone. "
+                  "Falling back to a null sink so the pipeline still runs.")
+
+        agent = ActionAgent(bus, sinks)
+        print(f"[recovery] action: LIVE tier — emitting through "
+              f"{len(sinks)} sink(s): {', '.join(s.name for s in sinks)}")
+        return agent
+
+    def _resolve_config_path(self, path: str) -> Path:
+        """Find a config file named relative to something sensible.
+
+        Tried in order: as given (absolute or CWD-relative), next to the
+        manifest, in a `config/` directory beside the manifest's parent,
+        in the repo root's `config/`, and finally in the config directory
+        that ships with this source tree. A bare filename in a manifest
+        should not require the operator to know which directory the
+        process happened to start in — nor should copying a manifest
+        somewhere else (which every test fixture does) silently strand
+        the shipped default rule set."""
+        candidate = Path(path)
+        if candidate.is_absolute():
+            return candidate
+
+        manifest_dir = Path(self.manifest_path).resolve().parent
+        repo_root = manifest_dir.parent
+        shipped = Path(__file__).resolve().parent.parent / "config"
+        for base in (Path.cwd(), manifest_dir, manifest_dir / "config",
+                     repo_root, repo_root / "config", shipped):
+            found = base / candidate
+            if found.exists():
+                return found
+        # Nothing found: hand back the most likely intended location so
+        # the error names a real path rather than a bare filename.
+        return shipped / candidate
+
     # ---- §9.1 step 4: cognitive hydration ---------------------------------
 
     def _provision_governance(self, bus: EmbeddedBus,
-                              manifest: Dict[str, Any]) -> Governance:
+                              manifest: Dict[str, Any], *,
+                              consolidator=None, impulse=None) -> Governance:
         """Governance is always real, and always deterministic (v0.34).
 
         There is one implementation, so `roles.governance.mock` has
@@ -258,8 +447,11 @@ class Recovery:
                   f"'{role_config['substrate']}', which is unused — Governance makes "
                   f"no model calls (v0.34).")
 
-        print("[recovery] governance: deterministic dispatcher (no substrate)")
-        return Governance(bus)
+        governance = Governance(bus, consolidator=consolidator, impulse=impulse)
+        print(f"[recovery] governance: deterministic dispatcher (no substrate), "
+              f"bundling {len(governance.buffer.expected)} parallel answers per "
+              f"event ({', '.join(sorted(governance.buffer.expected))})")
+        return governance
 
     def _provision_analytics(self, bus: EmbeddedBus, manifest: Dict[str, Any],
                              archive: ArchiveStore,
@@ -301,15 +493,213 @@ class Recovery:
             strict=bool(role_config.get("strict", False)),
             budget=budget,
         )
-        price = ("unpriced — budget mode cannot estimate spend"
-                 if not substrate.has_prices
-                 else f"${substrate.price_per_mtok_in}/${substrate.price_per_mtok_out} per Mtok")
         print(f"[recovery] analytics: LIVE tier on substrate "
-              f"{substrate.describe()} ({price})")
+              f"{substrate.describe()} ({self._price_note(substrate)})")
+        self._warn_unpriced(substrate)
+        return agent
+
+    def _provision_intent(self, bus: EmbeddedBus, manifest: Dict[str, Any],
+                          archive: ArchiveStore,
+                          budget: Optional[BudgetManager]) -> IntentBase:
+        """Select Intent's tier from `roles.intent.mock` (§13.4).
+
+        Same shape as `_provision_analytics` now — mock: true is templated
+        and free, mock: false resolves a real substrate and stops the
+        bootstrap deterministically on a credential the role can't reach
+        (§9.1 step 6).
+
+        v0.35f removed what used to make this method special. Node
+        selection is gone with the fleet/rotation model: Intent declares
+        one flat `substrate`, exactly like Analytics, and there is no
+        nodes[0] to pick. The consolidation substrate is gone too —
+        consolidation is its own role now (see _provision_consolidator).
+        A manifest still carrying the old shape is told so rather than
+        silently ignored, because a stale `nodes:` list looks like it is
+        doing something."""
+        role_config = manifest.get("roles", {}).get("intent", {}) or {}
+
+        if role_config.get("nodes"):
+            print("[recovery] NOTE: roles.intent.nodes is set, but the Intent "
+                  "fleet/rotation model was removed in v0.35f (§7 superseded) "
+                  "— Intent is always active and declares one flat "
+                  "'substrate'. Ignoring 'nodes'.")
+        if role_config.get("consolidation_substrate"):
+            print("[recovery] NOTE: roles.intent.consolidation_substrate is set, "
+                  "but consolidation is its own role as of v0.35f — configure it "
+                  "under roles.consolidator.substrate. Ignoring.")
+
+        context_events = int(role_config.get("context_events", DEFAULT_CONTEXT_EVENTS))
+
+        if role_config.get("mock", True):
+            print(f"[recovery] intent: MOCK tier (templated voicing, zero LLM cost), "
+                  f"conversation window {context_events} events")
+            return IntentMock(bus, archive, context_events=context_events)
+
+        substrate_class = role_config.get("substrate")
+        if not substrate_class:
+            raise BootstrapError(
+                "Intent is declared real (roles.intent.mock: false) but declares "
+                "no 'substrate' class")
+        try:
+            substrate = resolve_substrate(manifest, substrate_class)
+            substrate.validate_credentials()
+        except SubstrateError as exc:
+            raise BootstrapError(
+                f"Intent is declared real (roles.intent.mock: false) but its "
+                f"substrate is not usable: {exc}"
+            ) from exc
+
+        agent = IntentAgent(
+            bus, substrate, archive,
+            context_events=context_events,
+            system_instruction=role_config.get("system_instruction", ""),
+            temperature=float(role_config.get("temperature", 0.7)),
+            max_tokens=role_config.get("max_tokens"),
+            strict=bool(role_config.get("strict", False)),
+            budget=budget,
+        )
+        print(f"[recovery] intent: LIVE tier on substrate {substrate.describe()} "
+              f"({self._price_note(substrate)}), conversation window "
+              f"{context_events} events")
+        self._warn_unpriced(substrate)
+        return agent
+
+    def _provision_consolidator(self, bus: EmbeddedBus, manifest: Dict[str, Any],
+                                archive: ArchiveStore,
+                                budget: Optional[BudgetManager],
+                                impulse: Optional[Impulse]) -> ConsolidatorBase:
+        """Select Consolidator's tier from `roles.consolidator.mock` (v0.35f).
+
+        One thing here differs from every other cognitive role, and it is
+        deliberate: an unusable substrate is a WARNING, not a bootstrap
+        stop. Consolidation is a rare background pass that gates nothing —
+        it degrades to ConsolidatorAgent's own fallback (an empty,
+        templated epoch), which is the same "an outage changes quality,
+        not behaviour" posture as every other degraded path here. Blocking
+        the whole live pipeline over a substrate only the memory writer
+        depends on would be the wrong trade. This is the posture Phase
+        0.4 already applied to `consolidation_substrate`, kept intact
+        now that consolidation is a role of its own.
+
+        The Impulse reference is the "slow coloring" coupling (§5.3):
+        consolidation may nudge drive-vector BASELINES by a small,
+        hard-clamped amount. It moved here from Intent with the rest of
+        the consolidation job."""
+        role_config = manifest.get("roles", {}).get("consolidator", {}) or {}
+        batch_size = int(role_config.get("batch_size_events", DEFAULT_BATCH_SIZE))
+        synchronous = bool(role_config.get("synchronous", False))
+        mode = "synchronous" if synchronous else "background thread"
+
+        if role_config.get("mock", True):
+            print(f"[recovery] consolidator: MOCK tier (templated epochs, zero "
+                  f"LLM cost), batch {batch_size} events, {mode}")
+            return ConsolidatorMock(bus, archive, batch_size=batch_size,
+                                    impulse=impulse, synchronous=synchronous)
+
+        substrate_class = role_config.get("substrate")
+        substrate = None
+        if not substrate_class:
+            print("[recovery] WARNING: consolidator is declared real but names no "
+                  "'substrate' class; falling back to the MOCK tier. Long-term "
+                  "memory will not be written until this is fixed.")
+        else:
+            try:
+                substrate = resolve_substrate(manifest, substrate_class)
+                substrate.validate_credentials()
+            except SubstrateError as exc:
+                print(f"[recovery] WARNING: consolidator substrate "
+                      f"'{substrate_class}' is not usable ({exc}); falling back "
+                      f"to the MOCK tier. The live pipeline is unaffected — "
+                      f"consolidation writes empty epochs until this is fixed.")
+                substrate = None
+
+        if substrate is None:
+            return ConsolidatorMock(bus, archive, batch_size=batch_size,
+                                    impulse=impulse, synchronous=synchronous)
+
+        agent = ConsolidatorAgent(
+            bus, substrate, archive,
+            batch_size=batch_size, impulse=impulse, synchronous=synchronous,
+            system_instruction=role_config.get("system_instruction", ""),
+            temperature=float(role_config.get("temperature", 0.3)),
+            max_tokens=role_config.get("max_tokens"),
+            strict=bool(role_config.get("strict", False)),
+            budget=budget,
+        )
+        print(f"[recovery] consolidator: LIVE tier on substrate "
+              f"{substrate.describe()} ({self._price_note(substrate)}), "
+              f"batch {batch_size} events, {mode}")
+        self._warn_unpriced(substrate)
+        return agent
+
+    def _provision_lookup(self, bus: EmbeddedBus, manifest: Dict[str, Any],
+                          archive: ArchiveStore, role: str,
+                          budget: Optional[BudgetManager] = None) -> ArchiveLookupBase:
+        """Provision one member of the archive-lookup family (v0.35b).
+
+        Called once per role, with no per-role branching anywhere in this
+        method — that is the whole point of the family being one class
+        with two configurations. A third member is an entry in
+        agents/archive_lookup/base.py's ROLE_STORES plus a manifest block,
+        and this method already handles it.
+
+        Phase 0.6 gave the family a live tier, so `mock: false` now means
+        what it says instead of being reported and ignored. The
+        credential check is the same offline one every cognitive role
+        gets: constructible with every endpoint unreachable (§9), but a
+        role declared real with no way to reach its substrate stops the
+        bootstrap rather than quietly running mocked."""
+        key = role.lower()
+        role_config = manifest.get("roles", {}).get(key, {}) or {}
+        query_limit = int(role_config.get("query_limit",
+                                          lookup_contract.DEFAULT_QUERY_LIMIT))
+        brief = role_config.get("brief", "")
+
+        if role_config.get("mock", True):
+            agent = ArchiveLookupMock(
+                bus, archive, role=role, brief=brief, query_limit=query_limit)
+            print(f"[recovery] {key}: MOCK tier (read-only lookup over the "
+                  f"'{agent.store_kind}' store, zero LLM cost)")
+            return agent
+
+        try:
+            substrate = resolve_role_substrate(manifest, key)
+            substrate.validate_credentials()
+        except SubstrateError as exc:
+            raise BootstrapError(
+                f"{role} is declared real (roles.{key}.mock: false) but its "
+                f"substrate is not usable: {exc}"
+            ) from exc
+
+        agent = ArchiveLookupAgent(
+            bus, archive, substrate, role=role, brief=brief,
+            query_limit=query_limit,
+            system_instruction=role_config.get("system_instruction", ""),
+            temperature=float(role_config.get("temperature", 0.2)),
+            max_tokens=role_config.get("max_tokens"),
+            strict=bool(role_config.get("strict", False)),
+            budget=budget,
+        )
+        print(f"[recovery] {key}: LIVE tier on substrate "
+              f"{substrate.describe()} — read-only lookup over the "
+              f"'{agent.store_kind}' store ({self._price_note(substrate)})")
+        self._warn_unpriced(substrate)
+        return agent
+
+    # ---- Shared reporting helpers ------------------------------------------
+
+    @staticmethod
+    def _price_note(substrate) -> str:
+        return ("unpriced — budget mode cannot estimate spend"
+                if not substrate.has_prices
+                else f"${substrate.price_per_mtok_in}/"
+                     f"${substrate.price_per_mtok_out} per Mtok")
+
+    @staticmethod
+    def _warn_unpriced(substrate) -> None:
         if not substrate.has_prices:
             print("[recovery] WARNING: no price_per_mtok declared for substrate "
                   f"'{substrate.substrate_class}'; the spend cap cannot protect you.")
-        return agent
 
     def _health_check(self, bus: EmbeddedBus, sensory: Sensory) -> None:
         received: Dict[str, bool] = {"ok": False}
