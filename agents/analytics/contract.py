@@ -32,20 +32,18 @@ Since v0.35a it is also fanned out to DIRECTLY by Sensory rather than
 relayed by Governance, so the envelope type it sees is the modality
 ("prompt", "feedback", "vision", ...). All of them mean Evaluate.
 
-What Analytics still contributes, and what it no longer does
--------------------------------------------------------------
-It still sets `proceed` and `concern`. That is an ANALYTICAL judgment
-("I don't think this is a good idea, and here's the one-line reason"),
-not a security one, and Intent reads it out of the bundle to choose
-between its ADVISE and REFUSE registers exactly as before — v0.35c is
-explicit that this half of the contract is unchanged. Loop detection, a
-mechanical count rather than an opinion, is the other place it comes
-from.
-
-What it no longer does is decide whether an action happens. Nothing
-downstream treats `proceed: false` as a veto: Intent voices the decline,
-and Intent, Security and Governance hold the actual gates. That is why
-there is no fail-closed asymmetry left in this file.
+What Analytics contributes, and what it no longer does
+--------------------------------------------------------
+2026-08-25 (Daniel): `proceed`/`concern` are gone. They read as an
+analytical judgment, but Governance's own routing code was still using
+them to fork Intent between ADVISE and REFUSE — a real, live gate riding
+on Analytics' opinion, not the harmless vestige it looked like. The only
+gate in this system now is Security's red verdict. Analytics is "only
+there to serve unbiased analytical keywords to intent" (Daniel,
+2026-08-24) — as dumb as Personality and Knowledge, full stop. It
+contributes a keyword recommendation and nothing else. Loop detection, a
+mechanical count rather than an opinion, is the other place its answer
+comes from.
 
 Fallback posture
 ----------------
@@ -54,10 +52,6 @@ recommendation the Phase 0 mock produced. The pipeline keeps moving with
 a duller answer, which is the right trade for a hop where nothing is
 gated — and it is byte-identical to the mock's output, so a substrate
 outage changes quality, not behaviour.
-
-The fail-closed discipline this file used to carry hasn't been lost; it
-moved to where the gating went. See agents/intent/contract.py's
-REVIEW/REVISE fallbacks.
 """
 from __future__ import annotations
 
@@ -66,15 +60,16 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from bus.envelope import Envelope
-from substrates.parsing import coerce_bool, extract_json_object
+from substrates.parsing import extract_json_object
 
 #: A recommendation longer than this is the model writing an essay rather
-#: than advising. Truncated rather than rejected — the content is
+#: than a keyword read. Truncated rather than rejected — the content is
 #: probably fine, there is just too much of it, and Intent reads it next.
-MAX_RECOMMENDATION_CHARS = 2000
-
-#: Concerns are shown to the human via Intent's refusal. Keep them short.
-MAX_CONCERN_CHARS = 300
+#: 2026-08-25 (Daniel): tightened from 2000 — a "keyword or short phrase"
+#: has no business running anywhere near the old ceiling, and Intent was
+#: getting misled by essay-length "recommendations" reading as loaded
+#: context rather than a terse read.
+MAX_RECOMMENDATION_CHARS = 80
 
 
 class Task(str, Enum):
@@ -102,10 +97,10 @@ SENSORY_TYPES = frozenset({"prompt", "feedback", "vision", "audio", "https"})
 #: What the model is asked to do. One entry, because there is one task.
 TASK_BRIEFS: Dict[Task, str] = {
     Task.EVALUATE: (
-        "Reason about this event and say what you make of it, in keywords. "
-        "Set proceed to false only if the request itself looks like a bad "
-        "idea on the merits, and give the reason in one plain sentence — "
-        "someone else decides what happens about it."
+        "Reason about this event and say what you make of it — 2-6 "
+        "comma-separated keywords, no sentences, no reasoning, no "
+        "punctuation beyond commas. Nothing is gated on this; you are "
+        "not deciding anything, only naming what stands out."
     ),
 }
 
@@ -115,16 +110,11 @@ class Recommendation:
     """A validated Analytics answer, ready to hand to Intent."""
 
     recommendation: str
-    proceed: bool = True
-    concern: str = ""
     decided_by: str = "llm"          # llm | fallback | deterministic
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
     def to_meta(self) -> Dict[str, Any]:
-        meta: Dict[str, Any] = {"proceed": self.proceed,
-                                "decided_by": self.decided_by}
-        if self.concern:
-            meta["concern"] = self.concern
+        meta: Dict[str, Any] = {"decided_by": self.decided_by}
         if self.diagnostics:
             meta.update(self.diagnostics)
         return meta
@@ -150,11 +140,10 @@ class ContractViolation(ValueError):
 RESPONSE_CONTRACT = """
 Reply with a single JSON object and nothing else:
 
-  {"recommendation": "<keywords/short phrase, not a full sentence>",
-   "proceed": true | false,
-   "concern": "<one short sentence, only when proceed is false>"}
+  {"recommendation": "<2-6 comma-separated keywords, no sentences>"}
 
-Never write the persona's reply. When unsure, proceed: false.
+Never write the persona's reply. Keywords only — no reasoning, no
+punctuation beyond commas.
 """
 
 
@@ -205,11 +194,7 @@ def build_prompt(envelope: Envelope, task: Task, *,
 # ---------------------------------------------------------------------------
 
 def parse(text: str, task: Task) -> Recommendation:
-    """Turn a substrate response into a Recommendation, or raise.
-
-    Note the default passed to coerce_bool: the SAFE value for this task.
-    A model that answers with something unreadable in the `proceed` field
-    does not get the benefit of the doubt on a gating task."""
+    """Turn a substrate response into a Recommendation, or raise."""
     obj = extract_json_object(text)
     if obj is None:
         raise ContractViolation(f"no JSON object in response: {text[:200]!r}")
@@ -219,24 +204,7 @@ def parse(text: str, task: Task) -> Recommendation:
         raise ContractViolation(f"no usable 'recommendation' in response: {obj!r}")
     recommendation = recommendation.strip()[:MAX_RECOMMENDATION_CHARS]
 
-    # Nothing downstream is gated on this value any more (v0.35e), so an
-    # unreadable one defaults to True: a model that answers the wrong
-    # question shouldn't be able to make the persona decline. Where it
-    # answers the question clearly, Intent hears it.
-    proceed = coerce_bool(obj.get("proceed"), default=True)
-
-    concern = obj.get("concern") or ""
-    if not isinstance(concern, str):
-        concern = str(concern)
-    concern = concern.strip()[:MAX_CONCERN_CHARS]
-
-    if not proceed and not concern:
-        # A refusal with no reason gives Intent nothing to say and the
-        # human nothing to act on.
-        concern = "Analytics advised against this but did not give a reason."
-
-    return Recommendation(recommendation=recommendation, proceed=proceed,
-                          concern=concern, decided_by="llm")
+    return Recommendation(recommendation=recommendation, decided_by="llm")
 
 
 # ---------------------------------------------------------------------------
@@ -256,16 +224,12 @@ def templated_recommendation(envelope: Envelope) -> str:
 def fallback(envelope: Envelope, task: Task, reason: str) -> Recommendation:
     """What Analytics says when the substrate's answer can't be used.
 
-    One posture now: degrade and keep moving. Nothing is gated on this
-    hop, so a duller answer is the right trade — and it is byte-identical
-    to the mock's, so an outage changes the quality of the thinking, not
-    the shape of the trace.
-
-    The fail-closed half of this function moved to Intent with the gating
-    (v0.35e). See agents/intent/contract.py's fallback_gated."""
+    Degrade and keep moving. Nothing is gated on this hop, so a duller
+    answer is the right trade — and it is byte-identical to the mock's,
+    so an outage changes the quality of the thinking, not the shape of
+    the trace."""
     return Recommendation(
         recommendation=templated_recommendation(envelope),
-        proceed=True,
         decided_by="fallback",
         diagnostics={"degraded": True, "reason": reason[:200]},
     )
@@ -277,10 +241,7 @@ def loop_detected(envelope: Envelope, repeats: int) -> Recommendation:
     should not pay for inference to notice it has seen the same thing
     three times."""
     return Recommendation(
-        recommendation=("Loop detected — recommend graceful degradation, "
-                        "not repetition."),
-        proceed=False,
-        concern=f"This is the {repeats}th identical attempt; repeating it will not help.",
+        recommendation="loop detected, graceful degradation",
         decided_by="deterministic",
         diagnostics={"loop_detected": True, "repeats": repeats},
     )

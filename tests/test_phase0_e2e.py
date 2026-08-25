@@ -103,11 +103,31 @@ class TestPhase0ExitCriteria:
         eco, event_id = _run_worked_example(manifest_path)
 
         hops = [(env.source, env.destination) for env in eco.bus.trace() if env.event_id == event_id]
-        assert hops == [
-            ("Sensory", "Impulse"), ("Impulse", "Governance"),
+
+        # 2026-08-25 (Daniel): Analytics/Personality/Knowledge now dispatch
+        # on a real thread pool (agents/sensory/agent.py), so their eight
+        # hops (in and their replies out) can interleave in any order run
+        # to run — that's the whole point of "truly async." What's still
+        # guaranteed, and what this test checks instead of a fixed
+        # sequence: Impulse is dispatched first and its round trip
+        # completes before anything else (the Critical-fast-path
+        # invariant), the other three each go in and answer exactly once,
+        # and the tail from Governance's bundle onward is unchanged —
+        # Governance only bundles once all three have reported, so that
+        # part of the pipeline stays strictly sequential regardless of the
+        # fan-out's internal order.
+        assert hops[0] == ("Sensory", "Impulse")
+        assert hops[1] == ("Impulse", "Governance")
+
+        concurrent = set(hops[2:8])
+        assert concurrent == {
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
             ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
+        }
+        assert len(hops[2:8]) == 6, "each of the three should answer exactly once"
+
+        assert hops[8:] == [
             ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),
@@ -159,9 +179,17 @@ class TestPhase0ExitCriteria:
         assert eco.watchdog.level2_fired is False
 
     def test_reproducible_twice_in_a_row(self, tmp_path):
-        """The actual exit criterion: identical queue traces (modulo
-        timestamps and randomly-generated event_ids) across two
-        independent cold bootstraps."""
+        """The exit criterion, adapted for real concurrency (Daniel,
+        2026-08-25): identical queue CONTENT across two independent cold
+        bootstraps, modulo timestamps/event_ids, and modulo the internal
+        order of the three concurrently-dispatched workers (Analytics,
+        Personality, Knowledge) — a thread pool makes no promise about
+        which of three equally-ready threads gets scheduled first, run to
+        run, and that was never the property worth guaranteeing. What
+        still must be identical, byte for byte, in order: the deterministic
+        prefix (Sensory->Impulse->Governance) and the deterministic
+        suffix (Governance's bundle onward) — nothing in either of those
+        runs concurrently, so nothing about them is allowed to vary."""
         manifest_a = _manifest_with_temp_storage(tmp_path / "run_a")
         manifest_b = _manifest_with_temp_storage(tmp_path / "run_b")
 
@@ -181,7 +209,15 @@ class TestPhase0ExitCriteria:
 
         trace_a = strip(eco_a.bus.trace(), eid_a)
         trace_b = strip(eco_b.bus.trace(), eid_b)
-        assert trace_a == trace_b
+
+        assert len(trace_a) == len(trace_b)
+        assert trace_a[:2] == trace_b[:2], "Impulse's round trip must stay first and identical"
+        assert trace_a[8:] == trace_b[8:], "the bundle onward must stay identical and in order"
+
+        # The concurrent middle: same six entries, order-independent.
+        concurrent_a = [dict(sorted(d.items())) for d in trace_a[2:8]]
+        concurrent_b = [dict(sorted(d.items())) for d in trace_b[2:8]]
+        assert sorted(concurrent_a, key=repr) == sorted(concurrent_b, key=repr)
 
 
 class TestWatchdogEscalation:
@@ -334,8 +370,12 @@ class TestActionFailureHandling:
         # and nothing was published back INTO Sensory.
         assert len(sensory_hops) == 4
         assert {env.type for env in sensory_hops} == {"prompt"}
-        assert [env.destination for env in sensory_hops] == [
-            "Impulse", "Analytics", "Personality", "Knowledge"]
+        # 2026-08-25: Analytics/Personality/Knowledge dispatch concurrently
+        # now — Impulse stays first and synchronous; the other three's
+        # relative order isn't guaranteed run to run.
+        destinations = [env.destination for env in sensory_hops]
+        assert destinations[0] == "Impulse"
+        assert set(destinations[1:]) == {"Analytics", "Personality", "Knowledge"}
         assert not [env for env in all_hops
                     if env.event_id == event_id and env.destination == "Sensory"]
 

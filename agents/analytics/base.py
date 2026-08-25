@@ -134,10 +134,9 @@ class AnalyticsBase:
         This is the one thing about Analytics that v0.35 changed. Before,
         it replied straight to Intent, and its `proceed: false` was what
         told Governance to route toward a decline. Now its answer is one
-        of four inputs to a bundle, and it gates nothing — the judgment it
-        contributes is analytical, and Intent is the one that decides what
-        to do about it (v0.35e). Same reasoning, same output shape, a
-        different recipient.
+        of four inputs to a bundle. 2026-08-25: `proceed` is gone
+        entirely — Analytics gates nothing, contributes unbiased keywords
+        only, and Intent is the sole judge of what to do with them.
 
         The findings ride in `meta.analytics`, the same role-named slot
         shape the archive-lookup family uses (agents/archive_lookup/) —
@@ -146,8 +145,6 @@ class AnalyticsBase:
         rather than parsing three."""
         if recommendation.decided_by == "fallback":
             self.metrics["fallbacks"] += 1
-        if not recommendation.proceed:
-            self.metrics["declined"] += 1
 
         meta: Dict[str, Any] = dict(envelope.meta)
         meta.pop("governance", None)      # not ours to forward

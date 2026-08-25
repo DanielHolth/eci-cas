@@ -130,15 +130,17 @@ class Task(str, Enum):
         """Which register this hop calls for.
 
         `Recommend` (Analytics' hand-off in the pre-fan-out topology) and
-        `Bundle` (Governance's four-slot bundle, v0.35c) both resolve to
-        ADVISE or REFUSE depending on the `proceed` the analytical slot
-        carries — Intent doesn't decide it in those registers, it inherits
-        it. `Review` and `Revise` are Security's two non-green lanes,
-        routed here by Governance (v0.35e), and Intent decides both."""
+        `Bundle` (Governance's four-slot bundle, v0.35c) always resolve to
+        ADVISE now (Daniel, 2026-08-25). They used to fork ADVISE/REFUSE on
+        the `proceed` the analytical slot carried, but that was Analytics
+        (or Personality/Knowledge) holding a real gate on Intent's register
+        choice, and the only real gate left in this system is Security's
+        red verdict. `Review` and `Revise` are Security's two non-green
+        lanes, routed here by Governance (v0.35e), and Intent decides both
+        — unchanged by this."""
         raw = str(envelope.type).strip()
         if raw in ("Recommend", "Bundle"):
-            proceed = coerce_bool(envelope.meta.get("proceed"), default=True)
-            return cls.ADVISE if proceed else cls.REFUSE
+            return cls.ADVISE
         try:
             return cls(raw)
         except ValueError:
@@ -347,8 +349,10 @@ def build_advise_prompt(envelope: Envelope, recommendation: str,
                         reflex_action: Optional[str] = None) -> str:
     lines = [
         "TASK: Advise",
-        "Your analytical agents have looked at this. Speak to the human "
-        "now, informed by what they found but in your own words.",
+        "Your analytical agents have looked at this and left you keywords "
+        "below, in RECOMMENDATIONS. Actually use them — let them shape "
+        "what you notice or say, don't just have them present and ignore "
+        "them. Speak to the human now, in your own words, not theirs.",
         "",
     ]
     lines += _persona_block(persona)
@@ -456,9 +460,11 @@ def build_revise_prompt(envelope: Envelope, persona: PersonaState, *,
 
 def _recommendation_lines(recommendations: Optional[List[Dict[str, Any]]]) -> List[str]:
     """Analytics', Personality's and Knowledge's answers (v0.35b/Daniel
-    2026-08-24), one shared shape — {sender, keywords, proceed, concern}
-    — rendered as one list rather than named blocks. Intent pattern-
-    matches one shape here, it doesn't parse three."""
+    2026-08-24), one shared shape — {sender, keywords} as of 2026-08-25
+    (proceed/concern removed; the only real gate left in the system is
+    Security's red verdict) — rendered as one list rather than named
+    blocks. Intent pattern-matches one shape here, it doesn't parse
+    three."""
     if not recommendations:
         return []
     lines = ["RECOMMENDATIONS:"]
@@ -467,10 +473,7 @@ def _recommendation_lines(recommendations: Optional[List[Dict[str, Any]]]) -> Li
         keywords = str(entry.get("keywords", ""))
         if not keywords:
             continue
-        line = f"  - {sender}: {keywords}"
-        if entry.get("proceed") is False and entry.get("concern"):
-            line += f" (concern: {entry['concern']})"
-        lines.append(line)
+        lines.append(f"  - {sender}: {keywords}")
     return lines if len(lines) > 1 else []
 
 

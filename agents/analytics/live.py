@@ -88,18 +88,15 @@ class AnalyticsAgent(AnalyticsBase):
 
     def think(self, envelope: Envelope, task: Task) -> Recommendation:
         if self.budget is not None and not self.budget.should_call_substrate():
-            # Budget mode. Reuse the SAME per-task fallbacks a substrate
-            # failure would produce — budget mode has no degraded behaviour
-            # of its own, so there is nothing extra to get wrong. Evaluate
-            # still proceeds; Review and Revise still decline.
+            # Budget mode. Reuse the SAME fallback a substrate failure
+            # would produce — budget mode has no degraded behaviour of its
+            # own, so there is nothing extra to get wrong.
             degraded = contract.fallback(
                 envelope, task,
                 f"budget mode ({self.budget.state.reason or 'manual'})")
             self.metrics["fallbacks"] += 1
             return Recommendation(
                 recommendation=degraded.recommendation,
-                proceed=degraded.proceed,
-                concern=degraded.concern,
                 decided_by="budget",
                 diagnostics={"budget_mode": True,
                              "budget_reason": self.budget.state.reason or "manual",
@@ -119,8 +116,6 @@ class AnalyticsAgent(AnalyticsBase):
             recommendation = contract.parse(text, task)
             return Recommendation(
                 recommendation=recommendation.recommendation,
-                proceed=recommendation.proceed,
-                concern=recommendation.concern,
                 decided_by="llm",
                 diagnostics=self._diagnostics(latency_ms=latency_ms, usage=usage,
                                               cost_usd=cost),
@@ -134,8 +129,6 @@ class AnalyticsAgent(AnalyticsBase):
             degraded = contract.fallback(envelope, task, f"{type(exc).__name__}: {exc}")
             return Recommendation(
                 recommendation=degraded.recommendation,
-                proceed=degraded.proceed,
-                concern=degraded.concern,
                 decided_by="fallback",
                 diagnostics={**self._diagnostics(), **degraded.diagnostics},
             )

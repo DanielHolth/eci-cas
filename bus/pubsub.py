@@ -22,6 +22,7 @@ per §11.1).
 """
 from __future__ import annotations
 
+import threading
 from collections import defaultdict
 from typing import Callable, Dict, List
 
@@ -50,6 +51,14 @@ class EmbeddedBus:
         self._subscribers: Dict[str, List[Handler]] = defaultdict(list)
         self._trace: List[Envelope] = []          # in-memory trace, for tests/harness
         self.archive = archive                    # ArchiveStore, optional (Phase 0 mocks may run without it)
+        # 2026-08-25 (Daniel): Sensory's cognitive fan-out now dispatches on
+        # a thread pool, so publish() can be called by more than one thread
+        # at once. Guards only the two shared, fast, non-blocking writes
+        # below (the trace list, the queue-log append) — never the handler
+        # dispatch loop, which is where a slow substrate call lives and
+        # must NOT be serialized, or the concurrency this exists for is
+        # lost.
+        self._lock = threading.Lock()
 
     def subscribe(self, topic: str, handler: Handler) -> None:
         if topic not in ALL_TOPICS:
@@ -60,13 +69,15 @@ class EmbeddedBus:
         if topic not in ALL_TOPICS:
             raise ValueError(f"Unknown topic '{topic}'. Known topics: {sorted(ALL_TOPICS)}")
 
-        self._trace.append(envelope)
+        with self._lock:
+            self._trace.append(envelope)
 
-        # Business events are logged to Archive's hot queue (§13.2). System
-        # topics are control-plane and intentionally excluded (§3, §11.1) —
-        # Level 1 Watchdog pings must have zero queue footprint.
-        if topic in BUSINESS_TOPICS and self.archive is not None:
-            self.archive.log_event(topic, envelope)
+            # Business events are logged to Archive's hot queue (§13.2).
+            # System topics are control-plane and intentionally excluded
+            # (§3, §11.1) — Level 1 Watchdog pings must have zero queue
+            # footprint.
+            if topic in BUSINESS_TOPICS and self.archive is not None:
+                self.archive.log_event(topic, envelope)
 
         for handler in list(self._subscribers.get(topic, [])):
             handler(envelope)

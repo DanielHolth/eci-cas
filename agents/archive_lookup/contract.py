@@ -33,9 +33,17 @@ from typing import Any, Dict, List, Optional
 
 from substrates.parsing import coerce_bool, extract_json_object
 
-#: Findings are keywords, not prose. Short enough that three of them plus
-#: a persona still fit comfortably in Intent's prompt (§1's flat cost).
-MAX_FINDINGS_CHARS = 300
+#: Findings are keywords, not prose. Tightened from 300 (Daniel,
+#: 2026-08-25) — a live trace showed Personality answering in full
+#: sentences ("active listener; reflect back what actually heard before
+#: offering a take; ask rather than assume...") well within the old cap,
+#: which flooded Intent's RECOMMENDATIONS block and, on at least one run,
+#: visibly misled Intent (it read the essay as loaded context and reacted
+#: to it rather than to the human). Matches Analytics'
+#: MAX_RECOMMENDATION_CHARS (agents/analytics/contract.py) — the two
+#: families share one keyword-terse shape at Governance's bundle boundary
+#: (agents/shared/recommendation.py) and now share one length ceiling too.
+MAX_FINDINGS_CHARS = 80
 
 #: How many Archive records one lookup reads. Bounded for the same reason
 #: Analytics' working window is: this runs on every event.
@@ -70,13 +78,15 @@ class ContractViolation(ValueError):
 RESPONSE_CONTRACT = """
 Reply with a single JSON object and nothing else:
 
-  {"findings": "<keywords or a short phrase, not a full sentence>",
+  {"findings": "<2-6 comma-separated keywords, no sentences>",
    "relevant": true | false}
 
-Report only what the records you were given actually say. If nothing in
-them bears on this event, answer with relevant: false and empty findings
-— that is a useful answer, not a failure. Never invent a record, and
-never address the human; you are informing another agent.
+Report only what the records you were given actually say, compressed to
+keywords — no sentences, no reasoning, no punctuation beyond commas. If
+nothing in the records bears on this event, answer with relevant: false
+and empty findings — that is a useful answer, not a failure. Never
+invent a record, and never address the human; you are informing another
+agent.
 """
 
 

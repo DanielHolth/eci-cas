@@ -146,10 +146,15 @@ class EventState:
 
     def recommendations(self) -> List[Dict[str, Any]]:
         """Analytics', Personality's and Knowledge's answers, projected to
-        the one shared shape Intent actually reads (Daniel, 2026-08-24):
-        {sender, keywords, proceed, concern} — sender identifies who said
-        it, everything else about HOW they arrived at it (tier, decided_by,
-        diagnostics) stays here in Governance's own bookkeeping.
+        the one shared shape Intent actually reads (Daniel, 2026-08-24;
+        cut to {sender, keywords} only, Daniel, 2026-08-25) — sender
+        identifies who said it, keywords is the terse content. Everything
+        about HOW they arrived at it (tier, decided_by, diagnostics,
+        source_model, latency_ms, usage, cost, records_considered) stays
+        here in Governance's own bookkeeping and never rides into Intent's
+        prompt. There is no `proceed`/`concern` any more — Analytics holds
+        no gate, and neither do Personality/Knowledge; the only real gate
+        left in the system is Security's red verdict.
 
         A worker that hasn't reported yet, or reported nothing worth
         surfacing (empty keywords — a silent lookup, e.g.), is simply
@@ -162,13 +167,8 @@ class EventState:
             keywords = str(slot.get("recommendation") or slot.get("findings") or "")
             if not keywords:
                 continue
-            proceed = slot.get("proceed")
-            if proceed is None:
-                proceed = slot.get("relevant", True)
-            concern = str(slot.get("concern") or "")
             entries.append(RecommendationEntry(
-                sender=name, keywords=keywords, proceed=bool(proceed),
-                concern=concern).to_dict())
+                sender=name, keywords=keywords).to_dict())
         return entries
 
     def final_proposal(self) -> str:

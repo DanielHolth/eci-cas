@@ -223,24 +223,18 @@ def _envelope(source="Governance", type="Evaluate", content=PROMPT, **meta):
 class TestContract:
     def test_a_well_formed_answer_parses(self):
         rec = contract.parse(_reply_correct(""), Task.EVALUATE)
-        assert rec.proceed is True
         assert "responsive" in rec.recommendation
         assert rec.decided_by == "llm"
 
-    def test_a_decline_carries_its_reason(self):
-        """Analytics may still say "I don't think so, and here's why" —
-        that is an ANALYTICAL judgment, and Intent voices it. What v0.35e
-        took away is any power to stop the action itself."""
+    def test_a_decline_still_parses_as_a_plain_recommendation(self):
+        """2026-08-25: proceed/concern are gone entirely. A model that
+        still sends them (old prompt cached somewhere, a stray fixture)
+        should not break parsing — the extra fields are simply ignored,
+        and Analytics has no power to stop anything either way."""
         rec = contract.parse(_reply_decline(""), Task.EVALUATE)
-        assert rec.proceed is False
-        assert "isn't ours to share" in rec.concern
-
-    def test_a_decline_without_a_reason_gets_one(self):
-        """A refusal with no reason gives Intent nothing to say and the
-        human nothing to act on."""
-        rec = contract.parse(_reply_decline_without_reason(""), Task.EVALUATE)
-        assert rec.proceed is False
-        assert rec.concern
+        assert not hasattr(rec, "proceed")
+        assert not hasattr(rec, "concern")
+        assert rec.recommendation
 
     @pytest.mark.parametrize("raw,expected", [
         (True, True), (False, False), ("yes", True), ("no", False),
@@ -249,15 +243,6 @@ class TestContract:
     ])
     def test_booleans_are_read_the_way_models_spell_them(self, raw, expected):
         assert coerce_bool(raw, default=not expected) is expected
-
-    def test_an_unreadable_proceed_does_not_halt_an_event(self):
-        """Nothing downstream is gated on this value (v0.35e), so a model
-        that answers the wrong question shouldn't be able to make the
-        persona decline. The fail-closed reading of an unreadable
-        `proceed` moved to Intent, which is where the gating went — see
-        tests/test_phase05_intent_veto.py."""
-        rec = contract.parse(_reply_unreadable_proceed(""), Task.EVALUATE)
-        assert rec.proceed is True
 
     @pytest.mark.parametrize("bad", ["prose", "missing_field"])
     def test_unusable_answers_raise(self, bad):
@@ -270,26 +255,29 @@ class TestContract:
         assert len(rec.recommendation) == contract.MAX_RECOMMENDATION_CHARS
 
     def test_prose_wrapped_json_is_understood(self):
-        assert contract.parse(_reply_fenced(""), Task.EVALUATE).proceed is True
+        assert contract.parse(_reply_fenced(""), Task.EVALUATE).recommendation
 
-    # ---- the fallback asymmetry -------------------------------------------
+    # ---- the fallback -------------------------------------------
 
     def test_evaluate_degrades_and_keeps_moving(self):
         env = _envelope()
         rec = contract.fallback(env, Task.EVALUATE, "substrate down")
-        assert rec.proceed is True
         assert rec.recommendation == contract.templated_recommendation(env)
         assert rec.diagnostics["degraded"] is True
 
     def test_there_are_no_gating_tasks_left_here(self):
         """v0.35e severed Analytics from Security entirely (Daniel,
         2026-08-24: "analytics is isolated from security in every way").
-        Review and Revise are Intent's now, and this file should carry no
-        trace of them — a fail-closed path with nothing to gate is dead
-        code that reads like a safety property."""
+        2026-08-25: proceed/concern removed too — Analytics is "as dumb
+        as Personality and Knowledge" and gates nothing, period. Review
+        and Revise are Intent's, and this file should carry no trace of
+        gating — a fail-closed path with nothing to gate is dead code that
+        reads like a safety property."""
         assert [t.value for t in Task] == ["Evaluate"]
         assert not hasattr(contract, "GATING_TASKS")
         assert not hasattr(contract, "FAIL_CLOSED_TASKS")
+        assert not hasattr(contract.Recommendation, "proceed")
+        assert not hasattr(contract.Recommendation, "concern")
 
     def test_the_degraded_evaluate_matches_the_mock_exactly(self):
         """A substrate outage should change the quality of the thinking,
@@ -328,13 +316,12 @@ class TestMechanicalWorkIsFree:
         assert eco.analytics.metrics["loops_detected"] == 1
         assert eco.analytics.metrics["llm_calls"] == LOOP_THRESHOLD - 1
 
-    def test_a_detected_loop_declines(self, tmp_path):
+    def test_a_detected_loop_is_flagged(self, tmp_path):
         eco = _boot(tmp_path)
         for _ in range(LOOP_THRESHOLD):
             eco.bus.publish("events.analytics", _envelope(content="same thing"))
         last = [e for e in eco.bus.trace() if e.source == "Analytics"][-1]
         assert last.destination == "Governance"
-        assert last.meta["analytics"]["proceed"] is False
         assert last.meta["analytics"]["loop_detected"] is True
 
     def test_the_control_plane_never_calls_a_model(self, tmp_path):
@@ -450,7 +437,6 @@ class TestDegradation:
         analytics_out = [e for e in eco.bus.trace()
                          if e.event_id == event_id and e.source == "Analytics"][0]
         assert analytics_out.meta["analytics"]["degraded"] is True
-        assert analytics_out.meta["analytics"]["proceed"] is True
 
     @pytest.mark.parametrize("mode", ["boom", "prose", "missing_field"])
     def test_a_degraded_event_still_reaches_the_human(self, tmp_path, mode):

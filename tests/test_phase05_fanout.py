@@ -75,8 +75,13 @@ class TestFanOut:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         out = [e for e in eco.bus.trace()
                if e.event_id == event_id and e.source == "Sensory"]
-        assert [e.destination for e in out] == [
-            "Impulse", "Analytics", "Personality", "Knowledge"]
+        # 2026-08-25: Analytics/Personality/Knowledge dispatch concurrently
+        # now — Impulse is still first and synchronous, but the other
+        # three's relative order isn't guaranteed run to run.
+        destinations = [e.destination for e in out]
+        assert destinations[0] == "Impulse"
+        assert set(destinations[1:]) == {"Analytics", "Personality", "Knowledge"}
+        assert len(destinations) == 4
 
     def test_every_copy_carries_the_same_event_id_and_content(self, tmp_path):
         """Four answers to one event have to stay distinguishable from one
@@ -146,7 +151,10 @@ class TestBundling:
         assert "Analytics" in senders
         assert senders <= {"Analytics", "Personality", "Knowledge"}
         for entry in bundle.meta["recommendations"]:
-            assert set(entry) <= {"sender", "keywords", "proceed", "concern"}
+            # 2026-08-25: proceed/concern removed entirely — sender and
+            # keywords are the whole shape now. Nothing left to weigh,
+            # nothing left to gate.
+            assert set(entry) == {"sender", "keywords"}
         assert "reflex" in bundle.meta
 
     def test_the_bundle_payload_is_the_human_verbatim(self, tmp_path):
@@ -158,17 +166,24 @@ class TestBundling:
                   if e.event_id == event_id and e.type == "Bundle"][0]
         assert str(bundle.content) == PROMPT
 
-    def test_intent_reads_proceed_out_of_the_analytics_slot(self, tmp_path):
-        """v0.35c is explicit that this half of the ADVISE/REFUSE contract
-        is unchanged — just relocated into the bundle."""
+    def test_the_bundle_carries_no_gate_at_all(self, tmp_path):
+        """2026-08-25 (Daniel): proceed/concern removed from the bundle
+        entirely — Analytics held no real veto after v0.35e moved gating
+        to Security/Intent, but Governance's own routing code was still
+        reading `analytics.get("proceed")` to fork Intent's ADVISE/REFUSE
+        register. That was a real, live gate riding on an agent that was
+        supposed to be "as dumb as Personality and Knowledge." The only
+        gate left in this system is Security's red verdict."""
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         bundle = [e for e in eco.bus.trace()
                   if e.event_id == event_id and e.type == "Bundle"][0]
-        assert bundle.meta["proceed"] is True
+        assert "proceed" not in bundle.meta
+        assert "concern" not in bundle.meta
         analytics_entry = next(e for e in bundle.meta["recommendations"]
                                if e["sender"] == "Analytics")
-        assert analytics_entry["proceed"] is True
+        assert "proceed" not in analytics_entry
+        assert "concern" not in analytics_entry
 
     def test_intent_voices_exactly_once_per_event(self, tmp_path):
         eco = _boot(tmp_path)
@@ -239,7 +254,7 @@ class TestBundling:
         eco = _boot(tmp_path)
         eco.bus.publish("events.governance", Envelope(
             source="Analytics", destination="Governance", type="Recommend",
-            content="partial", meta={"analytics": {"proceed": True}}))
+            content="partial", meta={"analytics": {"recommendation": "partial"}}))
         assert eco.governance.metrics["bundles"] == 0
         assert eco.governance.metrics["held"] == 1
 

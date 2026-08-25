@@ -42,6 +42,7 @@ Two properties are enforced here rather than trusted to callers:
 """
 from __future__ import annotations
 
+import threading
 from typing import Any, Dict, Optional, Set
 
 from bus.envelope import Envelope, new_event_id
@@ -82,6 +83,22 @@ class Governance:
         #: never sets a drive vector itself; the frustration nudge goes
         #: over the control plane like every other cross-agent signal.
         self.impulse = impulse
+
+        # 2026-08-25 (Daniel): Sensory's cognitive fan-out is now genuinely
+        # concurrent (agents/sensory/agent.py), so Analytics'/Personality's/
+        # Knowledge's replies can call on_event() from three different
+        # threads at once, for the SAME event_id. Everything below —
+        # buffer.get(), the slot write, ready()/decide(), emit(), _conclude()
+        # — is a read-modify-write over one EventState, and none of it was
+        # written with that in mind. One RLock, held for the whole business-
+        # event section, is the minimal fix: it's reentrant because emit()
+        # can publish synchronously and re-enter on_event on the SAME
+        # thread (e.g. a failing Action loops back to Governance before
+        # returning) — a plain Lock would deadlock there. Nothing this
+        # guards ever calls a substrate or blocks on I/O, so serializing it
+        # costs nothing; the actual parallelism win is upstream, in the
+        # slow calls that happen before a worker ever reaches this lock.
+        self._lock = threading.RLock()
 
         # Observability counters ONLY. Never read by decide(): Governance's
         # per-event statutory context reset (§5.1) means no decision may
@@ -128,57 +145,65 @@ class Governance:
             self.metrics["dropped"] += 1
             return
 
-        state = self.buffer.get(envelope.event_id)
+        # Everything from here down reads and mutates one EventState, and
+        # (2026-08-25) may now be entered by more than one worker's reply
+        # thread concurrently for the same event_id — see the RLock's own
+        # comment in __init__ for why.
+        with self._lock:
+            state = self.buffer.get(envelope.event_id)
 
-        if trigger is routing.Trigger.WORKER_REPORT:
-            self._record_worker(envelope, state)
-        elif trigger is routing.Trigger.INTENT_ADVICE:
-            self._record_intent(envelope, state)
-        elif trigger is routing.Trigger.SECURITY_VERDICT:
-            self._record_verdict(envelope, state)
+            if trigger is routing.Trigger.WORKER_REPORT:
+                self._record_worker(envelope, state)
+            elif trigger is routing.Trigger.INTENT_ADVICE:
+                self._record_intent(envelope, state)
+            elif trigger is routing.Trigger.SECURITY_VERDICT:
+                self._record_verdict(envelope, state)
 
-        decision = routing.decide(
-            envelope,
-            bundle_ready=state.ready(),
-            revision_passes=state.revision_passes,
-            max_revision_passes=_max_revision_passes(),
-            sensory=state.sensory,
-        )
+            decision = routing.decide(
+                envelope,
+                bundle_ready=state.ready(),
+                revision_passes=state.revision_passes,
+                max_revision_passes=_max_revision_passes(),
+                sensory=state.sensory,
+            )
 
-        if decision is None:
-            if trigger is routing.Trigger.WORKER_REPORT and not state.bundled:
-                # Waiting on the other answers. Not a drop — a hold.
-                self.metrics["held"] += 1
-                self._evict_stale(keep=envelope.event_id)
+            if decision is None:
+                if trigger is routing.Trigger.WORKER_REPORT and not state.bundled:
+                    # Waiting on the other answers. Not a drop — a hold.
+                    self.metrics["held"] += 1
+                    self._evict_stale(keep=envelope.event_id)
+                    return
+                # A duplicate report after bundling, or a worker answering
+                # an event that already short-circuited.
+                self.metrics["dropped"] += 1
                 return
-            # A duplicate report after bundling, or a worker answering an
-            # event that already short-circuited.
-            self.metrics["dropped"] += 1
-            return
 
-        if decision.diagnostics.get("verdict_inferred"):
-            self.metrics["verdicts_inferred"] += 1
+            if decision.diagnostics.get("verdict_inferred"):
+                self.metrics["verdicts_inferred"] += 1
 
-        self._note_route(decision, state)
-        out = self.emit(envelope, decision)
+            self._note_route(decision, state)
+            out = self.emit(envelope, decision)
 
-        # The event is over once something reached Action. Hand
-        # Consolidator the whole arc, then forget it (§5.1).
-        #
-        # emit() publishes synchronously, so a failing Action re-enters
-        # this method and concludes the event from INSIDE the frame above
-        # before we get here. _conclude is therefore idempotent — without
-        # that, an Action failure consolidated the same event twice.
-        if decision.route.topic == "events.action":
-            if state.concludes_on_action():
-                self._conclude(state)
-            else:
-                # A Critical reflex just reached the human. The event is
-                # NOT over: the fan-out is still running behind it and
-                # Intent's considered reply is still to come. Remember
-                # what the reflex did so Intent can speak to it.
-                state.reflex_action = str(decision.content)
-        return out
+            # The event is over once something reached Action. Hand
+            # Consolidator the whole arc, then forget it (§5.1).
+            #
+            # emit() publishes synchronously, so a failing Action
+            # re-enters this method and concludes the event from INSIDE
+            # the frame above before we get here. _conclude is therefore
+            # idempotent — without that, an Action failure consolidated
+            # the same event twice. The RLock permits this same-thread
+            # re-entry; a plain Lock would deadlock on it.
+            if decision.route.topic == "events.action":
+                if state.concludes_on_action():
+                    self._conclude(state)
+                else:
+                    # A Critical reflex just reached the human. The event
+                    # is NOT over: the fan-out is still running behind it
+                    # and Intent's considered reply is still to come.
+                    # Remember what the reflex did so Intent can speak to
+                    # it.
+                    state.reflex_action = str(decision.content)
+            return out
 
     # ---- Per-event bookkeeping (v0.35c/g) ---------------------------------
 
@@ -295,6 +320,23 @@ class Governance:
                 proposed_action = envelope.meta.get("proposed_action")
                 if proposed_action is not None:
                     meta["proposed_action"] = proposed_action
+        elif route.id == routing.BUNDLE.id:
+            # 2026-08-25 (Daniel): NOT `dict(envelope.meta)`. This route
+            # fires on whichever worker's reply happens to be the LAST to
+            # complete the bundle — and until the fan-out ran on a thread
+            # pool, that was always Knowledge (fixed dispatch order), so
+            # carrying its meta forward looked harmless: the same stray
+            # role-named slot (e.g. `meta["knowledge"]`) rode along on
+            # every single run, unnoticed, because it was always the same
+            # slot. True concurrency makes the arrival order genuinely
+            # vary, so that stray slot started flipping between
+            # "personality" and "knowledge" run to run — a real
+            # arrival-order leak into what's supposed to be a clean bundle
+            # (nothing downstream ever read it; Intent reads
+            # `meta["recommendations"]`, never a role-named key). Starts
+            # clean; the block below rebuilds everything Intent actually
+            # needs from `state`.
+            meta = {}
         elif route.carry_meta:
             meta = dict(envelope.meta)
         else:
@@ -307,18 +349,23 @@ class Governance:
 
         if route.id == routing.BUNDLE.id and state is not None:
             # The three analytical answers, projected to one shared shape
-            # (Daniel, 2026-08-24) — sender, keywords, proceed, concern.
-            # None of Analytics'/Personality's/Knowledge's own tier or
-            # diagnostics rides along; Intent needs to know who said what,
-            # not how each of them arrived at it. Intent still reads
-            # proceed/concern for its ADVISE/REFUSE choice out of
-            # Analytics specifically — that half of the contract is
-            # unchanged, just better grounded (v0.35c).
+            # (Daniel, 2026-08-24) — sender, keywords. None of Analytics'/
+            # Personality's/Knowledge's own tier or diagnostics rides
+            # along; Intent needs to know who said what, not how each of
+            # them arrived at it.
+            #
+            # 2026-08-25: proceed/concern are gone. Analytics used to gate
+            # Intent's ADVISE/REFUSE choice through this exact meta —
+            # real, live logic, not a hypothetical remnant — even though
+            # v0.35e had already moved the actual veto to Security/Intent.
+            # That meant Analytics could still steer Intent into a REFUSE
+            # register on nothing but its own unbiased-keywords opinion,
+            # which is precisely the "dead gate" Daniel asked to remove:
+            # the only real gate left in this system is Security's red
+            # verdict. Task.from_envelope now always resolves BUNDLE to
+            # ADVISE (see agents/intent/contract.py).
             meta["recommendations"] = state.recommendations()
             analytics = state.slots.get("Analytics") or {}
-            meta["proceed"] = analytics.get("proceed", True)
-            if analytics.get("concern"):
-                meta["concern"] = analytics["concern"]
             if analytics.get("recommendation"):
                 meta["recommendation"] = analytics["recommendation"]
             impulse = state.slots.get("Impulse") or {}

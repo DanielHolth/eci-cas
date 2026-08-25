@@ -166,11 +166,16 @@ def _boot(tmp_path: Path, mode: str = "advise_correct", **overrides):
     return eco
 
 
-def _analytics_reply(eco, proceed=True, concern="", content=RECOMMENDATION):
+def _analytics_reply(eco, content=RECOMMENDATION, **extra_meta):
     """Inject straight onto events.intent — same shape Analytics' emit()
-    produces, without needing a live Analytics."""
+    produces, without needing a live Analytics.
+
+    2026-08-25: proceed/concern are gone from this hand-off — Recommend/
+    Bundle always resolve to ADVISE now (see Task.from_envelope). Any
+    extra meta a caller still wants to pass (e.g. for a REVIEW/REVISE
+    envelope built some other way) goes through **extra_meta."""
     env = Envelope(source="Analytics", destination="Intent", type="Recommend",
-                  content=content, meta={"proceed": proceed, "concern": concern})
+                  content=content, meta=dict(extra_meta))
     eco.bus.publish("events.intent", env)
     return env.event_id
 
@@ -245,7 +250,7 @@ class TestContract:
 class TestVoicing:
     def test_advise_produces_persona_speech_not_analysis(self, tmp_path):
         eco = _boot(tmp_path, mode="advise_correct")
-        event_id = _analytics_reply(eco, proceed=True)
+        event_id = _analytics_reply(eco)
         spoken = _spoken(eco, event_id)
         assert spoken and RECOMMENDATION not in spoken[0]
 
@@ -253,41 +258,33 @@ class TestVoicing:
         """The guard has teeth: it doesn't just reject in parse(), it
         actually changes what reaches the human."""
         eco = _boot(tmp_path, mode="advise_parrot")
-        event_id = _analytics_reply(eco, proceed=True)
+        event_id = _analytics_reply(eco)
         spoken = _spoken(eco, event_id)
         assert spoken == [contract.DEFAULT_ADVISE_FALLBACK]
         assert eco.intent.metrics["fallbacks"] == 1
 
-    def test_a_refusal_is_voiced_and_carries_the_concern(self, tmp_path):
-        eco = _boot(tmp_path, mode="refuse_correct")
-        event_id = _analytics_reply(eco, proceed=False, concern="it isn't ours to share")
-        spoken = _spoken(eco, event_id)
-        assert spoken and "it isn't ours to share" in spoken[0]
-
-    def test_an_assenting_refusal_degrades_rather_than_reaching_the_human(self, tmp_path):
-        eco = _boot(tmp_path, mode="refuse_assent")
-        event_id = _analytics_reply(eco, proceed=False, concern="a real concern")
-        spoken = _spoken(eco, event_id)
-        assert spoken == [f"{contract.DEFAULT_REFUSAL_LEAD_IN} a real concern"]
+    # 2026-08-25: proceed/concern removed from the Recommend/Bundle
+    # hand-off — Task.from_envelope now always resolves those two types to
+    # ADVISE (see agents/intent/contract.py), so REFUSE is unreachable via
+    # this route any more. The end-to-end "refusal via Recommend" tests
+    # that used to live here are gone with it; parse_refuse/fallback_refusal
+    # themselves are still exercised directly in TestContract above, since
+    # the REFUSE register's machinery is untouched, just no longer wired
+    # to Analytics' opinion.
 
     def test_an_outage_degrades_advise_to_the_deterministic_line(self, tmp_path):
         eco = _boot(tmp_path, mode="boom")
-        event_id = _analytics_reply(eco, proceed=True)
+        event_id = _analytics_reply(eco)
         assert _spoken(eco, event_id) == [contract.DEFAULT_ADVISE_FALLBACK]
-
-    def test_an_outage_degrades_refusal_to_the_deterministic_line(self, tmp_path):
-        eco = _boot(tmp_path, mode="boom")
-        event_id = _analytics_reply(eco, proceed=False, concern="a concern")
-        assert _spoken(eco, event_id) == [f"{contract.DEFAULT_REFUSAL_LEAD_IN} a concern"]
 
     def test_strict_mode_surfaces_the_failure_instead(self, tmp_path):
         eco = _boot(tmp_path, mode="advise_prose", strict=True)
         with pytest.raises(ContractViolation):
-            _analytics_reply(eco, proceed=True)
+            _analytics_reply(eco)
 
     def test_attribution_is_written_to_meta_intent(self, tmp_path):
         eco = _boot(tmp_path, mode="advise_correct")
-        event_id = _analytics_reply(eco, proceed=True)
+        event_id = _analytics_reply(eco)
         out = [e for e in eco.bus.trace()
               if e.event_id == event_id and e.source == "Intent"][0]
         assert out.meta["intent"]["tier"] == "live"
@@ -301,11 +298,19 @@ class TestVoicing:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         hops = [(e.source, e.destination) for e in eco.bus.trace()
                if e.event_id == event_id]
-        assert hops == [
-            ("Sensory", "Impulse"), ("Impulse", "Governance"),
+
+        # 2026-08-25: Analytics/Personality/Knowledge dispatch concurrently
+        # now (agents/sensory/agent.py) — their six hops can interleave in
+        # any order, so check them as a set. Impulse's prefix and the
+        # bundle-onward suffix stay strictly sequential and ordered.
+        assert hops[0] == ("Sensory", "Impulse")
+        assert hops[1] == ("Impulse", "Governance")
+        assert set(hops[2:8]) == {
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
             ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
+        }
+        assert hops[8:] == [
             ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),
@@ -338,7 +343,7 @@ class TestPersona:
 
     def test_the_persona_prompt_carries_the_stance(self, tmp_path):
         eco = _boot(tmp_path, mode="advise_correct")
-        _analytics_reply(eco, proceed=True)
+        _analytics_reply(eco)
         user = eco.intent.substrate.provider.calls[-1].user
         assert "STANCE" in user
         assert "active listener" in user.lower()

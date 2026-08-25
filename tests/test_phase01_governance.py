@@ -47,6 +47,12 @@ PROPOSED = "Hey there! I'm awake."
 
 #: The v0.35 topology: a four-way ungated fan-out, then Governance on
 #: every hop that follows.
+#:
+#: 2026-08-25: Analytics/Personality/Knowledge dispatch concurrently now
+#: (agents/sensory/agent.py) — kept here for reference/readability, but
+#: test_the_worked_example_is_unchanged checks the middle six as a set
+#: rather than this fixed sequence, since their arrival order is no
+#: longer guaranteed run to run.
 HAPPY_PATH_HOPS = [
     ("Sensory", "Impulse"), ("Impulse", "Governance"),
     ("Sensory", "Analytics"), ("Analytics", "Governance"),
@@ -293,7 +299,10 @@ class TestGovernanceInThePipeline:
     def test_the_worked_example_is_unchanged(self, tmp_path):
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        assert _hops(eco, event_id) == HAPPY_PATH_HOPS
+        hops = _hops(eco, event_id)
+        assert hops[:2] == HAPPY_PATH_HOPS[:2]
+        assert set(hops[2:8]) == set(HAPPY_PATH_HOPS[2:8])
+        assert hops[8:] == HAPPY_PATH_HOPS[8:]
 
     def test_governance_holds_no_substrate(self, tmp_path):
         """The claim this phase actually ended up making."""
