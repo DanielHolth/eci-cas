@@ -68,8 +68,7 @@ message_bus:
 
 # Substrate classes -> vendor mapping, ONE place (§10.2). Agents ask for
 # a CLASS; only this table knows the vendor. Swapping providers, models
-# or endpoints is a change here and nowhere else. Listed cheapest to
-# most expensive.
+# or endpoints is a change here and nowhere else.
 #
 #   provider     registry key or alias — anthropic | openai | groq |
 #                together | mistral | openrouter | vllm | ollama |
@@ -80,40 +79,38 @@ message_bus:
 #   base_url     override endpoint — gateways, self-hosted, local runtimes
 #   max_tokens   ceiling per call
 #
-# Model ids and per-MTok prices checked against vendor/aggregator docs on
-# 2026-08-23; validate reachability with your own keys:
+# Phase 1 mandates a single class for all cognitive roles (§14), so all
+# three point at the same cheap model for now; real diversity arrives at
+# Phase 3 (§7.5) as a one-line change here.
+#
+# PREPROD STRESS TEST (deliberate, temporary): fast-reflex, deep-reasoning
+# and local-fast below are pointed at the CHEAPEST available real models
+# on purpose, to surface bottlenecks (odd JSON, contract violations,
+# latency, rate limits) before prod, where the models are expected to be
+# worse-behaved than claude-haiku-4-5. `orthogonal` is untouched — it's
+# reserved for Phase 3 diversity, not part of this pass, still Haiku.
+# Model ids and per-MTok prices below were checked against vendor/
+# aggregator docs on 2026-08-23; validate reachability with your own keys:
 #     python -m tools.preflight --manifest manifests/ecosystem-manifest.yaml --live
 substrates:
-  # Minimal/Budget tiers' local model — genuinely free, keyless.
-  # Point base_url at a real Ollama/LM Studio/vLLM endpoint before
-  # running Minimal for real; until then it fails preflight/bootstrap
-  # with "connection refused" rather than silently billing a hosted
-  # model (this exact mistake has happened once before — Phase 0.4).
-  local-fast:
-    provider: "ollama"                # openai-compatible adapter, §10.2
-    model: "llama3.1:8b"
-    api_key_env: null                 # keyless — a local runtime needs no key
-    base_url: "http://localhost:11434/v1"
-    max_tokens: 512
-    timeout_sec: 120                  # local inference is slower than a hosted API
-    price_per_mtok: { input: 0.00, output: 0.00 }
-    notes: "Minimal/Budget tiers' local model. Point base_url at your actual Ollama/LM Studio/vLLM endpoint."
-
-  # PREPROD STRESS TEST (deliberate, temporary): cheapest real OpenAI
-  # model, swapped in to press bottlenecks (odd JSON, contract
-  # violations, latency, rate limits) before prod. Was claude-haiku-4-5.
   fast-reflex:
     provider: "openai"                # openai-compatible adapter, §10.2
     model: "gpt-5.4-nano"
     api_key_env: "OPENAI_API_KEY"
     max_tokens: 512
     timeout_sec: 60                   # one hung call would hang the whole bus (§3)
-    price_per_mtok: { input: 0.20, output: 1.25 }
-    options: { token_param: "max_completion_tokens" }  # gpt-5.4-nano 400s on max_tokens; pin skips the reactive probe
-    notes: "PREPROD STRESS TEST — cheapest OpenAI model. Was claude-haiku-4-5-20251001."
-
-  # Reserved for Phase 3 multi-substrate diversity (§7.5). Untouched by
-  # the preprod stress test — still Haiku, not part of that pass.
+    price_per_mtok: { input: 0.20, output: 1.25 }   # checked 2026-08-23, verify before relying on it
+    options: { token_param: "max_completion_tokens" }  # confirmed live 2026-08-23: gpt-5.4-nano 400s on max_tokens; pin skips the reactive probe
+    notes: "PREPROD STRESS TEST — cheapest OpenAI model, swapped in to press bottlenecks before prod. Was claude-haiku-4-5-20251001."
+  deep-reasoning:
+    provider: "openai"
+    model: "gpt-5.4-nano"
+    api_key_env: "OPENAI_API_KEY"
+    max_tokens: 1024
+    timeout_sec: 60
+    price_per_mtok: { input: 0.20, output: 1.25 }   # checked 2026-08-23, verify before relying on it
+    options: { token_param: "max_completion_tokens" }  # same pin as fast-reflex — see its comment
+    notes: "PREPROD STRESS TEST — same swap as fast-reflex (single-class rule, §14 — the two are meant to move together). Was claude-haiku-4-5-20251001."
   orthogonal:
     provider: "anthropic"
     model: "claude-haiku-4-5-20251001"
@@ -123,16 +120,47 @@ substrates:
     price_per_mtok: { input: 1.00, output: 5.00 }   # CHECK against current vendor pricing
     notes: "unused until Phase 3 multi-substrate diversity, §7.5"
 
-  # Super tier's consolidation slot — deliberately expensive, rare
-  # (once-a-day epoch writing, never the live pipeline). A real,
-  # well-behaved, non-cheapest model to consolidate against.
+  # Named by the Minimal and Budget budget_tier presets (budget/tiers.py).
+  # Normal shape: Ollama/LM Studio/vLLM, keyless, base_url pointed at a
+  # local runtime — that's the whole point of the Minimal tier being $0.
+  #
+  # REVERTED 2026-08-23 (Phase 0.4): this was pointed at OpenAI's hosted
+  # gpt-4o-mini during the preprod stress test, as a stand-in for the real
+  # self-hosted model. That was harmless while Intent was still mocked —
+  # nothing called local-fast yet. Phase 0.4 makes Intent live, and
+  # Minimal's whole point is Analytics mocked + Intent live on a genuinely
+  # free, keyless local model — so leaving this pointed at a metered
+  # OpenAI endpoint would silently break Minimal's "$0, no credentials"
+  # claim the moment anything actually used it (flagged as exactly this
+  # trigger condition in docs/phase-0.2.2-budget-tiers.md: "once it is
+  # live, this entry needs to point at an actual local runtime"). Point
+  # base_url at a real Ollama/LM Studio/vLLM endpoint before running
+  # Minimal for real; until then Minimal tier will fail preflight/bootstrap
+  # with a clear "connection refused", which is honest — better than a
+  # silent charge to a hosted model.
+  local-fast:
+    provider: "ollama"                # openai-compatible adapter, §10.2
+    model: "llama3.1:8b"
+    api_key_env: null                 # keyless — a local runtime needs no key
+    base_url: "http://localhost:11434/v1"
+    max_tokens: 512
+    timeout_sec: 120                  # kept generous; local inference is slower than a hosted API
+    price_per_mtok: { input: 0.00, output: 0.00 }   # self-hosted — genuinely free
+    notes: "Minimal/Budget tiers' local model. Point base_url at your actual Ollama/LM Studio/vLLM endpoint."
+
+  # Named by the Super preset's consolidation slot only (budget/tiers.py) —
+  # deliberately expensive, deliberately rare: once-a-day epoch writing,
+  # never the live pipeline. Not part of the preprod cheap-model pass
+  # above — this one is unchanged from what fast-reflex/deep-reasoning
+  # used before the swap, which is exactly what "specialist" should be:
+  # a real, well-behaved, non-cheapest model to consolidate against.
   identity-specialist:
     provider: "anthropic"
     model: "claude-haiku-4-5-20251001"
     api_key_env: "ANTHROPIC_API_KEY"
     max_tokens: 2048
     timeout_sec: 120
-    price_per_mtok: { input: 1.00, output: 5.00 }
+    price_per_mtok: { input: 1.00, output: 5.00 }   # checked 2026-08-23 (platform.claude.com/docs pricing)
     notes: "Super tier consolidation only; not used by the live pipeline. Real specialist (e.g. Opus) TBD before prod — see docs/phase-0.2.2-budget-tiers.md."
 
   # Worked examples of the same contract pointed elsewhere — swap a class
@@ -227,7 +255,7 @@ roles:
   analytics:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
-    substrate: "fast-reflex"          # swap the vendor in the table above, not here
+    substrate: "deep-reasoning"       # swap the vendor in the table above, not here
     temperature: 0.2
     max_tokens: 512                   # recommendations are 1-3 sentences
     # Raise on an unusable substrate answer instead of degrading. Off by
@@ -238,16 +266,15 @@ roles:
     # previously stated here AND in contract.RESPONSE_CONTRACT AND in
     # TASK_BRIEFS — three restatements of the same two points, on every
     # single call. RESPONSE_CONTRACT is the code-fixed backstop for those
-    # (survives even if this field is blanked). See docs/phase-0.2-analytics.md
-    # for the before/after and the token-cost rationale.
-    #
-    # v0.35e: the old "gating judgment: decline if unsure" line is gone —
-    # Analytics was severed from Security under v0.35e and no longer has
-    # anything to gate. Kept generic/short rather than repurposed, in case
-    # this role gets a new job later.
+    # (survives even if this field is blanked); this text now only adds
+    # what's genuinely specific to Analytics' role and the gating logic,
+    # once. See docs/phase-0.2-analytics.md for the before/after and the
+    # token-cost rationale.
     system_instruction: |
       You are ANALYTICS: the reasoning agent in a multi-agent system.
       No persona; advise in keywords, not full sentences.
+      On a gating judgment: decline if unsure, and say why in one plain
+      sentence.
   intent:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
@@ -274,9 +301,9 @@ roles:
     # registers and the instruction must not tell it otherwise.
     system_instruction: |
       You are INTENT: the persona of a multi-agent system, speaking
-      directly to the human. Your personality is constant — always
-      voice it. Note: If Security is yellow or red, revise or your
-      message is blocked.
+      directly to the human. Security is a hard stop you never argue
+      with; where it cannot decide, the judgment is yours, and unsure
+      means no.
 
   # Personality and Knowledge — NEW in v0.35b. One reusable agent CLASS
   # (agents/archive_lookup/), two configurations: same shape, same output
@@ -303,23 +330,12 @@ roles:
     substrate: "fast-reflex"
     temperature: 0.2
     query_limit: 8                    # bounded read — this runs on every event
-    system_instruction: |
-      You are PERSONALITY: the identity-lookup agent in a multi-agent
-      system. No persona of your own; advise in keywords, not full
-      sentences. Report what the archived identity record says is
-      relevant to this event — values, boundaries, prior stances.
   knowledge:
     tier: cognitive
     mock: false
     substrate: "fast-reflex"
     temperature: 0.2
     query_limit: 8
-    system_instruction: |
-      You are KNOWLEDGE: the fact-lookup agent in a multi-agent system.
-      No persona of your own; advise in keywords, not full sentences.
-      Report what the archived record says is relevant to this event —
-      people, places, prior stories. Local knowledge only, not general
-      world knowledge.
 
   # Consolidator — NEW in v0.35f. The entire former "Consolidating" mode
   # of Intent, on its own: batches concluded events, reasons over the
@@ -334,7 +350,7 @@ roles:
   consolidator:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
-    substrate: "identity-specialist"  # was roles.intent.consolidation_substrate
+    substrate: "fast-reflex"          # was roles.intent.consolidation_substrate
     temperature: 0.3
     batch_size_events: 25             # was roles.intent.rotation.batch_size_events
     synchronous: false

@@ -1,7 +1,7 @@
 # Handover — starting Phase 0.7
 
 Read this before writing any code, then read
-`claude/phase-0.6-as-built.md`. This is the pickup point for a fresh
+`docs/phase-0.6-as-built.md`. This is the pickup point for a fresh
 session.
 
 ## 1. Where things actually stand
@@ -103,7 +103,7 @@ the queue log already has.
 Unchanged from Phase 0.6's handover, and all still true:
 
 - **Read the "as-built" docs before touching code.** Every phase has one
-  in `claude/`. They carry not just what was built but *why*, including
+  in `docs/`. They carry not just what was built but *why*, including
   decisions Daniel made verbally that narrowed or overrode the spec draft
   — grep for "Daniel", most load-bearing calls are attributed and dated.
 - **The manifest's `substrates:` block has live comments explaining a
