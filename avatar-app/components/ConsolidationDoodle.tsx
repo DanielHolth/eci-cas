@@ -1,0 +1,61 @@
+"use client";
+
+import { useState } from "react";
+import type { ConsolidationEpoch } from "@/types/events";
+
+/**
+ * Stub for M8 — the real backend seam (`EpochWritten` payload, epoch-level
+ * dedup in Consolidator) doesn't exist yet (M3, not built). This click
+ * handler only logs what the real one would send: a `ui_click`-tagged
+ * Sensory.ingest, first click only, per Daniel's dedup rule
+ * (docs/ideas/consolidation-doodle.md). No network call, no bus.
+ */
+function sendUiClickStub(epoch: ConsolidationEpoch) {
+  console.log(
+    `[stub] Sensory.ingest(source_type: "ui_click", epoch_id: "${epoch.epochId}") — would fire once M3 lands`,
+  );
+}
+
+export function ConsolidationDoodle({
+  epoch,
+  onAcknowledge,
+}: {
+  epoch: ConsolidationEpoch;
+  onAcknowledge: (epochId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const wasAlreadyAcknowledged = epoch.acknowledged;
+
+  function handleClick() {
+    setExpanded((v) => !v);
+    // First click on this epoch is the real signal; repeats are dropped
+    // client-side too, mirroring Consolidator's own dedup.
+    if (!wasAlreadyAcknowledged) {
+      sendUiClickStub(epoch);
+      onAcknowledge(epoch.epochId);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={handleClick}
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500 text-white text-lg font-bold shadow hover:bg-indigo-600"
+        aria-label="Something was learned — click to see what"
+      >
+        +
+      </button>
+      {expanded && (
+        <div className="max-w-sm rounded-md border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-900">
+          {epoch.summary}
+          {wasAlreadyAcknowledged && (
+            <span className="block mt-1 text-indigo-400">
+              (already acknowledged — reopening is view-only, no new event fires)
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
