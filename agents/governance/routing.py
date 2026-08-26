@@ -139,8 +139,8 @@ class Trigger(str, Enum):
     UNROUTABLE = "unroutable"
 
 
-#: The four agents whose answers Governance bundles (v0.35a).
-WORKERS = ("Impulse", "Analytics", "Personality", "Knowledge")
+#: The agents whose answers Governance bundles (Knowledge removed Phase 0.8 — swarm replaces it).
+WORKERS = ("Impulse", "Analytics", "Personality")
 
 
 @dataclass(frozen=True)

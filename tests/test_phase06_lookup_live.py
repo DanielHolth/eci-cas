@@ -360,10 +360,9 @@ class TestBootstrap:
         }
         for role in ("analytics", "intent", "consolidator"):
             manifest["roles"][role]["mock"] = True
-        for role in ("personality", "knowledge"):
-            manifest["roles"][role]["mock"] = False
-            manifest["roles"][role]["substrate"] = "fast-reflex"
-            manifest["roles"][role].update(overrides)
+        manifest["roles"]["personality"]["mock"] = False
+        manifest["roles"]["personality"]["substrate"] = "fast-reflex"
+        manifest["roles"]["personality"].update(overrides)
         path = tmp_path / "manifest.yaml"
         path.write_text(yaml.safe_dump(manifest))
         return str(path)
@@ -373,13 +372,11 @@ class TestBootstrap:
         no live tier existed. It does now."""
         eco = Recovery(self._manifest(tmp_path)).bootstrap()
         assert isinstance(eco.personality, ArchiveLookupAgent)
-        assert isinstance(eco.knowledge, ArchiveLookupAgent)
         assert eco.personality.tier == "live"
 
     def test_mock_true_still_gives_the_mock(self, tmp_path):
         manifest = yaml.safe_load(Path(self._manifest(tmp_path)).read_text())
-        for role in ("personality", "knowledge"):
-            manifest["roles"][role]["mock"] = True
+        manifest["roles"]["personality"]["mock"] = True
         path = tmp_path / "mocked.yaml"
         path.write_text(yaml.safe_dump(manifest))
         eco = Recovery(str(path)).bootstrap()
@@ -397,16 +394,13 @@ class TestBootstrap:
     def test_each_instance_reads_its_own_store(self, tmp_path):
         eco = Recovery(self._manifest(tmp_path)).bootstrap()
         assert eco.personality.store_kind == "identity"
-        assert eco.knowledge.store_kind == "knowledge"
 
     def test_the_shipped_manifest_puts_both_on_the_cheap_slot(self):
         """Two extra calls on EVERY event, in parallel. If these ever
         migrate to an expensive class it should be a decision, not a
         drift."""
         manifest = yaml.safe_load(MANIFEST_PATH.read_text())
-        assert (manifest["roles"]["personality"]["substrate"]
-                == manifest["roles"]["knowledge"]["substrate"]
-                == "fast-reflex")
+        assert manifest["roles"]["personality"]["substrate"] == "fast-reflex"
 
 
 # ---------------------------------------------------------------------------

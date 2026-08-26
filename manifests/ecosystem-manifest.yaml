@@ -59,7 +59,7 @@ timers:                               # two independent clocks — §11.1
     idle_musing_interval_sec: 7200    # organic/social quiet-period timer (§15 default)
 
 storage:
-  profile: "json"                     # json | hybrid-sqlite | hybrid-parquet (phase-coupled, §5.8)
+  profile: "hybrid-parquet"             # json (legacy) | hybrid-parquet (Phase 0.8: structured store in Parquet, queue/working in JSON)
   root: "data/archive"
 
 message_bus:
@@ -314,6 +314,14 @@ roles:
     substrate: "fast-reflex"
     temperature: 0.2
     query_limit: 8
+    # Phase 0.8: structured-archive swarm retrieval. Analytics picks N
+    # (category, topic) paths; Governance spawns this many parallel
+    # lookups into the Parquet store. Tier-scaled by budget_tier.
+    swarm:
+      minimal: { agents: 2, max_results_per_agent: 100 }
+      budget:  { agents: 3, max_results_per_agent: 200 }
+      default: { agents: 4, max_results_per_agent: 300 }
+      super:   { agents: 5, max_results_per_agent: 400 }
     system_instruction: |
       You are KNOWLEDGE: the fact-lookup agent in a multi-agent system.
       No persona of your own; advise in keywords, not full sentences.

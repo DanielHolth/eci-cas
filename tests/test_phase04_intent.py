@@ -150,7 +150,6 @@ def _manifest(tmp_path: Path, mode: str = "advise_correct", **role_overrides) ->
     # same reason every other cognitive role is: this test is not
     # about them, and it must run with no credentials.
     manifest["roles"]["personality"]["mock"] = True
-    manifest["roles"]["knowledge"]["mock"] = True
     manifest["roles"]["consolidator"]["synchronous"] = True
     manifest["roles"]["intent"].update(role_overrides)
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -299,18 +298,15 @@ class TestVoicing:
         hops = [(e.source, e.destination) for e in eco.bus.trace()
                if e.event_id == event_id]
 
-        # 2026-08-25: Analytics/Personality/Knowledge dispatch concurrently
-        # now (agents/sensory/agent.py) — their six hops can interleave in
-        # any order, so check them as a set. Impulse's prefix and the
-        # bundle-onward suffix stay strictly sequential and ordered.
+        # Phase 0.8: Knowledge removed. Analytics/Personality dispatch
+        # concurrently — their four hops can interleave in any order.
         assert hops[0] == ("Sensory", "Impulse")
         assert hops[1] == ("Impulse", "Governance")
-        assert set(hops[2:8]) == {
+        assert set(hops[2:6]) == {
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
-            ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
         }
-        assert hops[8:] == [
+        assert hops[6:] == [
             ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),

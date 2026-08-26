@@ -58,7 +58,6 @@ def _manifest_with_temp_storage(tmp_path: Path) -> Path:
     # same reason every other cognitive role is: this test is not
     # about them, and it must run with no credentials.
     manifest["roles"]["personality"]["mock"] = True
-    manifest["roles"]["knowledge"]["mock"] = True
     tmp_path.mkdir(parents=True, exist_ok=True)
     out_path = tmp_path / "ecosystem-manifest.yaml"
     with open(out_path, "w") as f:
@@ -104,30 +103,20 @@ class TestPhase0ExitCriteria:
 
         hops = [(env.source, env.destination) for env in eco.bus.trace() if env.event_id == event_id]
 
-        # 2026-08-25 (Daniel): Analytics/Personality/Knowledge now dispatch
-        # on a real thread pool (agents/sensory/agent.py), so their eight
-        # hops (in and their replies out) can interleave in any order run
-        # to run — that's the whole point of "truly async." What's still
-        # guaranteed, and what this test checks instead of a fixed
-        # sequence: Impulse is dispatched first and its round trip
-        # completes before anything else (the Critical-fast-path
-        # invariant), the other three each go in and answer exactly once,
-        # and the tail from Governance's bundle onward is unchanged —
-        # Governance only bundles once all three have reported, so that
-        # part of the pipeline stays strictly sequential regardless of the
-        # fan-out's internal order.
+        # Phase 0.8: Knowledge removed (swarm replaces it). Impulse is
+        # still first and synchronous; Analytics and Personality fan out
+        # concurrently — their relative order isn't guaranteed.
         assert hops[0] == ("Sensory", "Impulse")
         assert hops[1] == ("Impulse", "Governance")
 
-        concurrent = set(hops[2:8])
+        concurrent = set(hops[2:6])
         assert concurrent == {
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
-            ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
         }
-        assert len(hops[2:8]) == 6, "each of the three should answer exactly once"
+        assert len(hops[2:6]) == 4, "each of the two should answer exactly once"
 
-        assert hops[8:] == [
+        assert hops[6:] == [
             ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),
@@ -139,10 +128,9 @@ class TestPhase0ExitCriteria:
         eco, event_id = _run_worked_example(manifest_path)
 
         logged = eco.archive.query_queue(predicate=lambda r: r.get("event_id") == event_id)
-        # 13 business hops as of v0.35a/c (was 8 — the fan-out adds four
-        # inbound copies and their four answers, and replaces one relay).
-        # See test_worked_example_traverses_full_pipeline.
-        assert len(logged) >= 13
+        # 11 business hops as of Phase 0.8 (was 13 with 4 workers — now 3
+        # workers means 3 inbound + 3 answers + 5 tail = 11).
+        assert len(logged) >= 11
 
     def test_impulse_vectors_present_in_working_tier(self, tmp_path):
         """§13.3 verify #2: Impulse vectors present in /archive/working/."""
@@ -368,14 +356,13 @@ class TestActionFailureHandling:
         # Four: the v0.35a fan-out, all from the ONE original ingest. What
         # matters here is unchanged — none of them is a failure re-entry,
         # and nothing was published back INTO Sensory.
-        assert len(sensory_hops) == 4
+        assert len(sensory_hops) == 3
         assert {env.type for env in sensory_hops} == {"prompt"}
-        # 2026-08-25: Analytics/Personality/Knowledge dispatch concurrently
-        # now — Impulse stays first and synchronous; the other three's
-        # relative order isn't guaranteed run to run.
+        # Phase 0.8: Knowledge removed. Impulse stays first; the other
+        # two's relative order isn't guaranteed.
         destinations = [env.destination for env in sensory_hops]
         assert destinations[0] == "Impulse"
-        assert set(destinations[1:]) == {"Analytics", "Personality", "Knowledge"}
+        assert set(destinations[1:]) == {"Analytics", "Personality"}
         assert not [env for env in all_hops
                     if env.event_id == event_id and env.destination == "Sensory"]
 

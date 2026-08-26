@@ -41,7 +41,7 @@ from agents.shared.recommendation import RecommendationEntry
 #: The four agents Sensory fans out to (v0.35a). Declared, not inferred:
 #: a bundle that waited for "however many turn up" could never tell a
 #: missing worker from a slow one.
-DEFAULT_WORKERS: Set[str] = {"Impulse", "Analytics", "Personality", "Knowledge"}
+DEFAULT_WORKERS: Set[str] = {"Impulse", "Analytics", "Personality"}
 
 #: Which meta key each worker's contribution rides in, on its way into
 #: the bundle Intent receives.
@@ -49,14 +49,13 @@ WORKER_SLOTS: Dict[str, str] = {
     "Impulse": "impulse",
     "Analytics": "analytics",
     "Personality": "personality",
-    "Knowledge": "knowledge",
 }
 
 #: The three workers whose answers become Intent's recommendations array
 #: (Daniel, 2026-08-24). Impulse is not one of them — its contribution is
 #: a felt reaction, not a recommendation, and it keeps riding in its own
 #: `meta.reflex` slot exactly as before.
-RECOMMENDATION_WORKERS: tuple = ("Analytics", "Personality", "Knowledge")
+RECOMMENDATION_WORKERS: tuple = ("Analytics", "Personality")
 
 
 @dataclass

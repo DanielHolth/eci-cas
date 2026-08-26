@@ -42,7 +42,7 @@ def _manifest(tmp_path: Path, **role_overrides) -> Path:
     # manifest declares personality/knowledge real too. Mocked here for the
     # same reason the others are: these tests must run with no credentials.
     for role in ("analytics", "intent", "consolidator",
-                 "personality", "knowledge"):
+                 "personality"):
         manifest["roles"][role]["mock"] = True
     manifest["roles"]["consolidator"]["synchronous"] = True
     for key, value in role_overrides.items():
@@ -75,13 +75,12 @@ class TestFanOut:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         out = [e for e in eco.bus.trace()
                if e.event_id == event_id and e.source == "Sensory"]
-        # 2026-08-25: Analytics/Personality/Knowledge dispatch concurrently
-        # now — Impulse is still first and synchronous, but the other
-        # three's relative order isn't guaranteed run to run.
+        # Phase 0.8: Knowledge removed (swarm replaces it). Impulse is
+        # still first and synchronous; the other two's order isn't guaranteed.
         destinations = [e.destination for e in out]
         assert destinations[0] == "Impulse"
-        assert set(destinations[1:]) == {"Analytics", "Personality", "Knowledge"}
-        assert len(destinations) == 4
+        assert set(destinations[1:]) == {"Analytics", "Personality"}
+        assert len(destinations) == 3
 
     def test_every_copy_carries_the_same_event_id_and_content(self, tmp_path):
         """Four answers to one event have to stay distinguishable from one
@@ -132,7 +131,7 @@ class TestBundling:
         bundles = [e for e in eco.bus.trace()
                    if e.event_id == event_id and e.type == "Bundle"]
         assert len(bundles) == 1
-        assert eco.governance.metrics["held"] == 3      # the first three waited
+        assert eco.governance.metrics["held"] == 2      # the first two waited
 
     def test_the_bundle_carries_all_three_recommendations_plus_the_reflex(self, tmp_path):
         """v0.35c bundled all four slots as named blocks. Daniel
@@ -149,7 +148,7 @@ class TestBundling:
         # be silent on a fresh archive (empty findings are omitted, not
         # sent as noisy empty entries — see EventState.recommendations()).
         assert "Analytics" in senders
-        assert senders <= {"Analytics", "Personality", "Knowledge"}
+        assert senders <= {"Analytics", "Personality"}
         for entry in bundle.meta["recommendations"]:
             # 2026-08-25: proceed/concern removed entirely — sender and
             # keywords are the whole shape now. Nothing left to weigh,
@@ -204,7 +203,7 @@ class TestBundling:
         assert to_security
         for envelope in to_security:
             noisy_keys = {"recommendations", "bundle", "analytics", "personality",
-                         "knowledge", "intent", "declined", "reflex"}
+                         "intent", "declined", "reflex"}
             assert not (noisy_keys & set(envelope.meta))
             # What Security's own verdict-forming DOES need to survive the
             # trip so Action can eventually resolve content:
@@ -215,8 +214,8 @@ class TestBundling:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         before = eco.governance.metrics["bundles"]
         eco.bus.publish("events.governance", Envelope(
-            source="Knowledge", destination="Governance", type="Findings",
-            content="late", event_id=event_id, meta={"knowledge": {}}))
+            source="Personality", destination="Governance", type="Findings",
+            content="late", event_id=event_id, meta={"personality": {}}))
         assert eco.governance.metrics["bundles"] == before
 
     def test_an_escalation_on_one_copy_survives_the_merge(self, tmp_path):
@@ -574,7 +573,7 @@ class TestBufferDoesNotLeak:
         counted, bounded diagnostic rather than into a memory leak."""
         from agents.governance.agent import MAX_IN_FLIGHT_EVENTS
         eco = _boot(tmp_path)
-        eco.bus._subscribers["events.knowledge"] = []      # Knowledge goes dark
+        eco.bus._subscribers["events.personality"] = []      # Personality goes dark
 
         for i in range(MAX_IN_FLIGHT_EVENTS + 40):
             eco.sensory.ingest(f"prompt {i}", source_type="prompt")

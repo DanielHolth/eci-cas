@@ -71,7 +71,8 @@ class Governance:
 
     def __init__(self, bus: EmbeddedBus, *,
                  expected_workers: Optional[Set[str]] = None,
-                 consolidator=None, impulse=None):
+                 consolidator=None, impulse=None,
+                 structured_store=None, budget_tier: str = "default"):
         self.bus = bus
         #: The four parallel answers this router waits for (v0.35a).
         self.buffer = BundleBuffer(expected_workers or DEFAULT_WORKERS)
@@ -83,6 +84,8 @@ class Governance:
         #: never sets a drive vector itself; the frustration nudge goes
         #: over the control plane like every other cross-agent signal.
         self.impulse = impulse
+        self._structured_store = structured_store
+        self._budget_tier = budget_tier
 
         # 2026-08-25 (Daniel): Sensory's cognitive fan-out is now genuinely
         # concurrent (agents/sensory/agent.py), so Analytics'/Personality's/
@@ -379,6 +382,37 @@ class Governance:
                 # catching up with its own hands.
                 meta["reflex_already_acted"] = True
                 meta["reflex_action"] = state.reflex_action
+
+            # Phase 0.8: Knowledge swarm — drill structured archive
+            # using Analytics' path recommendations.
+            if self._structured_store is not None:
+                paths = analytics.get("knowledge_paths") or []
+                if paths:
+                    from agents.governance.knowledge_swarm import retrieve_per_path, format_for_intent
+                    per_path_results = retrieve_per_path(
+                        self._structured_store, paths, tier=self._budget_tier)
+                    all_results = []
+                    swarm_detail = []
+                    for path, records in per_path_results:
+                        all_results.extend(records)
+                        swarm_detail.append({
+                            "path": path,
+                            "count": len(records),
+                            "sample": [
+                                f"{r.get('key','')}={r.get('value','')}"
+                                for r in records[:5]
+                            ],
+                        })
+                    if all_results:
+                        swarm_text = format_for_intent(all_results)
+                        meta["knowledge_swarm"] = swarm_text
+                        meta["knowledge_swarm_count"] = len(all_results)
+                        meta["knowledge_swarm_detail"] = swarm_detail
+                        from agents.shared.recommendation import RecommendationEntry
+                        recs = meta.get("recommendations", [])
+                        recs.append(RecommendationEntry(
+                            sender="Knowledge", keywords=swarm_text).to_dict())
+                        meta["recommendations"] = recs
 
         if route.id in (routing.REVIEW.id, routing.REVISE.id):
             # These two routes carry the ORIGINAL REQUEST as their payload

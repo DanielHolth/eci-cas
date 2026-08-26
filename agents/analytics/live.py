@@ -71,19 +71,16 @@ class AnalyticsAgent(AnalyticsBase):
                  temperature: float = 0.2,
                  max_tokens: Optional[int] = None,
                  strict: bool = False,
-                 budget=None):
+                 budget=None,
+                 structured_store=None):
         self.substrate = substrate
-        #: BudgetManager, or None. When present it decides whether this
-        #: agent may call its substrate at all, and it learns the outcome
-        #: of every call it does allow (budget/state.py).
         self.budget = budget
         self.system_instruction = (system_instruction or DEFAULT_SYSTEM_INSTRUCTION).strip()
         self.temperature = float(temperature)
         self.max_tokens = max_tokens or substrate.max_tokens
-        # strict=True re-raises instead of degrading. For calibration runs
-        # where a silent fallback would hide a bad prompt; never for
-        # production, where a substrate outage must not stop the pipeline.
         self.strict = bool(strict)
+        self._structured_store = structured_store
+        self._schema_index_cache: Optional[list] = None
         super().__init__(bus, archive)
 
     def think(self, envelope: Envelope, task: Task) -> Recommendation:
@@ -116,6 +113,7 @@ class AnalyticsAgent(AnalyticsBase):
             recommendation = contract.parse(text, task)
             return Recommendation(
                 recommendation=recommendation.recommendation,
+                knowledge_paths=recommendation.knowledge_paths,
                 decided_by="llm",
                 diagnostics=self._diagnostics(latency_ms=latency_ms, usage=usage,
                                               cost_usd=cost),
@@ -141,6 +139,7 @@ class AnalyticsAgent(AnalyticsBase):
             envelope, task,
             recent_events=self.recent_events(),
             prior_knowledge=self.prior_knowledge(),
+            schema_index=self._get_schema_index(),
         )
 
         self.metrics["llm_calls"] += 1
@@ -154,6 +153,17 @@ class AnalyticsAgent(AnalyticsBase):
         )
         latency_ms = round((time.perf_counter() - started) * 1000, 1)
         return response.text, latency_ms, dict(response.usage or {})
+
+    def _get_schema_index(self) -> Optional[list]:
+        if self._structured_store is None:
+            return None
+        if self._schema_index_cache is None:
+            self._schema_index_cache = self._structured_store.schema_index("knowledge")
+        return self._schema_index_cache
+
+    def refresh_schema_index(self):
+        """Called on ArchiveWritten events to invalidate the cache."""
+        self._schema_index_cache = None
 
     # ---- Diagnostics ------------------------------------------------------
 

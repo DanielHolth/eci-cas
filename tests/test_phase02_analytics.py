@@ -179,7 +179,6 @@ def _manifest(tmp_path: Path, mode: str = "correct", **role_overrides) -> Path:
     # same reason every other cognitive role is: this test is not
     # about them, and it must run with no credentials.
     manifest["roles"]["personality"]["mock"] = True
-    manifest["roles"]["knowledge"]["mock"] = True
     tmp_path.mkdir(parents=True, exist_ok=True)
     out = tmp_path / "ecosystem-manifest.yaml"
     with open(out, "w") as f:
@@ -357,8 +356,7 @@ class TestPipeline:
             ("Sensory", "Impulse"), ("Impulse", "Governance"),
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
-            ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
-            # v0.35c: Governance bundles all four into one message.
+            # v0.35c: Governance bundles all three into one message.
             ("Governance", "Intent"),
             ("Intent", "Governance"), ("Governance", "Security"),
             ("Security", "Governance"), ("Governance", "Action"),

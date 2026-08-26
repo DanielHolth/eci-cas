@@ -69,6 +69,7 @@ COLORS = {
     "Impulse": "\033[35m",     # magenta
     "Governance": "\033[33m",  # yellow
     "Analytics": "\033[34m",   # blue
+    "Knowledge": "\033[38;5;208m",  # orange
     "Intent": "\033[32m",      # green
     "Security": "\033[31m",    # red
     "Action": "\033[37m",      # white
@@ -236,8 +237,27 @@ def main(argv=None) -> int:
         eco.sensory.ingest(line, source_type="prompt")
 
         full_trace = eco.bus.trace()
-        for envelope in full_trace[last_seen:]:
+        new_hops = full_trace[last_seen:]
+
+        # Print the speech first (what the persona actually said to the human)
+        for envelope in new_hops:
+            if envelope.destination == "Action" and envelope.type == "Speech":
+                print(f"{_color('Action')}[Speech]{RESET} {envelope.content}\n")
+                break
+
+        for envelope in new_hops:
             print_hop(envelope)
+            # After the Bundle hop, show knowledge swarm nodes if present
+            if envelope.type == "Bundle" and envelope.meta.get("knowledge_swarm_detail"):
+                for i, node in enumerate(envelope.meta["knowledge_swarm_detail"]):
+                    path = node["path"]
+                    label = f"{path.get('category','')}/{path.get('topic','')}"
+                    sample = "; ".join(node.get("sample", [])[:3])
+                    count = node["count"]
+                    if count:
+                        print(f"  {DIM}Knowledge[{i}] -> Governance [Findings/{count}]  "
+                              f"{label}: {sample[:80]}{RESET}")
+
         last_seen = len(full_trace)
 
         # Alerts AFTER the trace: the event already degraded gracefully,

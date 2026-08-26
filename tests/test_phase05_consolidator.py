@@ -145,7 +145,6 @@ def _manifest(tmp_path: Path, mode: str = "correct", **role_overrides) -> Path:
     # same reason every other cognitive role is: this test is not
     # about them, and it must run with no credentials.
     manifest["roles"]["personality"]["mock"] = True
-    manifest["roles"]["knowledge"]["mock"] = True
     manifest["roles"]["consolidator"]["mock"] = False
     manifest["roles"]["consolidator"]["substrate"] = "consolidator-scripted"
     # Deterministic by default: the worker thread gets its own section.

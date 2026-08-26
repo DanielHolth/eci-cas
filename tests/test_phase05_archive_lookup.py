@@ -34,7 +34,7 @@ from recovery.bootstrap import Recovery
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "manifests" / "ecosystem-manifest.yaml"
 
-ROLES = ["Personality", "Knowledge"]
+ROLES = ["Personality"]
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ def _manifest(tmp_path: Path, **overrides) -> Path:
     # manifest declares personality/knowledge real too. Mocked here for the
     # same reason the others are: these tests must run with no credentials.
     for role in ("analytics", "intent", "consolidator",
-                 "personality", "knowledge"):
+                 "personality"):
         manifest["roles"][role]["mock"] = True
     manifest["roles"]["consolidator"]["synchronous"] = True
     for key, value in overrides.items():
@@ -86,15 +86,11 @@ def _event(content: str = "who is Maria?") -> Envelope:
 class TestTheFamilyIsOneClass:
     def test_both_roles_are_the_same_class(self, tmp_path):
         eco = _boot(tmp_path)
-        assert type(eco.personality) is type(eco.knowledge)
         assert isinstance(eco.personality, ArchiveLookupBase)
 
-    def test_they_differ_only_in_store_topic_and_brief(self, tmp_path):
+    def test_personality_has_correct_store_kind(self, tmp_path):
         eco = _boot(tmp_path)
         assert eco.personality.store_kind == "identity"
-        assert eco.knowledge.store_kind == "knowledge"
-        assert eco.personality.topic != eco.knowledge.topic
-        assert eco.personality.brief != eco.knowledge.brief
 
     def test_a_third_member_needs_no_new_class(self, tmp_path):
         """The family test. Adding a member is a configuration, not a
@@ -154,7 +150,6 @@ class TestReadOnly:
         eco = _boot(tmp_path)
         assert hasattr(eco.consolidator.archive, "write")
         assert not hasattr(eco.personality.archive, "write")
-        assert not hasattr(eco.knowledge.archive, "write")
 
 
 # ---------------------------------------------------------------------------
@@ -239,10 +234,6 @@ class TestSingleEventScope:
         eco.bus.publish("events.personality", _event())
         assert set(kinds) == {"identity"}
 
-        kinds.clear()
-        eco.bus.publish("events.knowledge", _event())
-        assert set(kinds) == {"knowledge"}
-
 
 # ---------------------------------------------------------------------------
 # Emission — the bundle slot
@@ -317,8 +308,8 @@ class TestMockTier:
 
     def test_the_mock_costs_nothing(self, tmp_path):
         eco = _boot(tmp_path)
-        eco.bus.publish("events.knowledge", _event())
-        assert eco.knowledge.metrics["llm_calls"] == 0
+        eco.bus.publish("events.personality", _event())
+        assert eco.personality.metrics["llm_calls"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +320,6 @@ class TestBootstrap:
     def test_both_roles_are_provisioned_and_subscribed(self, tmp_path):
         eco = _boot(tmp_path)
         assert eco.personality.tier == "mock"
-        assert eco.knowledge.tier == "mock"
         eco.bus.publish("events.personality", _event())
         assert eco.personality.metrics["events"] == 1
 
@@ -339,8 +329,7 @@ class TestBootstrap:
         exactly the kind of thing that quietly comes back."""
         with open(MANIFEST_PATH) as f:
             manifest = yaml.safe_load(f)
-        for key in ("personality", "knowledge"):
-            assert manifest["roles"][key]["mock"] is False
+        assert manifest["roles"]["personality"]["mock"] is False
 
 
 # ---------------------------------------------------------------------------

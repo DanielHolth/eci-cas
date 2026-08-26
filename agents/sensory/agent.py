@@ -79,7 +79,6 @@ FAN_OUT = (
     ("Impulse", "events.impulse"),
     ("Analytics", "events.analytics"),
     ("Personality", "events.personality"),
-    ("Knowledge", "events.knowledge"),
 )
 
 #: The subset of FAN_OUT dispatched concurrently (2026-08-25, Daniel) —

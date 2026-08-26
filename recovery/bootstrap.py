@@ -83,7 +83,6 @@ class Ecosystem:
     intent: IntentBase                 # IntentMock or IntentAgent (§13.4, Phase 0.4)
     consolidator: ConsolidatorBase     # ConsolidatorMock or ConsolidatorAgent (v0.35f)
     personality: ArchiveLookupBase     # archive-grounded lookup, identity store (v0.35b)
-    knowledge: ArchiveLookupBase       # archive-grounded lookup, knowledge store (v0.35b)
     security: Any                      # SecurityMock or SecurityAgent (Phase 0.6)
     action: Any                        # ActionMock or ActionAgent (Phase 0.6)
     watchdog: Watchdog
@@ -134,6 +133,14 @@ class Recovery:
         print(f"[recovery] storage initialized at '{storage_root}' "
               f"(profile: {manifest['storage']['profile']})")
 
+        # Phase 0.8: structured Parquet store for knowledge swarm retrieval.
+        structured_store = None
+        if manifest["storage"]["profile"] == "hybrid-parquet":
+            from agents.archive.structured_store import StructuredStore
+            structured_store = StructuredStore(root=storage_root)
+            print(f"[recovery] structured store: {structured_store.count('knowledge')} "
+                  f"knowledge, {structured_store.count('identity')} identity records")
+
         # Step 5 groundwork: bus binding happens as each agent subscribes
         # in its own constructor below. Bus must exist first.
         bus = EmbeddedBus(archive=archive)
@@ -172,7 +179,8 @@ class Recovery:
         # Step 4: cognitive hydration — load system instructions and resolve
         # substrate classes for any cognitive role running real, then
         # register Intent nodes from the manifest.
-        analytics = self._provision_analytics(bus, manifest, archive, budget)
+        analytics = self._provision_analytics(bus, manifest, archive, budget,
+                                                structured_store=structured_store)
 
         # v0.35f: Consolidator is provisioned BEFORE Intent, because Intent
         # holds the reference it hands concluded events to. Nothing flows
@@ -180,8 +188,6 @@ class Recovery:
         # the control plane when it has written an epoch.
         personality = self._provision_lookup(bus, manifest, archive,
                                              "Personality", budget)
-        knowledge = self._provision_lookup(bus, manifest, archive,
-                                           "Knowledge", budget)
 
         consolidator = self._provision_consolidator(bus, manifest, archive,
                                                     budget, impulse)
@@ -196,7 +202,8 @@ class Recovery:
         # than through a reference.
         governance = self._provision_governance(bus, manifest,
                                                 consolidator=consolidator,
-                                                impulse=impulse)
+                                                impulse=impulse,
+                                                structured_store=structured_store)
 
         real_roles = ["Sensory", "Impulse", "Governance"] + (
             ["Archive"] if archive_agent is not None else []) + (
@@ -205,8 +212,7 @@ class Recovery:
             ["Analytics"] if analytics.tier == "live" else []) + (
             ["Intent"] if intent.tier == "live" else []) + (
             ["Consolidator"] if consolidator.tier == "live" else []) + (
-            ["Personality"] if personality.tier == "live" else []) + (
-            ["Knowledge"] if knowledge.tier == "live" else [])
+            ["Personality"] if personality.tier == "live" else [])
         print(f"[recovery] provisioned {11 - len(real_roles)} mocks + {len(real_roles)} real "
               f"({', '.join(real_roles)})")
 
@@ -231,7 +237,7 @@ class Recovery:
             archive_agent=archive_agent, sensory=sensory,
             impulse=impulse, governance=governance, analytics=analytics,
             intent=intent, consolidator=consolidator, personality=personality,
-            knowledge=knowledge, security=security, action=action,
+            security=security, action=action,
             watchdog=watchdog, budget=budget,
         )
 
@@ -425,7 +431,8 @@ class Recovery:
 
     def _provision_governance(self, bus: EmbeddedBus,
                               manifest: Dict[str, Any], *,
-                              consolidator=None, impulse=None) -> Governance:
+                              consolidator=None, impulse=None,
+                              structured_store=None) -> Governance:
         """Governance is always real, and always deterministic (v0.34).
 
         There is one implementation, so `roles.governance.mock` has
@@ -447,7 +454,10 @@ class Recovery:
                   f"'{role_config['substrate']}', which is unused — Governance makes "
                   f"no model calls (v0.34).")
 
-        governance = Governance(bus, consolidator=consolidator, impulse=impulse)
+        budget_tier = manifest.get("budget_tier", "default")
+        governance = Governance(bus, consolidator=consolidator, impulse=impulse,
+                               structured_store=structured_store,
+                               budget_tier=budget_tier)
         print(f"[recovery] governance: deterministic dispatcher (no substrate), "
               f"bundling {len(governance.buffer.expected)} parallel answers per "
               f"event ({', '.join(sorted(governance.buffer.expected))})")
@@ -455,7 +465,8 @@ class Recovery:
 
     def _provision_analytics(self, bus: EmbeddedBus, manifest: Dict[str, Any],
                              archive: ArchiveStore,
-                             budget: Optional[BudgetManager] = None) -> AnalyticsBase:
+                             budget: Optional[BudgetManager] = None,
+                             structured_store=None) -> AnalyticsBase:
         """Select Analytics' tier from `roles.analytics.mock` (§13.4).
 
         mock: true  -> AnalyticsMock, templated reasoning, zero LLM cost.
@@ -492,6 +503,7 @@ class Recovery:
             max_tokens=role_config.get("max_tokens"),
             strict=bool(role_config.get("strict", False)),
             budget=budget,
+            structured_store=structured_store,
         )
         print(f"[recovery] analytics: LIVE tier on substrate "
               f"{substrate.describe()} ({self._price_note(substrate)})")

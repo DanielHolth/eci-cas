@@ -97,10 +97,8 @@ SENSORY_TYPES = frozenset({"prompt", "feedback", "vision", "audio", "https"})
 #: What the model is asked to do. One entry, because there is one task.
 TASK_BRIEFS: Dict[Task, str] = {
     Task.EVALUATE: (
-        "Reason about this event and say what you make of it — 2-6 "
-        "comma-separated keywords, no sentences, no reasoning, no "
-        "punctuation beyond commas. Nothing is gated on this; you are "
-        "not deciding anything, only naming what stands out."
+        "Reason about this event: produce 2-6 keywords AND pick which "
+        "knowledge paths to query. Both fields are mandatory."
     ),
 }
 
@@ -110,11 +108,14 @@ class Recommendation:
     """A validated Analytics answer, ready to hand to Intent."""
 
     recommendation: str
+    knowledge_paths: list = field(default_factory=list)
     decided_by: str = "llm"          # llm | fallback | deterministic
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
     def to_meta(self) -> Dict[str, Any]:
         meta: Dict[str, Any] = {"decided_by": self.decided_by}
+        if self.knowledge_paths:
+            meta["knowledge_paths"] = self.knowledge_paths
         if self.diagnostics:
             meta.update(self.diagnostics)
         return meta
@@ -140,16 +141,21 @@ class ContractViolation(ValueError):
 RESPONSE_CONTRACT = """
 Reply with a single JSON object and nothing else:
 
-  {"recommendation": "<2-6 comma-separated keywords, no sentences>"}
+  {"recommendation": "<2-6 keywords>",
+   "knowledge_paths": [{"category": "person", "topic": "family"}, ...]}
 
-Never write the persona's reply. Keywords only — no reasoning, no
-punctuation beyond commas.
+MANDATORY FIELDS (both required in every response):
+- recommendation: 2-6 comma-separated keywords describing the event.
+- knowledge_paths: pick 1-5 paths from AVAILABLE PATHS. Each entry must
+  have EXACTLY the "category" and "topic" values shown in the list — do
+  NOT combine them or rephrase them. Copy them verbatim.
 """
 
 
 def build_prompt(envelope: Envelope, task: Task, *,
                  recent_events: Optional[list] = None,
-                 prior_knowledge: Optional[list] = None) -> str:
+                 prior_knowledge: Optional[list] = None,
+                 schema_index: Optional[list] = None) -> str:
     """One task, one event, and whatever bounded context we have.
 
     Kept deliberately small. §5.4 gives Analytics a rolling 10-event
@@ -186,6 +192,13 @@ def build_prompt(envelope: Envelope, task: Task, *,
         lines.append("PRIOR KNOWLEDGE (from Archive):")
         lines.extend(f"  - {str(k)[:200]}" for k in prior_knowledge)
 
+    if schema_index:
+        lines.append("")
+        lines.append("AVAILABLE PATHS (pick from this list for knowledge_paths):")
+        lines.append("  Format: category = left of slash, topic = right of slash")
+        for entry in schema_index:
+            lines.append(f"  - category: \"{entry['category']}\" / topic: \"{entry['topic']}\"")
+
     return "\n".join(lines)
 
 
@@ -204,7 +217,17 @@ def parse(text: str, task: Task) -> Recommendation:
         raise ContractViolation(f"no usable 'recommendation' in response: {obj!r}")
     recommendation = recommendation.strip()[:MAX_RECOMMENDATION_CHARS]
 
-    return Recommendation(recommendation=recommendation, decided_by="llm")
+    knowledge_paths = []
+    raw_paths = obj.get("knowledge_paths")
+    if isinstance(raw_paths, list):
+        for p in raw_paths[:5]:
+            if isinstance(p, dict) and p.get("category") and p.get("topic"):
+                knowledge_paths.append({
+                    "category": str(p["category"]).strip(),
+                    "topic": str(p["topic"]).strip(),
+                })
+
+    return Recommendation(recommendation=recommendation, knowledge_paths=knowledge_paths, decided_by="llm")
 
 
 # ---------------------------------------------------------------------------
