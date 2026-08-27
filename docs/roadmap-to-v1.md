@@ -105,3 +105,60 @@ other until M8, which needs M3 finished first.
 Nothing here is a spec revision by itself; each milestone gets its own
 `as-built.md` the same way 0.1–0.7 did, and v0.35's numbering can just
 continue (0.8, 0.9, ...) rather than reviving "Phase 1/2."
+
+---
+
+## Long-term Goals (Post-v1)
+
+### 1. Minimal-Tier LLM for Mobile Devices
+
+Consider integrating a free 1.8B or 3B parameter model (e.g., Phi, Qwen, or
+similar) for the `minimal` budget tier. This enables ECI-CAS to run
+on-device with a small footprint, suitable for mobile environments where cloud
+connectivity is unreliable or unavailable.
+
+- **Rationale**: Budget tiers already drive substrate selection via manifest;
+  this is a new substrate class, not a topology change.
+- **Scope TBD**: Fine-tuning requirements, on-device quantization, latency
+  targets.
+
+### 2. Python → C# Refactor
+
+Migrate the codebase to .NET 10 C# for better performance, type safety, and
+unified ecosystem (aligns with avatar app development). A standardized
+agent-conversion process is documented in `.github/prompts/convert-agent.prompt.md`;
+use it to convert agents incrementally.
+
+- **Architecture preserved**: All 11 agents keep their IAgent contracts, pub-sub
+  topology, and budget-tier routing.
+- **Build order TBD**: Start with leaf agents (deterministic, few dependencies),
+  work up to orchestrators (Governance, Intent).
+- **Testing parity**: Each C# agent must pass the same phase-numbered test suite
+  as its Python predecessor.
+
+See `.github/copilot-instructions.md` for C# conventions and
+`.github/prompts/convert-agent.prompt.md` for the conversion task template.
+
+### 3. Android Native Client
+
+Build towards a native Android client that can run ECI-CAS locally (via the
+on-device 1.8B/3B model) or connect to a remote Sensory endpoint for cloud-backed
+reasoning.
+
+- **Phase 1**: On-device minimal-tier agent running the core 11-role system.
+- **Phase 2**: Remote-client mode where only Sensory and Action cross process
+  boundaries, all reasoning stays on-device or in a trusted backend.
+- **Stretch**: iOS support via shared business logic + platform-specific UI.
+
+Each phase requires close collaboration with the avatar app team to ensure UI
+parity and shared infrastructure.
+
+---
+
+## Rationale
+
+These three goals address:
+1. **Accessibility**: Free models on mobile remove cloud dependency.
+2. **Sustainability**: C# unifies the stack and improves maintainability.
+3. **Scale**: Native clients let ECI-CAS reach users where they are, not just
+   where a web server lives.
