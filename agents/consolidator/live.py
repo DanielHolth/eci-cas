@@ -49,14 +49,15 @@ from agents.consolidator.base import (
     ConsolidationResult,
     ConsolidatorBase,
     DEFAULT_BATCH_SIZE,
-    VALID_WRITE_STORES,
 )
 
 DEFAULT_SYSTEM_INSTRUCTION = (
     "You are CONSOLIDATOR, the memory-writing agent of a multi-agent "
-    "system. You reason over a batch of concluded events and decide what "
-    "is worth remembering. You never speak to the human and you never "
-    "gate anything."
+    "system. You extract facts from the user's own words and store them. "
+    "ONLY write facts the user explicitly stated. Never infer, embellish, "
+    "or guess details that were not in the input. If the user said "
+    "'I married Yahnessa' do NOT invent a location or date they did not "
+    "mention. You never speak to the human and you never gate anything."
 )
 
 #: The response contract. Code-fixed rather than manifest-only, for the
@@ -72,25 +73,37 @@ Reply with a single JSON object and nothing else:
   {"deltas": [{"trait": "<short name>", "rationale": "<one sentence>"}],
    "recalibration": {"<drive vector name>": <small float, -0.2 to 0.2>},
    "evolving_delta": "<one or two sentences: what shifted, in your own words>",
-   "writes": [{"store": "knowledge" | "identity",
-               "tag": "general" | "security" | "note",
-               "content": "<one thing worth remembering, stated plainly>"}]}
+   "writes": [{"category": "<broad domain>",
+               "topic": "<grouping within domain>",
+               "subtopic": "<the specific who or what>",
+               "key": "<attribute name>",
+               "value": "<bare datum>"}]}
 
 deltas may be empty. recalibration may be empty or omitted entirely —
 only include a vector if this batch gives you a real reason to nudge your
 baseline temperament, and keep the number small; this compounds slowly
 over many cycles, not all at once.
 
-writes may be empty. Where to file each one, by default:
-  - something the world told us (a fact, a person, a place, a story)
-    -> store "knowledge", tag "general"
-  - a security event: what was blocked and why -> store "knowledge",
-    tag "security"
-  - something the persona concluded about itself, or about how it acts
-    -> store "identity", tag "note"
-Override the default when an entry obviously belongs elsewhere — for
-example feedback from the outside world that is really about the
-persona's own behaviour belongs in "identity", not "knowledge".
+WRITE RULES — follow exactly:
+1. ONLY write facts the user explicitly stated. Questions are NOT facts.
+2. category, topic, and subtopic are SINGLE words or short phrases, NEVER
+   paths with slashes. The schema is: category = broad domain (person,
+   place, event), topic = grouping (family, relationship, biography),
+   subtopic = the specific entity (wife, mother, dog). Multiple keys
+   hang off the same subtopic:
+     category="person", topic="relationship", subtopic="wife", key="name", value="Yahnessa"
+     category="person", topic="relationship", subtopic="wife", key="marriage_date", value="07.03.2004"
+     category="person", topic="relationship", subtopic="wife", key="marriage_location", value="Tjøme"
+     category="person", topic="family", subtopic="mother", key="name", value="Maria"
+     category="person", topic="family", subtopic="mother", key="occupation", value="nurse"
+3. value must be the bare datum — a name, a date, a place — never a
+   sentence. "Yahnessa" not "Daniel is married to Yahnessa."
+4. One fact per write. Do not pack multiple facts into one value.
+5. If a key already exists under the same path, the old value is
+   overwritten — so updating a fact is just writing it again.
+6. Reuse existing categories and topics from the EXISTING CATEGORIES list.
+   Do not invent synonyms.
+7. writes may be empty if nothing worth storing was said.
 """
 
 
@@ -107,9 +120,11 @@ class ConsolidatorAgent(ConsolidatorBase):
                  temperature: float = 0.3,
                  max_tokens: Optional[int] = None,
                  strict: bool = False,
-                 budget=None):
+                 budget=None,
+                 structured_store=None):
         self.substrate = substrate
         self.budget = budget
+        self.structured_store = structured_store
         self.system_instruction = (system_instruction or DEFAULT_SYSTEM_INSTRUCTION).strip()
         self.temperature = float(temperature)
         self.max_tokens = max_tokens or substrate.max_tokens
@@ -181,42 +196,26 @@ class ConsolidatorAgent(ConsolidatorBase):
                 prior_epochs: List[Dict[str, Any]]) -> str:
         """The batch, rendered.
 
-        Each entry is one concluded event's bundle (v0.35g): what came in,
-        what security made of it, and what the persona finally said.
-        Deliberately NOT included, per the spec: Impulse's reflex reading,
-        Analytics' own recommendation text, and Personality's/Knowledge's
-        per-event findings — all redundant here, since those agents only
-        ever surface what Archive already holds or stay deliberately
-        neutral and never touch it."""
+        Only the original Sensory input and non-green security verdicts.
+        Deliberately excluded: Intent's voiced response, Analytics'
+        recommendations, Personality/Knowledge findings, and the queue
+        log — all are downstream interpretations that the LLM could
+        mistake for ground truth, causing hallucinated facts to be
+        written back as knowledge."""
         lines = [f"BATCH: {len(batch)} concluded events since the last pass.", ""]
 
         for entry in batch[-25:]:
             lines.append(f"- event {entry.get('event_id', '?')}")
             sensory = str(entry.get("sensory", ""))[:200]
             if sensory:
-                lines.append(f"    came in:  {sensory}")
+                lines.append(f"    input:    {sensory}")
             security = entry.get("security") or {}
             verdict = security.get("verdict")
-            if verdict and verdict != "green":
+            if verdict and verdict not in ("green", None):
                 lines.append(f"    security: {verdict}"
                              + (f" — {str(security.get('concern'))[:160]}"
                                 if security.get("concern") else ""))
-                for attempt in (security.get("revisions") or [])[:3]:
-                    lines.append(f"      tried:  {str(attempt)[:160]}")
-            final = str(entry.get("intent_final", ""))[:200]
-            if final:
-                lines.append(f"    said:     {final}")
         if not batch:
-            lines.append("  (none)")
-
-        lines.append("")
-        lines.append("RECENT QUEUE ACTIVITY (bounded window, stand-in for a "
-                     "future Analytics delta report):")
-        for record in recent_queue[-25:]:
-            lines.append(f"  - {record.get('source', '?')} -> "
-                         f"{record.get('destination', '?')}: "
-                         f"{str(record.get('content', ''))[:120]}")
-        if not recent_queue:
             lines.append("  (none)")
 
         lines.append("")
@@ -226,6 +225,18 @@ class ConsolidatorAgent(ConsolidatorBase):
                 lines.append(f"  - {delta}")
         if not any(e.get("deltas") for e in prior_epochs):
             lines.append("  (none yet)")
+
+        lines.append("")
+        lines.append("EXISTING CATEGORIES/TOPICS (reuse these when they fit):")
+        if self.structured_store is not None:
+            index = self.structured_store.schema_index("knowledge")
+            if index:
+                for entry in index:
+                    lines.append(f"  - {entry['category']}/{entry['topic']}")
+            else:
+                lines.append("  (empty — you may create new categories)")
+        else:
+            lines.append("  (not available)")
 
         return "\n".join(lines)
 
@@ -278,14 +289,20 @@ class ConsolidatorAgent(ConsolidatorBase):
                 if not isinstance(w, dict):
                     dropped += 1
                     continue
-                store = str(w.get("store") or "").strip().lower()
-                content = str(w.get("content") or "").strip()
-                if store not in VALID_WRITE_STORES or not content:
+                category = str(w.get("category") or "").strip()
+                topic = str(w.get("topic") or "").strip()
+                key = str(w.get("key") or "").strip()
+                value = str(w.get("value") or "").strip()
+                if not category or not topic or not key or not value:
                     dropped += 1
                     continue
-                writes.append({"store": store,
-                               "tag": str(w.get("tag") or "general")[:40],
-                               "content": content[:1000]})
+                writes.append({
+                    "category": category[:80],
+                    "topic": topic[:80],
+                    "subtopic": str(w.get("subtopic") or "general")[:80],
+                    "key": key[:120],
+                    "value": value[:1000],
+                })
 
         return deltas, recalibration, evolving_delta, writes, dropped
 

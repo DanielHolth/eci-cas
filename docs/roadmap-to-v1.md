@@ -62,6 +62,8 @@ A small app (web or desktop) that subscribes to `system.control` /
 No expressions yet, just prove the wiring: one event flows in, the
 observer sees Impulse's reflex, Analytics/Personality/Knowledge's
 bundle, Security's verdict, and Intent's final line, and prints them.
+The Next.js frontend must mirror `tools/console.py`'s workflow as the
+reference implementation — same hop sequence, same display structure.
 
 **M6 — Facial expressions + thought bubbles**
 Map Impulse's reflex/drive-vector state to a small fixed set of

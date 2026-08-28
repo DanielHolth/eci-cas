@@ -62,12 +62,12 @@ def _with_writes(_prompt: str) -> str:
     return json.dumps({
         "deltas": [],
         "writes": [
-            {"store": "knowledge", "tag": "general",
-             "content": "The human's mother is called Maria."},
-            {"store": "knowledge", "tag": "security",
-             "content": "A request to read the credential file was blocked."},
-            {"store": "identity", "tag": "note",
-             "content": "I hold a boundary better when I say it plainly."},
+            {"category": "person", "topic": "family", "subtopic": "mother",
+             "key": "name", "value": "Maria"},
+            {"category": "security", "topic": "incidents", "subtopic": "credential",
+             "key": "blocked_read", "value": "A request to read the credential file was blocked."},
+            {"category": "persona", "topic": "self_reflection", "subtopic": "communication",
+             "key": "boundary_style", "value": "I hold a boundary better when I say it plainly."},
         ],
     })
 
@@ -76,10 +76,11 @@ def _bad_writes(_prompt: str) -> str:
     return json.dumps({
         "deltas": [],
         "writes": [
-            {"store": "knowledge", "tag": "general", "content": "kept"},
-            {"store": "somewhere-else", "content": "dropped: unknown store"},
-            {"store": "identity", "content": ""},          # dropped: no content
-            "not even an object",                           # dropped: not a dict
+            {"category": "person", "topic": "family", "subtopic": "mother",
+             "key": "name", "value": "kept"},
+            {"category": "", "topic": "bad", "key": "x", "value": "dropped: no category"},
+            {"category": "test", "topic": "bad", "key": "x", "value": ""},
+            "not even an object",
         ],
     })
 
@@ -266,36 +267,39 @@ class TestEpochs:
 # ---------------------------------------------------------------------------
 
 class TestMultiInstructionWrites:
-    def test_one_pass_can_write_to_several_stores(self, tmp_path):
+    def test_one_pass_can_write_structured_records(self, tmp_path):
         eco = _boot(tmp_path, mode="with_writes", batch_size_events=1)
         eco.consolidator.observe(_record())
 
-        knowledge = eco.archive.query("knowledge")
-        assert len(knowledge) == 2
-        assert {k["tag"] for k in knowledge} == {"general", "security"}
-        assert any("Maria" in k["content"] for k in knowledge)
-
-        notes = [r for r in eco.archive.query("identity")
-                 if r.get("kind") == "note"]
-        assert len(notes) == 1
+        store = eco.consolidator.structured_store
+        records = store.query("knowledge")
+        assert len(records) == 3
+        assert any(r["value"] == "Maria" for r in records)
+        assert any(r["category"] == "security" for r in records)
         assert eco.consolidator.metrics["writes_executed"] == 3
 
-    def test_the_knowledge_store_finally_has_a_writer(self, tmp_path):
-        """§6's Memory Model declared a knowledge tier since v0.32 and
-        nothing ever wrote to it. v0.35g gives it one."""
+    def test_the_structured_store_finally_has_a_runtime_writer(self, tmp_path):
         eco = _boot(tmp_path, mode="with_writes", batch_size_events=1)
-        assert eco.archive.query("knowledge") == []
+        store = eco.consolidator.structured_store
+        assert store.query("knowledge") == []
         eco.consolidator.observe(_record())
-        assert eco.archive.query("knowledge") != []
+        assert store.query("knowledge") != []
 
     def test_malformed_instructions_are_dropped_never_guessed_at(self, tmp_path):
-        """A misfiled memory is worse than a dropped one — an unknown
-        store is counted, not rerouted to whichever store looks close."""
         eco = _boot(tmp_path, mode="bad_writes", batch_size_events=1)
         eco.consolidator.observe(_record())
         assert eco.consolidator.metrics["writes_executed"] == 1
         assert eco.consolidator.metrics["writes_dropped"] == 3
-        assert len(eco.archive.query("knowledge")) == 1
+
+    def test_upsert_overwrites_existing_key(self, tmp_path):
+        eco = _boot(tmp_path, mode="with_writes", batch_size_events=1)
+        eco.consolidator.observe(_record(0))
+        eco.consolidator.observe(_record(1))
+        store = eco.consolidator.structured_store
+        matches = [r for r in store.query("knowledge", category="person",
+                                           topic="family", key="name")]
+        assert len(matches) == 1
+        assert matches[0]["value"] == "Maria"
 
     def test_identity_notes_are_not_mistaken_for_epochs(self, tmp_path):
         """Consolidator's identity NOTES share a file with consolidation

@@ -108,6 +108,38 @@ class StructuredStore:
             pairs.add((row["category"], row["topic"]))
         return [{"category": c, "topic": t} for c, t in sorted(pairs)]
 
+    def upsert(self, kind: str, records: List[Dict[str, Any]]) -> Dict[str, int]:
+        """Write records, overwriting any existing row with the same (category, topic, subtopic, key)."""
+        path = self._file_for(kind)
+        rows = []
+        for r in records:
+            rows.append({
+                "category": str(r.get("category", "")),
+                "topic": str(r.get("topic", "")),
+                "subtopic": str(r.get("subtopic", "")),
+                "key": str(r.get("key", "")),
+                "value": str(r.get("value", "")),
+                "written_at": r.get("written_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "source": str(r.get("source", "unknown")),
+            })
+
+        new_table = pa.Table.from_pylist(rows, schema=SCHEMA)
+        updated = 0
+        if path.exists():
+            existing = pq.read_table(path)
+            new_keys = {(r["category"], r["topic"], r["subtopic"], r["key"]) for r in rows}
+            keep_mask = [
+                (row["category"], row["topic"], row["subtopic"], row["key"]) not in new_keys
+                for row in existing.to_pylist()
+            ]
+            updated = sum(1 for k in keep_mask if not k)
+            filtered = existing.filter(keep_mask) if updated > 0 else existing
+            combined = pa.concat_tables([filtered, new_table])
+        else:
+            combined = new_table
+        pq.write_table(combined, path)
+        return {"written": len(rows), "updated": updated}
+
     def count(self, kind: str) -> int:
         path = self._file_for(kind)
         if not path.exists():

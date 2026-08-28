@@ -158,21 +158,22 @@ class TestReadOnly:
 
 class TestContract:
     def test_a_well_formed_answer_parses(self):
-        findings = contract.parse('{"findings": "mother: Maria", "relevant": true}')
-        assert findings.findings == "mother: Maria"
+        findings = contract.parse("mother: Maria, family, relationships")
+        assert findings.findings == "mother: Maria, family, relationships"
         assert findings.relevant is True
 
     def test_empty_findings_are_never_marked_relevant(self):
-        findings = contract.parse('{"findings": "", "relevant": true}')
+        findings = contract.parse("")
         assert findings.relevant is False
 
     def test_an_unreadable_relevant_flag_defaults_to_silence(self):
-        findings = contract.parse('{"findings": "", "relevant": "perhaps"}')
+        findings = contract.parse("NONE")
         assert findings.relevant is False
+        assert findings.findings == ""
 
-    def test_prose_is_rejected(self):
-        with pytest.raises(contract.ContractViolation):
-            contract.parse("I had a look and found some things.")
+    def test_none_is_case_insensitive(self):
+        findings = contract.parse("none")
+        assert findings.relevant is False
 
     def test_the_fallback_is_silence_not_invention(self):
         findings = contract.fallback("scripted outage")

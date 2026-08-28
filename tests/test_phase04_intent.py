@@ -21,7 +21,6 @@ credential having exercised this against a real model.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -45,31 +44,19 @@ RECOMMENDATION = "responsive check, warm reply appropriate"
 # ---------------------------------------------------------------------------
 
 def _advise_correct(prompt: str) -> str:
-    return json.dumps({"speech": "Hey — yep, wide awake. Good timing, actually."})
+    return "Hey — yep, wide awake. Good timing, actually."
 
 
 def _advise_parrot(prompt: str) -> str:
-    return json.dumps({"speech": RECOMMENDATION})
+    return RECOMMENDATION
 
 
-def _advise_missing_field(prompt: str) -> str:
-    return json.dumps({"response_text": "hi"})
+def _advise_empty(prompt: str) -> str:
+    return "   "
 
 
-def _advise_prose(prompt: str) -> str:
-    return "Sure, I'm awake!"
-
-
-def _refuse_correct(prompt: str) -> str:
-    return json.dumps({"lead_in": "Ah — I'd rather sit this one out."})
-
-
-def _refuse_assent(prompt: str) -> str:
-    return json.dumps({"lead_in": "Sure, happy to help with that."})
-
-
-def _refuse_missing_field(prompt: str) -> str:
-    return json.dumps({"nope": True})
+def _advise_whitespace_only(prompt: str) -> str:
+    return "\n\t  \n"
 
 
 def _consolidate_correct(prompt: str) -> str:
@@ -87,11 +74,8 @@ def _consolidate_big_recalibration(prompt: str) -> str:
 RESPONDERS = {
     "advise_correct": _advise_correct,
     "advise_parrot": _advise_parrot,
-    "advise_missing_field": _advise_missing_field,
-    "advise_prose": _advise_prose,
-    "refuse_correct": _refuse_correct,
-    "refuse_assent": _refuse_assent,
-    "refuse_missing_field": _refuse_missing_field,
+    "advise_empty": _advise_empty,
+    "advise_whitespace_only": _advise_whitespace_only,
     "consolidate_correct": _consolidate_correct,
     "consolidate_big_recalibration": _consolidate_big_recalibration,
     "boom": None,
@@ -190,7 +174,8 @@ def _spoken(eco, event_id):
 
 class TestContract:
     def test_a_well_formed_advise_parses(self):
-        speech = contract.parse_advise(_advise_correct(""), RECOMMENDATION)
+        speech = contract.parse(_advise_correct(""), contract.Task.ADVISE,
+                                recommendation=RECOMMENDATION)
         assert "wide awake" in speech.text
         assert speech.decided_by == "llm"
 
@@ -198,7 +183,8 @@ class TestContract:
         """The failure mode unique to this hop — Analytics has no persona
         to accidentally drop, but Intent does."""
         with pytest.raises(ContractViolation, match="parrot"):
-            contract.parse_advise(_advise_parrot(""), RECOMMENDATION)
+            contract.parse(_advise_parrot(""), contract.Task.ADVISE,
+                           recommendation=RECOMMENDATION)
 
     @pytest.mark.parametrize("recommendation,speech", [
         ("responsive check, warm reply appropriate",
@@ -212,34 +198,17 @@ class TestContract:
         assert not contract.is_parroting(
             "Hey! Good to hear from you.", RECOMMENDATION)
 
-    @pytest.mark.parametrize("bad", ["advise_missing_field", "advise_prose"])
+    @pytest.mark.parametrize("bad", ["advise_empty", "advise_whitespace_only"])
     def test_unusable_advise_answers_raise(self, bad):
         with pytest.raises(ContractViolation):
-            contract.parse_advise(RESPONDERS[bad](""), RECOMMENDATION)
+            contract.parse(RESPONDERS[bad](""), contract.Task.ADVISE,
+                           recommendation=RECOMMENDATION)
 
-    def test_a_refusal_lead_in_is_appended_to_the_concern_verbatim(self):
-        speech = contract.parse_refuse(_refuse_correct(""), "it isn't ours to share")
-        assert speech.text.startswith("Ah")
-        assert speech.text.endswith("it isn't ours to share")
-
-    def test_an_assenting_lead_in_is_rejected_not_trusted(self):
-        """The one place Intent's contract does more than Analytics' ever
-        had to — Governance forwards this straight to Security with no
-        semantic check, so a refusal that reads as agreement can't be
-        allowed through even once."""
-        with pytest.raises(ContractViolation, match="assent"):
-            contract.parse_refuse(_refuse_assent(""), "some concern")
-
-    def test_unusable_refuse_answers_raise(self):
-        with pytest.raises(ContractViolation):
-            contract.parse_refuse(_refuse_missing_field(""), "concern")
-
-    def test_fallback_advice_matches_the_mock(self):
-        assert contract.fallback_advice("x", "reason").text == contract.DEFAULT_ADVISE_FALLBACK
-
-    def test_fallback_refusal_matches_the_mock(self):
-        speech = contract.fallback_refusal("a real reason", "reason")
-        assert speech.text == f"{contract.DEFAULT_REFUSAL_LEAD_IN} a real reason"
+    def test_fallback_returns_default_advise(self):
+        speech = contract.fallback(contract.Task.ADVISE, "reason")
+        assert speech.text == contract.DEFAULT_ADVISE_FALLBACK
+        assert speech.decided_by == "fallback"
+        assert speech.diagnostics["degraded"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +246,7 @@ class TestVoicing:
         assert _spoken(eco, event_id) == [contract.DEFAULT_ADVISE_FALLBACK]
 
     def test_strict_mode_surfaces_the_failure_instead(self, tmp_path):
-        eco = _boot(tmp_path, mode="advise_prose", strict=True)
+        eco = _boot(tmp_path, mode="advise_empty", strict=True)
         with pytest.raises(ContractViolation):
             _analytics_reply(eco)
 

@@ -190,7 +190,8 @@ class Recovery:
                                              "Personality", budget)
 
         consolidator = self._provision_consolidator(bus, manifest, archive,
-                                                    budget, impulse)
+                                                    budget, impulse,
+                                                    structured_store=structured_store)
         intent = self._provision_intent(bus, manifest, archive, budget)
 
         # Governance is provisioned LAST because it is the only role that
@@ -579,7 +580,8 @@ class Recovery:
     def _provision_consolidator(self, bus: EmbeddedBus, manifest: Dict[str, Any],
                                 archive: ArchiveStore,
                                 budget: Optional[BudgetManager],
-                                impulse: Optional[Impulse]) -> ConsolidatorBase:
+                                impulse: Optional[Impulse],
+                                structured_store=None) -> ConsolidatorBase:
         """Select Consolidator's tier from `roles.consolidator.mock` (v0.35f).
 
         One thing here differs from every other cognitive role, and it is
@@ -637,6 +639,7 @@ class Recovery:
             max_tokens=role_config.get("max_tokens"),
             strict=bool(role_config.get("strict", False)),
             budget=budget,
+            structured_store=structured_store,
         )
         print(f"[recovery] consolidator: LIVE tier on substrate "
               f"{substrate.describe()} ({self._price_note(substrate)}), "

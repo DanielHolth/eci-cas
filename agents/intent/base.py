@@ -123,7 +123,7 @@ class IntentBase:
         self._temp_log: Deque[Dict[str, Any]] = deque(maxlen=TEMP_LOG_MAXLEN)
 
         self.metrics: Dict[str, int] = {
-            "events": 0, "advised": 0, "refused": 0,
+            "events": 0, "advised": 0,
             "llm_calls": 0, "fallbacks": 0, "rehydrations": 0,
         }
 
@@ -235,11 +235,8 @@ class IntentBase:
 
     def emit(self, envelope: Envelope, task: Task, speech: Speech) -> Envelope:
         """Intent always replies to Governance, which owns every hop from
-        here (v0.35c's universal router)."""
-        if speech.proceed:
-            self.metrics["advised"] += 1
-        else:
-            self.metrics["refused"] += 1
+        here. Intent always proceeds — Security/Governance decide blocking."""
+        self.metrics["advised"] += 1
         if speech.decided_by in ("fallback", "budget"):
             self.metrics["fallbacks"] += 1
 
@@ -248,26 +245,17 @@ class IntentBase:
             "task": task.value,
             "heard": str(envelope.content)[:400],
             "said": speech.text,
-            "proceed": speech.proceed,
-            "concern": speech.concern,
         })
 
-        # Attribution (§7.4's source_substrate/source_model split, applied
-        # to Intent's own hop the same way Analytics writes meta.analytics
-        # — so a queue trace can attribute a voicing decision, not just a
-        # judgment).
         intent_meta: Dict[str, Any] = {"tier": self.tier,
                                        "decided_by": speech.decided_by,
                                        "task": task.value}
         intent_meta.update(speech.diagnostics)
 
         meta: Dict[str, Any] = dict(envelope.meta)
-        meta.pop("governance", None)          # not ours to forward
+        meta.pop("governance", None)
         meta["proposed_action"] = speech.text
-        meta["proceed"] = speech.proceed
-        meta["declined"] = not speech.proceed
-        if speech.concern:
-            meta["concern"] = speech.concern
+        meta["proceed"] = True
         meta["intent"] = intent_meta
 
         out = envelope.reply(
@@ -277,7 +265,6 @@ class IntentBase:
             content=speech.text,
             triggered_by=envelope.triggered_by,
             meta=meta,
-            # Severity deliberately omitted — inherited untouched (§3).
         )
         self.bus.publish("events.governance", out)
         return out

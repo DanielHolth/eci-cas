@@ -81,7 +81,7 @@ SPECIALIST_CLASS = "identity-specialist"   # expensive*, rare, consolidation-onl
 #: here"), so a tier that claims to match prior behaviour has to name it
 #: specifically rather than assume the two classes are interchangeable
 #: forever.
-ANALYTICS_DEFAULT_CLASS = "deep-reasoning"
+ANALYTICS_DEFAULT_CLASS = "fast-reflex"
 
 #: role -> config, per tier. `analytics.substrate: None` means "leave
 #: whatever's declared" — irrelevant while analytics.mock is True, and

@@ -161,7 +161,6 @@ class ArchiveLookupAgent(ArchiveLookupBase):
             user=user,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-            prefill="{",
         )
         latency_ms = round((time.perf_counter() - started) * 1000, 1)
         return response.text, latency_ms, dict(response.usage or {})

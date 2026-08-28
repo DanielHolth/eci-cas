@@ -57,10 +57,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from bus.envelope import Envelope
-from substrates.parsing import extract_json_object
 
 #: A recommendation longer than this is the model writing an essay rather
 #: than a keyword read. Truncated rather than rejected — the content is
@@ -97,8 +96,8 @@ SENSORY_TYPES = frozenset({"prompt", "feedback", "vision", "audio", "https"})
 #: What the model is asked to do. One entry, because there is one task.
 TASK_BRIEFS: Dict[Task, str] = {
     Task.EVALUATE: (
-        "Reason about this event: produce 2-6 keywords AND pick which "
-        "knowledge paths to query. Both fields are mandatory."
+        "Reason about this event: produce 2-6 keywords on the first line, "
+        "then one category/topic path per line from the AVAILABLE PATHS list."
     ),
 }
 
@@ -139,16 +138,15 @@ class ContractViolation(ValueError):
 #: a "be concise" reminder, a length rule) was pure restatement of what
 #: system_instruction or TASK_BRIEFS already say once — cut, not moved.
 RESPONSE_CONTRACT = """
-Reply with a single JSON object and nothing else:
+First line: 2-6 comma-separated keywords describing the event.
+Following lines: one category/topic path per line, picked from
+AVAILABLE PATHS. Copy the category and topic exactly as shown.
+Nothing else — no JSON, no labels, no preamble.
 
-  {"recommendation": "<2-6 keywords>",
-   "knowledge_paths": [{"category": "person", "topic": "family"}, ...]}
-
-MANDATORY FIELDS (both required in every response):
-- recommendation: 2-6 comma-separated keywords describing the event.
-- knowledge_paths: pick 1-5 paths from AVAILABLE PATHS. Each entry must
-  have EXACTLY the "category" and "topic" values shown in the list — do
-  NOT combine them or rephrase them. Copy them verbatim.
+Example:
+identity question, name, recognition, self-reference
+person/identity
+person/preferences
 """
 
 
@@ -206,26 +204,30 @@ def build_prompt(envelope: Envelope, task: Task, *,
 # Validation
 # ---------------------------------------------------------------------------
 
+def _parse_paths(lines: List[str]) -> list:
+    """Extract category/topic paths from lines like 'person/identity'."""
+    paths = []
+    for line in lines:
+        line = line.strip().strip("-").strip()
+        if "/" in line:
+            parts = line.split("/", 1)
+            category = parts[0].strip()
+            topic = parts[1].strip()
+            if category and topic:
+                paths.append({"category": category, "topic": topic})
+        if len(paths) >= 5:
+            break
+    return paths
+
+
 def parse(text: str, task: Task) -> Recommendation:
-    """Turn a substrate response into a Recommendation, or raise."""
-    obj = extract_json_object(text)
-    if obj is None:
-        raise ContractViolation(f"no JSON object in response: {text[:200]!r}")
+    """Turn a plain-text substrate response into a Recommendation."""
+    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+    if not lines:
+        raise ContractViolation(f"empty response from Analytics: {text[:200]!r}")
 
-    recommendation = obj.get("recommendation") or obj.get("advice")
-    if not isinstance(recommendation, str) or not recommendation.strip():
-        raise ContractViolation(f"no usable 'recommendation' in response: {obj!r}")
-    recommendation = recommendation.strip()[:MAX_RECOMMENDATION_CHARS]
-
-    knowledge_paths = []
-    raw_paths = obj.get("knowledge_paths")
-    if isinstance(raw_paths, list):
-        for p in raw_paths[:5]:
-            if isinstance(p, dict) and p.get("category") and p.get("topic"):
-                knowledge_paths.append({
-                    "category": str(p["category"]).strip(),
-                    "topic": str(p["topic"]).strip(),
-                })
+    recommendation = lines[0].strip()[:MAX_RECOMMENDATION_CHARS]
+    knowledge_paths = _parse_paths(lines[1:]) if len(lines) > 1 else []
 
     return Recommendation(recommendation=recommendation, knowledge_paths=knowledge_paths, decided_by="llm")
 

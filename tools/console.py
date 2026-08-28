@@ -170,6 +170,25 @@ def print_hop(envelope: Envelope) -> None:
         content = content[:97] + "..."
     print(f"  {arrow} {tag:<14} {content}")
 
+    # Analytics knowledge_paths — show which archive paths Analytics selected
+    if envelope.source == "Analytics" and envelope.type == "Recommend":
+        analytics_meta = (envelope.meta or {}).get("analytics") or {}
+        paths = analytics_meta.get("knowledge_paths") or []
+        if paths:
+            labels = [f"{p.get('category','')}/{p.get('topic','')}" for p in paths]
+            print(f"  {DIM}Analytics paths: {', '.join(labels)}{RESET}")
+
+    # Knowledge swarm detail on the Bundle hop
+    if envelope.type == "Bundle" and (envelope.meta or {}).get("knowledge_swarm_detail"):
+        for i, node in enumerate(envelope.meta["knowledge_swarm_detail"]):
+            path = node["path"]
+            label = f"{path.get('category','')}/{path.get('topic','')}"
+            sample = "; ".join(node.get("sample", [])[:3])
+            count = node["count"]
+            if count:
+                print(f"  {DIM}Knowledge[{i}] -> Governance [Findings/{count}]  "
+                      f"{label}: {sample[:80]}{RESET}")
+
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="ECI-CAS live queue console")
@@ -179,6 +198,11 @@ def main(argv=None) -> int:
         help="Override the manifest's consolidation threshold for this "
              "session only (e.g. 3, to actually watch consolidation happen "
              "in a short console run). The manifest is not modified.")
+    parser.add_argument(
+        "--context-window", type=int, default=None, metavar="N",
+        help="Override Intent's conversation window size for this session "
+             "(default 10). Use a small value like 1 or 2 to test without "
+             "prior-conversation bleed.")
     args = parser.parse_args(argv)
 
     try:
@@ -193,6 +217,9 @@ def main(argv=None) -> int:
         # disk to make a demo visible is how a cost control quietly
         # becomes a cost problem.
         eco.consolidator.batch_size = max(1, args.consolidate_every)
+
+    if args.context_window is not None and getattr(eco, "intent", None):
+        eco.intent.context_events = max(0, args.context_window)
 
     print()
     print("=" * 70)
@@ -211,7 +238,18 @@ def main(argv=None) -> int:
     print()
     show_alerts(eco)
 
-    last_seen = len(eco.bus.trace())  # BootCheck already ran during bootstrap; skip it
+    # Real-time display: print each hop as it's published on the bus,
+    # instead of batch-reading the trace after ingest() returns.
+    speech_lines = []
+
+    def _on_hop(topic: str, envelope: Envelope) -> None:
+        if topic.startswith("system."):
+            return
+        if envelope.destination == "Action" and envelope.type == "Speech":
+            speech_lines.append(envelope.content)
+        print_hop(envelope)
+
+    eco.bus._on_publish = _on_hop
 
     while True:
         try:
@@ -226,39 +264,18 @@ def main(argv=None) -> int:
             break
 
         if handle_consolidate(line, eco):
-            last_seen = len(eco.bus.trace())
             continue
 
         if handle_command(line, eco):
-            last_seen = len(eco.bus.trace())   # commands publish nothing
             continue
 
         print()
+        speech_lines.clear()
         eco.sensory.ingest(line, source_type="prompt")
 
-        full_trace = eco.bus.trace()
-        new_hops = full_trace[last_seen:]
-
-        # Print the speech first (what the persona actually said to the human)
-        for envelope in new_hops:
-            if envelope.destination == "Action" and envelope.type == "Speech":
-                print(f"{_color('Action')}[Speech]{RESET} {envelope.content}\n")
-                break
-
-        for envelope in new_hops:
-            print_hop(envelope)
-            # After the Bundle hop, show knowledge swarm nodes if present
-            if envelope.type == "Bundle" and envelope.meta.get("knowledge_swarm_detail"):
-                for i, node in enumerate(envelope.meta["knowledge_swarm_detail"]):
-                    path = node["path"]
-                    label = f"{path.get('category','')}/{path.get('topic','')}"
-                    sample = "; ".join(node.get("sample", [])[:3])
-                    count = node["count"]
-                    if count:
-                        print(f"  {DIM}Knowledge[{i}] -> Governance [Findings/{count}]  "
-                              f"{label}: {sample[:80]}{RESET}")
-
-        last_seen = len(full_trace)
+        # Print the speech prominently after the hop trace
+        for speech in speech_lines:
+            print(f"\n{_color('Action')}[Speech]{RESET} {speech}\n")
 
         # Alerts AFTER the trace: the event already degraded gracefully,
         # so the explanation belongs with the result rather than ahead of it.

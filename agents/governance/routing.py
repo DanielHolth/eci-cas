@@ -26,8 +26,8 @@ The topology
                                      to Intent
     Intent  → Governance → Security
     Security green  → Governance → Action     (release)
-    Security yellow → Governance → Intent     (Review — Intent decides)
-    Security red    → Governance → Intent     (Revise — one chance)
+    Security yellow → Governance → Intent     (Revise — one chance)
+    Security red    → Governance → Action     (Blocked, immediate)
     Security red    → Governance → Action     (Blocked, on the second red)
     Action failure  → Governance → Action     (Prompt, v0.33 fallback)
 
@@ -236,7 +236,7 @@ FALLBACK_PROMPT = Route(
 )
 
 ROUTES: Dict[str, Route] = {
-    r.id: r for r in (BUNDLE, CLEAR, SPEAK, REVIEW, REVISE, BLOCKED, REFLEX,
+    r.id: r for r in (BUNDLE, CLEAR, SPEAK, REVISE, BLOCKED, REFLEX,
                       FALLBACK_PROMPT)
 }
 
@@ -245,18 +245,17 @@ ROUTES: Dict[str, Route] = {
 LEGAL_ROUTES: Dict[Trigger, Tuple[Route, ...]] = {
     Trigger.WORKER_REPORT: (BUNDLE, REFLEX),
     Trigger.INTENT_ADVICE: (CLEAR,),
-    Trigger.SECURITY_VERDICT: (SPEAK, REVIEW, REVISE, BLOCKED),
+    Trigger.SECURITY_VERDICT: (SPEAK, REVISE, BLOCKED),
     Trigger.ACTION_FAILURE: (FALLBACK_PROMPT,),
     Trigger.UNROUTABLE: (),
 }
 
-#: Verdict value -> route. The ONLY entry that reaches Action's SPEAK is
-#: `green`. Red resolves to REVISE or BLOCKED depending on how many
-#: attempts have already been spent — see route_for().
+#: Verdict value -> route. Green clears to Action. Yellow gets one chance
+#: to re-speak (REVISE). Red is blocked immediately.
 VERDICT_ROUTES: Dict[str, Route] = {
     VERDICT_GREEN: SPEAK,
-    VERDICT_YELLOW: REVIEW,
-    VERDICT_RED: REVISE,
+    VERDICT_YELLOW: REVISE,
+    VERDICT_RED: BLOCKED,
 }
 
 
@@ -467,7 +466,7 @@ def decide(envelope: Envelope, *, bundle_ready: bool = False,
 
 __all__ = [
     "Trigger", "Route", "RoutingDecision", "WORKERS", "CRITICAL",
-    "BUNDLE", "CLEAR", "SPEAK", "REVIEW", "REVISE", "BLOCKED", "REFLEX",
+    "BUNDLE", "CLEAR", "SPEAK", "REVISE", "BLOCKED", "REFLEX",
     "FALLBACK_PROMPT", "ROUTES", "LEGAL_ROUTES", "VERDICT_ROUTES",
     "classify", "legal_routes", "read_verdict", "is_critical", "route_for",
     "template_content", "resolve_content", "decide",

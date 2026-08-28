@@ -279,27 +279,27 @@ class ConsolidatorBase:
             event_id=new_event_id(),
         ))
 
-    # ---- Multi-instruction writes (v0.35g) ----------------------------------
+    # ---- Multi-instruction writes (Phase 0.9: Parquet upsert) ----------------
 
     def _execute_writes(self, writes: List[Dict[str, Any]]) -> None:
-        """Hand the validated write instructions to Archive (v0.35g).
+        """Upsert structured records into the Parquet StructuredStore.
 
-        Invalid stores were already dropped at the tier's parse boundary;
-        this re-checks anyway — defence in depth on the only path that
-        appends to long-term memory — and then Archive executes. Nothing
-        in either place decides WHERE something goes; that judgment was
-        the reasoner's, upstream."""
-        instructions = [
-            {**w, "meta": {"consolidation_cycle": self._cycle}}
-            for w in (writes or [])
-            if (w or {}).get("store") in VALID_WRITE_STORES
-        ]
-        self.metrics["writes_dropped"] += len(writes or []) - len(instructions)
-        if not instructions:
+        Each write is a {category, topic, subtopic, key, value} dict.
+        Dedup is handled by StructuredStore.upsert — matching keys get
+        their value overwritten."""
+        structured_store = getattr(self, "structured_store", None)
+        if not writes or structured_store is None:
             return
-        counts = self.archive.execute_writes(instructions)
-        self.metrics["writes_executed"] += counts.get("executed", 0)
-        self.metrics["writes_dropped"] += counts.get("dropped", 0)
+        records = [
+            {**w, "source": "consolidator", "written_at": None}
+            for w in writes
+            if w.get("category") and w.get("key") and w.get("value")
+        ]
+        self.metrics["writes_dropped"] += len(writes) - len(records)
+        if not records:
+            return
+        counts = structured_store.upsert("knowledge", records)
+        self.metrics["writes_executed"] += counts.get("written", 0)
 
     # ---- The Impulse coupling (§5.3 "slow coloring", moved intact) ----------
 

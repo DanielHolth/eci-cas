@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from substrates.parsing import coerce_bool, extract_json_object
+from typing import Any, Dict, List, Optional
 
 #: Findings are keywords, not prose. Tightened from 300 (Daniel,
 #: 2026-08-25) — a live trace showed Personality answering in full
@@ -76,17 +76,10 @@ class ContractViolation(ValueError):
 #: Code-fixed backstop, mirroring the other roles' contracts: this
 #: survives an operator blanking `system_instruction`.
 RESPONSE_CONTRACT = """
-Reply with a single JSON object and nothing else:
-
-  {"findings": "<2-6 comma-separated keywords, no sentences>",
-   "relevant": true | false}
-
-Report only what the records you were given actually say, compressed to
-keywords — no sentences, no reasoning, no punctuation beyond commas. If
-nothing in the records bears on this event, answer with relevant: false
-and empty findings — that is a useful answer, not a failure. Never
-invent a record, and never address the human; you are informing another
-agent.
+Reply with comma-separated keywords relevant to this event, drawn only
+from the records you were given. Nothing else — no JSON, no sentences,
+no reasoning. If nothing in the records bears on this event, reply with
+exactly: NONE
 """
 
 
@@ -111,23 +104,11 @@ def build_prompt(content: str, records: Optional[List[Any]], *,
 
 
 def parse(text: str) -> Findings:
-    obj = extract_json_object(text)
-    if obj is None:
-        raise ContractViolation(f"no JSON object in response: {text[:200]!r}")
-
-    findings = obj.get("findings")
-    if not isinstance(findings, str):
-        findings = "" if findings is None else str(findings)
-    findings = findings.strip()[:MAX_FINDINGS_CHARS]
-
-    # `relevant` defaults FALSE when unreadable — silence is the safe
-    # value for this family, the same way `proceed: false` is for a
-    # gating one.
-    relevant = coerce_bool(obj.get("relevant"), default=bool(findings))
-    if not findings:
-        relevant = False
-
-    return Findings(findings=findings, relevant=relevant, decided_by="llm")
+    """Parse plain-text findings. 'NONE' means nothing relevant."""
+    cleaned = text.strip()[:MAX_FINDINGS_CHARS]
+    if not cleaned or cleaned.upper() == "NONE":
+        return Findings(findings="", relevant=False, decided_by="llm")
+    return Findings(findings=cleaned, relevant=True, decided_by="llm")
 
 
 def silent(reason: str = "", decided_by: str = "deterministic") -> Findings:

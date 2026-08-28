@@ -256,7 +256,7 @@ class Governance:
         if route_id == routing.BUNDLE.id:
             state.bundled = True
             self.metrics["bundles"] += 1
-        elif route_id in (routing.REVISE.id, routing.REVIEW.id):
+        elif route_id == routing.REVISE.id:
             # BOTH non-green lanes spend an attempt. Bounding only REVISE
             # left the yellow lane unbounded — and Intent's fail-closed
             # answer on a yellow is a decline sentence that comes straight
@@ -414,7 +414,7 @@ class Governance:
                             sender="Knowledge", keywords=swarm_text).to_dict())
                         meta["recommendations"] = recs
 
-        if route.id in (routing.REVIEW.id, routing.REVISE.id):
+        if route.id == routing.REVISE.id:
             # These two routes carry the ORIGINAL REQUEST as their payload
             # (see routing.py), because Intent's prompt renders the payload
             # as "what the human said" and Intent is the agent deciding

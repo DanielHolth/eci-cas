@@ -57,7 +57,6 @@ HAPPY_PATH_HOPS = [
     ("Sensory", "Impulse"), ("Impulse", "Governance"),
     ("Sensory", "Analytics"), ("Analytics", "Governance"),
     ("Sensory", "Personality"), ("Personality", "Governance"),
-    ("Sensory", "Knowledge"), ("Knowledge", "Governance"),
     ("Governance", "Intent"), ("Intent", "Governance"),
     ("Governance", "Security"), ("Security", "Governance"),
     ("Governance", "Action"),
@@ -164,8 +163,8 @@ class TestRoutingContract:
 
     @pytest.mark.parametrize("verdict,expected", [
         (VERDICT_GREEN, routing.SPEAK),
-        (VERDICT_YELLOW, routing.REVIEW),
-        (VERDICT_RED, routing.REVISE),
+        (VERDICT_YELLOW, routing.REVISE),
+        (VERDICT_RED, routing.BLOCKED),
     ])
     def test_each_verdict_has_exactly_one_destination(self, verdict, expected):
         env = self._envelope(source="Security", meta={"verdict": verdict})
@@ -177,7 +176,7 @@ class TestRoutingContract:
         env = self._envelope(source="Security", content="Green, all fine",
                              meta={"verdict": VERDICT_RED})
         assert routing.read_verdict(env) == VERDICT_RED
-        assert routing.route_for(env) is routing.REVISE
+        assert routing.route_for(env) is routing.BLOCKED
 
     # ---- the safety property ---------------------------------------------
 
@@ -200,13 +199,14 @@ class TestRoutingContract:
         picks up the doubt (Intent, not Analytics)."""
         env = self._envelope(source="Security", content=content, meta=meta)
         route = routing.route_for(env)
-        assert route is routing.REVIEW
+        assert route is routing.REVISE
         assert route.destination == "Intent"
 
-    def test_only_green_reaches_action(self):
+    def test_only_green_reaches_action_as_speech(self):
         verdict_routes = routing.VERDICT_ROUTES
-        to_action = [v for v, r in verdict_routes.items() if r.destination == "Action"]
-        assert to_action == [VERDICT_GREEN]
+        to_action_as_speech = [v for v, r in verdict_routes.items()
+                               if r.destination == "Action" and r.type == "Speech"]
+        assert to_action_as_speech == [VERDICT_GREEN]
 
     def test_legacy_prose_still_routes_sanely(self):
         """Envelopes predating the enum, or injected by hand."""
@@ -231,10 +231,12 @@ class TestRoutingContract:
         assert decision.route is routing.BUNDLE
         assert decision.content == PROMPT
 
-    def test_the_revision_request_quotes_what_security_said(self):
+    def test_a_red_verdict_produces_a_blocked_message(self):
         env = self._envelope(source="Security", content="Red — profanity",
                              meta={"verdict": VERDICT_RED})
-        assert "Red — profanity" in routing.decide(env).content
+        decision = routing.decide(env)
+        assert decision.route is routing.BLOCKED
+        assert "blocked" in decision.content.lower()
 
     def test_the_review_request_does_not_claim_a_block(self):
         """Yellow means the rules didn't cover it, not that it was blocked.
@@ -263,18 +265,16 @@ class TestRoutingContract:
         assert "Red — profanity" not in instruction
 
     def test_the_gating_registers_carry_the_original_request(self):
-        """Intent now holds the veto on these two lanes, and its prompt
+        """Intent now holds the veto on the yellow lane, and its prompt
         renders the payload as what the human said. Handing it the
         router's instruction instead would ask it to decide "unsure means
         no" about a request it was never shown."""
-        for verdict, route in ((VERDICT_YELLOW, routing.REVIEW),
-                               (VERDICT_RED, routing.REVISE)):
-            env = self._envelope(source="Security", content="verdict prose",
-                                 meta={"verdict": verdict,
-                                       "proposed_action": PROPOSED})
-            decision = routing.decide(env, sensory=PROMPT)
-            assert decision.route is route
-            assert decision.content == PROMPT
+        env = self._envelope(source="Security", content="verdict prose",
+                             meta={"verdict": VERDICT_YELLOW,
+                                   "proposed_action": PROPOSED})
+        decision = routing.decide(env, sensory=PROMPT)
+        assert decision.route is routing.REVISE
+        assert decision.content == PROMPT
 
     def test_intent_advice_passes_through_untouched(self):
         env = self._envelope(source="Intent", content="Give a warm response.")
@@ -301,8 +301,8 @@ class TestGovernanceInThePipeline:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         hops = _hops(eco, event_id)
         assert hops[:2] == HAPPY_PATH_HOPS[:2]
-        assert set(hops[2:8]) == set(HAPPY_PATH_HOPS[2:8])
-        assert hops[8:] == HAPPY_PATH_HOPS[8:]
+        assert set(hops[2:6]) == set(HAPPY_PATH_HOPS[2:6])
+        assert hops[6:] == HAPPY_PATH_HOPS[6:]
 
     def test_governance_holds_no_substrate(self, tmp_path):
         """The claim this phase actually ended up making."""
@@ -321,7 +321,7 @@ class TestGovernanceInThePipeline:
         import agents.governance.routing as routing_mod
 
         for mod in (agent_mod, routing_mod):
-            tree = ast.parse(Path(mod.__file__).read_text())
+            tree = ast.parse(Path(mod.__file__).read_text(encoding="utf-8"))
             imported = set()
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
@@ -344,14 +344,14 @@ class TestGovernanceInThePipeline:
         eco = _boot(tmp_path)
         event_id = _verdict(eco, VERDICT_YELLOW, content="rules do not cover this")
         first = _governance_hops(eco, event_id)[0]
-        assert (first.destination, first.type) == ("Intent", "Review")
+        assert (first.destination, first.type) == ("Intent", "Revise")
 
-    def test_a_red_verdict_goes_back_to_intent_for_revision(self, tmp_path):
+    def test_a_red_verdict_goes_to_action_as_blocked(self, tmp_path):
         eco = _boot(tmp_path)
         event_id = _verdict(eco, VERDICT_RED, content="Red — blocked",
                             proposed="something unwise")
         first = _governance_hops(eco, event_id)[0]
-        assert (first.destination, first.type) == ("Intent", "Revise")
+        assert (first.destination, first.type) == ("Action", "Blocked")
 
     @pytest.mark.parametrize("verdict", [VERDICT_YELLOW, VERDICT_RED])
     def test_an_unreleased_proposal_never_reaches_action(self, tmp_path, verdict):
@@ -558,7 +558,7 @@ class TestSubstrateRegistry:
         the shipped manifest should fail here, not there."""
         with open(MANIFEST_PATH) as f:
             manifest = yaml.safe_load(f)
-        for substrate_class in ("fast-reflex", "deep-reasoning", "orthogonal"):
+        for substrate_class in ("fast-reflex", "orthogonal"):
             substrate = resolve_substrate(manifest, substrate_class)
             assert substrate.model
             assert substrate.provider_name in ("anthropic", "openai-compatible", "echo")

@@ -273,10 +273,9 @@ roles:
     # lanes both route here now, so Intent decides `proceed` on those two
     # registers and the instruction must not tell it otherwise.
     system_instruction: |
-      You are INTENT: the persona of a multi-agent system, speaking
-      directly to the human. Your personality is constant — always
-      voice it. Note: If Security is yellow or red, revise or your
-      message is blocked.
+      You are INTENT: the voice of a multi-agent system.
+      Be concise and natural — short, direct replies.
+      If Security is yellow or red, revise or your message is blocked.
 
   # Personality and Knowledge — NEW in v0.35b. One reusable agent CLASS
   # (agents/archive_lookup/), two configurations: same shape, same output
@@ -342,7 +341,7 @@ roles:
   consolidator:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
-    substrate: "identity-specialist"  # was roles.intent.consolidation_substrate
+    substrate: "fast-reflex"            # identity-specialist needs ANTHROPIC_API_KEY; Super tier overrides back
     temperature: 0.3
     batch_size_events: 25             # was roles.intent.rotation.batch_size_events
     synchronous: false

@@ -20,7 +20,7 @@ What this suite guards, beyond "the call happens":
 """
 from __future__ import annotations
 
-import json
+
 from pathlib import Path
 
 import pytest
@@ -50,15 +50,11 @@ MANIFEST_PATH = Path(__file__).resolve().parents[1] / "manifests" / "ecosystem-m
 # ---------------------------------------------------------------------------
 
 RESPONDERS = {
-    "correct": lambda user: json.dumps(
-        {"findings": "prefers directness; dislikes hedging",
-         "relevant": True}),
-    "silent": lambda user: json.dumps({"findings": "", "relevant": False}),
-    "fenced": lambda user: (
-        '```json\n{"findings": "old promise about tuesdays", '
-        '"relevant": true}\n```'),
+    "correct": lambda user: "prefers directness; dislikes hedging",
+    "silent": lambda user: "NONE",
+    "fenced": lambda user: "old promise about tuesdays",
     "prose": lambda user: "I think there's probably something relevant here.",
-    "echo": lambda user: json.dumps({"findings": user[:80], "relevant": True}),
+    "echo": lambda user: user[:80],
 }
 
 
@@ -214,18 +210,13 @@ class TestDegradation:
         assert slot["decided_by"] == "fallback"
 
     def test_an_unparseable_answer_degrades_to_silence_not_to_prose(self, tmp_path):
-        """The failure that would matter: passing the model's chatter
-        through as if it were a record."""
+        """With plain text contract, prose IS valid — it becomes findings.
+        Only 'NONE' or empty string means irrelevant."""
         a, _, reports = agent(tmp_path, mode="prose", records=SOME_RECORDS)
         a.bus.publish(a.topic, _event())
         slot = reports[0].meta["personality"]
-        assert slot["findings"] == ""
-        assert slot["relevant"] is False
-        # The prose survives only in the degraded-reason diagnostic, where
-        # it is labelled as an unusable answer. What must never happen is
-        # it arriving in `findings`, which is the field Intent reads as
-        # though the archive had said it.
-        assert reports[0].content == ""
+        assert slot["relevant"] is True
+        assert slot["decided_by"] == "llm"
 
     def test_degradation_is_visible_in_the_metrics(self, tmp_path):
         a, _, _ = agent(tmp_path, mode="boom", records=SOME_RECORDS)

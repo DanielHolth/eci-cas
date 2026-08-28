@@ -500,10 +500,10 @@ class TestRecommendationsSurviveSecurity:
 
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        reviews = [e for e in eco.bus.trace()
-                  if e.event_id == event_id and e.type == "Review"]
-        assert reviews
-        recommendations = reviews[0].meta.get("recommendations")
+        revises = [e for e in eco.bus.trace()
+                  if e.event_id == event_id and e.type == "Revise"]
+        assert revises
+        recommendations = revises[0].meta.get("recommendations")
         assert recommendations
         assert any(r["sender"] == "Analytics" for r in recommendations)
 
