@@ -1,114 +1,24 @@
 """
-Governance's routing contract — the one source of truth for what
-Governance is structurally allowed to do (§5.1, §4, spec v0.35).
+Governance's routing contract (§5.1, §4, spec v0.35).
 
-Governance is a dispatcher
---------------------------
-Phase 0.1 set out to put a model behind Governance and ended up proving
-it doesn't need one. Every hop turned out to be settled by the envelope
-alone. So the table below is the whole of Governance. It is data, it is
-total, and it is evaluated without a substrate, a prompt, or a network
-call. Governance decides nothing (§2.1), holds no memory ACROSS events
-(§5.1 — see agents/governance/buffer.py on the one thing it now holds
-within one), and spends nothing.
+Envelope-only dispatcher — no substrate, no state across events.
 
-v0.35 made it the universal router: every hop passes through here except
-the one Sensory fan-out (v0.35a), which is deliberately ungated.
+Topology::
 
-The topology
-------------
     Sensory ──┬─→ Impulse      ─┐
-              ├─→ Analytics    ─┤  (parallel, NO Governance hop —
-              ├─→ Personality  ─┤   the one deliberate exception)
-              └─→ Knowledge    ─┘
-                                 └─→ Governance buffers all four,
-                                     bundles them, sends ONE message
-                                     to Intent
+              ├─→ Analytics    ─┤  (parallel, no Governance hop)
+              └─→ Personality  ─┘
+                                 └─→ Governance bundles → Intent
     Intent  → Governance → Security
-    Security green  → Governance → Action     (release)
-    Security yellow → Governance → Intent     (Revise — one chance)
-    Security red    → Governance → Action     (Blocked, immediate)
-    Security red    → Governance → Action     (Blocked, on the second red)
-    Action failure  → Governance → Action     (Prompt, v0.33 fallback)
+    Security green  → Action     (SPEAK)
+    Security yellow → Intent     (REVISE — one chance)
+    Security red    → Action     (BLOCKED, immediate)
+    Action failure  → Action     (Prompt fallback)
 
-Two lanes changed in v0.35e, and the second is wider than the spec draft
---------------------------------------------------------------------------
-Before v0.35: Security's yellow and red both went to ANALYTICS, and
-Intent was "advisory only... holds no veto" (§5.5).
-
-After v0.35e, as confirmed by Daniel on 2026-08-24: **Analytics is
-isolated from Security in every way.** Both non-green lanes route to
-Intent, which now decides `proceed` on them — a real veto. Analytics is
-cut back to its bare minimum: unbiased analytical keywords, contributed
-into Intent's bundle, gating nothing.
-
-The reasoning, recorded because it reverses a documented safety property:
-by the time Security says anything, Intent already holds every analytical
-read of the event (its own bundle) PLUS the broader conversation window
-none of the single-event agents ever see. A fresh Analytics call would be
-strictly less grounded than the agent that already has all of it.
-
-Anything that is not an explicit `green` still routes away from Action.
-That property is unchanged and is what keeps the dispatch fail-safe: to
-reach the pipeline's one irreversible step you must say `green` and mean
-it. What changed is only WHICH agent picks up the doubt.
-
-One chance to clear, then blocked
-----------------------------------
-A non-green verdict buys exactly ONE more attempt
-(contract.MAX_REVISION_PASSES, Daniel 2026-08-24). If the next verdict is
-also non-green, the event does not loop: it becomes a BLOCKED incident —
-a deterministic notice to Action carrying an expression drawn from
-Impulse's live appraisal, plus a frustration nudge back into Impulse on
-the control plane. Nothing about that notice is model-authored, because
-nothing about it cleared Security.
-
-The budget deliberately covers YELLOW as well as red, and that is not
-over-engineering — it is the only thing standing between this router and
-a live-lock. Governance forwards whatever Intent writes to Security
-(INTENT_ADVICE -> CLEAR, unconditionally), including a fail-closed
-DECLINE. A rule engine that yellows a decline will yellow it again, every
-time, forever — and on a synchronous bus that is not a slow loop, it is
-stack exhaustion inside a single ingest() call. Bounding red alone left
-that door open.
-
-Content policy per route
-------------------------
-No payload is Governance's to write:
-
-  template         An instruction to another agent, generated from a
-                   fixed template that quotes the relevant payload
-                   verbatim. Downstream agents see what was actually
-                   said, never Governance's summary of it.
-  verbatim         The payload passes through untouched.
-  proposed_action  The PERSONA'S words (Intent's proposal, cleared by
-                   Security). §5.1's "no persona, no opinions" would be a
-                   dead letter if the router could rewrite the line
-                   before Action speaks it.
-  bundle           The four parallel answers, carried as structured meta
-                   with the original Sensory content verbatim as the
-                   payload. Governance assembles the envelope; it writes
-                   none of its contents.
-  sensory          The original human request, verbatim, for the two
-                   registers where Intent now holds the veto. The router's
-                   instruction and the blocked proposal ride in meta
-                   instead of replacing it — see below.
-
-Why REVIEW and REVISE carry the request rather than the instruction
---------------------------------------------------------------------
-Both were `template` routes before v0.35e, when they went to Analytics
-and the payload was "here is the situation, judge it". Now they go to the
-agent that HOLDS THE VETO, and its prompt renders the payload as "THE
-HUMAN SAID". Sending the router's own instruction there would ask Intent
-to decide "unsure means no" about a request it was never shown — and on
-REVISE it would have quoted Security's verdict text as the thing to
-revise. So both routes now carry `state.sensory` (the original words),
-and the instruction, the blocked proposal and Security's concern ride in
-meta where they can be attributed correctly.
-
-Severity is never routed either. It is computed upstream and propagates
-untouched (§3's OR-upscale-only rule); Governance inherits it via
-Envelope.reply() and no code path here can set it.
+Non-green verdicts get ONE revision attempt; yellow is bounded too
+to prevent live-lock (a declined revision yellows forever otherwise).
+REVISE carries the original request as payload; the router instruction
+rides in meta.
 """
 from __future__ import annotations
 
@@ -186,17 +96,7 @@ SPEAK = Route(
     content_policy="proposed_action",
 )
 
-#: The YELLOW lane. v0.35e: Intent, not Analytics.
-REVIEW = Route(
-    id="review",
-    topic="events.intent",
-    destination="Intent",
-    type="Review",
-    content_policy="sensory",
-    carry_meta=True,
-)
-
-#: The RED lane. v0.35e: Intent, not Analytics. One attempt only.
+#: The non-green lane. One attempt only.
 REVISE = Route(
     id="revise",
     topic="events.intent",
@@ -372,14 +272,6 @@ def route_for(envelope: Envelope, *, bundle_ready: bool = False,
 def template_content(envelope: Envelope, route: Route) -> str:
     """The payload for a route. Every template quotes verbatim; none of
     them summarise, and none of them are Governance's opinion."""
-    if route.id == REVIEW.id:
-        # The yellow lane. Say plainly that nothing was blocked — Intent
-        # is being asked for a judgment, not a fix, and telling it
-        # otherwise would be Governance putting words in Security's mouth.
-        proposed = envelope.meta.get("proposed_action", "")
-        return (f"Security could not clear or block this by rule. Decide "
-                f"whether it should proceed. The proposed action was: "
-                f"'{proposed}'.")
     if route.id == REVISE.id:
         # Quote the PROPOSAL, not the verdict envelope's content — the
         # thing being revised is what Intent said, not what Security said

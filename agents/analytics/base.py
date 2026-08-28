@@ -27,7 +27,7 @@ and its task into a Recommendation.
 from __future__ import annotations
 
 from collections import deque
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List
 
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
@@ -127,22 +127,7 @@ class AnalyticsBase:
     # ---- Emission ---------------------------------------------------------
 
     def emit(self, envelope: Envelope, recommendation: Recommendation) -> Envelope:
-        """Analytics reports to GOVERNANCE, which buffers this alongside
-        the other three parallel answers and bundles them for Intent
-        (v0.35a/c).
-
-        This is the one thing about Analytics that v0.35 changed. Before,
-        it replied straight to Intent, and its `proceed: false` was what
-        told Governance to route toward a decline. Now its answer is one
-        of four inputs to a bundle. 2026-08-25: `proceed` is gone
-        entirely — Analytics gates nothing, contributes unbiased keywords
-        only, and Intent is the sole judge of what to do with them.
-
-        The findings ride in `meta.analytics`, the same role-named slot
-        shape the archive-lookup family uses (agents/archive_lookup/) —
-        one shape across all three analytical slots, so Governance
-        bundles them uniformly and Intent pattern-matches one format
-        rather than parsing three."""
+        """Publish Analytics' answer to Governance for bundling."""
         if recommendation.decided_by == "fallback":
             self.metrics["fallbacks"] += 1
 

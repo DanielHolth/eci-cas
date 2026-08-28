@@ -1,36 +1,13 @@
 """
-The archive-lookup family's output contract (v0.35b).
+The archive-lookup family's output contract.
 
-One shape, shared by every agent in this family — today Personality and
-Knowledge, tomorrow whatever else turns out to be "look something up in
-Archive and say what's relevant." Daniel flagged early that these two are
-unlikely to be the only ones of this character, so the contract is
-defined once, here, rather than twice in two hand-copied agents.
-
-The format matches Analytics' terse keyword style, and that is
-load-bearing rather than cosmetic. Two reasons:
-
-  1. Intent pattern-matches ONE shape across all three analytical slots
-     in Governance's bundle (Analytics, Personality, Knowledge). Three
-     different response shapes would mean three parsers and three ways
-     for a slot to be misread.
-  2. The (deferred, product-layer) avatar UI shows three coloured
-     "thought bubble" streams, one per agent. For that to read as three
-     voices of one mind rather than three unrelated widgets, the things
-     being streamed have to be the same KIND of thing.
-
-Fallback posture: fail toward SILENCE, never toward invention. These
-agents gate nothing — they contribute grounding, and a lookup with
-nothing to say should say nothing. `relevant: false` with empty findings
-is a complete, honest answer, and it is also what an outage degrades to;
-the alternative (guessing at what the archive might have said) would put
-fiction into Intent's prompt with an authoritative label on it.
+One shape shared by Personality and Knowledge: terse keyword findings,
+matching Analytics' style so Intent pattern-matches one format across all
+analytical slots. Fallback posture: fail toward SILENCE, never invention.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-
 from typing import Any, Dict, List, Optional
 
 #: Findings are keywords, not prose. Tightened from 300 (Daniel,
@@ -66,11 +43,6 @@ class Findings:
         if self.diagnostics:
             meta.update(self.diagnostics)
         return meta
-
-
-class ContractViolation(ValueError):
-    """The substrate's answer cannot be used. Always recoverable — the
-    caller degrades to silence (see `fallback`)."""
 
 
 #: Code-fixed backstop, mirroring the other roles' contracts: this
@@ -126,6 +98,6 @@ def fallback(reason: str) -> Findings:
                     diagnostics={"degraded": True, "reason": reason[:200]})
 
 
-__all__ = ["Findings", "ContractViolation", "RESPONSE_CONTRACT",
+__all__ = ["Findings", "RESPONSE_CONTRACT",
            "MAX_FINDINGS_CHARS", "DEFAULT_QUERY_LIMIT",
            "build_prompt", "parse", "silent", "fallback"]

@@ -238,22 +238,6 @@ class TestRoutingContract:
         assert decision.route is routing.BLOCKED
         assert "blocked" in decision.content.lower()
 
-    def test_the_review_request_does_not_claim_a_block(self):
-        """Yellow means the rules didn't cover it, not that it was blocked.
-        Telling Intent otherwise would be Governance putting words in
-        Security's mouth.
-
-        v0.35e note: the payload of a REVIEW is now the original request
-        (Intent's prompt renders it as "what the human said", and Intent
-        is the one deciding). The instruction itself is what this asserts
-        on, and it rides in meta.router_instruction."""
-        env = self._envelope(source="Security", content="unclear",
-                             meta={"verdict": VERDICT_YELLOW, "proposed_action": PROPOSED})
-        instruction = routing.template_content(env, routing.REVIEW)
-        assert "could not clear or block" in instruction
-        assert PROPOSED in instruction
-        assert "blocked the prior course" not in instruction
-
     def test_the_revision_request_quotes_the_proposal_not_the_verdict(self):
         """What is being revised is what INTENT said, not what Security
         said about it. Quoting the verdict envelope's content here sent

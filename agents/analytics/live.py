@@ -1,40 +1,11 @@
 """
-Analytics — LIVE tier, Phase 0.2 (§5.4, §13.4).
+Analytics — LIVE tier (§5.4, §13.4).
 
-The second cycle of the replacement sequence, and the first role that
-genuinely needs a model. Phase 0.1 ended by proving Governance didn't;
-this one is the opposite case, and the contrast is the point. Governance
-routes, which is a lookup. Analytics reasons, which isn't.
-
-What that changes about the guardrails
---------------------------------------
-Governance got a routing whitelist: a closed set of legal answers,
-checkable exactly. There is no equivalent here — enumerating the useful
-recommendations in advance would mean not needing the model. So this
-agent constrains the SHAPE of the answer and the CONSEQUENCE of a bad
-one, rather than its content:
-
-  * The response schema is fixed and validated (contract.parse).
-  * Every task has a deterministic fallback, and two of the three fail
-    toward not acting (contract.fallback).
-  * Analytics never speaks as the persona. It advises Intent, which owns
-    the wording and the values (§5.5). A model that starts writing the
-    reply is still producing a valid recommendation — Intent simply
-    treats it as advice, because that is the only thing this hop is wired
-    to be.
-  * Loop detection and the control plane never reach this class at all;
-    AnalyticsBase answers both mechanically.
-
-Substrate handling
-------------------
-The vendor is resolved from the manifest's substrate class table (§10.2)
-and never named here. Model, provider, endpoint and credentials are all
-one manifest edit away from being something else, which is the property
-the whole layer exists for.
-
-Every call is stateless and single-turn: one task, one event, and a
-bounded working window. History does not accumulate in the prompt, which
-is what keeps cost per event flat as the ecosystem's memory grows (§1).
+Substrate-backed reasoning. Constrains the SHAPE of the answer (validated
+by contract.parse) and the CONSEQUENCE of a bad one (fallback to
+deterministic template). Analytics never speaks as the persona — it
+advises Intent, which owns the wording. Every call is stateless and
+single-turn.
 """
 from __future__ import annotations
 
@@ -106,10 +77,8 @@ class AnalyticsAgent(AnalyticsBase):
             if self.budget is not None:
                 self.budget.record_success(usage=usage, cost_usd=cost)
 
-            # A contract violation is NOT a substrate failure — the call
-            # succeeded and was paid for; the model just answered out of
-            # shape. Parsing after recording keeps the two accounted
-            # separately, so a run of bad JSON never latches budget mode.
+            # Parse AFTER recording: a call that returned unusable text
+            # still happened and was still paid for.
             recommendation = contract.parse(text, task)
             return Recommendation(
                 recommendation=recommendation.recommendation,

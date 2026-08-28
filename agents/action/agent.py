@@ -1,45 +1,14 @@
 """
 Action — deterministic executor (§5.7, §13.1).
 
-Two tiers as of Phase 0.6:
-
-  ActionMock   the original: records what it was handed, emits nowhere.
-  ActionAgent  the real one: fans the same content out to configured
-               sinks (agents/action/sinks.py) that actually put it in
-               the world.
-
-Going live here is not "Action gains judgment" — it is "Action finally
-has somewhere to put things". The role invariant is unchanged and is
-enforced by the sink interface itself: a sink is handed the envelope and
-emits it, and is never handed the pipeline's reasoning, so there is
-nothing here to author WITH.
-
-The failure contract is v0.33's, unchanged: silent on success, one
-Failure envelope to Governance on failure, no retries, no loop detection.
-What is new is that failure can now come from the world rather than only
-from a testing knob.
-
 No persona, no judgment — executes exactly what Governance hands it
-after Security clearance.
+after Security clearance. Fans content out to configured sinks
+(agents/action/sinks.py). Silent on success; reports one Failure
+envelope to Governance on failure (v0.33 contract).
 
-v0.35e — Action gained one new message type, `Blocked`: the outcome of an
-exchange Security refused twice (see agents/governance/routing.py). It is
-handled here exactly like any other action, which is the point — Action
-"executes exactly what Governance hands it" and authors nothing of its
-own. What makes a Blocked notice legible as more than an error message is
-`meta.expression`, a word from Impulse's live appraisal state
-(agents/impulse/agent.py's EXPRESSIONS) that a product layer can map onto
-an avatar frame, or that a text-only front end can simply say. Action
-does not choose it and does not interpret it; it carries it.
-
-v0.33 — Action executes and reports only failures back to Governance.
-On success: silent (no envelope goes anywhere). On failure: report to
-Governance with the original content.
-
-Governance's fallback rule: Action failed? → Issue a Prompt action
-instead, letting the persona explain the failure to the human. This
-is the only failure path; no retry loops, no loop detection, no
-Analytics escalation. Governance has the answer built-in.
+Blocked notices (from twice-refused exchanges) are handled like any
+other action. `meta.expression` carries Impulse's live appraisal for
+product-layer rendering.
 """
 from __future__ import annotations
 

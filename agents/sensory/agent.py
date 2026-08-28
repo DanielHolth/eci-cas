@@ -1,64 +1,17 @@
 """
-Sensory — REAL, deterministic (§5.2, §13.1).
+Sensory — deterministic input agent (§5.2, §13.1).
 
-"It's essentially an input field plus source-tagging; there is nothing
-meaningful to mock. It is also the injection point for every test."
+External injection point: ingest(content, source_type) tags input and
+fans it out to Impulse, Analytics, and Personality in parallel. Impulse
+is dispatched first (synchronous) because it gates the Critical fast
+path. The other workers run concurrently on a thread pool.
 
-Two roles:
-  1. External injection point — ingest(content, source_type) is called
-     directly (by the test harness, a CLI, or later a real UI/webhook)
-     with a human prompt or a feedback signal (§3.1). Sensory tags it and
-     FANS IT OUT to four agents in parallel (v0.35a): Impulse,
-     Analytics, Personality and Knowledge, each receiving its own copy
-     of the same event.
+This is the one hop with no Governance in between — the four agents are
+independent and stateless, so parallel dispatch is safe. Governance
+buffers all answers and bundles them for Intent.
 
-     This is the one hop in the whole pipeline with no Governance in
-     between — deliberate, confirmed repeatedly during the v0.35 design
-     pass, and the single exception to Governance's otherwise-universal
-     routing (v0.35c). The reason is latency: four short, cheap,
-     independent calls racing in parallel beat one long call, or a serial
-     chain, doing all four jobs. Nothing is lost by fanning them out,
-     because none of the four needs to see another's answer to do its
-     own job — every cognitive call in this system is stateless anyway.
-
-     Governance picks the four answers back up, buffers them, and sends
-     ONE bundled message to Intent.
-
-     This replaces v0.31's strict relay, where Sensory forwarded to
-     Impulse alone and Impulse was "the sole trigger into Governance".
-     Impulse still gets first look in the sense that matters — it is
-     still the only agent that can open the Critical fast path (v0.35d),
-     and it is still published to first below, so its reflex is on the
-     wire before the other three are even dispatched.
-
-     2026-08-25 (Daniel): "truly async," not just fanned-out-but-still-
-     sequential. Until now the embedded bus dispatched every publish()
-     synchronously (bus/pubsub.py), so on a single thread the three
-     cognitive workers' slow substrate calls still ran one after another
-     behind the scenes — Impulse, then Analytics, then Personality, then
-     Knowledge, each blocking the next. Impulse stays exactly where it
-     was: synchronous, first, deterministic, near-instant, and the only
-     one that can open the Critical fast path. Analytics, Personality and
-     Knowledge are genuinely independent of each other and of Impulse —
-     none needs to see another's answer, every cognitive call in this
-     system is stateless anyway — so their dispatch now runs on a small
-     thread pool (COGNITIVE_FAN_OUT below) instead of a loop. ingest()
-     still blocks until all three have actually finished; Governance still
-     buffers on completeness, not arrival order (EventState.ready()), so
-     nothing about the bundling contract changed — only the wall-clock.
-  2. Bus re-entry point — subscribed to events.sensory, kept for
-     protocol completeness (§3's topic list) and any future external
-     source that publishes directly onto the bus rather than calling
-     ingest(). v0.32: Action's outcomes no longer route here (see
-     revision notes) — a failed action reports straight to Governance,
-     which commanded it and owns deciding what happens next; a
-     successful action is silent. This topic is currently a no-op in
-     Phase 0's flow.
-
-Severity (v0.31): Sensory may tag incoming content with a severity from
-the start of the chain (e.g. a vision-modality agent flagging danger).
-Downstream agents (Impulse, Governance) may only ever RAISE this tag,
-never lower it — see bus.envelope.severity_max.
+Severity may be tagged from the start; downstream agents may only raise
+it (OR-upscale-only, bus.envelope.severity_max).
 """
 from __future__ import annotations
 

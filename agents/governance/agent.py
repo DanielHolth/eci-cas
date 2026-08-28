@@ -415,11 +415,10 @@ class Governance:
                         meta["recommendations"] = recs
 
         if route.id == routing.REVISE.id:
-            # These two routes carry the ORIGINAL REQUEST as their payload
+            # This route carries the ORIGINAL REQUEST as its payload
             # (see routing.py), because Intent's prompt renders the payload
-            # as "what the human said" and Intent is the agent deciding
-            # here. The router's own instruction rides alongside it rather
-            # than replacing it.
+            # as "what the human said". The router's instruction rides in
+            # meta instead.
             meta["router_instruction"] = routing.template_content(envelope, route)
             if state is not None:
                 # What Security actually said, kept distinct from

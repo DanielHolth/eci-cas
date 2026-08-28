@@ -1,24 +1,10 @@
 """
-Action's output sinks (Phase 0.6, §5.7).
+Action's output sinks (§5.7).
 
-Going live for Action does not mean giving it judgment — it means giving
-it somewhere for `envelope.content` to actually GO. Everything upstream
-of here reasons; this is the one place where the system stops thinking
-and does something in the world.
-
-So the invariant is stated as an interface rather than as a comment: a
-sink receives the content Governance authorised and emits it. It gets no
-opportunity to rewrite, prefix, summarise or decorate, because it is
-never handed the pipeline's reasoning in the first place — only the text
-and the envelope's own metadata. "Action executes exactly what Governance
-hands it and authors nothing of its own" survives by construction.
-
-A sink signals failure by RAISING. That is deliberate: Phase 0.33's
-failure contract (report to Governance, which issues a Prompt explaining
-the failure to the human) needs a clean boundary between "emitted" and
-"did not emit", and a boolean return invites a sink to half-succeed
-quietly. Anything a sink raises is caught by the agent and turned into
-the one Failure envelope the contract allows.
+A sink receives the content Governance authorised and emits it. It is
+never handed the pipeline's reasoning — only the text and envelope
+metadata. A sink signals failure by raising; ActionAgent catches it
+and reports to Governance.
 """
 from __future__ import annotations
 

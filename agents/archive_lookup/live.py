@@ -1,40 +1,16 @@
 """
-The archive-lookup family — LIVE tier (Phase 0.6).
+The archive-lookup family — LIVE tier.
 
-v0.35b built this family mock-first: the mock proved the wiring, the
-parallel fan-out and the read-only posture at zero cost, and left the one
-thing a model is actually for — deciding what in a pile of records
-BEARS on the event in front of you — as the open item. This is that item.
+Substrate-backed relevance judgment over a bounded set of archive
+records. Personality and Knowledge are two instances of this one class,
+differing only in which store they read and their brief.
 
-One class, two instances, exactly as the mock tier is. Personality and
-Knowledge differ in which store they read and how their brief is worded;
-neither difference belongs in code (see base.py's header).
+The model decides which records bear on the current event (a relevance
+judgment that can't be written as a rule). It is NOT asked to recall
+anything — the supplied records are the only permissible source.
 
-What the model is and is not asked to do
-----------------------------------------
-It is asked: given this event and these N records, which of them matter,
-stated as keywords. That is a relevance judgment over a bounded, supplied
-set — the one thing here that cannot be written as a rule, because
-relevance is about meaning.
-
-It is NOT asked to recall anything. The records in the prompt are the
-only permissible source, and the contract says so explicitly ("report
-what the records say, not what you happen to know"). A lookup that
-answers from parametric knowledge has quietly become a second Analytics
-while still being labelled as memory — the failure mode that would make
-Intent's bundle untrustworthy in a way no test would catch.
-
-Fallback posture: SILENCE, never invention (contract.fallback). This
-family gates nothing, so a substrate outage costs grounding, not safety.
-Guessing at what the archive might have said would put fiction into
-Intent's prompt with an authoritative label on it — strictly worse than
-saying nothing.
-
-Cost posture: this runs on EVERY event, twice (once per instance), in
-parallel with Impulse and Analytics. That is why the empty-archive
-short-circuit below exists, and why it is not merely an optimisation:
-calling a model to reason over zero records is spending money to be told
-there is nothing there.
+Fallback: SILENCE. Cost: runs on every event, twice, in parallel.
+Empty-archive short-circuits without a substrate call.
 """
 from __future__ import annotations
 
@@ -52,7 +28,7 @@ from substrates.base import (
 
 from agents.archive_lookup import contract
 from agents.archive_lookup.base import ArchiveLookupBase
-from agents.archive_lookup.contract import ContractViolation, Findings
+from agents.archive_lookup.contract import Findings
 
 DEFAULT_SYSTEM_INSTRUCTION = (
     "You are a memory-lookup agent in a multi-agent system. You are given "
@@ -120,10 +96,8 @@ class ArchiveLookupAgent(ArchiveLookupBase):
             if self.budget is not None:
                 self.budget.record_success(usage=usage, cost_usd=cost)
 
-            # Parse AFTER recording: a call that returned bad JSON still
-            # happened and was still paid for. Conflating the two would
-            # let a run of malformed answers latch budget mode as if the
-            # substrate were down.
+            # Parse AFTER recording: a call that returned unusable text
+            # still happened and was still paid for.
             findings = contract.parse(text)
             return Findings(
                 findings=findings.findings,
@@ -133,7 +107,7 @@ class ArchiveLookupAgent(ArchiveLookupBase):
                                               cost_usd=cost,
                                               records_considered=len(records)),
             )
-        except (SubstrateError, ContractViolation, ValueError) as exc:
+        except (SubstrateError, ValueError) as exc:
             if isinstance(exc, CompletionError) and self.budget is not None:
                 self.budget.record_failure(
                     getattr(exc, "kind", FailureKind.UNKNOWN), str(exc))

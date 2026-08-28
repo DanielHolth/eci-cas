@@ -1,34 +1,12 @@
 """
-Security's rule engine (Phase 0.6, §5.6).
+Security's rule engine (§5.6).
 
-The answer to the open question the Phase 0.6 handover left standing:
-what does `security_rules.json` actually look like?
+A closed, declarative pattern list loaded from JSON. Each rule has
+any/all/unless regex conditions, a verdict (yellow or red), and a
+concern string. Evaluation is total and order-independent: every rule
+is tested, highest verdict wins. Green is the absence of a match.
 
-It is a **closed, declarative pattern list** — not a DSL, not a scripting
-hook, not a keyword bag. The reasons, in the order they mattered:
-
-  * §5.6 makes Security "is this against the rules", deterministic and
-    auditable — every verdict must be justifiable from the rules file and
-    that single event, by a human reading both. A DSL with control flow
-    stops being readable at exactly the moment it becomes useful.
-  * A bare keyword list can't express "unless", and almost every real
-    rule needs one ("refuse to give an address, UNLESS it is our own").
-    Without it the rules file grows a parallel allowlist that no longer
-    lines up with the denials.
-  * Regex is the smallest thing that covers the actual cases and still
-    has one obvious meaning per rule. Every pattern is compiled at LOAD
-    time, so a typo is a bootstrap failure, not a mid-conversation
-    exception on the safety path.
-
-Evaluation is total and order-independent: every rule is tested, the
-HIGHEST verdict any matching rule asks for wins, and the concern text is
-the matching rule's own. Order-independence is deliberate — a rules file
-whose meaning depends on line order is a rules file nobody can safely
-edit.
-
-There is no model here and there will not be one. A reasoner in this seat
-would trade the audit trail for judgment the ecosystem already has in
-Intent, and the hard stop only works while it stays mechanical.
+No model here — the hard stop only works while it stays mechanical.
 """
 from __future__ import annotations
 

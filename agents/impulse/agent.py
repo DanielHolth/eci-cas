@@ -1,60 +1,18 @@
 """
-Impulse — REAL, deterministic tier (§5.3, Phase 0.3).
+Impulse — deterministic tier (§5.3, Phase 0.3). No substrate by design.
 
-Phase 0's mock proved the topology: real drive-vector bookkeeping behind
-a templated, 2-3-branch reaction. Phase 0.3 makes the reaction itself
-real, while staying on the deterministic tier (§2.1) — no substrate, by
-design, not by default. Two things changed from the mock:
+Runs on every event in parallel with Analytics and Personality. Two
+mechanisms beyond the Phase 0 mock:
 
-  1. Vectors DRIFT. They used to sit wherever they were last poked
-     forever. Now every vector relaxes back toward its baseline (the
-     manifest's initial_vectors) over wall-clock time, exponentially, at
-     its own per-vector rate (`drift_tau_sec`) — urgency snaps back fast
-     (it shouldn't linger after whatever triggered it has passed),
-     temperament-like traits move slowly. See `_drift()`.
+  1. Vectors DRIFT back toward baseline over wall-clock time at per-vector
+     rates (drift_tau_sec). See `_drift()`.
+  2. The reaction is a weighted appraisal: five drive vectors collapse into
+     three axes (alertness, warmth, engagement) via fixed linear combinations.
+     See `_axes()`.
 
-  2. The reaction is a weighted appraisal, not a lookup on one raw
-     vector. Five drive vectors collapse into three legible axes
-     (alertness, warmth, engagement) via fixed, documented linear
-     combinations — still a formula, not a model, and still fully
-     explainable from the vector state alone. See `_axes()`.
-
-Why this stays deterministic rather than reaching for a substrate: it
-runs on every single event, in parallel with three other agents, and it
-gates the Critical fast path — it needs to run inline, synchronously, with zero added
-latency and zero added cost on the pipeline's busiest hop, for the same
-reason Governance and Security stayed deterministic. There is a real
-case for a future fast/cheap LLM-backed variant here too — colored by
-Intent's persona over time (Phase 0.4's temperature recalibration), not
-per-event, since the v0.31 relay is one-way — but the plan is to measure
-this deterministic version's actual behaviour first, then decide whether
-an LLM variant earns its cost against a real baseline rather than a
-straw one. See docs/phase-0.3-impulse.md.
-
-What did NOT change from the mock
-----------------------------------
-- Still relays the ORIGINAL verbatim content, never a paraphrase
-  (everything downstream needs what was actually said).
-
-  NOT still the sole trigger into Governance — v0.35a ended that. Sensory
-  now fans out to four agents in parallel (Impulse, Analytics,
-  Personality, Knowledge) and Governance buffers all four. What Impulse
-  kept is the part that mattered: it is published to FIRST, and it is
-  still the only role whose severity read can open the Critical fast path
-  past cognition (v0.35d) — which is exactly why the Elevated ceiling
-  below is a hard invariant rather than tidiness.
-- Still combines its own severity read with whatever Sensory tagged,
-  via OR-upscale-only (bus.envelope.severity_max) — it can raise, never
-  lower, a tag set upstream.
-- The guardrail: Impulse's own severity assessment is hard-capped at
-  "Elevated". Drive-vector state alone — however extreme — can never
-  produce "Critical"; only an external Sensory signal can. Before this
-  phase that cap was tidiness. It is now the actual safety invariant
-  behind the Phase 0.3 Critical reflex (Impulse becomes the sole path
-  that can bypass cognition for a genuine emergency), so it is a code
-  constant, not a manifest knob — see IMPULSE_SEVERITY_CEILING below and
-  recovery.bootstrap._provision_impulse's refusal to let a manifest
-  raise it.
+Hard invariant: Impulse's severity assessment is capped at Elevated
+(IMPULSE_SEVERITY_CEILING). Only an external Sensory signal can produce
+Critical — drive-vector state alone never can.
 """
 from __future__ import annotations
 

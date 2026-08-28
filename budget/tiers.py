@@ -1,50 +1,16 @@
 """
-Budget tiers — model allocation presets (docs/budget-tiers-appendix.md,
-Phase 0.2.2).
+Budget tiers — model allocation presets.
 
-Budget MODE (budget/state.py) and budget TIER (this module) are two
-different axes and it is worth being precise about the difference:
+budget_mode (runtime): a latch that trips on failure and falls back to
+deterministic per-task fallbacks. budget_tier (design-time): which
+vendor/model backs each cognitive role — Minimal/Budget/Default/Super.
+They compose: any tier can still latch into budget mode on a failure.
 
-  budget_mode   RUNTIME. A latch that trips on a classified substrate
-                failure or a spend cap and falls back to the deterministic
-                per-task fallbacks that already exist. Same substrate
-                assignment throughout; the pipeline just stops calling it.
-
-  budget_tier   DESIGN-TIME. Which vendor/model backs each cognitive role
-                in the first place — the appendix's Minimal / Budget /
-                Default / Super. A manifest edit plus a restart, not
-                something that trips mid-session.
-
-A tier answers "what do I want to pay, structurally". Budget mode answers
-"what happens right now when that structure can't be reached". They
-compose: any tier can still latch into budget mode on a failure.
-
-What's wired today
--------------------
-Three cognitive roles have live implementations as of Phase 0.5:
-Analytics (Phase 0.2), Intent (Phase 0.4) and Consolidator (v0.35f — the
-former "Consolidating" mode of Intent, now a role of its own with its own
-substrate slot; what used to be `roles.intent.consolidation_substrate` is
-`roles.consolidator.substrate`). Every named tier sets `mock: false`
-explicitly on all three, the same way it always did for Analytics — an
-operator's stale `mock: true` must not silently survive a tier switch.
-Only Minimal mocks a role at all, and only Analytics.
-
-A tier also scales Intent's conversation window (`context_events`, see
-CONTEXT_EVENTS below). That rides on every live call, so it is charged
-against the same flat-cost claim (§1) as the persona — which makes it a
-tier's business.
-
-Personality and Knowledge (v0.35b) are mock-first and have no substrate
-to allocate yet, so no tier names one for them.
-
-Minimal and Budget name a `local-fast` substrate class. Nothing new had
-to be built for that to work — the substrate layer has taken an
-OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, any local runtime)
-since before this module existed (substrates/providers.py). A tier is
-just a name for a combination that was already reachable one manifest
-edit away; see manifests/ecosystem-manifest.yaml for the `local-fast`
-entry these tiers point at.
+A tier names substrate CLASSES (resolved in the manifest's substrates
+table). Three cognitive roles have live implementations: Analytics,
+Intent, and Consolidator. Personality and Knowledge use the lookup
+family tier. Minimal mocks Analytics and lookups; all tiers run Intent
+and Consolidator live.
 """
 from __future__ import annotations
 

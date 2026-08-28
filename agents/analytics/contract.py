@@ -1,57 +1,10 @@
 """
-Analytics' output contract — what it is asked, and what happens when the
-answer can't be used (§5.4, spec v0.35).
+Analytics' output contract (§5.4, spec v0.35).
 
-Why this looks different from Governance's contract
----------------------------------------------------
-Phase 0.1 gave Governance a routing whitelist: a closed set of legal
-answers, so a model could be checked against it exactly. Analytics has no
-such set. It is the reasoner, and the whole point of putting a model
-there is that the useful answers are not enumerable in advance.
-
-So the contract here constrains the SHAPE of an answer, not which answer
-— and what happens when the shape is wrong.
-
-One task, and why it is now only one
-------------------------------------
-Analytics used to answer three message types, one per lane of the v0.34
-verdict dispatch: Evaluate (an ordinary event), Review (Security's yellow
-lane) and Revise (Security's red lane). Two of those were safety
-judgments, and they are gone.
-
-v0.35e moved Security's non-green lanes to Intent. Daniel's 2026-08-24
-confirmation went further than the spec draft had: **Analytics is
-isolated from Security in every way**, and the role is "only there to
-serve unbiased analytical keywords to intent" — cut back to its bare
-minimum for now. So:
-
-  Evaluate   the only task. Reason about the event and say what you make
-             of it, in keywords. Nothing is gated on the answer.
-
-Since v0.35a it is also fanned out to DIRECTLY by Sensory rather than
-relayed by Governance, so the envelope type it sees is the modality
-("prompt", "feedback", "vision", ...). All of them mean Evaluate.
-
-What Analytics contributes, and what it no longer does
---------------------------------------------------------
-2026-08-25 (Daniel): `proceed`/`concern` are gone. They read as an
-analytical judgment, but Governance's own routing code was still using
-them to fork Intent between ADVISE and REFUSE — a real, live gate riding
-on Analytics' opinion, not the harmless vestige it looked like. The only
-gate in this system now is Security's red verdict. Analytics is "only
-there to serve unbiased analytical keywords to intent" (Daniel,
-2026-08-24) — as dumb as Personality and Knowledge, full stop. It
-contributes a keyword recommendation and nothing else. Loop detection, a
-mechanical count rather than an opinion, is the other place its answer
-comes from.
-
-Fallback posture
-----------------
-One task, one posture: DEGRADE. Fall back to the templated
-recommendation the Phase 0 mock produced. The pipeline keeps moving with
-a duller answer, which is the right trade for a hop where nothing is
-gated — and it is byte-identical to the mock's output, so a substrate
-outage changes quality, not behaviour.
+One task (Evaluate): reason about the event and produce keywords.
+Analytics gates nothing — it contributes unbiased keywords into Intent's
+bundle. Fallback posture: DEGRADE to the templated recommendation the
+Phase 0 mock produced.
 """
 from __future__ import annotations
 
