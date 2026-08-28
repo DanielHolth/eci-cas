@@ -37,7 +37,6 @@ class IntentAgent(IntentBase):
 
     def __init__(self, bus: EmbeddedBus, substrate: Substrate, archive=None, *,
                  context_events: int = DEFAULT_CONTEXT_EVENTS,
-                 consolidator=None,
                  system_instruction: str = "",
                  temperature: float = 0.7,
                  max_tokens: Optional[int] = None,
@@ -49,8 +48,7 @@ class IntentAgent(IntentBase):
         self.temperature = float(temperature)
         self.max_tokens = max_tokens or substrate.max_tokens
         self.strict = bool(strict)
-        super().__init__(bus, archive, context_events=context_events,
-                         consolidator=consolidator)
+        super().__init__(bus, archive, context_events=context_events)
 
     # ---- Voicing ------------------------------------------------------------
 
@@ -76,8 +74,7 @@ class IntentAgent(IntentBase):
             return Speech(
                 text=parsed.text, decided_by="llm",
                 diagnostics={**self._diagnostics(), "latency_ms": latency_ms,
-                             "usage": usage, "est_cost_usd": cost or None,
-                             "epoch_count": self.persona.epoch_count})
+                             "usage": usage, "est_cost_usd": cost or None})
         except (SubstrateError, ContractViolation, ValueError) as exc:
             if isinstance(exc, CompletionError) and self.budget is not None:
                 self.budget.record_failure(

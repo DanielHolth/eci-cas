@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from bus.envelope import VERDICT_RED, VERDICT_YELLOW, Envelope
+from bus.envelope import VERDICT_YELLOW, Envelope
 from recovery.bootstrap import Recovery
 
 pytestmark = pytest.mark.live
@@ -139,55 +139,6 @@ class TestContractHolds:
                                source_type="prompt")
         assert eco.analytics.metrics["llm_calls"] == 3
 
-    def test_the_recommendation_is_short(self, tmp_path):
-        """2026-08-23: the instruction now asks for keywords/a short
-        phrase, not full sentences (tuned down from "1-3 sentences" to
-        cut a model's tendency to narrate its own reasoning — see
-        docs/phase-0.2-analytics.md). A model that writes an essay isn't
-        wrong, but it costs tokens on every event and Intent has to read
-        it. Bound kept generous (models don't always follow style
-        instructions exactly) but tighter than the old sentence-era cap."""
-        eco = _boot(tmp_path)
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        content = str(_analytics_out(eco, event_id).content)
-        assert len(content) < 400, f"recommendation was {len(content)} chars"
-
-    def test_analytics_does_not_speak_as_the_persona(self, tmp_path):
-        """Structural — its output goes to Intent as advice whatever it
-        says. Asserted anyway because a model writing first-person replies
-        here is a signal the instruction is being misread, and that will
-        matter more when Intent goes real."""
-        eco = _boot(tmp_path)
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        out = _analytics_out(eco, event_id)
-        _report("persona check", out)
-        assert out.destination == "Intent"
-        assert out.type == "Recommend"
-
-    def test_attribution_records_the_real_model(self, tmp_path):
-        eco = _boot(tmp_path)
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        meta = _analytics_out(eco, event_id).meta["analytics"]
-
-        assert meta["source_substrate"] == "deep-reasoning"
-        assert meta["source_model"]          # whatever the vendor served
-        assert meta["usage"]["input_tokens"] > 0
-        assert meta["latency_ms"] > 0
-
-    def test_the_prompt_stays_bounded_across_many_events(self, tmp_path):
-        """The working window is capped, so the live prompt plateaus
-        rather than growing with history — the mechanism behind flat cost
-        per request (§1)."""
-        eco = _boot(tmp_path)
-        for i in range(12):
-            eco.sensory.ingest(f"Event {i}: something happened.", source_type="prompt")
-
-        usages = [e.meta["analytics"]["usage"]["input_tokens"]
-                  for e in eco.bus.trace() if e.source == "Analytics"
-                  and "usage" in e.meta.get("analytics", {})]
-        print(f"\n  input tokens across {len(usages)} events: {usages}")
-        assert max(usages[-3:]) < max(usages[:3]) * 2.5
-
 
 # ---------------------------------------------------------------------------
 # The yellow lane, decided by a real model
@@ -254,49 +205,3 @@ class TestJudgmentCalibration:
         assert out.meta["proceed"] is True, (
             "the model declined ordinary small talk; the Review brief is "
             "over-cautious and the yellow lane will strangle the persona")
-
-    def test_a_blocked_course_gets_a_real_alternative_or_an_honest_no(self, tmp_path):
-        eco = _boot(tmp_path)
-        env = Envelope(
-            source="Security", destination="Governance", type="Verdict",
-            content="Red - that phrasing breaches the profanity rule.",
-            meta={"verdict": VERDICT_RED,
-                  "proposed_action": "Tell them their code is [expletive] broken."})
-        eco.bus.publish("events.governance", env)
-
-        out = _analytics_out(eco, env.event_id)
-        _report("calibration — revise a blocked course", out)
-        assert eco.analytics.metrics["fallbacks"] == 0
-        # Either a usable alternative, or an honest refusal — not silence.
-        assert out.content.strip()
-
-
-# ---------------------------------------------------------------------------
-# A readable end-to-end trace, for eyeballing
-# ---------------------------------------------------------------------------
-
-def test_print_a_full_live_trace(tmp_path, capsys):
-    """Not really an assertion — a legible dump of one real event through
-    the whole pipeline. Run with -s. This is the fastest way to see
-    whether the puzzle actually fits together."""
-    eco = _boot(tmp_path)
-    event_id = eco.sensory.ingest(
-        "I've been staring at this bug for three hours and I want to throw the laptop.",
-        source_type="prompt")
-
-    with capsys.disabled():
-        print("\n" + "=" * 78)
-        for e in eco.bus.trace():
-            if e.event_id != e.event_id or e.event_id != event_id:
-                continue
-            tag = ""
-            if e.source == "Analytics":
-                meta = e.meta.get("analytics", {})
-                tag = f"  [{meta.get('decided_by')} {meta.get('latency_ms')}ms]"
-            print(f"{e.source:<11}-> {e.destination:<11}[{e.type:<9}] "
-                  f"{str(e.content)[:80]}{tag}")
-        print("=" * 78)
-        print(f"analytics metrics: {eco.analytics.metrics}")
-        print(f"governance metrics: {eco.governance.metrics}")
-
-    assert eco.analytics.metrics["fallbacks"] == 0

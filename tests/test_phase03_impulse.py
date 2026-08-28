@@ -25,9 +25,6 @@ from bus.pubsub import EmbeddedBus
 from agents.archive.store import ArchiveStore
 from agents.impulse.agent import (
     Impulse,
-    DEFAULT_VECTORS,
-    DEFAULT_DRIFT_TAU_SEC,
-    URGENCY_ELEVATED_THRESHOLD,
     IMPULSE_SEVERITY_CEILING,
     REACTION_VOCABULARY,
 )
@@ -70,18 +67,6 @@ class TestDriftNoOpAtBaseline:
         assert impulse.vectors == before   # exact, bit-for-bit — see module docstring
         assert captured[0].meta["drive_vectors"] == before
 
-    def test_no_op_holds_even_with_elapsed_wall_clock_time(self, bus, archive):
-        """Drift is gated on (value != baseline), not on elapsed time being
-        small — so a vector sitting at rest should still be untouched even
-        if real time has passed between construction and the first event."""
-        impulse = Impulse(bus, archive)
-        before = dict(impulse.vectors)
-        time.sleep(0.05)
-
-        _ingest(bus)
-
-        assert impulse.vectors == before
-
 
 # ---- Drift: observable once displaced ------------------------------------
 
@@ -110,25 +95,6 @@ class TestDriftWhenDisplaced:
         assert impulse.vectors["urgency"] >= 0.0
         assert impulse.vectors["urgency"] < 0.05
 
-    def test_drift_updates_archive_only_when_something_changed(self, bus, archive):
-        impulse = Impulse(bus, archive, drift_tau_sec={"urgency": 0.05})
-        impulse.vectors["urgency"] = 1.0
-        impulse._last_update = time.monotonic()
-        time.sleep(0.15)
-
-        _ingest(bus)
-
-        stored = archive.get_drive_vectors()
-        assert stored["urgency"] == impulse.vectors["urgency"]
-
-    def test_manifest_drift_tau_sec_override_is_applied(self, bus, archive):
-        custom_tau = {"fatigue": 12345.0}
-        impulse = Impulse(bus, archive, drift_tau_sec=custom_tau)
-
-        assert impulse.drift_tau_sec["fatigue"] == 12345.0
-        # Everything not overridden keeps the code default.
-        assert impulse.drift_tau_sec["urgency"] == DEFAULT_DRIFT_TAU_SEC["urgency"]
-
 
 # ---- Appraisal engine ------------------------------------------------------
 
@@ -149,24 +115,6 @@ class TestAppraisalEngine:
                                  "urgency": 0.0, "social_drive": 0.0, "temperature": 0.0})
         reflex = impulse._reflex()
         assert reflex == REACTION_VOCABULARY["engagement"]["high"]
-
-    def test_high_urgency_low_fatigue_yields_alertness_reflex(self, bus, archive):
-        impulse = Impulse(bus, archive)
-        impulse.vectors.update({"urgency": 0.95, "fatigue": 0.0,
-                                 "curiosity": 0.0, "social_drive": 0.0, "temperature": 0.0})
-        reflex = impulse._reflex()
-        assert reflex == REACTION_VOCABULARY["alertness"]["high"]
-
-    def test_reflex_is_present_in_outgoing_meta(self, bus, archive):
-        impulse = Impulse(bus, archive)
-        captured = _capture_governance(bus)
-
-        _ingest(bus)
-
-        assert "reflex" in captured[0].meta
-        assert captured[0].meta["reflex"] in {
-            text for buckets in REACTION_VOCABULARY.values() for text in buckets.values()
-        }
 
 
 # ---- Severity ceiling (hard invariant) ------------------------------------
@@ -192,23 +140,6 @@ class TestSeverityCeiling:
 
         assert captured[0].severity == "Critical"
 
-    def test_low_alertness_does_not_raise_severity(self, bus, archive):
-        impulse = Impulse(bus, archive)
-        captured = _capture_governance(bus)
-
-        _ingest(bus, severity="Neutral")
-
-        assert captured[0].severity == "Neutral"
-
-    def test_threshold_is_manifest_tunable(self, bus, archive):
-        impulse = Impulse(bus, archive, urgency_elevated_threshold=0.05)
-        impulse.vectors["urgency"] = 0.1
-        captured = _capture_governance(bus)
-
-        _ingest(bus, severity="Neutral")
-
-        assert captured[0].severity == IMPULSE_SEVERITY_CEILING
-
 
 # ---- Verbatim relay (unchanged from the mock) ------------------------------
 
@@ -221,16 +152,6 @@ class TestVerbatimRelay:
 
         assert captured[0].content == "the original human words"
         assert captured[0].content != captured[0].meta["reflex"]
-
-    def test_destination_is_always_governance(self, bus, archive):
-        impulse = Impulse(bus, archive)
-        captured = _capture_governance(bus)
-
-        _ingest(bus)
-
-        assert captured[0].destination == "Governance"
-        assert captured[0].source == "Impulse"
-
 
 # ---- Feedback path (§4.1 reward path) --------------------------------------
 

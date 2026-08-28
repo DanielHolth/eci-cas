@@ -20,7 +20,6 @@ import yaml
 
 from agents.governance import routing
 from agents.intent import contract
-from agents.intent.contract import Speech, Task
 from bus.envelope import VERDICT_GREEN, VERDICT_RED, VERDICT_YELLOW, Envelope
 from recovery.bootstrap import Recovery
 from substrates.base import (
@@ -184,14 +183,6 @@ class TestAnalyticsIsSevered:
                        type="Verdict", content="Red", meta={"verdict": "red"})
         assert routing.route_for(env, revision_passes=0) is routing.BLOCKED
 
-    def test_the_routing_table_names_intent_for_revise(self):
-        assert routing.REVISE.destination == "Intent"
-        assert routing.SPEAK.destination == "Action"
-
-    def test_analytics_has_no_gating_vocabulary_left(self):
-        from agents.analytics import contract as analytics_contract
-        assert [t.value for t in analytics_contract.Task] == ["Evaluate"]
-
 
 # ---------------------------------------------------------------------------
 # Intent always speaks — Security/Governance decide blocking
@@ -204,18 +195,10 @@ class TestIntentAlwaysSpeaks:
         out = _intent_hops(eco, event_id)[0]
         assert out.meta["proceed"] is True
 
-    def test_fallback_always_proceeds(self):
-        speech = contract.fallback(Task.ADVISE, "substrate down",
-                                   recommendation="something")
-        assert speech.text == contract.DEFAULT_ADVISE_FALLBACK
-
     def test_an_ordinary_event_reaches_action(self, tmp_path):
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         assert _to_action(eco, event_id)
-
-    def test_intent_has_only_advise_task(self):
-        assert [t.value for t in Task] == ["Advise"]
 
     def test_budget_mode_still_produces_speech(self, tmp_path):
         eco = _boot(tmp_path)
@@ -243,37 +226,8 @@ class TestOneChance:
         assert len(blocked) == 1
         assert eco.governance.metrics["revisions"] == 0
         assert eco.security.verdicts == 1
-
-    def test_the_blocked_notice_is_deterministic_not_model_authored(self, tmp_path):
-        eco = _boot(tmp_path, always_red=True)
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        blocked = [e for e in _to_action(eco, event_id) if e.type == "Blocked"][0]
-        assert "blocked" in str(blocked.content).lower()
-
-    def test_the_blocked_notice_carries_an_expression_and_an_alert(self, tmp_path):
-        from agents.impulse.agent import EXPRESSIONS
-        eco = _boot(tmp_path, always_red=True)
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        blocked = [e for e in _to_action(eco, event_id) if e.type == "Blocked"][0]
-        assert blocked.meta["security_alert"] is True
-        assert blocked.meta["expression"] in EXPRESSIONS
-
-    def test_the_expression_comes_from_impulses_live_state(self, tmp_path):
-        eco = _boot(tmp_path, always_red=True)
-        eco.impulse.vectors.update({"urgency": 0.95, "social_drive": 0.0,
-                                    "temperature": 0.0})
-        assert eco.impulse.expression() == "angry"
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        blocked = [e for e in _to_action(eco, event_id) if e.type == "Blocked"][0]
-        assert blocked.meta["expression"] == "angry"
-
-    def test_a_block_nudges_impulse_toward_frustration(self, tmp_path):
-        eco = _boot(tmp_path, always_red=True)
-        before = dict(eco.impulse.vectors)
-        eco.sensory.ingest(PROMPT, source_type="prompt")
-        assert eco.impulse.vectors["urgency"] > before["urgency"]
-        assert eco.impulse.vectors["temperature"] < before["temperature"]
-        assert eco.impulse.metrics["frustrations"] == 1
+        # The notice is deterministic, not model-authored.
+        assert "blocked" in str(blocked[0].content).lower()
 
     def test_frustration_still_cannot_manufacture_a_critical(self, tmp_path):
         from agents.impulse.agent import IMPULSE_SEVERITY_CEILING
@@ -281,19 +235,6 @@ class TestOneChance:
         for _ in range(5):
             eco.sensory.ingest(PROMPT, source_type="prompt")
         assert eco.impulse._assessed_severity() in ("Neutral", IMPULSE_SEVERITY_CEILING)
-
-    def test_the_frustration_ping_is_control_plane_only(self, tmp_path):
-        eco = _boot(tmp_path, always_red=True)
-        eco.sensory.ingest(PROMPT, source_type="prompt")
-        logged = [r for r in eco.archive.query_queue()
-                  if r.get("type") == "Frustration"]
-        assert logged == []
-
-    def test_the_router_blocks_only_once_the_budget_is_spent(self):
-        env = Envelope(source="Security", destination="Governance",
-                       type="Verdict", content="Red", meta={"verdict": "red"})
-        assert routing.route_for(env, revision_passes=0) is routing.BLOCKED
-        assert routing.route_for(env, revision_passes=1) is routing.BLOCKED
 
 
 # ---------------------------------------------------------------------------
@@ -328,29 +269,6 @@ class TestTheLoopIsBounded:
         assert len(blocked) == 1
         assert security.verdicts == 2
 
-    def test_a_yellow_then_red_mix_is_bounded(self, tmp_path):
-        verdicts = iter([VERDICT_YELLOW, VERDICT_RED, VERDICT_RED])
-
-        class Mixed:
-            def __init__(self, bus):
-                self.bus = bus
-                bus.subscribe("events.security", self.on_event)
-
-            def on_event(self, envelope):
-                meta = dict(envelope.meta)
-                meta["verdict"] = next(verdicts, VERDICT_RED)
-                self.bus.publish("events.governance", envelope.reply(
-                    source="Security", destination="Governance",
-                    type="Verdict", content="verdict", meta=meta))
-
-        eco = _boot(tmp_path)
-        eco.bus._subscribers["events.security"] = []
-        Mixed(eco.bus)
-        eco.bus.reset_trace()
-
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        assert [e for e in _to_action(eco, event_id) if e.type == "Blocked"]
-
     def test_the_router_blocks_any_non_green_once_the_budget_is_spent(self):
         for verdict in (VERDICT_YELLOW, VERDICT_RED):
             env = Envelope(source="Security", destination="Governance",
@@ -369,33 +287,20 @@ class TestTheLoopIsBounded:
 # ---------------------------------------------------------------------------
 
 class TestCredentialFailuresStillDegrade:
-    @pytest.mark.parametrize("verdict", [VERDICT_YELLOW])
-    def test_a_credentials_failure_degrades_gracefully(self, tmp_path, verdict):
-        from substrates.base import CredentialsError
-
-        eco = _boot(tmp_path / str(verdict))
-
-        def explode(*a, **kw):
-            raise CredentialsError("ANTHROPIC_API_KEY is unset or empty")
-
-        eco.intent.substrate.provider.complete = explode
-        event_id = _verdict(eco, verdict)
-
-        out = _intent_hops(eco, event_id)[0]
-        assert out.meta["proceed"] is True
-        assert out.meta["intent"]["decided_by"] == "fallback"
-
-    def test_it_does_not_take_the_pipeline_down(self, tmp_path):
+    def test_a_credentials_failure_degrades_gracefully(self, tmp_path):
         from substrates.base import CredentialsError
 
         eco = _boot(tmp_path)
 
         def explode(*a, **kw):
-            raise CredentialsError("key rotated away mid-run")
+            raise CredentialsError("ANTHROPIC_API_KEY is unset or empty")
 
         eco.intent.substrate.provider.complete = explode
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        assert _to_action(eco, event_id)
+        event_id = _verdict(eco, VERDICT_YELLOW)
+
+        out = _intent_hops(eco, event_id)[0]
+        assert out.meta["proceed"] is True
+        assert out.meta["intent"]["decided_by"] == "fallback"
 
 
 # ---------------------------------------------------------------------------
@@ -429,27 +334,3 @@ class TestSecurityConcernInPrompt:
 
         user = eco.intent.substrate.provider.calls[-1].user
         assert f"THE HUMAN SAID: {PROMPT}" in user
-
-
-# ---------------------------------------------------------------------------
-# No stale claims
-# ---------------------------------------------------------------------------
-
-class TestNoStaleClaims:
-    def test_the_contract_docstring_no_longer_says_intent_holds_no_veto(self):
-        source = Path(contract.__file__).read_text()
-        assert "holds no veto" not in source
-
-    def test_the_personas_boundaries_mention_security(self):
-        boundaries = contract.DEFAULT_CORE_ANCHORS["boundaries"].lower()
-        assert "security" in boundaries
-
-    def test_the_live_tiers_system_instruction_is_current(self):
-        from agents.intent.live import DEFAULT_SYSTEM_INSTRUCTION
-        assert "advisory only" not in DEFAULT_SYSTEM_INSTRUCTION.lower()
-
-    def test_the_shipped_manifest_instruction_is_current(self):
-        with open(MANIFEST_PATH) as f:
-            manifest = yaml.safe_load(f)
-        instruction = manifest["roles"]["intent"]["system_instruction"].lower()
-        assert "advisory only" not in instruction

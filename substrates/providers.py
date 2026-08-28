@@ -290,16 +290,18 @@ class OpenAICompatibleProvider(LLMProvider):
 
     name = "openai-compatible"
 
+    #: model -> "max_tokens" | "max_completion_tokens". Learned the first
+    #: time a model 400s on the old name (see _is_max_tokens_rename_error
+    #: below). Class-level, not per-instance: every role gets its own
+    #: OpenAICompatibleProvider (registry.build_provider), so an
+    #: instance-level cache would rediscover (and reprint the NOTE for)
+    #: the same model once per role instead of once per process.
+    _token_param_by_model: Dict[str, str] = {}
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.unsupported_params: Set[str] = set()
         self._warned: Set[str] = set()
-        #: model -> "max_tokens" | "max_completion_tokens". Learned the
-        #: first time a model 400s on the old name (see
-        #: _is_max_tokens_rename_error above), so every call after the
-        #: first for that model sends the right key straight away instead
-        #: of paying for a failing round trip every time.
-        self._token_param_by_model: Dict[str, str] = {}
 
     def _note_dropped(self, dropped: Set[str]) -> None:
         self.unsupported_params |= dropped
@@ -354,6 +356,14 @@ class OpenAICompatibleProvider(LLMProvider):
             optional["stop"] = list(request.stop_sequences)
         if request.timeout_sec:
             optional["timeout"] = request.timeout_sec
+        reasoning_effort = self.options.get("reasoning_effort")
+        if reasoning_effort:
+            # Manifest-level dial (`options: {reasoning_effort: ...}`) for
+            # reasoning-capable models that default to a costly effort
+            # tier (often "medium") when unset — left off entirely for
+            # models/SDK builds that don't take it, via the same
+            # drop-and-report path as every other optional field.
+            optional["reasoning_effort"] = reasoning_effort
 
         kept, dropped = _split_supported(client.chat.completions.create, optional)
         if "max_tokens" in dropped:

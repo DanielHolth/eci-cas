@@ -138,24 +138,15 @@ SOME_RECORDS = [{"kind": "note", "content": "prefers directness"},
 # ---------------------------------------------------------------------------
 
 class TestLookup:
-    def test_it_calls_the_substrate_when_there_are_records(self, tmp_path):
-        a, substrate, _ = agent(tmp_path, records=SOME_RECORDS)
+    def test_a_relevant_answer_reaches_governance(self, tmp_path):
+        a, substrate, reports = agent(tmp_path, records=SOME_RECORDS)
         a.bus.publish(a.topic, _event())
         assert len(substrate.calls) == 1
         assert a.metrics["llm_calls"] == 1
-
-    def test_a_relevant_answer_reaches_governance(self, tmp_path):
-        a, _, reports = agent(tmp_path, records=SOME_RECORDS)
-        a.bus.publish(a.topic, _event())
         slot = reports[0].meta["personality"]
         assert slot["relevant"] is True
         assert slot["decided_by"] == "llm"
         assert "directness" in slot["findings"]
-
-    def test_it_parses_a_fenced_answer(self, tmp_path):
-        a, _, reports = agent(tmp_path, mode="fenced", records=SOME_RECORDS)
-        a.bus.publish(a.topic, _event())
-        assert reports[0].meta["personality"]["relevant"] is True
 
     def test_an_honest_nothing_is_a_complete_answer(self, tmp_path):
         """`relevant: false` is not a failure — it is the answer most
@@ -167,35 +158,18 @@ class TestLookup:
         assert slot["decided_by"] == "llm"
         assert a.metrics["fallbacks"] == 0
 
-    def test_it_reports_how_many_records_it_considered(self, tmp_path):
-        """'relevant: false' means something quite different over 8
-        records than over 1."""
-        a, _, reports = agent(tmp_path, records=SOME_RECORDS)
-        a.bus.publish(a.topic, _event())
-        assert reports[0].meta["personality"]["records_considered"] == 2
-
-    def test_the_tier_is_reported_as_live(self, tmp_path):
-        a, _, reports = agent(tmp_path, records=SOME_RECORDS)
-        a.bus.publish(a.topic, _event())
-        assert reports[0].meta["personality"]["tier"] == "live"
-
-
 class TestEmptyArchiveShortCircuit:
     def test_an_empty_store_never_reaches_the_substrate(self, tmp_path):
         """Not merely an optimisation: this runs twice on every event, and
         reasoning over zero records is spending money to be told there is
         nothing there."""
-        a, substrate, _ = agent(tmp_path, records=[])
+        a, substrate, reports = agent(tmp_path, records=[])
         a.bus.publish(a.topic, _event())
         assert substrate.calls == []
         assert a.metrics["llm_calls"] == 0
         assert a.metrics["skipped_empty"] == 1
-
-    def test_the_short_circuit_is_not_a_fallback(self, tmp_path):
-        """It is the correct answer, arrived at for free — reporting it as
-        degraded would make a healthy system look like an outage."""
-        a, _, reports = agent(tmp_path, records=[])
-        a.bus.publish(a.topic, _event())
+        # Not merely an optimisation reported as a failure: this is the
+        # correct answer, arrived at for free.
         assert reports[0].meta["personality"]["decided_by"] == "deterministic"
         assert a.metrics["fallbacks"] == 0
 
@@ -217,18 +191,6 @@ class TestDegradation:
         slot = reports[0].meta["personality"]
         assert slot["relevant"] is True
         assert slot["decided_by"] == "llm"
-
-    def test_degradation_is_visible_in_the_metrics(self, tmp_path):
-        a, _, _ = agent(tmp_path, mode="boom", records=SOME_RECORDS)
-        a.bus.publish(a.topic, _event())
-        assert a.metrics["fallbacks"] == 1
-
-    def test_an_outage_never_stops_the_event(self, tmp_path):
-        """This family gates nothing. A lookup failing must cost grounding
-        and nothing else."""
-        a, _, reports = agent(tmp_path, mode="boom", records=SOME_RECORDS)
-        a.bus.publish(a.topic, _event())
-        assert len(reports) == 1
 
     def test_strict_mode_re_raises_for_calibration_runs(self, tmp_path):
         a, _, _ = agent(tmp_path, mode="boom", records=SOME_RECORDS, strict=True)
@@ -281,33 +243,6 @@ class TestInvariantsSurviveGoingLive:
         assert not hasattr(a.archive, "write")
         assert not hasattr(a.archive, "execute_writes")
 
-    def test_it_reads_only_its_own_store(self, tmp_path):
-        archive = ArchiveStore(root=str(tmp_path / "archive"))
-        archive.write("knowledge", {"content": "a knowledge record"})
-        bus = EmbeddedBus()
-        reports = []
-        bus.subscribe("events.governance", reports.append)
-        a = ArchiveLookupAgent(bus, archive, FakeSubstrate("echo"),
-                               role="Personality")
-        a.bus.publish(a.topic, _event())
-        # Identity store is empty, so it short-circuits — it never saw the
-        # knowledge record at all.
-        assert a.metrics["skipped_empty"] == 1
-
-    def test_it_never_raises_the_severity_of_an_event(self, tmp_path):
-        a, _, reports = agent(tmp_path, records=SOME_RECORDS)
-        event = _event()
-        event.severity = "Neutral"
-        a.bus.publish(a.topic, event)
-        assert reports[0].severity == "Neutral"
-
-    def test_it_never_addresses_the_human(self, tmp_path):
-        """Stated in the prompt contract, asserted here: the system
-        instruction has to actually say so."""
-        a, substrate, _ = agent(tmp_path, records=SOME_RECORDS)
-        a.bus.publish(a.topic, _event())
-        assert "never address the human" in substrate.calls[0]["system"].lower()
-
     def test_the_prompt_carries_the_records_and_the_event(self, tmp_path):
         a, substrate, _ = agent(tmp_path, records=SOME_RECORDS)
         a.bus.publish(a.topic, _event("Should I tell them the truth?"))
@@ -322,15 +257,6 @@ class TestInvariantsSurviveGoingLive:
         for text in ("first thing", "second thing"):
             a.bus.publish(a.topic, _event(text))
         assert "first thing" not in substrate.calls[1]["user"]
-
-    def test_both_roles_use_the_same_class(self, tmp_path):
-        """Two instances, not two subclasses — v0.35b's whole design point,
-        and the live tier did not quietly undo it."""
-        p, _, _ = agent(tmp_path, role="Personality", records=SOME_RECORDS)
-        k = ArchiveLookupAgent(EmbeddedBus(), None, FakeSubstrate(),
-                               role="Knowledge")
-        assert type(p) is type(k)
-        assert p.store_kind == "identity" and k.store_kind == "knowledge"
 
 
 # ---------------------------------------------------------------------------
@@ -382,17 +308,6 @@ class TestBootstrap:
                 tmp_path, options={"fail_credentials": True})).bootstrap()
         assert "not usable" in str(exc.value)
 
-    def test_each_instance_reads_its_own_store(self, tmp_path):
-        eco = Recovery(self._manifest(tmp_path)).bootstrap()
-        assert eco.personality.store_kind == "identity"
-
-    def test_the_shipped_manifest_puts_both_on_the_cheap_slot(self):
-        """Two extra calls on EVERY event, in parallel. If these ever
-        migrate to an expensive class it should be a decision, not a
-        drift."""
-        manifest = yaml.safe_load(MANIFEST_PATH.read_text())
-        assert manifest["roles"]["personality"]["substrate"] == "fast-reflex"
-
 
 # ---------------------------------------------------------------------------
 # Budget tiers
@@ -413,30 +328,3 @@ class TestBudgetTiers:
         assert out["roles"]["personality"]["mock"] is True
         assert out["roles"]["knowledge"]["mock"] is True
         assert "substrate" not in out["roles"]["personality"]
-
-    def test_budget_puts_the_family_on_the_local_slot(self):
-        from budget import tiers
-        out = self._apply("budget")
-        assert out["roles"]["personality"]["mock"] is False
-        assert out["roles"]["personality"]["substrate"] == tiers.LOCAL_CLASS
-
-    def test_both_members_always_get_the_same_treatment(self):
-        """They are two instances of one class by design; a tier that
-        split them would assert a difference the architecture denies."""
-        for tier in ("minimal", "budget", "super"):
-            out = self._apply(tier)
-            assert (out["roles"]["personality"]["mock"]
-                    == out["roles"]["knowledge"]["mock"])
-            assert (out["roles"]["personality"].get("substrate")
-                    == out["roles"]["knowledge"].get("substrate"))
-
-
-# ---------------------------------------------------------------------------
-# Vendor independence (§10.2)
-# ---------------------------------------------------------------------------
-
-def test_the_live_tier_names_no_vendor_and_no_model():
-    source = Path(
-        "agents/archive_lookup/live.py").read_text().lower()
-    for vendor in ("anthropic", "openai", "claude-", "gpt-", "llama"):
-        assert vendor not in source

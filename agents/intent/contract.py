@@ -92,11 +92,9 @@ DEFAULT_CORE_ANCHORS: Dict[str, Any] = {
 
 @dataclass
 class PersonaState:
-    """Core Anchors + Evolving Trait Delta. Hydrated once and cached."""
+    """Core Anchors. Hydrated once and cached."""
 
     anchors: Dict[str, Any]
-    evolving_delta: str = ""
-    epoch_count: int = 0
 
     def render(self, *, max_chars: int = 1400) -> str:
         lines = [f"STANCE: {self.anchors.get('stance', '')}"]
@@ -106,8 +104,6 @@ class PersonaState:
         boundaries = self.anchors.get("boundaries")
         if boundaries:
             lines.append(f"BOUNDARIES: {boundaries}")
-        if self.evolving_delta:
-            lines.append(f"RECENT SELF (from consolidation): {self.evolving_delta}")
         text = "\n".join(lines)
         return text[:max_chars]
 
@@ -127,6 +123,10 @@ RULES:
 - Never start with "You asked", "You mentioned", "I think you're asking",
   or any paraphrase of what the human said.
 - Talk like a person, not a system explaining itself.
+- A Knowledge fact whose path starts with "system/" describes YOU (your
+  own name, traits, preferences) — never attribute it to the human. A
+  fact whose path starts with "person/" describes the human or someone
+  they've told you about.
 """
 
 

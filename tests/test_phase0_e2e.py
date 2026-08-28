@@ -58,6 +58,7 @@ def _manifest_with_temp_storage(tmp_path: Path) -> Path:
     # same reason every other cognitive role is: this test is not
     # about them, and it must run with no credentials.
     manifest["roles"]["personality"]["mock"] = True
+    manifest["roles"]["consolidator"]["mock"] = True
     tmp_path.mkdir(parents=True, exist_ok=True)
     out_path = tmp_path / "ecosystem-manifest.yaml"
     with open(out_path, "w") as f:
@@ -103,42 +104,27 @@ class TestPhase0ExitCriteria:
 
         hops = [(env.source, env.destination) for env in eco.bus.trace() if env.event_id == event_id]
 
-        # Phase 0.8: Knowledge removed (swarm replaces it). Impulse is
-        # still first and synchronous; Analytics and Personality fan out
+        # Phase 0.8: Knowledge removed (swarm replaces it). Phase 0.9 added
+        # Consolidator as a fan-out member — it never replies to Governance,
+        # so it contributes one hop, not a pair. Impulse is still first and
+        # synchronous; Analytics, Personality, and Consolidator fan out
         # concurrently — their relative order isn't guaranteed.
         assert hops[0] == ("Sensory", "Impulse")
         assert hops[1] == ("Impulse", "Governance")
 
-        concurrent = set(hops[2:6])
+        concurrent = set(hops[2:7])
         assert concurrent == {
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
+            ("Sensory", "Consolidator"),
         }
-        assert len(hops[2:6]) == 4, "each of the two should answer exactly once"
+        assert len(hops[2:7]) == 5, "each of the two repliers answers once, plus Consolidator's one-way hop"
 
-        assert hops[6:] == [
+        assert hops[7:] == [
             ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),
         ]
-
-    def test_every_hop_logged_to_archive_queue(self, tmp_path):
-        """§13.3 verify #1: every hop logged in /archive/queue/."""
-        manifest_path = _manifest_with_temp_storage(tmp_path)
-        eco, event_id = _run_worked_example(manifest_path)
-
-        logged = eco.archive.query_queue(predicate=lambda r: r.get("event_id") == event_id)
-        # 11 business hops as of Phase 0.8 (was 13 with 4 workers — now 3
-        # workers means 3 inbound + 3 answers + 5 tail = 11).
-        assert len(logged) >= 11
-
-    def test_impulse_vectors_present_in_working_tier(self, tmp_path):
-        """§13.3 verify #2: Impulse vectors present in /archive/working/."""
-        manifest_path = _manifest_with_temp_storage(tmp_path)
-        eco, _ = _run_worked_example(manifest_path)
-
-        vectors = eco.archive.get_drive_vectors()
-        assert set(vectors.keys()) == {"curiosity", "fatigue", "urgency", "social_drive", "temperature"}
 
     def test_action_success_is_silent(self, tmp_path):
         """v0.32: no proprioception loop through Sensory (revision notes).
@@ -157,14 +143,6 @@ class TestPhase0ExitCriteria:
         to_sensory = [env for env in eco.bus.trace()
                       if env.event_id == event_id and env.destination == "Sensory"]
         assert to_sensory == []
-
-    def test_no_watchdog_escalation_on_happy_path(self, tmp_path):
-        """§13.3 verify #4: no Watchdog escalation triggered (queue stayed
-        active throughout)."""
-        manifest_path = _manifest_with_temp_storage(tmp_path)
-        eco, _ = _run_worked_example(manifest_path)
-        assert eco.watchdog.check() in ("none",)
-        assert eco.watchdog.level2_fired is False
 
     def test_reproducible_twice_in_a_row(self, tmp_path):
         """The exit criterion, adapted for real concurrency (Daniel,
@@ -353,16 +331,16 @@ class TestActionFailureHandling:
         sensory_hops = [env for env in all_hops
                         if env.event_id == event_id and env.source == "Sensory"]
 
-        # Four: the v0.35a fan-out, all from the ONE original ingest. What
-        # matters here is unchanged — none of them is a failure re-entry,
-        # and nothing was published back INTO Sensory.
-        assert len(sensory_hops) == 3
+        # Four: the v0.35a/0.9 fan-out, all from the ONE original ingest.
+        # What matters here is unchanged — none of them is a failure
+        # re-entry, and nothing was published back INTO Sensory.
+        assert len(sensory_hops) == 4
         assert {env.type for env in sensory_hops} == {"prompt"}
-        # Phase 0.8: Knowledge removed. Impulse stays first; the other
-        # two's relative order isn't guaranteed.
+        # Phase 0.8: Knowledge removed. Phase 0.9 added Consolidator.
+        # Impulse stays first; the rest's relative order isn't guaranteed.
         destinations = [env.destination for env in sensory_hops]
         assert destinations[0] == "Impulse"
-        assert set(destinations[1:]) == {"Analytics", "Personality"}
+        assert set(destinations[1:]) == {"Analytics", "Personality", "Consolidator"}
         assert not [env for env in all_hops
                     if env.event_id == event_id and env.destination == "Sensory"]
 

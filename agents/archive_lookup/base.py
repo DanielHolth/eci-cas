@@ -60,6 +60,17 @@ ROLE_TOPICS: Dict[str, str] = {
     "Knowledge": "events.knowledge",
 }
 
+#: Roles backed by StructuredStore instead of the legacy JSON ArchiveStore
+#: (Phase 0.9). Personality's own record is tiny — one persona's worth of
+#: facts, never a whole family's — so it never needs the swarm's path
+#: fan-out or relevance ranking Knowledge uses; one fixed category/topic
+#: slice is the entire contract. Consolidator writing to this slice is a
+#: separate, not-yet-implemented change — this just gives it somewhere to
+#: land.
+STRUCTURED_LOOKUP_PATHS: Dict[str, Dict[str, str]] = {
+    "Personality": {"kind": "identity", "category": "Personality", "topic": "profile 1"},
+}
+
 DEFAULT_BRIEFS: Dict[str, str] = {
     "Personality": (
         "You look up who this persona has been. Report anything in its "
@@ -100,6 +111,31 @@ class _ReadOnlyArchive:
         return "<_ReadOnlyArchive>"
 
 
+class _ReadOnlyStructuredArchive:
+    """Query-only view of StructuredStore, fixed to one category/topic
+    slice (Phase 0.9). Same `query(kind, predicate=None, limit=None)`
+    shape as `_ReadOnlyArchive` so `records()` below doesn't need to know
+    which kind of store it's talking to; `predicate` is accepted and
+    ignored since a fixed category/topic slice has no need for it."""
+
+    __slots__ = ("_store", "_kind", "_category", "_topic")
+
+    def __init__(self, store, kind: str, category: str, topic: str):
+        self._store = store
+        self._kind = kind
+        self._category = category
+        self._topic = topic
+
+    def query(self, kind: str, predicate=None, limit: Optional[int] = None):
+        if self._store is None:
+            return []
+        return self._store.query(self._kind, category=self._category,
+                                  topic=self._topic, limit=limit)
+
+    def __repr__(self) -> str:  # pragma: no cover - debug aid
+        return f"<_ReadOnlyStructuredArchive {self._category}/{self._topic}>"
+
+
 class ArchiveLookupBase:
     """Bus-facing half of one archive-grounded lookup agent.
 
@@ -112,7 +148,8 @@ class ArchiveLookupBase:
                  store_kind: Optional[str] = None,
                  topic: Optional[str] = None,
                  brief: str = "",
-                 query_limit: int = contract.DEFAULT_QUERY_LIMIT):
+                 query_limit: int = contract.DEFAULT_QUERY_LIMIT,
+                 structured_store=None):
         if role not in ROLE_STORES and store_kind is None:
             raise ValueError(
                 f"Unknown archive-lookup role '{role}' and no store_kind given. "
@@ -124,8 +161,18 @@ class ArchiveLookupBase:
         self.brief = brief or DEFAULT_BRIEFS.get(role, "")
         self.query_limit = int(query_limit)
 
-        #: Read-only by construction — see _ReadOnlyArchive.
-        self.archive = _ReadOnlyArchive(archive)
+        #: Read-only by construction — see _ReadOnlyArchive /
+        #: _ReadOnlyStructuredArchive. A structured-lookup role only gets
+        #: the structured view when a store was actually handed in;
+        #: otherwise it falls back to the legacy archive like every other
+        #: role (keeps this constructible offline, same as before).
+        structured_path = STRUCTURED_LOOKUP_PATHS.get(role)
+        if structured_path and structured_store is not None:
+            self.archive = _ReadOnlyStructuredArchive(
+                structured_store, structured_path["kind"],
+                structured_path["category"], structured_path["topic"])
+        else:
+            self.archive = _ReadOnlyArchive(archive)
 
         self.metrics: Dict[str, int] = {
             "events": 0, "relevant": 0, "silent": 0,
@@ -192,4 +239,5 @@ class ArchiveLookupBase:
         return out
 
 
-__all__ = ["ArchiveLookupBase", "ROLE_STORES", "ROLE_TOPICS", "DEFAULT_BRIEFS"]
+__all__ = ["ArchiveLookupBase", "ROLE_STORES", "ROLE_TOPICS",
+           "STRUCTURED_LOOKUP_PATHS", "DEFAULT_BRIEFS"]

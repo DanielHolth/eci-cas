@@ -32,6 +32,10 @@ FAN_OUT = (
     ("Impulse", "events.impulse"),
     ("Analytics", "events.analytics"),
     ("Personality", "events.personality"),
+    # Phase 0.9: Consolidator moved here from a Governance-fed batch
+    # buffer — it gets the same raw event as the other archive-grounded
+    # workers and writes facts immediately, never replying to Governance.
+    ("Consolidator", "events.consolidator"),
 )
 
 #: The subset of FAN_OUT dispatched concurrently (2026-08-25, Daniel) —

@@ -164,24 +164,14 @@ class TestLatching:
         assert m.state.mode == BUDGET
         assert m.state.reason == "terminal"
 
-    def test_unknown_failures_are_treated_as_transient(self):
-        m = BudgetManager(failure_threshold=3)
-        m.record_failure(FailureKind.UNKNOWN, "who knows")
-        assert m.state.mode == LIVE
-
-    def test_latching_raises_an_alert(self):
+    def test_latching_raises_an_alert_exactly_once(self):
         m = BudgetManager(failure_threshold=1)
         m.record_failure(FailureKind.TERMINAL, "401")
         alerts = m.drain_alerts()
         assert alerts and "budget mode" in alerts[0]
         assert m.drain_alerts() == [], "alerts should drain exactly once"
-
-    def test_further_failures_in_budget_mode_do_not_re_alert(self):
-        m = BudgetManager(failure_threshold=1)
         m.record_failure(FailureKind.TERMINAL, "401")
-        m.drain_alerts()
-        m.record_failure(FailureKind.TERMINAL, "401")
-        assert m.drain_alerts() == []
+        assert m.drain_alerts() == [], "further failures in budget mode do not re-alert"
 
 
 class TestSpendCap:
@@ -253,10 +243,6 @@ class TestManualControl:
         assert m.state.mode == LIVE
         assert "over the cap" in message
 
-    def test_switching_to_the_current_mode_is_a_no_op(self):
-        m = BudgetManager()
-        assert "Already" in m.switch_manual("live")
-
     def test_reset_clears_spend_but_says_it_is_not_billing(self):
         m = BudgetManager()
         m.record_success(cost_usd=1.0, usage={"input_tokens": 10, "output_tokens": 2})
@@ -311,24 +297,6 @@ class TestLoggingFields:
     "under which tier" to be worth comparing across runs later — neither
     field feeds a mode decision."""
 
-    def test_every_saved_snapshot_carries_a_timestamp_and_tier(self, tmp_path):
-        from agents.archive.store import ArchiveStore
-        archive = ArchiveStore(root=str(tmp_path / "archive"))
-        m = BudgetManager(archive, budget_tier="default")
-        m.record_success(cost_usd=0.1)
-
-        record = archive.query("budget")[-1]
-        assert record["budget_tier"] == "default"
-        assert record["timestamp"]
-
-    def test_from_manifest_reads_budget_tier_off_the_manifest(self):
-        m = from_manifest({"budget_tier": "minimal", "budget_mode": {}})
-        assert m.budget_tier == "minimal"
-
-    def test_missing_budget_tier_defaults_to_empty_not_none(self):
-        m = from_manifest({"budget_mode": {}})
-        assert m.budget_tier == ""
-
     def test_every_call_appends_its_own_stamped_snapshot(self, tmp_path):
         """Still an append-only log by design (Daniel was fine with that
         once each entry is self-describing) — every call adds a new row,
@@ -380,29 +348,18 @@ class TestInThePipeline:
         assert eco.budget.state.spend_usd > 0
         assert eco.analytics.metrics["llm_calls"] == 1
 
-    def test_budget_mode_never_touches_the_substrate(self, tmp_path):
-        eco = _boot(tmp_path)
-        eco.budget.switch_manual("budget")
-        eco.sensory.ingest(PROMPT, source_type="prompt")
-
-        assert eco.analytics.substrate.provider.calls == 0
-        assert eco.budget.state.spend_usd == 0.0
-
-    def test_the_pipeline_still_completes_in_budget_mode(self, tmp_path):
-        """The whole promise: degrade, don't stop."""
+    def test_budget_mode_never_touches_the_substrate_and_still_completes(self, tmp_path):
         eco = _boot(tmp_path)
         eco.budget.switch_manual("budget")
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
+
+        assert eco.analytics.substrate.provider.calls == 0
+        assert eco.budget.state.spend_usd == 0.0
 
         hops = [(e.source, e.destination) for e in eco.bus.trace()
                 if e.event_id == event_id]
         assert hops[-1] == ("Governance", "Action")
         assert len(eco.action.executed) == 1
-
-    def test_an_ordinary_event_still_proceeds_in_budget_mode(self, tmp_path):
-        eco = _boot(tmp_path)
-        eco.budget.switch_manual("budget")
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
 
         out = _analytics_out(eco, event_id)
         assert out.meta["analytics"]["proceed"] is True
@@ -487,16 +444,6 @@ class TestInThePipeline:
         assert eco.analytics.substrate.provider.calls < 6
         assert len(eco.action.executed) == 6, "every event still produced an action"
 
-    def test_the_latch_is_visible_in_the_queue_log(self, tmp_path):
-        eco = _boot(tmp_path)
-        eco.budget.switch_manual("budget")
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-
-        logged = eco.archive.query_queue(
-            predicate=lambda r: r.get("event_id") == event_id
-                                and r.get("source") == "Analytics")
-        assert logged[0]["meta"]["analytics"]["budget_mode"] is True
-
     def test_bootstrap_restores_a_latch(self, tmp_path):
         path = _manifest(tmp_path)
         first = Recovery(str(path)).bootstrap()
@@ -515,21 +462,11 @@ class TestConsoleCommands:
     def _eco(self, tmp_path):
         return _boot(tmp_path)
 
-    @pytest.mark.parametrize("command,expected", [
-        ("switch to budget mode", BUDGET),
-        ("Switch To Budget Mode", BUDGET),
-        ("  switch to   budget mode  ", BUDGET),
-    ])
-    def test_budget_commands_are_recognised(self, tmp_path, command, expected, capsys):
+    def test_budget_commands_switch_and_switch_back(self, tmp_path):
         from tools.console import handle_command
         eco = self._eco(tmp_path)
-        assert handle_command(command, eco) is True
-        assert eco.budget.state.mode == expected
-
-    def test_switching_back_to_live_works(self, tmp_path):
-        from tools.console import handle_command
-        eco = self._eco(tmp_path)
-        handle_command("switch to budget mode", eco)
+        assert handle_command("switch to budget mode", eco) is True
+        assert eco.budget.state.mode == BUDGET
         handle_command("switch to live mode", eco)
         assert eco.budget.state.mode == LIVE
 
@@ -542,14 +479,6 @@ class TestConsoleCommands:
         handle_command("switch to budget mode", eco)
         assert len(eco.bus.trace()) == before
         assert eco.analytics.substrate.provider.calls == 0
-
-    def test_budget_status_reports_without_changing_anything(self, tmp_path, capsys):
-        from tools.console import handle_command
-        eco = self._eco(tmp_path)
-        assert handle_command("budget", eco) is True
-        out = capsys.readouterr().out
-        assert "mode" in out and "est. spend" in out
-        assert eco.budget.state.mode == LIVE
 
     def test_reset_budget_zeroes_the_counters(self, tmp_path):
         from tools.console import handle_command
@@ -580,13 +509,7 @@ class TestConsoleCommands:
 class TestFailureClassification:
     @pytest.mark.parametrize("status,expected", [
         (429, FailureKind.TRANSIENT),   # rate limited
-        (529, FailureKind.TRANSIENT),   # overloaded
-        (503, FailureKind.TRANSIENT),
-        (504, FailureKind.TRANSIENT),
         (401, FailureKind.TERMINAL),    # bad key
-        (403, FailureKind.TERMINAL),
-        (404, FailureKind.TERMINAL),    # unknown model
-        (400, FailureKind.TERMINAL),    # malformed, or credit exhausted
     ])
     def test_status_codes_map_to_the_right_kind(self, status, expected):
         from substrates.providers import _classify

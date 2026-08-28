@@ -133,6 +133,13 @@ use it to convert agents incrementally.
 
 - **Architecture preserved**: All 11 agents keep their IAgent contracts, pub-sub
   topology, and budget-tier routing.
+- **Interfaces to the max**: every seam an agent has today (substrate, archive,
+  structured store, budget, bus) becomes an explicit C# interface, not just a
+  duck-typed Python object. Agents themselves should end up as thin
+  description/wiring layers over injected interface implementations — the
+  reasoning-vs-mechanism split already used for Consolidator's `writes`
+  contract, taken to every agent, for loose coupling, modularity, and
+  reusability across tiers (mock/live) and even across projects (avatar app).
 - **Build order TBD**: Start with leaf agents (deterministic, few dependencies),
   work up to orchestrators (Governance, Intent).
 - **Testing parity**: Each C# agent must pass the same phase-numbered test suite

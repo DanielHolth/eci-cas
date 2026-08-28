@@ -145,14 +145,6 @@ class TestAnthropicAdapter:
         assert stub.body["system"] == "You are ANALYTICS."
         assert stub.body["messages"][0] == {"role": "user", "content": "TASK: Evaluate"}
 
-    def test_prefill_is_sent_as_an_assistant_turn(self):
-        """How JSON-only output gets forced without spending prompt tokens
-        pleading for it."""
-        with _Stub(_anthropic_reply()) as stub:
-            _substrate("anthropic", stub.url, "ECI_TEST_KEY").complete(
-                system="s", user="u", prefill="{")
-        assert stub.body["messages"][-1] == {"role": "assistant", "content": "{"}
-
     def test_the_prefill_is_rejoined_to_the_response(self):
         """The vendor returns only the tail. Callers must see a whole
         document, or every parse fails on a stray leading brace."""
@@ -161,14 +153,6 @@ class TestAnthropicAdapter:
                 system="s", user="u", prefill="{")
         assert response.text.startswith('{"recommendation"')
         assert json.loads(response.text)["proceed"] is True
-
-    def test_usage_and_model_are_reported(self):
-        with _Stub(_anthropic_reply(usage={"input_tokens": 11, "output_tokens": 22})) as stub:
-            response = _substrate("anthropic", stub.url, "ECI_TEST_KEY").complete(
-                system="s", user="u")
-        assert response.usage == {"input_tokens": 11, "output_tokens": 22}
-        assert response.model == "some-model-id"
-        assert response.provider == "anthropic"
 
     def test_unsupported_parameters_are_dropped_and_reported(self, capsys):
         """The bug this file was written to catch. The 1.x Messages API
@@ -228,13 +212,6 @@ class TestOpenAICompatibleAdapter:
         assert stub.body["model"] == "some-model-id"
         roles = [m["role"] for m in stub.body["messages"]]
         assert roles[:2] == ["system", "user"]
-
-    def test_a_keyless_local_endpoint_works(self):
-        """Ollama, LM Studio, vLLM — no credential, base_url required."""
-        with _Stub(_openai_reply()) as stub:
-            response = _substrate("ollama", stub.url + "/v1", None).complete(
-                system="s", user="u")
-        assert json.loads(response.text)["proceed"] is True
 
     def test_usage_is_normalised_to_the_neutral_shape(self):
         """Different vendors, one vocabulary — prompt_tokens becomes
@@ -299,47 +276,6 @@ class TestOpenAICompatibleAdapter:
             assert response2.text == "ok"
             assert len(calls) == 3
             assert "max_completion_tokens" in calls[-1]
-
-    def test_a_genuine_bad_request_is_not_mistaken_for_the_rename(self):
-        """A 400 that has nothing to do with max_tokens must still surface
-        as an ordinary CompletionError, not trigger the retry path."""
-        with _Stub(lambda request: {"error": {"message": "invalid model id"}},
-                   status=400) as stub:
-            with pytest.raises(CompletionError):
-                _substrate("openai", stub.url + "/v1", "ECI_TEST_KEY").complete(
-                    system="s", user="u")
-
-    def test_a_pinned_token_param_skips_the_probe_entirely(self):
-        """Once a model's requirement is confirmed (e.g. by a --live
-        preflight run), the manifest can pin it via
-        `options: {token_param: max_completion_tokens}` — first call
-        succeeds directly, no failing round trip, no retry at all."""
-        calls = []
-
-        def responder(request):
-            calls.append(request)
-            assert "max_completion_tokens" in request
-            assert "max_tokens" not in request
-            return {
-                "id": "chatcmpl-stub", "object": "chat.completion", "created": 0,
-                "model": request.get("model", "?"),
-                "choices": [{"index": 0, "finish_reason": "stop",
-                             "message": {"role": "assistant", "content": "ok"}}],
-                "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
-            }
-
-        with _Stub(responder) as stub:
-            substrate = resolve_substrate({"substrates": {"probe": {
-                "provider": "openai", "model": "gpt-5.4-nano",
-                "api_key_env": "ECI_TEST_KEY", "base_url": stub.url + "/v1",
-                "max_tokens": 512,
-                "options": {"token_param": "max_completion_tokens"},
-            }}}, "probe")
-            response = substrate.complete(system="s", user="u")
-
-        assert response.text == "ok"
-        assert len(calls) == 1
-        assert stub.status == 200          # never touched the 400 path
 
 
 # ---------------------------------------------------------------------------

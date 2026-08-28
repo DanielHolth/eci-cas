@@ -71,14 +71,11 @@ class Governance:
 
     def __init__(self, bus: EmbeddedBus, *,
                  expected_workers: Optional[Set[str]] = None,
-                 consolidator=None, impulse=None,
+                 impulse=None,
                  structured_store=None, budget_tier: str = "default"):
         self.bus = bus
         #: The four parallel answers this router waits for (v0.35a).
         self.buffer = BundleBuffer(expected_workers or DEFAULT_WORKERS)
-        #: Where a concluded event's record goes (v0.35g). Optional — a
-        #: harness without a Consolidator simply doesn't consolidate.
-        self.consolidator = consolidator
         #: Read-only use: the blocked incident asks Impulse for the
         #: expression its CURRENT appraisal state implies. Governance
         #: never sets a drive vector itself; the frustration nudge goes
@@ -389,8 +386,15 @@ class Governance:
                 paths = analytics.get("knowledge_paths") or []
                 if paths:
                     from agents.governance.knowledge_swarm import retrieve_per_path, format_for_intent
+                    # Analytics already did the semantic work of matching
+                    # loose phrasing ("kids") to the stored vocabulary
+                    # ("children") when it picked these paths — reuse that
+                    # keyword line here rather than re-deriving a weaker,
+                    # literal-only signal from the raw input alone.
+                    query = f"{state.sensory} {analytics.get('recommendation', '')}"
                     per_path_results = retrieve_per_path(
-                        self._structured_store, paths, tier=self._budget_tier)
+                        self._structured_store, paths, tier=self._budget_tier,
+                        query=query)
                     all_results = []
                     swarm_detail = []
                     for path, records in per_path_results:
@@ -398,15 +402,11 @@ class Governance:
                         swarm_detail.append({
                             "path": path,
                             "count": len(records),
-                            "sample": [
-                                f"{r.get('key','')}={r.get('value','')}"
-                                for r in records[:5]
-                            ],
+                            "detail": format_for_intent(records),
                         })
                     if all_results:
                         swarm_text = format_for_intent(all_results)
                         meta["knowledge_swarm"] = swarm_text
-                        meta["knowledge_swarm_count"] = len(all_results)
                         meta["knowledge_swarm_detail"] = swarm_detail
                         from agents.shared.recommendation import RecommendationEntry
                         recs = meta.get("recommendations", [])
@@ -524,24 +524,19 @@ class Governance:
                 return
 
     def _conclude(self, state: EventState) -> None:
-        """Action has run. Hand Consolidator the one bundle per event the
-        v0.35g design settled on, then forget the event.
+        """Action has run. Release the buffered bundle and forget the event.
 
-        This is the hand-off that replaced two rejected designs: a direct
-        Consolidator subscription to the Sensory fan-out (which couldn't
-        know pipeline-final information), and three incremental hand-offs
-        per event (which paid the fixed prompt overhead three times for a
-        component whose whole design point is running rarely)."""
+        Phase 0.9: Consolidator no longer waits on this — it reads the raw
+        Sensory envelope directly, as a fifth fan-out member alongside
+        Analytics/Personality (`agents/sensory/agent.py`), so it has
+        nothing left to be handed here."""
         if self.buffer.peek(state.event_id) is None:
             # Already concluded — see the note at the call site. An Action
             # failure re-enters synchronously and concludes the event
             # before the outer frame returns.
             return
-        record = state.consolidation_record()
         self.buffer.release(state.event_id)
         self.metrics["concluded"] += 1
-        if self.consolidator is not None:
-            self.consolidator.observe(record)
 
 
 #: Retired alias. Phase 0 had a mock/real split for this role; v0.34

@@ -54,7 +54,8 @@ class ArchiveLookupAgent(ArchiveLookupBase):
                  temperature: float = 0.2,
                  max_tokens: Optional[int] = None,
                  strict: bool = False,
-                 budget=None):
+                 budget=None,
+                 structured_store=None):
         self.substrate = substrate
         self.budget = budget
         self.system_instruction = (
@@ -66,7 +67,8 @@ class ArchiveLookupAgent(ArchiveLookupBase):
         #: production: a substrate outage must not stop the pipeline.
         self.strict = bool(strict)
         super().__init__(bus, archive, role=role, store_kind=store_kind,
-                         topic=topic, brief=brief, query_limit=query_limit)
+                         topic=topic, brief=brief, query_limit=query_limit,
+                         structured_store=structured_store)
         self.metrics.setdefault("skipped_empty", 0)
 
     # ---- The judgment -----------------------------------------------------

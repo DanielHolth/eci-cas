@@ -29,17 +29,20 @@ vocabulary.
 
 What lives here rather than in either tier
 -------------------------------------------
-  The persona CACHE (v0.35g). Core Anchors + Evolving Trait Delta are
-  hydrated once at construction and held in memory. Phase 0.4 called
-  hydrate() — and therefore archive.query("identity") — on every single
-  voicing call; that per-event Archive read is gone. Anchors don't change
-  between consolidation cycles, and Personality (v0.35b) now supplies the
-  per-event, situationally-relevant identity context Intent used to fetch
-  for itself. The cache is refreshed on exactly one signal: Consolidator's
-  `EpochWritten` ping on system.control, published right after it writes
-  a new epoch. That ping is the ONLY coupling between the two agents —
-  no shared mutable state, no direct references; the one shared durable
-  thing is Archive, written only by Consolidator.
+  The persona CACHE. Core Anchors are hydrated once at construction and
+  held in memory. Phase 0.4 called hydrate() — and therefore
+  archive.query("identity") — on every single voicing call; that
+  per-event Archive read is gone. Anchors don't change at runtime, and
+  Personality (v0.35b) now supplies the per-event, situationally-relevant
+  identity context Intent used to fetch for itself.
+
+  (Phase 0.4 through 0.8 also carried an "Evolving Trait Delta" here —
+  a digest of Consolidator's batch epochs, re-hydrated on an
+  `EpochWritten` control-plane ping. Phase 0.9 turned Consolidator into a
+  per-event fact writer with no epochs at all, which left the digest
+  permanently empty and the ping permanently unfired — an unintended
+  side effect, not a design decision. Removed in Phase 0.9.1 rather than
+  left as dead code.)
 
   The conversation window. The temp log is the only cross-event state in
   the system, and under v0.35c it is also what gives Intent the broader
@@ -66,11 +69,6 @@ from bus.pubsub import EmbeddedBus
 from agents.intent import contract
 from agents.intent.contract import PersonaState, Speech, Task
 
-#: How many prior epochs feed the Evolving Trait Delta digest. Small and
-#: bounded (§1's flat-cost claim) — though as of v0.35g this is read once
-#: per consolidation cycle rather than once per event.
-RECENT_EPOCHS_FOR_HYDRATION = 3
-
 #: Default conversation window, in whole concluded events. Overridden per
 #: budget tier (budget/tiers.py) — see the module docstring.
 DEFAULT_CONTEXT_EVENTS = 10
@@ -81,40 +79,16 @@ DEFAULT_CONTEXT_EVENTS = 10
 TEMP_LOG_MAXLEN = 200
 
 
-def is_epoch_record(record: Dict[str, Any]) -> bool:
-    """True for a consolidation epoch, false for the anchors record and
-    for Consolidator's identity NOTES (v0.35g's knowledge-style writes
-    into the identity store).
-
-    Phase 0.4 epochs carry no `kind` field at all, so absence means
-    epoch — this stays readable against archives written before v0.35."""
-    kind = record.get("kind")
-    return kind is None or kind == "epoch"
-
-
 class IntentBase:
     """Bus-facing half of Intent. Subclass and implement voice()."""
 
     tier = "base"
 
     def __init__(self, bus: EmbeddedBus, archive, *,
-                 context_events: int = DEFAULT_CONTEXT_EVENTS,
-                 consolidator=None):
+                 context_events: int = DEFAULT_CONTEXT_EVENTS):
         self.bus = bus
         self.archive = archive
         self.context_events = max(0, int(context_events))
-        #: Deliberately unused, and kept as a named no-op rather than
-        #: removed silently.
-        #:
-        #: v0.35f's first cut had Intent hand each concluded event to
-        #: Consolidator directly, in-process, because the fan-out didn't
-        #: exist yet. Under the full v0.35a/c/g topology that is
-        #: GOVERNANCE's job — one bundle per event, sent once Action
-        #: completes, carrying the Security outcome an Intent-side
-        #: hand-off could never know. Intent hands over nothing, and the
-        #: two agents share no reference at all (v0.35f: "no shared
-        #: mutable state").
-        self.consolidator = consolidator
 
         #: The conversation window's backing store (§7.2's ephemeral
         #: provisional ledger). In memory, not Archive: the spec is
@@ -124,16 +98,15 @@ class IntentBase:
 
         self.metrics: Dict[str, int] = {
             "events": 0, "advised": 0,
-            "llm_calls": 0, "fallbacks": 0, "rehydrations": 0,
+            "llm_calls": 0, "fallbacks": 0,
         }
 
         self.ensure_anchors_seeded()
-        #: The persona cache (v0.35g). Hydrated once here; refreshed only
-        #: on Consolidator's EpochWritten ping.
+        #: The persona cache. Hydrated once here; Core Anchors don't
+        #: change at runtime, so there is nothing to re-hydrate on.
         self._persona: PersonaState = self.hydrate()
 
         self.bus.subscribe("events.intent", self.on_event)
-        self.bus.subscribe("system.control", self.on_control)
 
     # ---- Persona (§5.5, §7.1) ----------------------------------------------
 
@@ -157,14 +130,10 @@ class IntentBase:
         })
 
     def hydrate(self) -> PersonaState:
-        """Core Anchors (fixed) + a recency-weighted digest of the most
-        recent consolidation deltas (§7.1).
-
-        Called ONCE at construction and again only on EpochWritten — never
-        per event (v0.35g). See the module docstring."""
+        """Core Anchors, read from Archive. Called once at construction —
+        nothing invalidates the cache at runtime, since anchors are
+        static once seeded."""
         anchors = dict(contract.DEFAULT_CORE_ANCHORS)
-        evolving_delta = ""
-        epoch_count = 0
 
         if self.archive is not None:
             records = self.archive.query("identity")
@@ -172,33 +141,13 @@ class IntentBase:
             if anchor_records:
                 anchors = anchor_records[-1].get("anchors", anchors)
 
-            epochs = [r for r in records if is_epoch_record(r)]
-            epoch_count = len(epochs)
-            fragments: List[str] = []
-            for epoch in epochs[-RECENT_EPOCHS_FOR_HYDRATION:]:
-                for delta in epoch.get("deltas", []):
-                    rationale = delta.get("rationale")
-                    if rationale:
-                        fragments.append(str(rationale))
-            evolving_delta = " ".join(fragments)[:800]
-
-        return PersonaState(anchors=anchors, evolving_delta=evolving_delta,
-                            epoch_count=epoch_count)
+        return PersonaState(anchors=anchors)
 
     @property
     def persona(self) -> PersonaState:
         """The cached persona. Every live call reads this; none of them
-        touch Archive (v0.35g)."""
+        touch Archive."""
         return self._persona
-
-    def on_control(self, envelope: Envelope) -> None:
-        """Control plane. Consolidator says it wrote an epoch; the cached
-        persona is now one cycle stale, so re-read it — once, here, rather
-        than on every voicing call."""
-        if envelope.type != "EpochWritten" or envelope.destination != "Intent":
-            return
-        self._persona = self.hydrate()
-        self.metrics["rehydrations"] += 1
 
     # ---- Conversation window (v0.35c) --------------------------------------
 
@@ -269,5 +218,4 @@ class IntentBase:
         self.bus.publish("events.governance", out)
         return out
 
-__all__ = ["IntentBase", "DEFAULT_CONTEXT_EVENTS", "RECENT_EPOCHS_FOR_HYDRATION",
-           "TEMP_LOG_MAXLEN", "is_epoch_record"]
+__all__ = ["IntentBase", "DEFAULT_CONTEXT_EVENTS", "TEMP_LOG_MAXLEN"]

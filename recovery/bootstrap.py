@@ -50,7 +50,7 @@ from agents.archive_lookup.live import ArchiveLookupAgent
 from agents.archive_lookup import contract as lookup_contract
 from agents.archive_lookup.base import ArchiveLookupBase
 from agents.consolidator.agent import ConsolidatorMock
-from agents.consolidator.base import DEFAULT_BATCH_SIZE, ConsolidatorBase
+from agents.consolidator.base import ConsolidatorBase
 from agents.consolidator.live import ConsolidatorAgent
 from agents.security.agent import SecurityAgent, SecurityMock
 from agents.security.rules import RuleSet, RulesError
@@ -139,7 +139,7 @@ class Recovery:
             from agents.archive.structured_store import StructuredStore
             structured_store = StructuredStore(root=storage_root)
             print(f"[recovery] structured store: {structured_store.count('knowledge')} "
-                  f"knowledge, {structured_store.count('identity')} identity records")
+                  f"knowledge, {structured_store.count('identity')} personality records")
 
         # Step 5 groundwork: bus binding happens as each agent subscribes
         # in its own constructor below. Bus must exist first.
@@ -182,27 +182,26 @@ class Recovery:
         analytics = self._provision_analytics(bus, manifest, archive, budget,
                                                 structured_store=structured_store)
 
-        # v0.35f: Consolidator is provisioned BEFORE Intent, because Intent
-        # holds the reference it hands concluded events to. Nothing flows
-        # the other way — Consolidator never calls Intent, it only pings
-        # the control plane when it has written an epoch.
+        # Phase 0.9: Consolidator is a fifth member of Sensory's per-event
+        # fan-out (agents/sensory/agent.py's FAN_OUT), alongside Analytics/
+        # Personality — it reads the raw Sensory envelope directly and
+        # writes facts immediately. Nothing here hands it a reference to
+        # anything else; it is provisioned like Personality/Knowledge.
         personality = self._provision_lookup(bus, manifest, archive,
-                                             "Personality", budget)
+                                             "Personality", budget,
+                                             structured_store=structured_store)
 
         consolidator = self._provision_consolidator(bus, manifest, archive,
-                                                    budget, impulse,
+                                                    budget,
                                                     structured_store=structured_store)
         intent = self._provision_intent(bus, manifest, archive, budget)
 
         # Governance is provisioned LAST because it is the only role that
-        # holds references to others: Consolidator (to hand a concluded
-        # event to, v0.35g) and Impulse (to READ an expression from when
-        # an exchange is blocked, v0.35e). Nothing flows back the other
-        # way — both couplings are one-directional, and the frustration
-        # nudge that answers a block goes over the control plane rather
-        # than through a reference.
+        # holds a reference to another: Impulse (to READ an expression from
+        # when an exchange is blocked, v0.35e). Nothing flows back the
+        # other way — the frustration nudge that answers a block goes over
+        # the control plane rather than through a reference.
         governance = self._provision_governance(bus, manifest,
-                                                consolidator=consolidator,
                                                 impulse=impulse,
                                                 structured_store=structured_store)
 
@@ -432,7 +431,7 @@ class Recovery:
 
     def _provision_governance(self, bus: EmbeddedBus,
                               manifest: Dict[str, Any], *,
-                              consolidator=None, impulse=None,
+                              impulse=None,
                               structured_store=None) -> Governance:
         """Governance is always real, and always deterministic (v0.34).
 
@@ -456,7 +455,7 @@ class Recovery:
                   f"no model calls (v0.34).")
 
         budget_tier = manifest.get("budget_tier", "default")
-        governance = Governance(bus, consolidator=consolidator, impulse=impulse,
+        governance = Governance(bus, impulse=impulse,
                                structured_store=structured_store,
                                budget_tier=budget_tier)
         print(f"[recovery] governance: deterministic dispatcher (no substrate), "
@@ -580,35 +579,28 @@ class Recovery:
     def _provision_consolidator(self, bus: EmbeddedBus, manifest: Dict[str, Any],
                                 archive: ArchiveStore,
                                 budget: Optional[BudgetManager],
-                                impulse: Optional[Impulse],
                                 structured_store=None) -> ConsolidatorBase:
-        """Select Consolidator's tier from `roles.consolidator.mock` (v0.35f).
+        """Select Consolidator's tier from `roles.consolidator.mock` (v0.9).
 
         One thing here differs from every other cognitive role, and it is
         deliberate: an unusable substrate is a WARNING, not a bootstrap
-        stop. Consolidation is a rare background pass that gates nothing —
-        it degrades to ConsolidatorAgent's own fallback (an empty,
-        templated epoch), which is the same "an outage changes quality,
-        not behaviour" posture as every other degraded path here. Blocking
-        the whole live pipeline over a substrate only the memory writer
-        depends on would be the wrong trade. This is the posture Phase
-        0.4 already applied to `consolidation_substrate`, kept intact
-        now that consolidation is a role of its own.
+        stop. Consolidation gates nothing — a degraded pass just means one
+        event's facts aren't written, which is the same "an outage changes
+        quality, not behaviour" posture as every other degraded path here.
+        Blocking the whole live pipeline over a substrate only the memory
+        writer depends on would be the wrong trade.
 
-        The Impulse reference is the "slow coloring" coupling (§5.3):
-        consolidation may nudge drive-vector BASELINES by a small,
-        hard-clamped amount. It moved here from Intent with the rest of
-        the consolidation job."""
+        Phase 0.9: Consolidator dropped its batch buffer and Impulse
+        coupling entirely — it is now a fifth member of Sensory's
+        per-event fan-out (`agents/sensory/agent.py`), provisioned the
+        same way as Personality/Knowledge: bus-subscribed at construction,
+        no batch/synchronous/impulse params."""
         role_config = manifest.get("roles", {}).get("consolidator", {}) or {}
-        batch_size = int(role_config.get("batch_size_events", DEFAULT_BATCH_SIZE))
-        synchronous = bool(role_config.get("synchronous", False))
-        mode = "synchronous" if synchronous else "background thread"
 
         if role_config.get("mock", True):
-            print(f"[recovery] consolidator: MOCK tier (templated epochs, zero "
-                  f"LLM cost), batch {batch_size} events, {mode}")
-            return ConsolidatorMock(bus, archive, batch_size=batch_size,
-                                    impulse=impulse, synchronous=synchronous)
+            print("[recovery] consolidator: MOCK tier (templated fact "
+                  "extraction, zero LLM cost)")
+            return ConsolidatorMock(bus, archive)
 
         substrate_class = role_config.get("substrate")
         substrate = None
@@ -623,17 +615,15 @@ class Recovery:
             except SubstrateError as exc:
                 print(f"[recovery] WARNING: consolidator substrate "
                       f"'{substrate_class}' is not usable ({exc}); falling back "
-                      f"to the MOCK tier. The live pipeline is unaffected — "
-                      f"consolidation writes empty epochs until this is fixed.")
+                      f"to the MOCK tier. Facts will not be written until this "
+                      f"is fixed.")
                 substrate = None
 
         if substrate is None:
-            return ConsolidatorMock(bus, archive, batch_size=batch_size,
-                                    impulse=impulse, synchronous=synchronous)
+            return ConsolidatorMock(bus, archive)
 
         agent = ConsolidatorAgent(
             bus, substrate, archive,
-            batch_size=batch_size, impulse=impulse, synchronous=synchronous,
             system_instruction=role_config.get("system_instruction", ""),
             temperature=float(role_config.get("temperature", 0.3)),
             max_tokens=role_config.get("max_tokens"),
@@ -642,14 +632,14 @@ class Recovery:
             structured_store=structured_store,
         )
         print(f"[recovery] consolidator: LIVE tier on substrate "
-              f"{substrate.describe()} ({self._price_note(substrate)}), "
-              f"batch {batch_size} events, {mode}")
+              f"{substrate.describe()} ({self._price_note(substrate)})")
         self._warn_unpriced(substrate)
         return agent
 
     def _provision_lookup(self, bus: EmbeddedBus, manifest: Dict[str, Any],
                           archive: ArchiveStore, role: str,
-                          budget: Optional[BudgetManager] = None) -> ArchiveLookupBase:
+                          budget: Optional[BudgetManager] = None,
+                          structured_store=None) -> ArchiveLookupBase:
         """Provision one member of the archive-lookup family (v0.35b).
 
         Called once per role, with no per-role branching anywhere in this
@@ -672,7 +662,8 @@ class Recovery:
 
         if role_config.get("mock", True):
             agent = ArchiveLookupMock(
-                bus, archive, role=role, brief=brief, query_limit=query_limit)
+                bus, archive, role=role, brief=brief, query_limit=query_limit,
+                structured_store=structured_store)
             print(f"[recovery] {key}: MOCK tier (read-only lookup over the "
                   f"'{agent.store_kind}' store, zero LLM cost)")
             return agent
@@ -694,6 +685,7 @@ class Recovery:
             max_tokens=role_config.get("max_tokens"),
             strict=bool(role_config.get("strict", False)),
             budget=budget,
+            structured_store=structured_store,
         )
         print(f"[recovery] {key}: LIVE tier on substrate "
               f"{substrate.describe()} — read-only lookup over the "

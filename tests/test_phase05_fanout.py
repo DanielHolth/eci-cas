@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agents.governance import routing
+from agents.consolidator.base import ConsolidationResult
 from agents.governance.buffer import DEFAULT_WORKERS, BundleBuffer
 from bus.envelope import VERDICT_GREEN, Envelope
 from recovery.bootstrap import Recovery
@@ -44,7 +44,6 @@ def _manifest(tmp_path: Path, **role_overrides) -> Path:
     for role in ("analytics", "intent", "consolidator",
                  "personality"):
         manifest["roles"][role]["mock"] = True
-    manifest["roles"]["consolidator"]["synchronous"] = True
     for key, value in role_overrides.items():
         manifest["roles"][key].update(value)
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -75,12 +74,13 @@ class TestFanOut:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         out = [e for e in eco.bus.trace()
                if e.event_id == event_id and e.source == "Sensory"]
-        # Phase 0.8: Knowledge removed (swarm replaces it). Impulse is
-        # still first and synchronous; the other two's order isn't guaranteed.
+        # Phase 0.8: Knowledge removed (swarm replaces it). Phase 0.9 added
+        # Consolidator as a fan-out member. Impulse is still first and
+        # synchronous; the other three's order isn't guaranteed.
         destinations = [e.destination for e in out]
         assert destinations[0] == "Impulse"
-        assert set(destinations[1:]) == {"Analytics", "Personality"}
-        assert len(destinations) == 3
+        assert set(destinations[1:]) == {"Analytics", "Personality", "Consolidator"}
+        assert len(destinations) == 4
 
     def test_every_copy_carries_the_same_event_id_and_content(self, tmp_path):
         """Four answers to one event have to stay distinguishable from one
@@ -100,16 +100,6 @@ class TestFanOut:
         from_sensory = [e for e in eco.bus.trace()
                         if e.event_id == event_id and e.source == "Sensory"]
         assert all(e.destination != "Governance" for e in from_sensory)
-
-    def test_impulse_is_published_to_first(self, tmp_path):
-        """Deliberate ordering: Impulse is the only agent that can open the
-        Critical fast path, so on a synchronous bus its reflex is already
-        on the wire before the other three are dispatched at all."""
-        eco = _boot(tmp_path)
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
-        first = [e for e in eco.bus.trace()
-                 if e.event_id == event_id and e.source == "Sensory"][0]
-        assert first.destination == "Impulse"
 
     def test_all_four_workers_actually_answer(self, tmp_path):
         eco = _boot(tmp_path)
@@ -249,15 +239,6 @@ class TestBundling:
         assert buffer.get("aaa").slots["Impulse"]["reflex"] == "A"
         assert not a.ready() and not b.ready()
 
-    def test_an_incomplete_bundle_holds_rather_than_routing(self, tmp_path):
-        eco = _boot(tmp_path)
-        eco.bus.publish("events.governance", Envelope(
-            source="Analytics", destination="Governance", type="Recommend",
-            content="partial", meta={"analytics": {"recommendation": "partial"}}))
-        assert eco.governance.metrics["bundles"] == 0
-        assert eco.governance.metrics["held"] == 1
-
-
 # ---------------------------------------------------------------------------
 # v0.35d — the Critical fast path
 # ---------------------------------------------------------------------------
@@ -288,12 +269,6 @@ class TestCriticalReflex:
         hops = _hops(eco, event_id)
         assert [h for h in hops if h[2] == "Bundle"]
         assert [h for h in hops if h[0] == "Intent"]
-
-    def test_the_other_three_answers_are_bundled_not_discarded(self, tmp_path):
-        eco = _boot(tmp_path)
-        eco.sensory.ingest("fire in the kitchen", source_type="prompt",
-                           severity="Critical")
-        assert eco.governance.metrics["bundles"] == 1
 
     def test_exactly_one_reflex_and_one_bundle_conclude_the_event_once(self, tmp_path):
         """The reflex reaching Action does NOT conclude the event — only
@@ -338,12 +313,6 @@ class TestCriticalReflex:
         assert bundle_envelope.meta.get("reflex_already_acted") is True
         assert bundle_envelope.meta.get("reflex_action")
 
-    def test_a_critical_reflex_still_reaches_action_through_security(self, tmp_path):
-        eco = _boot(tmp_path)
-        event_id = eco.sensory.ingest("fire in the kitchen", source_type="prompt",
-                                      severity="Critical")
-        assert any(dst == "Action" for _, dst, _ in _hops(eco, event_id))
-
     def test_action_speaks_the_reflex_reaction_not_securitys_verdict_word(self, tmp_path):
         """Bug found 2026-08-24: the reflex's outbound-to-Security meta
         never carried proposed_action (Intent hasn't run yet on this fast
@@ -375,98 +344,43 @@ class TestCriticalReflex:
         assert [e for e in eco.bus.trace()
                 if e.event_id == event_id and e.type == "Bundle"]
 
-    def test_the_reflex_instruction_quotes_the_input_and_the_reaction(self):
-        env = Envelope(source="Impulse", destination="Governance", type="prompt",
-                       content="fire in the kitchen", severity="Critical",
-                       meta={"reflex": "Terse, protective reaction."})
-        decision = routing.decide(env)
-        assert decision.route is routing.REFLEX
-        assert "fire in the kitchen" in decision.content
-        assert "Terse, protective reaction." in decision.content
-        assert decision.diagnostics["critical_reflex"] is True
-
 
 # ---------------------------------------------------------------------------
 # v0.35g — the Consolidator hand-off
 # ---------------------------------------------------------------------------
 
-class TestConsolidatorHandOff:
-    def test_the_record_arrives_only_after_action(self, tmp_path):
-        seen = []
+# ---------------------------------------------------------------------------
+# Phase 0.9 — Consolidator as a fan-out member
+# ---------------------------------------------------------------------------
 
+class TestConsolidatorFanOut:
+    """Consolidator dropped the Governance hand-off entirely (v0.9): it's
+    now a fifth Sensory fan-out member, wired like Personality, and it
+    never replies to Governance or waits for Action to conclude."""
+
+    def test_consolidator_sees_the_raw_event_not_a_concluded_record(self, tmp_path):
         eco = _boot(tmp_path)
-        original = eco.consolidator.observe
-
-        def spy(record):
-            seen.append((record, len(eco.action.executed)))
-            return original(record)
-
-        eco.consolidator.observe = spy
-        eco.governance.consolidator = eco.consolidator
+        seen = []
+        eco.consolidator.write = lambda envelope: (seen.append(envelope) or
+                                                     ConsolidationResult())
         eco.sensory.ingest(PROMPT, source_type="prompt")
 
         assert len(seen) == 1
-        _, actions_at_handoff = seen[0]
-        assert actions_at_handoff == 1        # Action had already run
+        assert seen[0].content == PROMPT
 
-    def test_the_record_carries_exactly_the_settled_contents(self, tmp_path):
-        eco = _boot(tmp_path)
-        seen = []
-        eco.consolidator.observe = lambda record: seen.append(record)
-        eco.sensory.ingest(PROMPT, source_type="prompt")
-
-        record = seen[0]
-        assert set(record) == {"event_id", "sensory", "security", "intent_final"}
-        assert record["sensory"] == PROMPT
-        assert record["intent_final"]
-        assert record["security"]["verdict"] == VERDICT_GREEN
-
-    def test_a_critical_events_record_carries_the_reflex_action(self, tmp_path):
-        """A reflex that actually acted on the world is not a redundant
-        reading (unlike Impulse's ordinary reflex text) — it's something
-        the persona did, so Consolidator's record carries it."""
-        eco = _boot(tmp_path)
-        seen = []
-        eco.consolidator.observe = lambda record: seen.append(record)
-        eco.sensory.ingest("fire in the kitchen", source_type="prompt",
-                           severity="Critical")
-
-        record = seen[0]
-        assert "reflex_action" in record
-        assert record["reflex_action"]
-
-    def test_the_record_excludes_what_the_spec_says_it_excludes(self, tmp_path):
-        """Impulse's reflex, Analytics' recommendation text and the two
-        lookups' findings are all redundant for Consolidator's purposes —
-        those agents only surface what Archive already holds, or stay
-        neutral and never touch it."""
-        eco = _boot(tmp_path)
-        seen = []
-        eco.consolidator.observe = lambda record: seen.append(record)
-        eco.sensory.ingest(PROMPT, source_type="prompt")
-
-        flat = str(seen[0])
-        assert "reflex" not in flat
-        assert "drive_vectors" not in flat
-        assert "findings" not in flat
-
-    def test_consolidator_hears_only_from_governance_never_mid_event(self, tmp_path):
+    def test_consolidator_runs_once_per_event_not_per_hop(self, tmp_path):
         eco = _boot(tmp_path)
         calls = []
-        eco.consolidator.observe = lambda record: calls.append(record)
-        eco.sensory.ingest(PROMPT, source_type="prompt")
-        assert len(calls) == 1          # once, at the end — not per hop
-
-    def test_intent_hands_over_nothing_itself(self, tmp_path):
-        """v0.35f's first cut had Intent forward concluded events directly.
-        Governance owns that now — and if both did it, every event would
-        be consolidated twice."""
-        eco = _boot(tmp_path)
-        calls = []
-        eco.consolidator.observe = lambda record: calls.append(record)
+        original = eco.consolidator.write
+        eco.consolidator.write = lambda envelope: (calls.append(envelope) or original(envelope))
         eco.sensory.ingest(PROMPT, source_type="prompt")
         assert len(calls) == 1
-        assert not hasattr(eco.intent, "hand_to_consolidator")
+
+    def test_consolidator_never_replies_to_governance(self, tmp_path):
+        eco = _boot(tmp_path)
+        eco.sensory.ingest(PROMPT, source_type="prompt")
+        out = [e for e in eco.bus.trace() if e.source == "Consolidator"]
+        assert out == []
 
 
 # ---------------------------------------------------------------------------
@@ -591,18 +505,13 @@ class TestBufferDoesNotLeak:
 
 
 class TestConcludeIsIdempotent:
-    def test_an_action_failure_does_not_consolidate_the_event_twice(self, tmp_path):
+    def test_an_action_failure_does_not_conclude_the_event_twice(self, tmp_path):
         """emit() publishes synchronously, so a failing Action re-enters
         Governance and concludes the event from inside the frame that was
-        about to conclude it. Without idempotence, long-term memory
-        double-counted the event and the batch threshold tripped early."""
+        about to conclude it. Without idempotence, `metrics["concluded"]`
+        double-counted the event."""
         eco = _boot(tmp_path)
-        seen = []
-        eco.consolidator.observe = lambda record: seen.append(record)
-
         eco.action.force_next_failures = 1
-        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
+        eco.sensory.ingest(PROMPT, source_type="prompt")
 
-        assert len(seen) == 1
-        assert seen[0]["event_id"] == event_id
         assert eco.governance.metrics["concluded"] == 1

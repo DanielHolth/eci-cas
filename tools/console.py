@@ -29,8 +29,6 @@ Budget mode commands (Phase 0.2.1)
 Recognised HERE, before anything reaches Sensory, so they cost nothing
 and never become events:
 
-    consolidate               force a reconciliation pass over whatever
-                              Consolidator has buffered, and print the result
     switch to budget mode     stop calling the substrate; use fallbacks
     switch to live mode       resume real reasoning
     budget                    show mode, calls, tokens, estimated spend
@@ -114,44 +112,6 @@ def handle_command(line: str, eco) -> bool:
     return False
 
 
-def handle_consolidate(line: str, eco) -> bool:
-    """`consolidate` — force a pass over the partial batch.
-
-    Separate from handle_command because that one returns early when the
-    ecosystem has no budget manager, and consolidation has nothing to do
-    with budget mode. Control-plane like the rest: publishes nothing, so
-    it never becomes an event.
-
-    Why this exists: Consolidator's threshold is 25 concluded events
-    (§15). A console session almost never gets there, so consolidation
-    correctly does nothing and incorrectly LOOKS broken. This makes the
-    threshold observable instead of mysterious."""
-    command = " ".join(line.lower().split())
-    if command not in ("consolidate", "consolidate now", "reconcile"):
-        return False
-
-    consolidator = getattr(eco, "consolidator", None)
-    if consolidator is None:
-        print("  no consolidator in this ecosystem\n")
-        return True
-
-    buffered = len(getattr(consolidator, "_batch", []))
-    if not consolidator.consolidate_now():
-        observed = consolidator.metrics.get("observed", 0)
-        print(f"  nothing buffered to consolidate "
-              f"({observed} events observed so far, "
-              f"threshold {consolidator.batch_size})\n")
-        return True
-
-    consolidator.flush()
-    m = consolidator.metrics
-    print(f"  consolidated {buffered} event(s) — "
-          f"{m.get('consolidations', 0)} passes total, "
-          f"{m.get('writes_executed', 0)} writes executed, "
-          f"{m.get('writes_dropped', 0)} dropped\n")
-    return True
-
-
 def show_alerts(eco) -> None:
     """Surface anything budget mode latched on since the last prompt."""
     budget = getattr(eco, "budget", None)
@@ -166,8 +126,6 @@ def print_hop(envelope: Envelope) -> None:
     arrow = f"{color}{envelope.source:<10}{RESET} -> {envelope.destination:<10}"
     tag = f"[{envelope.type}]"
     content = str(envelope.content)
-    if len(content) > 100:
-        content = content[:97] + "..."
     print(f"  {arrow} {tag:<14} {content}")
 
     # Analytics knowledge_paths — show which archive paths Analytics selected
@@ -181,23 +139,15 @@ def print_hop(envelope: Envelope) -> None:
     # Knowledge swarm detail on the Bundle hop
     if envelope.type == "Bundle" and (envelope.meta or {}).get("knowledge_swarm_detail"):
         for i, node in enumerate(envelope.meta["knowledge_swarm_detail"]):
-            path = node["path"]
-            label = f"{path.get('category','')}/{path.get('topic','')}"
-            sample = "; ".join(node.get("sample", [])[:3])
             count = node["count"]
             if count:
                 print(f"  {DIM}Knowledge[{i}] -> Governance [Findings/{count}]  "
-                      f"{label}: {sample[:80]}{RESET}")
+                      f"{node.get('detail', '')}{RESET}")
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="ECI-CAS live queue console")
     parser.add_argument("--manifest", required=True)
-    parser.add_argument(
-        "--consolidate-every", type=int, default=None, metavar="N",
-        help="Override the manifest's consolidation threshold for this "
-             "session only (e.g. 3, to actually watch consolidation happen "
-             "in a short console run). The manifest is not modified.")
     parser.add_argument(
         "--context-window", type=int, default=None, metavar="N",
         help="Override Intent's conversation window size for this session "
@@ -211,13 +161,6 @@ def main(argv=None) -> int:
         print(f"BOOTSTRAP FAILED: {e}", file=sys.stderr)
         return 1
 
-    if args.consolidate_every is not None and getattr(eco, "consolidator", None):
-        # Session-local override, not a manifest edit: the shipped
-        # threshold is a deliberate cost decision (§15) and lowering it on
-        # disk to make a demo visible is how a cost control quietly
-        # becomes a cost problem.
-        eco.consolidator.batch_size = max(1, args.consolidate_every)
-
     if args.context_window is not None and getattr(eco, "intent", None):
         eco.intent.context_events = max(0, args.context_window)
 
@@ -230,26 +173,30 @@ def main(argv=None) -> int:
         print("                 'budget' for spend, 'reset budget' to zero it")
         print(f"Currently: {eco.budget.state.mode} mode, "
               f"${eco.budget.state.spend_usd:.4f} estimated spend")
-    consolidator = getattr(eco, "consolidator", None)
-    if consolidator is not None:
-        print(f"Consolidation: every {consolidator.batch_size} concluded events "
-              f"— type 'consolidate' to force a pass now")
     print("=" * 70)
     print()
     show_alerts(eco)
 
     # Real-time display: print each hop as it's published on the bus,
     # instead of batch-reading the trace after ingest() returns.
-    speech_lines = []
-
     def _on_hop(topic: str, envelope: Envelope) -> None:
         if topic.startswith("system."):
             return
-        if envelope.destination == "Action" and envelope.type == "Speech":
-            speech_lines.append(envelope.content)
         print_hop(envelope)
 
     eco.bus._on_publish = _on_hop
+
+    # Consolidator never publishes a bus hop (it doesn't reply to
+    # Governance), so its writes are otherwise invisible here — show them
+    # via the display-layer hook instead of adding a bus message for it.
+    if getattr(eco, "consolidator", None) is not None:
+        def _on_consolidator_write(records) -> None:
+            for r in records:
+                path = "/".join(str(r.get(p, "")) for p in
+                                 ("category", "topic", "subtopic", "key"))
+                print(f"  {DIM}Consolidator -> knowledge   [{path}] "
+                      f"= {r.get('value', '')!r}{RESET}")
+        eco.consolidator.on_write = _on_consolidator_write
 
     while True:
         try:
@@ -263,19 +210,11 @@ def main(argv=None) -> int:
         if line.lower() in ("quit", "exit"):
             break
 
-        if handle_consolidate(line, eco):
-            continue
-
         if handle_command(line, eco):
             continue
 
         print()
-        speech_lines.clear()
         eco.sensory.ingest(line, source_type="prompt")
-
-        # Print the speech prominently after the hop trace
-        for speech in speech_lines:
-            print(f"\n{_color('Action')}[Speech]{RESET} {speech}\n")
 
         # Alerts AFTER the trace: the event already degraded gracefully,
         # so the explanation belongs with the result rather than ahead of it.
@@ -286,19 +225,6 @@ def main(argv=None) -> int:
             print(f"{DIM}  [{budget.state.mode}] {budget.state.calls} calls, "
                   f"${budget.state.spend_usd:.4f} est.{RESET}")
         print()
-
-    # Consolidate whatever is still buffered before the process dies.
-    # The worker is a daemon thread: without this, a partial batch (and
-    # a batch dispatched moments ago) goes with it. See
-    # ConsolidatorBase.shutdown().
-    consolidator = getattr(eco, "consolidator", None)
-    if consolidator is not None:
-        pending = len(getattr(consolidator, "_batch", []))
-        if pending:
-            print(f"  consolidating {pending} pending event(s) before exit...")
-        if not consolidator.shutdown(timeout=30.0):
-            print("  WARNING: consolidation did not finish within 30s; "
-                  "some events may not have reached long-term memory")
 
     print("Session ended.")
     return 0

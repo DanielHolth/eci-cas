@@ -6,9 +6,9 @@ Phase 0 uses an in-memory, synchronous, single-process bus
 
     events.sensory | events.impulse      | events.governance | events.analytics
     events.intent  | events.personality | events.knowledge  | events.security
-    events.action  | events.archive
+    events.action  | events.archive     | events.consolidator
     system.diagnostic   (BootCheck / SystemCheck synthetic pings, §9)
-    system.control       (Consolidator -> Intent persona-refresh pings, v0.35g)
+    system.control       (e.g. Governance -> Impulse Frustration signal)
 
 Every publish is:
   1. dispatched synchronously to all subscribers of that topic, and
@@ -34,6 +34,10 @@ BUSINESS_TOPICS = {
     # v0.35b: the archive-grounded lookup family. Two topics today
     # (Personality, Knowledge); the family is expected to grow.
     "events.personality", "events.knowledge",
+    # Phase 0.9: Consolidator moved from a Governance-fed batch buffer to
+    # a fifth member of Sensory's per-event fan-out, alongside Analytics/
+    # Personality/Knowledge.
+    "events.consolidator",
     # Phase 0.6: Archive's bus door. §5.8 always described Archive as two
     # HTTP-shaped endpoints, and it keeps them — this topic is the
     # asynchronous half, for a writer that has no reason to hold a

@@ -16,10 +16,8 @@ class IntentMock(IntentBase):
     tier = "mock"
 
     def __init__(self, bus, archive, *,
-                 context_events: int = DEFAULT_CONTEXT_EVENTS,
-                 consolidator=None):
-        super().__init__(bus, archive, context_events=context_events,
-                         consolidator=consolidator)
+                 context_events: int = DEFAULT_CONTEXT_EVENTS):
+        super().__init__(bus, archive, context_events=context_events)
 
     def voice(self, envelope: Envelope, task: Task) -> Speech:
         diagnostics = {"source_substrate": "mock",

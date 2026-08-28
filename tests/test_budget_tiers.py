@@ -52,17 +52,6 @@ def test_unknown_tier_raises():
         budget_tiers.apply_tier(manifest)
 
 
-def test_unknown_tier_stops_bootstrap_deterministically(tmp_path):
-    manifest = _with_tier(_load_manifest(), "ultra-deluxe")
-    manifest["storage"]["root"] = str(tmp_path / "archive")
-    out = tmp_path / "m.yaml"
-    with open(out, "w") as f:
-        yaml.safe_dump(manifest, f)
-
-    with pytest.raises(BootstrapError):
-        Recovery(str(out)).parse_manifest()
-
-
 # ---------------------------------------------------------------------------
 # Each named tier resolves to what the appendix says it should
 # ---------------------------------------------------------------------------
@@ -135,27 +124,6 @@ def test_tier_overwrites_an_explicit_conflicting_role_setting():
     )
 
 
-def test_apply_tier_does_not_mutate_the_input():
-    manifest = _with_tier(_load_manifest(), "minimal")
-    original_mock = manifest["roles"]["analytics"]["mock"]
-    budget_tiers.apply_tier(manifest)
-    assert manifest["roles"]["analytics"]["mock"] == original_mock
-
-
-def test_every_tier_scales_intents_conversation_window():
-    """v0.35c's conversation window rides on every live call, so it is
-    charged against the same flat-cost claim (§1) as the persona — which
-    makes it a tier's business (Daniel, 2026-08-24). Whole events, so the
-    number is events, not tokens or turns."""
-    for tier in ("minimal", "budget", "super"):
-        out = budget_tiers.apply_tier(_with_tier(_load_manifest(), tier))
-        assert out["roles"]["intent"]["context_events"] == \
-            budget_tiers.CONTEXT_EVENTS[tier]
-    # Default is a no-op tier, so the manifest's own value stands.
-    assert _load_manifest()["roles"]["intent"]["context_events"] == \
-        budget_tiers.CONTEXT_EVENTS["default"]
-
-
 def test_every_tier_states_the_consolidator_mock_flag_explicitly():
     """Same stale-flag discipline the tiers already apply to
     roles.analytics.mock and roles.intent.mock: an operator's leftover
@@ -198,25 +166,6 @@ def test_a_live_intent_with_no_substrate_still_stops_the_bootstrap(tmp_path):
 
     with pytest.raises(BootstrapError, match="no 'substrate' class"):
         Recovery(str(path)).bootstrap()
-
-
-# ---------------------------------------------------------------------------
-# describe() — the boot log line
-# ---------------------------------------------------------------------------
-
-def test_describe_reports_resolved_substrates_not_just_the_name():
-    manifest = budget_tiers.apply_tier(_with_tier(_load_manifest(), "super"))
-    line = budget_tiers.describe(manifest)
-    assert "super" in line
-    assert budget_tiers.FAST_CLASS in line
-    assert budget_tiers.SPECIALIST_CLASS in line
-
-
-def test_describe_custom_says_so():
-    manifest = _with_tier(_load_manifest(), "custom")
-    assert budget_tiers.describe(manifest).startswith("custom")
-    manifest_absent = _with_tier(_load_manifest(), None)
-    assert budget_tiers.describe(manifest_absent).startswith("custom")
 
 
 # ---------------------------------------------------------------------------

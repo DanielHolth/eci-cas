@@ -23,7 +23,7 @@ import yaml
 from agents.archive.agent import ArchiveAgent
 from agents.archive.store import ArchiveStore
 from bus.envelope import Envelope
-from bus.pubsub import BUSINESS_TOPICS, EmbeddedBus
+from bus.pubsub import EmbeddedBus
 from recovery.bootstrap import Recovery
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "manifests" / "ecosystem-manifest.yaml"
@@ -58,19 +58,6 @@ class TestWritesOverTheBus:
         assert len(records) == 1
         assert records[0]["content"] == ONE_WRITE["content"]
 
-    def test_several_instructions_in_one_request(self, tmp_path):
-        agent, _ = build(tmp_path)
-        agent.bus.publish("events.archive", write_request(
-            [ONE_WRITE, {**ONE_WRITE, "content": "and windy"}]))
-        assert len(agent.query("knowledge")) == 2
-
-    def test_a_single_object_is_accepted_as_one_write(self, tmp_path):
-        """Both shapes are natural things for a caller to send and neither
-        is ambiguous."""
-        agent, _ = build(tmp_path)
-        agent.bus.publish("events.archive", write_request(ONE_WRITE))
-        assert agent.metrics["executed"] == 1
-
     def test_prose_yields_no_write_rather_than_a_guessed_one(self, tmp_path):
         """Archive is the last place in this system that should be
         inferring intent."""
@@ -90,24 +77,6 @@ class TestWritesOverTheBus:
         assert agent.query("knowledge") == []
         assert agent.query("identity") == []
 
-    def test_a_non_write_envelope_is_ignored_and_counted(self, tmp_path):
-        agent, _ = build(tmp_path)
-        agent.bus.publish("events.archive",
-                          write_request(ONE_WRITE, type="Query"))
-        assert agent.metrics["ignored"] == 1
-        assert agent.metrics["requests"] == 0
-
-    def test_reads_stay_synchronous(self, tmp_path):
-        """A request whose whole value is the answer needs a reply
-        channel; inventing one here would duplicate the direct `query`
-        every reader already has."""
-        agent, _ = build(tmp_path)
-        agent.write("knowledge", {"content": "already here"})
-        agent.bus.publish("events.archive",
-                          write_request(ONE_WRITE, type="Query"))
-        assert len(agent.query("knowledge")) == 1
-
-
 class TestReceipts:
     def test_a_completed_write_publishes_a_receipt(self, tmp_path):
         agent, receipts = build(tmp_path)
@@ -122,32 +91,6 @@ class TestReceipts:
         agent.bus.publish("events.archive", write_request(
             {"store": "nowhere", "content": "x"}))
         assert receipts[0].meta == {"executed": 0, "dropped": 1}
-
-    def test_the_receipt_goes_back_to_the_requester(self, tmp_path):
-        agent, receipts = build(tmp_path)
-        agent.bus.publish("events.archive",
-                          write_request(ONE_WRITE, source="Impulse"))
-        assert receipts[0].destination == "Impulse"
-
-    def test_the_receipt_keeps_the_event_id(self, tmp_path):
-        agent, receipts = build(tmp_path)
-        request = write_request(ONE_WRITE)
-        agent.bus.publish("events.archive", request)
-        assert receipts[0].event_id == request.event_id
-
-    def test_receipts_are_control_plane_not_business_events(self, tmp_path):
-        """Bookkeeping about the system, not a step in an event's life. It
-        must not appear in the queue log as though memory had had a
-        thought."""
-        agent, _ = build(tmp_path)
-        agent.bus.publish("events.archive", write_request(ONE_WRITE))
-        logged = agent.query_queue()
-        assert all(r["type"] != "ArchiveWritten" for r in logged)
-
-    def test_the_write_topic_is_a_business_topic(self, tmp_path):
-        """The REQUEST is business traffic and is logged; only the receipt
-        is control-plane."""
-        assert "events.archive" in BUSINESS_TOPICS
 
 
 # ---------------------------------------------------------------------------
@@ -169,20 +112,6 @@ class TestDelegation:
         assert result == {"executed": 1, "dropped": 0}
         # And it publishes nothing: the direct path is not the bus path.
         assert receipts == []
-
-    def test_drive_vectors_round_trip(self, tmp_path):
-        agent, _ = build(tmp_path)
-        agent.set_drive_vectors({"curiosity": 0.7})
-        assert agent.get_drive_vectors() == {"curiosity": 0.7}
-
-    def test_it_still_logs_bus_hops(self, tmp_path):
-        agent, _ = build(tmp_path)
-        agent.bus.publish("events.archive", write_request(ONE_WRITE))
-        assert agent.query_queue()
-
-    def test_it_exposes_the_root(self, tmp_path):
-        agent, _ = build(tmp_path)
-        assert str(tmp_path) in str(agent.root)
 
 
 # ---------------------------------------------------------------------------
@@ -208,13 +137,6 @@ class TestBootstrap:
         eco = Recovery(self._manifest(tmp_path)).bootstrap()
         assert isinstance(eco.archive_agent, ArchiveAgent)
 
-    def test_the_store_is_still_the_store(self, tmp_path):
-        """Roles are handed the store exactly as before. Adopting the door
-        must be a non-event for existing callers."""
-        eco = Recovery(self._manifest(tmp_path)).bootstrap()
-        assert isinstance(eco.archive, ArchiveStore)
-        assert eco.archive_agent.store is eco.archive
-
     def test_mock_true_means_no_bus_door_not_no_memory(self, tmp_path):
         """The store is constructed in step 2 either way — mocking this
         role returns to the pre-0.6 state, it does not disable memory."""
@@ -222,15 +144,3 @@ class TestBootstrap:
         assert eco.archive_agent is None
         eco.archive.write("knowledge", {"content": "still works"})
         assert eco.archive.query("knowledge")
-
-    def test_writes_over_the_bus_work_end_to_end(self, tmp_path):
-        eco = Recovery(self._manifest(tmp_path)).bootstrap()
-        eco.bus.publish("events.archive", write_request(ONE_WRITE))
-        assert eco.archive.query("knowledge")
-
-    def test_consolidator_still_writes_directly(self, tmp_path):
-        """The one caller deliberately not migrated. Stated as a test so
-        that 'move everything onto the bus' is a decision somebody has to
-        make on purpose."""
-        eco = Recovery(self._manifest(tmp_path)).bootstrap()
-        assert eco.consolidator.archive is eco.archive

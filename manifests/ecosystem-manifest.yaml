@@ -104,13 +104,13 @@ substrates:
   # violations, latency, rate limits) before prod. Was claude-haiku-4-5.
   fast-reflex:
     provider: "openai"                # openai-compatible adapter, §10.2
-    model: "gpt-5.4-nano"
+    model: "gpt-5.6-luna"
     api_key_env: "OPENAI_API_KEY"
     max_tokens: 512
     timeout_sec: 60                   # one hung call would hang the whole bus (§3)
-    price_per_mtok: { input: 0.20, output: 1.25 }
-    options: { token_param: "max_completion_tokens" }  # gpt-5.4-nano 400s on max_tokens; pin skips the reactive probe
-    notes: "PREPROD STRESS TEST — cheapest OpenAI model. Was claude-haiku-4-5-20251001."
+    price_per_mtok: { input: 0.20, output: 1.20 }
+    options: { reasoning_effort: "none", token_param: "max_completion_tokens" }  # luna is reasoning-capable (max/xhigh/high/medium/low/none); pin to its non-reasoning tier so minor swarm-job calls don't default to medium effort. token_param: confirmed via the reactive probe that luna rejects max_tokens like nano did — pinned now to skip the probe (and its NOTE) entirely.
+    notes: "PREPROD STRESS TEST — cheapest OpenAI model. Was gpt-5.4-nano, before that claude-haiku-4-5-20251001."
 
   # Reserved for Phase 3 multi-substrate diversity (§7.5). Untouched by
   # the preprod stress test — still Haiku, not part of that pass.
@@ -140,7 +140,7 @@ substrates:
   #
   # openai-example:
   #   provider: "openai"
-  #   model: "gpt-4o-mini"
+  #   model: "gpt-5.4-nano"
   #   api_key_env: "OPENAI_API_KEY"
   # offline-example:
   #   provider: "echo"                # no network, no cost; exercises fallbacks
@@ -343,10 +343,8 @@ roles:
     mock: false                       # set true for a zero-cost ecosystem
     substrate: "fast-reflex"            # identity-specialist needs ANTHROPIC_API_KEY; Super tier overrides back
     temperature: 0.3
-    batch_size_events: 25             # was roles.intent.rotation.batch_size_events
-    synchronous: false
     system_instruction: |
       You are CONSOLIDATOR: the memory-writing agent of a multi-agent
-      system. You reason over a batch of concluded events and decide what
-      is worth remembering, and where it belongs. You never speak to the
-      human and you never gate anything.
+      system. You extract facts from the user's own words, one event at a
+      time, and decide what is worth remembering and where it belongs.
+      You never speak to the human and you never gate anything.

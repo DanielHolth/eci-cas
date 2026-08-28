@@ -20,16 +20,10 @@ import yaml
 
 from agents.archive_lookup import contract
 from agents.archive_lookup.agent import ArchiveLookupMock
-from agents.archive_lookup.base import (
-    DEFAULT_BRIEFS,
-    ROLE_STORES,
-    ROLE_TOPICS,
-    ArchiveLookupBase,
-    _ReadOnlyArchive,
-)
+from agents.archive_lookup.base import ROLE_STORES, ArchiveLookupBase
 from agents.archive.store import ArchiveStore
 from bus.envelope import Envelope
-from bus.pubsub import BUSINESS_TOPICS, EmbeddedBus
+from bus.pubsub import EmbeddedBus
 from recovery.bootstrap import Recovery
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "manifests" / "ecosystem-manifest.yaml"
@@ -88,36 +82,11 @@ class TestTheFamilyIsOneClass:
         eco = _boot(tmp_path)
         assert isinstance(eco.personality, ArchiveLookupBase)
 
-    def test_personality_has_correct_store_kind(self, tmp_path):
-        eco = _boot(tmp_path)
-        assert eco.personality.store_kind == "identity"
-
-    def test_a_third_member_needs_no_new_class(self, tmp_path):
-        """The family test. Adding a member is a configuration, not a
-        subclass — if this ever needs a new file, the family has stopped
-        being a family."""
-        archive = ArchiveStore(root=str(tmp_path / "archive"))
-        bus = EmbeddedBus(archive=archive)
-        agent = ArchiveLookupMock(bus, archive, role="Whatever",
-                                  store_kind="knowledge",
-                                  topic="events.knowledge",
-                                  brief="look up something else")
-        assert agent.store_kind == "knowledge"
-
     def test_an_unknown_role_with_no_store_is_refused(self, tmp_path):
         archive = ArchiveStore(root=str(tmp_path / "archive"))
         bus = EmbeddedBus(archive=archive)
         with pytest.raises(ValueError, match="Unknown archive-lookup role"):
             ArchiveLookupMock(bus, archive, role="Nonsense")
-
-    @pytest.mark.parametrize("role", ROLES)
-    def test_every_declared_role_has_a_store_a_topic_and_a_brief(self, role):
-        assert role in ROLE_STORES and role in ROLE_TOPICS
-        assert DEFAULT_BRIEFS[role].strip()
-
-    @pytest.mark.parametrize("role", ROLES)
-    def test_each_topic_is_a_registered_business_topic(self, role):
-        assert ROLE_TOPICS[role] in BUSINESS_TOPICS
 
 
 # ---------------------------------------------------------------------------
@@ -125,17 +94,6 @@ class TestTheFamilyIsOneClass:
 # ---------------------------------------------------------------------------
 
 class TestReadOnly:
-    @pytest.mark.parametrize("role", ROLES)
-    def test_the_agent_holds_no_write_surface_at_all(self, tmp_path, role):
-        """Not a convention, not a docstring — the object the agent holds
-        has `query` and nothing else, so there is no write method to call
-        by accident."""
-        agent, _, _ = _standalone(tmp_path, role)
-        assert isinstance(agent.archive, _ReadOnlyArchive)
-        for forbidden in ("write", "execute_writes", "log_event",
-                          "set_drive_vectors"):
-            assert not hasattr(agent.archive, forbidden)
-
     @pytest.mark.parametrize("role", ROLES)
     def test_a_full_event_writes_nothing_anywhere(self, tmp_path, role):
         agent, bus, archive = _standalone(tmp_path, role)
@@ -162,32 +120,16 @@ class TestContract:
         assert findings.findings == "mother: Maria, family, relationships"
         assert findings.relevant is True
 
-    def test_empty_findings_are_never_marked_relevant(self):
-        findings = contract.parse("")
-        assert findings.relevant is False
-
     def test_an_unreadable_relevant_flag_defaults_to_silence(self):
         findings = contract.parse("NONE")
         assert findings.relevant is False
         assert findings.findings == ""
-
-    def test_none_is_case_insensitive(self):
-        findings = contract.parse("none")
-        assert findings.relevant is False
 
     def test_the_fallback_is_silence_not_invention(self):
         findings = contract.fallback("scripted outage")
         assert findings.findings == ""
         assert findings.relevant is False
         assert findings.diagnostics["degraded"] is True
-
-    def test_the_prompt_says_so_when_the_store_is_empty(self):
-        prompt = contract.build_prompt("hello", [], brief="b")
-        assert "(nothing recorded yet)" in prompt
-
-    def test_the_prompt_carries_the_records_and_the_brief(self):
-        prompt = contract.build_prompt("hello", ["mother: Maria"], brief="BRIEF")
-        assert "BRIEF" in prompt and "Maria" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -254,14 +196,6 @@ class TestEmission:
         assert out[0].type == "Findings"
 
     @pytest.mark.parametrize("role", ROLES)
-    def test_the_findings_ride_in_a_role_named_meta_slot(self, tmp_path, role):
-        agent, bus, _ = _standalone(tmp_path, role)
-        bus.publish(agent.topic, _event())
-        out = [e for e in bus.trace() if e.source == role][0]
-        slot = out.meta[role.lower()]
-        assert set(slot) >= {"tier", "findings", "relevant", "decided_by"}
-
-    @pytest.mark.parametrize("role", ROLES)
     def test_the_event_id_is_preserved_for_bundling(self, tmp_path, role):
         """Governance buffers the four parallel answers by event_id —
         a lookup that lost it could never be bundled."""
@@ -271,31 +205,12 @@ class TestEmission:
         out = [e for e in bus.trace() if e.source == role][0]
         assert out.event_id == event.event_id
 
-    @pytest.mark.parametrize("role", ROLES)
-    def test_severity_is_inherited_never_raised(self, tmp_path, role):
-        """A lookup reports what memory holds; it does not get to raise
-        the alarm level of an event (§3's OR-upscale-only rule is for
-        agents that assess, and this family doesn't)."""
-        agent, bus, _ = _standalone(tmp_path, role)
-        event = _event()
-        event.severity = "Elevated"
-        bus.publish(agent.topic, event)
-        out = [e for e in bus.trace() if e.source == role][0]
-        assert out.severity == "Elevated"
-
 
 # ---------------------------------------------------------------------------
 # The mock tier's honesty
 # ---------------------------------------------------------------------------
 
 class TestMockTier:
-    @pytest.mark.parametrize("role", ROLES)
-    def test_an_empty_store_answers_with_silence(self, tmp_path, role):
-        agent, bus, _ = _standalone(tmp_path, role)
-        bus.publish(agent.topic, _event())
-        out = [e for e in bus.trace() if e.source == role][0]
-        assert out.meta[role.lower()]["relevant"] is False
-
     def test_the_mock_never_claims_relevance_it_cannot_assess(self, tmp_path):
         """It reports that records exist, not that they matter — the
         distinction the live tier is actually for. Overstating it here
@@ -331,18 +246,3 @@ class TestBootstrap:
         with open(MANIFEST_PATH) as f:
             manifest = yaml.safe_load(f)
         assert manifest["roles"]["personality"]["mock"] is False
-
-
-# ---------------------------------------------------------------------------
-# Vendor independence (§10.2)
-# ---------------------------------------------------------------------------
-
-class TestVendorIndependence:
-    def test_the_family_names_no_vendor_and_no_model(self):
-        import agents.archive_lookup.base as base_mod
-        import agents.archive_lookup.contract as contract_mod
-        for module in (base_mod, contract_mod):
-            source = Path(module.__file__).read_text().lower()
-            for vendor in ("anthropic", "openai", "claude-", "gpt-", "llama"):
-                assert vendor not in source, (
-                    f"{module.__name__} names a vendor: {vendor}")

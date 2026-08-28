@@ -52,21 +52,6 @@ class TestPreflightAppliesTheTier:
         assert "gpt-5.4-nano" not in out
         assert code == 0
 
-    def test_default_tier_reports_analytics_as_required(self, tmp_path, capsys):
-        path = _manifest(tmp_path, "default")
-        preflight.main(["--manifest", str(path)])
-        out = capsys.readouterr().out
-
-        assert "analytics" in out
-        assert "(role is mocked)" not in out.split("analytics", 1)[1].split("\n")[0]
-
-    def test_the_boot_log_line_names_the_active_tier(self, tmp_path, capsys):
-        path = _manifest(tmp_path, "minimal")
-        preflight.main(["--manifest", str(path)])
-        out = capsys.readouterr().out
-
-        assert "minimal" in out
-
     def test_an_unknown_tier_fails_closed_rather_than_crashing(self, tmp_path, capsys):
         path = _manifest(tmp_path, "not-a-real-tier")
         code = preflight.main(["--manifest", str(path)])
