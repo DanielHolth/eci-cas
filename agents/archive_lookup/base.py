@@ -68,7 +68,12 @@ ROLE_TOPICS: Dict[str, str] = {
 #: separate, not-yet-implemented change — this just gives it somewhere to
 #: land.
 STRUCTURED_LOOKUP_PATHS: Dict[str, Dict[str, str]] = {
-    "Personality": {"kind": "identity", "category": "Personality", "topic": "profile 1"},
+    # category-only (no "topic" key): the seeded traits span several
+    # topics (values, boundaries, style, ...) under this one category, and
+    # Personality's whole identity fits comfortably in one category-wide
+    # read (2026-08-29 — see _ReadOnlyStructuredArchive's docstring for
+    # why a fixed (category, topic) PAIR was wrong here).
+    "Personality": {"kind": "identity", "category": "trait"},
 }
 
 DEFAULT_BRIEFS: Dict[str, str] = {
@@ -112,15 +117,24 @@ class _ReadOnlyArchive:
 
 
 class _ReadOnlyStructuredArchive:
-    """Query-only view of StructuredStore, fixed to one category/topic
-    slice (Phase 0.9). Same `query(kind, predicate=None, limit=None)`
-    shape as `_ReadOnlyArchive` so `records()` below doesn't need to know
-    which kind of store it's talking to; `predicate` is accepted and
-    ignored since a fixed category/topic slice has no need for it."""
+    """Query-only view of StructuredStore, fixed to one category slice
+    (Phase 0.9). Same `query(kind, predicate=None, limit=None)` shape as
+    `_ReadOnlyArchive` so `records()` below doesn't need to know which
+    kind of store it's talking to; `predicate` is accepted and ignored
+    since a fixed category slice has no need for it.
+
+    `topic` is optional and narrows further when given, but Personality's
+    actual seed data (agents/archive/seed_structured.py's IDENTITY_SEED)
+    spans several topics under one category ("trait"/values, "trait"/
+    boundaries, "trait"/style) — pinning both category AND topic here
+    would silently see none of it, which is exactly the bug found
+    2026-08-29: the original fixed slice named a (category, topic) pair
+    that no seeded row actually used, so every lookup queried an empty
+    slice and degraded to "no records" without ever raising anything."""
 
     __slots__ = ("_store", "_kind", "_category", "_topic")
 
-    def __init__(self, store, kind: str, category: str, topic: str):
+    def __init__(self, store, kind: str, category: str, topic: Optional[str] = None):
         self._store = store
         self._kind = kind
         self._category = category
@@ -170,7 +184,7 @@ class ArchiveLookupBase:
         if structured_path and structured_store is not None:
             self.archive = _ReadOnlyStructuredArchive(
                 structured_store, structured_path["kind"],
-                structured_path["category"], structured_path["topic"])
+                structured_path["category"], structured_path.get("topic"))
         else:
             self.archive = _ReadOnlyArchive(archive)
 

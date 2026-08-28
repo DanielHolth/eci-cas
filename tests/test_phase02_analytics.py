@@ -19,7 +19,8 @@ import pytest
 import yaml
 
 from bus.envelope import VERDICT_GREEN, VERDICT_RED, VERDICT_YELLOW, Envelope
-from recovery.bootstrap import BootstrapError, Recovery
+from recovery.bootstrap import Recovery
+from tests.conftest import assert_unusable_substrate_stops_bootstrap
 from substrates.base import (
     CompletionError,
     CompletionRequest,
@@ -413,8 +414,7 @@ class TestBootstrap:
         with open(path, "w") as f:
             yaml.safe_dump(manifest, f)
 
-        with pytest.raises(BootstrapError, match="substrate is not usable"):
-            Recovery(str(path)).bootstrap()
+        assert_unusable_substrate_stops_bootstrap(path)
 
 
 # ---------------------------------------------------------------------------

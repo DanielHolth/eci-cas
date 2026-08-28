@@ -230,8 +230,6 @@ class AnthropicProvider(LLMProvider):
             "system": request.system,
             "temperature": request.temperature,
         }
-        if request.stop_sequences:
-            optional["stop_sequences"] = list(request.stop_sequences)
         if request.timeout_sec:
             optional["timeout"] = request.timeout_sec
 
@@ -352,8 +350,6 @@ class OpenAICompatibleProvider(LLMProvider):
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
         }
-        if request.stop_sequences:
-            optional["stop"] = list(request.stop_sequences)
         if request.timeout_sec:
             optional["timeout"] = request.timeout_sec
         reasoning_effort = self.options.get("reasoning_effort")

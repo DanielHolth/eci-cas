@@ -5,6 +5,17 @@ import os
 
 import pytest
 
+from recovery.bootstrap import BootstrapError, Recovery
+
+
+def assert_unusable_substrate_stops_bootstrap(manifest_path) -> None:
+    """The 'role declared real but its substrate can't be reached' contract
+    every cognitive role's bootstrap enforces independently
+    (recovery/bootstrap.py has one raise site per role) — same wording,
+    proven per role by each caller's own manifest fixture."""
+    with pytest.raises(BootstrapError, match="substrate is not usable"):
+        Recovery(str(manifest_path)).bootstrap()
+
 
 def pytest_configure(config):
     config.addinivalue_line(

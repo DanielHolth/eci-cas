@@ -164,23 +164,6 @@ def _diversify_by_subject(records: List[Dict[str, Any]], limit: int) -> List[Dic
     return picked
 
 
-def retrieve(
-    store: StructuredStore,
-    paths: List[Dict[str, str]],
-    *,
-    tier: str = "default",
-) -> List[Dict[str, Any]]:
-    """Query structured store for each (category, topic) path.
-
-    Returns merged, deduplicated results ordered by path priority
-    (first path = highest priority from Analytics)."""
-    per_path = retrieve_per_path(store, paths, tier=tier)
-    all_results: List[Dict[str, Any]] = []
-    for _, records in per_path:
-        all_results.extend(records)
-    return all_results
-
-
 def format_for_intent(results: List[Dict[str, Any]]) -> str:
     """Format swarm results as a terse string for Intent's bundle."""
     if not results:

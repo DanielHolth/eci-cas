@@ -18,20 +18,15 @@ adjacent judgments, and Security/Governance's routing.
 """
 from __future__ import annotations
 
-import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
-from substrates.base import (
-    CompletionError,
-    FailureKind,
-    Substrate,
-    SubstrateError,
-)
+from substrates.base import Substrate, SubstrateError
 from substrates.parsing import extract_json_object
 
 from agents.consolidator.base import ConsolidationResult, ConsolidatorBase
+from agents.shared.substrate_call import record_budget_failure, timed_complete
 
 DEFAULT_SYSTEM_INSTRUCTION = (
     "You are CONSOLIDATOR, the memory-writing agent of a multi-agent "
@@ -57,7 +52,10 @@ Reply with a single JSON object and nothing else:
                "value": "<bare datum>"}]}
 
 WRITE RULES — follow exactly:
-1. ONLY write facts the user explicitly stated. Questions are NOT facts.
+1. ONLY write facts the user explicitly stated. Questions are NOT facts —
+   but a message can state facts AND ask a question in the same breath
+   ("Here are the three rules: X, Y, Z. Any questions about them?"). Write
+   the stated facts; only the question part itself is not a fact.
 2. category and topic are SINGLE words or short phrases, NEVER paths with
    slashes. category = broad domain (person, place, event), topic =
    grouping (family, relationship, biography).
@@ -89,12 +87,35 @@ WRITE RULES — follow exactly:
    "person" is reserved for the human and the people they tell you about;
    mixing your own identity into it is what causes it to be confused with
    theirs later.
-9. Reuse existing categories and topics from the EXISTING CATEGORIES list
-   when one fits. Create a new category when nothing does — a store that
-   only has "person" facts in it must still be able to gain a "system"
-   one the first time your own identity comes up. Don't invent a synonym
-   for something that already exists, though.
-10. writes may be empty if nothing worth storing was said.
+9. A statement about THIS SYSTEM'S OWN configuration, rules, or mechanics
+   (its security rules, its architecture, how its agents route work) is
+   also a fact, also never a "person" fact, and also never a question even
+   when the user is teaching it to you conversationally. Use
+   category="system" with a topic that names what the fact is about —
+   e.g. topic="security", subtopic="rule", subject="<the rule's own
+   name>":
+     category="system", topic="security", subtopic="rule", subject="bypass-this-system", key="verdict", value="red"
+     category="system", topic="security", subtopic="rule", subject="self-harm-method", key="verdict", value="red"
+   Being told "log this for future reference" is the user stating a fact
+   and asking you to remember it — write it, exactly as you would if they
+   had stated it about themselves.
+   This applies to ANY of this system's own agents/components, not just
+   the ones named above — a message that names an agent and describes
+   what it does, even in passing ("your knowledge agent, the one that
+   reads from your memory"), states a fact about this system just as
+   much as a message naming a security rule does:
+     category="system", topic="architecture", subtopic="agent", subject="Knowledge", key="function", value="reads from memory"
+     category="system", topic="architecture", subtopic="agent", subject="Consolidator", key="function", value="writes new knowledge into memory"
+   Do not require the message to be ABOUT that fact for it to count — a
+   descriptive aside inside a request to test or check something ("let's
+   check if X, the one that does Y, now also does Z") still states that X
+   does Y, exactly as plainly as if it were the whole sentence.
+10. Reuse existing categories and topics from the EXISTING CATEGORIES list
+    when one fits. Create a new category when nothing does — a store that
+    only has "person" facts in it must still be able to gain a "system"
+    one the first time your own identity comes up. Don't invent a synonym
+    for something that already exists, though.
+11. writes may be empty if nothing worth storing was said.
 """
 
 
@@ -105,7 +126,14 @@ class ConsolidatorAgent(ConsolidatorBase):
 
     def __init__(self, bus: EmbeddedBus, substrate: Substrate, archive=None, *,
                  system_instruction: str = "",
-                 temperature: float = 0.3,
+                 # 0.0, not 0.3 (2026-08-29, Daniel): this is a
+                 # fact-extraction judgment call, not creative writing —
+                 # the SAME event should reliably produce the SAME
+                 # write-or-don't-write decision. A live trace showed two
+                 # near-identically-shaped prompts ("X agent, the one that
+                 # does Y") land on opposite decisions; temperature was
+                 # adding variance to a call that gains nothing from it.
+                 temperature: float = 0.0,
                  max_tokens: Optional[int] = None,
                  strict: bool = False,
                  budget=None,
@@ -133,19 +161,16 @@ class ConsolidatorAgent(ConsolidatorBase):
         user = self._prompt(envelope)
 
         try:
-            self.metrics["llm_calls"] += 1
-            started = time.perf_counter()
-            response = self.substrate.complete(
+            text, latency_ms, usage = timed_complete(
+                self.substrate, self.metrics,
                 system=system, user=user, temperature=self.temperature,
                 max_tokens=self.max_tokens, prefill="{",
             )
-            latency_ms = round((time.perf_counter() - started) * 1000, 1)
-            usage = dict(response.usage or {})
             cost = self.substrate.estimate_cost(usage)
             if self.budget is not None:
                 self.budget.record_success(usage=usage, cost_usd=cost)
 
-            writes, dropped = self._parse(response.text)
+            writes, dropped = self._parse(text)
             return ConsolidationResult(
                 writes=writes, decided_by="llm",
                 diagnostics={
@@ -158,9 +183,7 @@ class ConsolidatorAgent(ConsolidatorBase):
                 },
             )
         except (SubstrateError, ValueError) as exc:
-            if isinstance(exc, CompletionError) and self.budget is not None:
-                self.budget.record_failure(
-                    getattr(exc, "kind", FailureKind.UNKNOWN), str(exc))
+            record_budget_failure(exc, self.budget)
             if self.strict:
                 raise
             return ConsolidationResult(

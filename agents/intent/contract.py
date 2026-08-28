@@ -22,6 +22,10 @@ from typing import Any, Dict, List, Optional
 
 from bus.envelope import Envelope
 
+#: No longer enforced (2026-08-29, Daniel) — this was cutting the
+#: persona's actual reply to the human off mid-sentence at 600 chars.
+#: Kept as a name only for anything still importing it; nothing slices
+#: against it any more.
 MAX_SPEECH_CHARS = 600
 
 #: How many revision attempts a non-green verdict buys. ONE: if Security
@@ -219,7 +223,7 @@ def is_parroting(speech: str, source: str) -> bool:
 
 def parse(text: str, task: Task, *, recommendation: str = "", **_kw) -> Speech:
     """Parse plain text speech from the LLM. No JSON extraction needed."""
-    speech = text.strip()[:MAX_SPEECH_CHARS]
+    speech = text.strip()
     if not speech:
         raise ContractViolation(f"empty response from Intent: {text[:200]!r}")
     if is_parroting(speech, recommendation):

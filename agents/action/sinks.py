@@ -12,7 +12,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from bus.envelope import Envelope
 
@@ -121,34 +121,10 @@ class FileSink(Sink):
             raise SinkError(f"transcript write failed ({self.path}): {exc}") from exc
 
 
-class CallbackSink(Sink):
-    """Hands the envelope to a Python callable.
-
-    The seam a product layer attaches to — TTS, an avatar frame, a chat
-    widget, a websocket push — without any of those becoming a dependency
-    of this repo. A callback that raises is a failed emission, exactly
-    like a failed file write."""
-
-    name = "callback"
-
-    def __init__(self, callback: Callable[[Envelope], Any], *, name: str = "callback"):
-        if not callable(callback):
-            raise TypeError("CallbackSink needs a callable")
-        self.callback = callback
-        self.name = name
-
-    def emit(self, envelope: Envelope) -> None:
-        try:
-            self.callback(envelope)
-        except Exception as exc:
-            raise SinkError(f"callback sink '{self.name}' failed: {exc}") from exc
-
-
-#: Sink types a manifest may name. Deliberately closed: `callback` is not
-#: here, because a manifest naming a Python callable to import would make
-#: the deployment file an execution vector, and Action is the one role
-#: whose whole job is to affect the world. Attach a CallbackSink in
-#: process, where somebody has already decided to run this code.
+#: Sink types a manifest may name. Deliberately closed to these: a
+#: manifest naming a Python callable to import would make the deployment
+#: file an execution vector, and Action is the one role whose whole job
+#: is to affect the world.
 SINK_TYPES = {"null", "stdout", "stderr", "file"}
 
 
@@ -184,4 +160,4 @@ def build_sinks(configs: Optional[List[Dict[str, Any]]]) -> List[Sink]:
 
 
 __all__ = ["Sink", "SinkError", "NullSink", "StreamSink", "FileSink",
-           "CallbackSink", "SINK_TYPES", "build_sink", "build_sinks"]
+           "SINK_TYPES", "build_sink", "build_sinks"]

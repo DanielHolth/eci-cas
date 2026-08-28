@@ -9,21 +9,20 @@ single-turn.
 """
 from __future__ import annotations
 
-import time
 from typing import Any, Dict, Optional
 
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
-from substrates.base import (
-    CompletionError,
-    FailureKind,
-    Substrate,
-    SubstrateError,
-)
+from substrates.base import Substrate, SubstrateError
 
 from agents.analytics import contract
 from agents.analytics.base import AnalyticsBase
 from agents.analytics.contract import ContractViolation, Recommendation, Task
+from agents.shared.substrate_call import (
+    base_diagnostics,
+    record_budget_failure,
+    timed_complete,
+)
 
 DEFAULT_SYSTEM_INSTRUCTION = (
     "You are ANALYTICS, the reasoning and working-memory agent in a "
@@ -88,9 +87,7 @@ class AnalyticsAgent(AnalyticsBase):
                                               cost_usd=cost),
             )
         except (SubstrateError, ContractViolation, ValueError) as exc:
-            if isinstance(exc, CompletionError) and self.budget is not None:
-                self.budget.record_failure(
-                    getattr(exc, "kind", FailureKind.UNKNOWN), str(exc))
+            record_budget_failure(exc, self.budget)
             if self.strict:
                 raise
             degraded = contract.fallback(envelope, task, f"{type(exc).__name__}: {exc}")
@@ -111,16 +108,11 @@ class AnalyticsAgent(AnalyticsBase):
             schema_index=self._get_schema_index(),
         )
 
-        self.metrics["llm_calls"] += 1
-        started = time.perf_counter()
-        response = self.substrate.complete(
-            system=system,
-            user=user,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+        return timed_complete(
+            self.substrate, self.metrics,
+            system=system, user=user,
+            temperature=self.temperature, max_tokens=self.max_tokens,
         )
-        latency_ms = round((time.perf_counter() - started) * 1000, 1)
-        return response.text, latency_ms, dict(response.usage or {})
 
     def _get_schema_index(self) -> Optional[list]:
         if self._structured_store is None:
@@ -143,18 +135,8 @@ class AnalyticsAgent(AnalyticsBase):
         analytical) / source_model (forensic, resolved at write time)
         split, so Diagnostic (§12) can later trace which substrate
         produced which judgment."""
-        diagnostics: Dict[str, Any] = {
-            "source_substrate": self.substrate.substrate_class,
-            "source_model": self.substrate.model,
-            "provider": self.substrate.provider_name,
-        }
-        if latency_ms is not None:
-            diagnostics["latency_ms"] = latency_ms
-        if usage:
-            diagnostics["usage"] = usage
-        if cost_usd:
-            diagnostics["est_cost_usd"] = cost_usd
-        return diagnostics
+        return base_diagnostics(self.substrate, latency_ms=latency_ms,
+                                usage=usage, cost_usd=cost_usd)
 
 
 __all__ = ["AnalyticsAgent", "DEFAULT_SYSTEM_INSTRUCTION"]

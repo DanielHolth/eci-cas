@@ -40,7 +40,7 @@ reasons picks it up.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Dict
 
 from bus.envelope import VERDICT_GREEN, Envelope
 from bus.pubsub import EmbeddedBus

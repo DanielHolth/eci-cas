@@ -7,26 +7,27 @@ whether something should proceed, it just speaks.
 """
 from __future__ import annotations
 
-import time
 from typing import Any, Dict, List, Optional
 
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
-from substrates.base import (
-    CompletionError,
-    FailureKind,
-    Substrate,
-    SubstrateError,
-)
+from substrates.base import Substrate, SubstrateError
 
 from agents.intent import contract
 from agents.intent.base import DEFAULT_CONTEXT_EVENTS, IntentBase
 from agents.intent.contract import ContractViolation, Speech, Task
+from agents.shared.substrate_call import (
+    base_diagnostics,
+    record_budget_failure,
+    timed_complete,
+)
 
 DEFAULT_SYSTEM_INSTRUCTION = (
     "You are INTENT: the voice of a multi-agent system. "
     "Be concise and natural — short, direct replies. "
-    "If Security is yellow or red, revise or your message is blocked."
+    "If Security is red, revise or your message is blocked. If Security is "
+    "yellow, it's a judgment call, not a violation — revise if you can "
+    "address the concern, but it will go out either way."
 )
 
 
@@ -76,9 +77,7 @@ class IntentAgent(IntentBase):
                 diagnostics={**self._diagnostics(), "latency_ms": latency_ms,
                              "usage": usage, "est_cost_usd": cost or None})
         except (SubstrateError, ContractViolation, ValueError) as exc:
-            if isinstance(exc, CompletionError) and self.budget is not None:
-                self.budget.record_failure(
-                    getattr(exc, "kind", FailureKind.UNKNOWN), str(exc))
+            record_budget_failure(exc, self.budget)
             if self.strict:
                 raise
             reason = f"{type(exc).__name__}: {exc}"
@@ -101,14 +100,11 @@ class IntentAgent(IntentBase):
             reflex_action=envelope.meta.get("reflex_action"),
             security_concern=self._security_concern(envelope),
         )
-        self.metrics["llm_calls"] += 1
-        started = time.perf_counter()
-        response = self.substrate.complete(
+        return timed_complete(
+            self.substrate, self.metrics,
             system=system, user=user, temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        latency_ms = round((time.perf_counter() - started) * 1000, 1)
-        return response.text, latency_ms, dict(response.usage or {})
 
     @staticmethod
     def _security_concern(envelope: Envelope) -> Optional[str]:
@@ -128,11 +124,7 @@ class IntentAgent(IntentBase):
     # ---- Diagnostics --------------------------------------------------------
 
     def _diagnostics(self) -> Dict[str, Any]:
-        return {
-            "source_substrate": self.substrate.substrate_class,
-            "source_model": self.substrate.model,
-            "provider": self.substrate.provider_name,
-        }
+        return base_diagnostics(self.substrate)
 
 
 __all__ = ["IntentAgent", "DEFAULT_SYSTEM_INSTRUCTION"]

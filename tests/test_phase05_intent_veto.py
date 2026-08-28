@@ -8,8 +8,12 @@ proceed. Security decides verdicts; Governance routes:
   red    → BLOCKED (immediate, no LLM call)
 
 A non-green verdict buys exactly ONE more attempt (MAX_REVISION_PASSES).
-If the re-speak is also non-green, the event is BLOCKED — a deterministic
-notice, not model-authored.
+If the re-speak is still red, the event is BLOCKED — a deterministic
+notice, not model-authored. If the re-speak is still yellow, the event
+proceeds to Action anyway (2026-08-28): yellow is not a rule violation,
+it's the rules declining to judge, so exhausting the revision budget on
+ambiguity should not be indistinguishable from exhausting it on an
+actual violation.
 """
 from __future__ import annotations
 
@@ -257,7 +261,10 @@ class AlwaysYellowSecurity:
 
 
 class TestTheLoopIsBounded:
-    def test_yellow_is_bounded_too_not_just_red(self, tmp_path):
+    def test_yellow_is_bounded_too_but_proceeds_not_blocks(self, tmp_path):
+        """Yellow's revision budget is still bounded (no infinite live-lock),
+        but running out is not a violation, so it proceeds to Action instead
+        of blocking (2026-08-28) — only red dead-ends there."""
         eco = _boot(tmp_path)
         eco.bus._subscribers["events.security"] = []
         security = AlwaysYellowSecurity(eco.bus)
@@ -265,15 +272,20 @@ class TestTheLoopIsBounded:
 
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
 
+        spoken = [e for e in _to_action(eco, event_id) if e.type == "Speech"]
         blocked = [e for e in _to_action(eco, event_id) if e.type == "Blocked"]
-        assert len(blocked) == 1
+        assert len(spoken) == 1
+        assert blocked == []
         assert security.verdicts == 2
 
-    def test_the_router_blocks_any_non_green_once_the_budget_is_spent(self):
-        for verdict in (VERDICT_YELLOW, VERDICT_RED):
-            env = Envelope(source="Security", destination="Governance",
-                           type="Verdict", content="x", meta={"verdict": verdict})
-            assert routing.route_for(env, revision_passes=1) is routing.BLOCKED
+    def test_the_router_blocks_red_but_speaks_yellow_once_the_budget_is_spent(self):
+        env = Envelope(source="Security", destination="Governance",
+                       type="Verdict", content="x", meta={"verdict": VERDICT_RED})
+        assert routing.route_for(env, revision_passes=1) is routing.BLOCKED
+
+        env = Envelope(source="Security", destination="Governance",
+                       type="Verdict", content="x", meta={"verdict": VERDICT_YELLOW})
+        assert routing.route_for(env, revision_passes=1) is routing.SPEAK
 
     def test_green_still_clears_regardless_of_attempts_spent(self):
         env = Envelope(source="Security", destination="Governance",

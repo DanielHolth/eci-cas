@@ -12,15 +12,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from agents.shared.decision import build_meta
 from bus.envelope import Envelope
 
-#: A recommendation longer than this is the model writing an essay rather
-#: than a keyword read. Truncated rather than rejected — the content is
-#: probably fine, there is just too much of it, and Intent reads it next.
-#: 2026-08-25 (Daniel): tightened from 2000 — a "keyword or short phrase"
-#: has no business running anywhere near the old ceiling, and Intent was
-#: getting misled by essay-length "recommendations" reading as loaded
-#: context rather than a terse read.
+#: No longer enforced (2026-08-29, Daniel) — the 80-char cap this used to
+#: apply was cutting recommendations off mid-word, which read as broken
+#: rather than terse. Kept as a name only for anything still importing it;
+#: nothing slices against it any more.
 MAX_RECOMMENDATION_CHARS = 80
 
 
@@ -65,12 +63,8 @@ class Recommendation:
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
     def to_meta(self) -> Dict[str, Any]:
-        meta: Dict[str, Any] = {"decided_by": self.decided_by}
-        if self.knowledge_paths:
-            meta["knowledge_paths"] = self.knowledge_paths
-        if self.diagnostics:
-            meta.update(self.diagnostics)
-        return meta
+        extra = {"knowledge_paths": self.knowledge_paths} if self.knowledge_paths else {}
+        return build_meta(self.decided_by, self.diagnostics, **extra)
 
 
 class ContractViolation(ValueError):
@@ -179,7 +173,7 @@ def parse(text: str, task: Task) -> Recommendation:
     if not lines:
         raise ContractViolation(f"empty response from Analytics: {text[:200]!r}")
 
-    recommendation = lines[0].strip()[:MAX_RECOMMENDATION_CHARS]
+    recommendation = lines[0].strip()
     knowledge_paths = _parse_paths(lines[1:]) if len(lines) > 1 else []
 
     return Recommendation(recommendation=recommendation, knowledge_paths=knowledge_paths, decided_by="llm")

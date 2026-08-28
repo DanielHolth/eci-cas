@@ -79,6 +79,22 @@ def _color(source: str) -> str:
     return COLORS.get(source, "")
 
 
+#: Sources whose non-final hops repeat content already said elsewhere —
+#: Sensory fans the SAME content out to four destinations (§5.2), and
+#: Governance is a pure dispatcher that re-emits whatever it's handed
+#: under a new envelope at every hop. Shared by print_hop (dims these) and
+#: the console's hop filter (hides these by default) so the two can't
+#: drift out of sync about which hops count as "repeat" — see main().
+REPEATING_SOURCES = {"Sensory", "Governance"}
+
+
+def is_repeat_hop(envelope: Envelope) -> bool:
+    """True for a Sensory/Governance hop that ISN'T the one reaching
+    Action — the actual output is always worth seeing, whatever route
+    produced it."""
+    return envelope.source in REPEATING_SOURCES and envelope.destination != "Action"
+
+
 BUDGET_COMMANDS = {
     "switch to budget mode": "budget",
     "switch to live mode": "live",
@@ -122,11 +138,18 @@ def show_alerts(eco) -> None:
 
 
 def print_hop(envelope: Envelope) -> None:
-    color = _color(envelope.source)
-    arrow = f"{color}{envelope.source:<10}{RESET} -> {envelope.destination:<10}"
     tag = f"[{envelope.type}]"
     content = str(envelope.content)
-    print(f"  {arrow} {tag:<14} {content}")
+    if is_repeat_hop(envelope):
+        # Whole line dimmed, not just the source label — this is a repeat,
+        # visible under --verbose for debugging but not meant to compete
+        # with the actual answers around it.
+        arrow = f"{envelope.source:<10} -> {envelope.destination:<10}"
+        print(f"  {DIM}{arrow} {tag:<14} {content}{RESET}")
+    else:
+        color = _color(envelope.source)
+        arrow = f"{color}{envelope.source:<10}{RESET} -> {envelope.destination:<10}"
+        print(f"  {arrow} {tag:<14} {content}")
 
     # Analytics knowledge_paths — show which archive paths Analytics selected
     if envelope.source == "Analytics" and envelope.type == "Recommend":
@@ -136,13 +159,23 @@ def print_hop(envelope: Envelope) -> None:
             labels = [f"{p.get('category','')}/{p.get('topic','')}" for p in paths]
             print(f"  {DIM}Analytics paths: {', '.join(labels)}{RESET}")
 
-    # Knowledge swarm detail on the Bundle hop
-    if envelope.type == "Bundle" and (envelope.meta or {}).get("knowledge_swarm_detail"):
-        for i, node in enumerate(envelope.meta["knowledge_swarm_detail"]):
-            count = node["count"]
-            if count:
-                print(f"  {DIM}Knowledge[{i}] -> Governance [Findings/{count}]  "
-                      f"{node.get('detail', '')}{RESET}")
+
+def print_knowledge_swarm(envelope: Envelope) -> None:
+    """Knowledge has no bus hop of its own since Phase 0.8 — it's a swarm
+    embedded in Governance's Bundle hop (agents/governance/knowledge_swarm.py)
+    — so its detail rides in `meta.knowledge_swarm_detail` on that (Governance-
+    sourced, ordinarily-hidden) envelope. Called unconditionally, independent
+    of whether the Bundle line itself printed: Knowledge's findings are a
+    genuinely distinct answer like Personality's or Analytics', not a repeat,
+    and hiding them as a side effect of hiding Governance's dispatch noise
+    was the bug (2026-08-29)."""
+    if envelope.type != "Bundle":
+        return
+    for i, node in enumerate((envelope.meta or {}).get("knowledge_swarm_detail") or []):
+        count = node["count"]
+        if count:
+            print(f"  {DIM}Knowledge[{i}] -> Governance [Findings/{count}]  "
+                  f"{node.get('detail', '')}{RESET}")
 
 
 def main(argv=None) -> int:
@@ -153,6 +186,15 @@ def main(argv=None) -> int:
         help="Override Intent's conversation window size for this session "
              "(default 10). Use a small value like 1 or 2 to test without "
              "prior-conversation bleed.")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Also print Sensory's four-way fan-out and Governance's own "
+             "dispatch hops (every Governance/Security round trip included) "
+             "— repeats of the same content that the default view hides. "
+             "This is how the console always used to behave. Without it, "
+             "everything else — Impulse, Analytics, Personality, Knowledge, "
+             "Intent, Security, Consolidator — still prints in full; only "
+             "Sensory and Governance are quieted.")
     args = parser.parse_args(argv)
 
     try:
@@ -166,7 +208,11 @@ def main(argv=None) -> int:
 
     print()
     print("=" * 70)
-    print("Live queue console — every hop prints in the order it happened.")
+    if args.verbose:
+        print("Live queue console — every hop prints in the order it happened.")
+    else:
+        print("Live queue console — everything prints except Sensory's and "
+              "Governance's repeats. Pass --verbose for every hop.")
     print("Type a prompt and press Enter. Type 'quit' or 'exit' to stop.")
     if getattr(eco, "budget", None) is not None and eco.budget.enabled:
         print("Budget commands: 'switch to budget mode' / 'switch to live mode'")
@@ -179,16 +225,32 @@ def main(argv=None) -> int:
 
     # Real-time display: print each hop as it's published on the bus,
     # instead of batch-reading the trace after ingest() returns.
+    #
+    # Non-verbose (default, 2026-08-29): hide a repeat hop (is_repeat_hop —
+    # Sensory/Governance, not reaching Action); every other source (present
+    # or future) carries a genuinely distinct answer and prints
+    # unconditionally, so the rule is exclusion-based rather than an
+    # allow-list that has to be remembered for each new agent. --verbose
+    # restores the full causal trace — repeat hops print too, dimmed
+    # (print_hop) rather than fully hidden, since they're real and useful
+    # for debugging, just not meant to compete with the actual answers.
     def _on_hop(topic: str, envelope: Envelope) -> None:
         if topic.startswith("system."):
             return
-        print_hop(envelope)
+        if args.verbose or not is_repeat_hop(envelope):
+            print_hop(envelope)
+        # Independent of whether the Bundle line itself printed above —
+        # see print_knowledge_swarm's docstring.
+        print_knowledge_swarm(envelope)
 
     eco.bus._on_publish = _on_hop
 
     # Consolidator never publishes a bus hop (it doesn't reply to
     # Governance), so its writes are otherwise invisible here — show them
     # via the display-layer hook instead of adding a bus message for it.
+    # Only Sensory and Governance are hidden by default (2026-08-29) —
+    # Consolidator's writes are a distinct answer like Impulse's/
+    # Analytics'/Intent's/Security's, so they print unconditionally too.
     if getattr(eco, "consolidator", None) is not None:
         def _on_consolidator_write(records) -> None:
             for r in records:

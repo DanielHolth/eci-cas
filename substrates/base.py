@@ -39,7 +39,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
 class SubstrateError(RuntimeError):
@@ -108,7 +108,6 @@ class CompletionRequest:
     user: str
     temperature: float = 0.0
     max_tokens: int = 512
-    stop_sequences: List[str] = field(default_factory=list)
     prefill: Optional[str] = None
     #: Wall-clock ceiling for one call. Vendor SDKs default to something
     #: close to unbounded, and one hung request hangs the whole pipeline —
@@ -186,14 +185,12 @@ class Substrate:
 
     def complete(self, *, system: str, user: str, temperature: float = 0.0,
                  max_tokens: Optional[int] = None,
-                 stop_sequences: Optional[List[str]] = None,
                  prefill: Optional[str] = None) -> CompletionResponse:
         request = CompletionRequest(
             system=system,
             user=user,
             temperature=temperature,
             max_tokens=max_tokens or self.max_tokens,
-            stop_sequences=list(stop_sequences or []),
             prefill=prefill,
             timeout_sec=self.timeout_sec,
         )

@@ -11,14 +11,17 @@ Topology::
                                  └─→ Governance bundles → Intent
     Intent  → Governance → Security
     Security green  → Action     (SPEAK)
-    Security yellow → Intent     (REVISE — one chance)
+    Security yellow → Intent     (REVISE — one chance, then SPEAK anyway)
     Security red    → Action     (BLOCKED, immediate)
     Action failure  → Action     (Prompt fallback)
 
-Non-green verdicts get ONE revision attempt; yellow is bounded too
-to prevent live-lock (a declined revision yellows forever otherwise).
-REVISE carries the original request as payload; the router instruction
-rides in meta.
+Non-green verdicts get ONE revision attempt. Red is a rule violation, so
+exhausting the attempt blocks. Yellow is NOT a violation — it is the
+rules declining to judge — so exhausting the attempt lets the event
+through rather than blocking it; blocking on mere ambiguity would make
+every unresolved judgment call a hard stop, which is Security's job
+description only for red. REVISE carries the original request as
+payload; the router instruction rides in meta.
 """
 from __future__ import annotations
 
@@ -106,7 +109,10 @@ REVISE = Route(
     carry_meta=True,
 )
 
-#: The second red. Not a loop — an outcome (Daniel, 2026-08-24).
+#: The second red, or a red on the first pass. Not a loop — an outcome
+#: (Daniel, 2026-08-24). Yellow no longer routes here (2026-08-28): a
+#: second yellow is not a rule violation either, so it proceeds via SPEAK
+#: instead of dead-ending here.
 BLOCKED = Route(
     id="blocked",
     topic="events.action",
@@ -134,11 +140,6 @@ FALLBACK_PROMPT = Route(
     type="Prompt",
     content_policy="template",
 )
-
-ROUTES: Dict[str, Route] = {
-    r.id: r for r in (BUNDLE, CLEAR, SPEAK, REVISE, BLOCKED, REFLEX,
-                      FALLBACK_PROMPT)
-}
 
 #: Which routes are legal for which inbound trigger. Anything not listed
 #: here is a topology violation by construction.
@@ -187,10 +188,6 @@ def classify(envelope: Envelope) -> Trigger:
     if source == "Action" and str(envelope.type).strip().lower() == "failure":
         return Trigger.ACTION_FAILURE
     return Trigger.UNROUTABLE
-
-
-def legal_routes(envelope: Envelope) -> Tuple[Route, ...]:
-    return LEGAL_ROUTES[classify(envelope)]
 
 
 #: Prose forms accepted as a verdict when `meta.verdict` is absent. Kept
@@ -255,12 +252,18 @@ def route_for(envelope: Envelope, *, bundle_ready: bool = False,
 
     if trigger is Trigger.SECURITY_VERDICT:
         verdict = read_verdict(envelope)
-        # Green is the only value that leaves the loop by clearing. Every
-        # other value spends an attempt, and when the budget is gone the
-        # event is blocked rather than re-asked. See the module docstring
-        # on why this covers yellow too.
-        if verdict != VERDICT_GREEN and revision_passes >= max_revision_passes:
-            return BLOCKED
+        if revision_passes >= max_revision_passes:
+            # Red is a rule violation: the budget being gone doesn't change
+            # that, so it blocks (it would have blocked on pass 0 too).
+            if verdict == VERDICT_RED:
+                return BLOCKED
+            # Yellow is NOT a rule violation — it is the rules declining to
+            # judge (§5.6). One revision is offered so Intent can address
+            # the concern; if it comes back yellow again that is still not
+            # a violation, so the event proceeds rather than dead-ending in
+            # a block. Only red is a hard stop.
+            if verdict == VERDICT_YELLOW:
+                return SPEAK
         return VERDICT_ROUTES[verdict]
 
     routes = LEGAL_ROUTES[trigger]
@@ -275,11 +278,13 @@ def template_content(envelope: Envelope, route: Route) -> str:
     if route.id == REVISE.id:
         # Quote the PROPOSAL, not the verdict envelope's content — the
         # thing being revised is what Intent said, not what Security said
-        # about it.
+        # about it. Only reached on yellow (red skips straight to BLOCKED),
+        # so this is a chance to address the concern, not a last warning —
+        # a second yellow proceeds rather than being blocked.
         proposed = envelope.meta.get("proposed_action", "")
-        return (f"Security blocked the prior course ('{proposed}'). "
-                f"Propose a revised response. This is the only revision "
-                f"available — if it is blocked again the exchange is dropped.")
+        return (f"Security flagged the prior course ('{proposed}') as a "
+                f"judgment call, not a rule violation. Propose a revised "
+                f"response if you can address the concern.")
     if route.id == BLOCKED.id:
         # Nothing model-authored reaches the human here: nothing cleared.
         return ("That one was blocked, and my attempt to put it another way "
@@ -346,6 +351,11 @@ def decide(envelope: Envelope, *, bundle_ready: bool = False,
             diagnostics["verdict_inferred"] = True
         if route.id == BLOCKED.id:
             diagnostics["revision_passes"] = revision_passes
+        if route.id == SPEAK.id and verdict == VERDICT_YELLOW:
+            # Distinguishes "green cleared it" from "yellow's revision
+            # budget ran out and it proceeded anyway" in the audit trail.
+            diagnostics["revision_passes"] = revision_passes
+            diagnostics["yellow_exhausted"] = True
     if route.id == REFLEX.id:
         diagnostics["critical_reflex"] = True
 
@@ -359,7 +369,7 @@ def decide(envelope: Envelope, *, bundle_ready: bool = False,
 __all__ = [
     "Trigger", "Route", "RoutingDecision", "WORKERS", "CRITICAL",
     "BUNDLE", "CLEAR", "SPEAK", "REVISE", "BLOCKED", "REFLEX",
-    "FALLBACK_PROMPT", "ROUTES", "LEGAL_ROUTES", "VERDICT_ROUTES",
-    "classify", "legal_routes", "read_verdict", "is_critical", "route_for",
+    "FALLBACK_PROMPT", "LEGAL_ROUTES", "VERDICT_ROUTES",
+    "classify", "read_verdict", "is_critical", "route_for",
     "template_content", "resolve_content", "decide",
 ]

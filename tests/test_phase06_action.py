@@ -22,7 +22,6 @@ import yaml
 
 from agents.action.agent import ActionAgent, ActionMock
 from agents.action.sinks import (
-    CallbackSink,
     FileSink,
     NullSink,
     SinkError,
@@ -41,6 +40,24 @@ def action_envelope(content="hello there", **kwargs):
     return Envelope(source="Governance", destination="Action",
                     type=kwargs.pop("type", "Prompt"), content=content,
                     meta=meta, **kwargs)
+
+
+class _CallbackSink:
+    """Test-only double: hands the envelope to a callable, raising
+    SinkError if it raises. Production sinks are closed to manifest
+    configuration (see TestSinkConfig) — this exists purely so
+    ActionAgent's failure handling can be exercised here."""
+
+    name = "callback"
+
+    def __init__(self, callback):
+        self.callback = callback
+
+    def emit(self, envelope):
+        try:
+            self.callback(envelope)
+        except Exception as exc:
+            raise SinkError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -75,15 +92,6 @@ class TestSinks:
 
         lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
         assert [r["content"] for r in lines] == ["first", "second"]
-
-    def test_callback_sink_hands_over_the_envelope(self):
-        seen = []
-        CallbackSink(seen.append).emit(action_envelope("for the avatar"))
-        assert seen[0].content == "for the avatar"
-
-    def test_callback_sink_refuses_a_non_callable(self):
-        with pytest.raises(TypeError):
-            CallbackSink("not callable")
 
 
 class TestSinkConfig:
@@ -133,7 +141,7 @@ class TestActionAgent:
         def explode(_):
             raise RuntimeError("offline")
 
-        agent, reports = self._agent(CallbackSink(explode))
+        agent, reports = self._agent(_CallbackSink(explode))
         agent.bus.publish("events.action", action_envelope())
         assert len(reports) == 1
         assert reports[0].type == "Failure"
@@ -146,7 +154,7 @@ class TestActionAgent:
         def explode(_):
             raise RuntimeError("offline")
 
-        agent, reports = self._agent(CallbackSink(explode))
+        agent, reports = self._agent(_CallbackSink(explode))
         agent.bus.publish("events.action", action_envelope("what it meant to say"))
         assert reports[0].content == "what it meant to say"
 
@@ -157,7 +165,7 @@ class TestActionAgent:
             raise RuntimeError("offline")
 
         good = NullSink()
-        agent, reports = self._agent(CallbackSink(explode), good)
+        agent, reports = self._agent(_CallbackSink(explode), good)
         agent.bus.publish("events.action", action_envelope())
         assert len(good.emitted) == 1
         assert len(reports) == 1
@@ -167,7 +175,7 @@ class TestActionAgent:
         and emits it; it is never handed the pipeline's reasoning, so
         there is nothing here to author with."""
         captured = []
-        agent, _ = self._agent(CallbackSink(captured.append))
+        agent, _ = self._agent(_CallbackSink(captured.append))
         original = action_envelope("exactly this")
         agent.bus.publish("events.action", original)
         assert captured[0].content == original.content

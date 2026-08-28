@@ -14,21 +14,20 @@ Empty-archive short-circuits without a substrate call.
 """
 from __future__ import annotations
 
-import time
 from typing import Any, Dict, List, Optional
 
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
-from substrates.base import (
-    CompletionError,
-    FailureKind,
-    Substrate,
-    SubstrateError,
-)
+from substrates.base import Substrate, SubstrateError
 
 from agents.archive_lookup import contract
 from agents.archive_lookup.base import ArchiveLookupBase
 from agents.archive_lookup.contract import Findings
+from agents.shared.substrate_call import (
+    base_diagnostics,
+    record_budget_failure,
+    timed_complete,
+)
 
 DEFAULT_SYSTEM_INSTRUCTION = (
     "You are a memory-lookup agent in a multi-agent system. You are given "
@@ -110,9 +109,7 @@ class ArchiveLookupAgent(ArchiveLookupBase):
                                               records_considered=len(records)),
             )
         except (SubstrateError, ValueError) as exc:
-            if isinstance(exc, CompletionError) and self.budget is not None:
-                self.budget.record_failure(
-                    getattr(exc, "kind", FailureKind.UNKNOWN), str(exc))
+            record_budget_failure(exc, self.budget)
             if self.strict:
                 raise
             degraded = contract.fallback(f"{type(exc).__name__}: {exc}")
@@ -130,16 +127,11 @@ class ArchiveLookupAgent(ArchiveLookupBase):
         user = contract.build_prompt(str(envelope.content), records,
                                      brief=self.brief)
 
-        self.metrics["llm_calls"] += 1
-        started = time.perf_counter()
-        response = self.substrate.complete(
-            system=system,
-            user=user,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+        return timed_complete(
+            self.substrate, self.metrics,
+            system=system, user=user,
+            temperature=self.temperature, max_tokens=self.max_tokens,
         )
-        latency_ms = round((time.perf_counter() - started) * 1000, 1)
-        return response.text, latency_ms, dict(response.usage or {})
 
     # ---- Diagnostics ------------------------------------------------------
 
@@ -152,20 +144,9 @@ class ArchiveLookupAgent(ArchiveLookupBase):
         produced which judgment. `records_considered` is this family's
         own addition: 'relevant: false' means something quite different
         over 8 records than over 1."""
-        diagnostics: Dict[str, Any] = {
-            "source_substrate": self.substrate.substrate_class,
-            "source_model": self.substrate.model,
-            "provider": self.substrate.provider_name,
-        }
-        if latency_ms is not None:
-            diagnostics["latency_ms"] = latency_ms
-        if usage:
-            diagnostics["usage"] = usage
-        if cost_usd:
-            diagnostics["est_cost_usd"] = cost_usd
-        if records_considered is not None:
-            diagnostics["records_considered"] = records_considered
-        return diagnostics
+        return base_diagnostics(self.substrate, latency_ms=latency_ms,
+                                usage=usage, cost_usd=cost_usd,
+                                records_considered=records_considered)
 
 
 __all__ = ["ArchiveLookupAgent", "DEFAULT_SYSTEM_INSTRUCTION"]

@@ -32,7 +32,8 @@ from agents.archive_lookup.base import ROLE_STORES
 from agents.archive_lookup.live import ArchiveLookupAgent
 from bus.envelope import Envelope
 from bus.pubsub import EmbeddedBus
-from recovery.bootstrap import BootstrapError, Recovery
+from recovery.bootstrap import Recovery
+from tests.conftest import assert_unusable_substrate_stops_bootstrap
 from substrates.base import (
     CompletionError,
     CompletionRequest,
@@ -303,10 +304,8 @@ class TestBootstrap:
         """Same posture as every other cognitive role: a role declared
         real with no way to reach its substrate must not quietly run
         mocked."""
-        with pytest.raises(BootstrapError) as exc:
-            Recovery(self._manifest(
-                tmp_path, options={"fail_credentials": True})).bootstrap()
-        assert "not usable" in str(exc.value)
+        assert_unusable_substrate_stops_bootstrap(self._manifest(
+            tmp_path, options={"fail_credentials": True}))
 
 
 # ---------------------------------------------------------------------------
