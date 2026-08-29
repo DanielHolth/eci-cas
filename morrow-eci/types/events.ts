@@ -1,9 +1,8 @@
 /**
  * Typed mirror of the ECI-CAS bus event shapes this app cares about.
  * Kept close to the real backend contracts (src/EciCas.Agents/*,
- * docs plan §1 roster) so that swapping the mock feed (lib/mockTurn.ts)
- * for a real SSE subscription (M5) is a drop-in later, not a rewrite.
- * See morrow-eci/README.md — "what this app is allowed to do".
+ * docs plan §1 roster). See morrow-eci/README.md — "what this app is
+ * allowed to do".
  */
 
 /** Impulse's fixed, closed expression vocabulary. */
@@ -50,13 +49,31 @@ export interface ConsolidationEpoch {
   acknowledged: boolean;
 }
 
-/** One full conversational turn, staged the way the mock sequences it
- * on screen: thinking -> (optional security loop) -> speaking -> doodle. */
+/** One full conversational turn, staged the way the UI sequences it on
+ * screen: thinking -> (optional security loop) -> speaking -> doodle.
+ * `impulse`/`output` start undefined and fill in as envelopes arrive live —
+ * see lib/useEciStream.ts, which is what actually produces these now. */
 export interface TurnEvent {
   turnId: string;
-  impulse: ImpulseState;
+  stage: "thinking" | "verdict" | "speaking";
+  impulse?: ImpulseState;
   bundle: BundleFinding[];
   security: SecurityOutcome[];
-  output: IntentOutput;
+  output?: IntentOutput;
   epoch?: ConsolidationEpoch;
+}
+
+/**
+ * Wire shape from GET /api/stream (src/EciCas.Host/EnvelopeDto.cs) — one SSE
+ * `data:` line per bus envelope, every topic, unfiltered (Topics.All).
+ */
+export interface RawEnvelope {
+  eventId: string;
+  correlationId: string;
+  topic: string;
+  publishedBy: string;
+  timestamp: string;
+  severity: "restful" | "neutral" | "elevated" | "critical";
+  generation: number;
+  meta: Record<string, unknown>;
 }

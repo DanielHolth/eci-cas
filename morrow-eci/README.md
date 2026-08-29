@@ -6,12 +6,16 @@ and "Project layout" sections). This is the frontend companion surface
 for the ECI-CAS backend, which lives one level up in this repo
 (`src/EciCas.*`).
 
-This pass builds the surface milestone's shell (read-only observer +
-companion) and its visual states (expressions, thought bubbles, security
-icon, speech bubble) against a **mock event feed** (`lib/mockTurn.ts`) so
-the UI can be reviewed before any live bus wiring exists. The "+" doodle
-is stubbed the same way — it depends on backend work (Memory milestone:
-`EpochWritten` payload, `ui_click` source type, epoch dedup) not yet built.
+The surface milestone (M5) is now wired to the real backend: `lib/api.ts`
+posts to `POST /api/perceive`, and `lib/useEciStream.ts` opens
+`GET /api/stream` (an SSE feed off `EciCas.Host`, see
+`src/EciCas.Host/Program.cs`) and reduces the raw envelope feed into the
+`TurnEvent` shape the components already expected from the mock-era pass.
+The mock feed (`lib/mockTurn.ts`) that stood in for it during the earlier
+scaffold-only pass has been removed now that a real feed exists. The "+"
+doodle stays client-side-only
+(see `components/ConsolidationDoodle.tsx`) — no backend endpoint was built
+for `source_type: "ui_click"` ingestion.
 
 ## Running it
 
@@ -20,27 +24,26 @@ npm install
 npm run dev
 ```
 
-Open the page and click "Next stage" / "Next turn" to step through two
-canned conversational turns: one clean pass, one that trips a security
-yellow (one revision pass), then red on the revision itself.
+Requires `EciCas.Host` running (`dotnet run --project ../src/EciCas.Host`)
+on `http://localhost:5179` — override via `NEXT_PUBLIC_ECI_API_BASE` if it's
+running elsewhere. Type into the input box and press Send; the avatar,
+thought bubbles, security icon, and speech bubble update live as envelopes
+arrive over SSE.
 
 ## What this app is allowed to do (void-observer discipline)
 
 Per the plan, this UI is a **void observer** on the bus — it subscribes
-to `events.*` and never publishes, with exactly one sanctioned exception:
-clicking the consolidation doodle fires a `Perception.ingest(source_type:
-"ui_click")` event, and nothing else. Right now neither side is wired to
-the real bus — `lib/mockTurn.ts` stands in for the subscription, and
-`ConsolidationDoodle`'s click handler only logs what it would send (see
-the comment in `components/ConsolidationDoodle.tsx`). When the surface
-milestone's live wiring lands (an ASP.NET SSE endpoint as one more bus
-subscriber), the mock feed is the thing that gets replaced; the component
-contracts (`types/events.ts`) are written to match the real event shapes
-already, so the components themselves shouldn't need to change.
+to `events.*` and never publishes directly to it. It does now have one
+sanctioned way in: `POST /api/perceive`, which is exactly what typing at
+the console REPL does on the backend side (`PerceptionAgent.Perceive`) —
+not a second privileged path. The consolidation doodle's click was the
+plan's other sanctioned exception (`Perception.ingest(source_type:
+"ui_click")`), but that stays unbuilt on the backend (see
+`components/ConsolidationDoodle.tsx`) — a scope decision, not an oversight.
 
 Any future interaction idea for this app should stay inside that same
-constraint: read from the bus freely, but the only path back in is the
-one sanctioned click.
+constraint: read from the bus freely via SSE, write only through
+`/api/perceive`.
 
 ## Event → UI map
 
@@ -75,9 +78,7 @@ react to — none of them are settled:
 
 ## Not in this pass
 
-- No live bus connection — mock data only (`lib/mockTurn.ts`).
-- No backend Memory/Surface milestone work (that's a separate, parallel
-  track — see the plan's milestone list).
+- No `ui_click` write path — the doodle acknowledges locally only.
 - No visual polish beyond "clearly reviewable" — placeholders are
   called out inline and above, not final design.
 
@@ -104,3 +105,41 @@ available to confirm:
   branch the first turn doesn't cover.
 - Renamed the doodle's stub log line from `Sensory.ingest` to
   `Perception.ingest` to match the plan's agent rename (§1).
+
+## Assumptions made while wiring M5 (2026-08-30)
+
+Made autonomously while Daniel was asleep, per his standing "keep going,
+document assumptions" instruction:
+
+- **Kestrel port fixed at `http://localhost:5179`** via
+  `Surface:Url` config, rather than leaving it to `launchSettings.json`
+  defaults — `EciCas.Host` has none (it started as a console app), and a
+  stable documented port is needed for this app's default `API_BASE`.
+- **JSON wire casing is camelCase** for both property names (`eventId`,
+  not `EventId`) and enum values (`"green"`, not `"Green"`) — idiomatic
+  for a TS consumer, configured in `EciCas.Host/Program.cs`'s
+  `jsonOptions`.
+- **Expression derivation is entirely client-side and heuristic**
+  (`lib/useEciStream.ts: deriveExpression`) — the backend's Impulse agent
+  has no concept of `Expression` at all, only a severity + free-text
+  advice string. This mapping is a placeholder, not a spec.
+- **Bundle findings are upserted, not appended**, keyed by agent name —
+  `ThoughtBubbles` renders one row per `BundleAgent` via `f.agent` as a
+  React key, so a second advisory from the same agent (e.g. a revision
+  pass) replaces its row rather than duplicating it.
+- **A consolidation epoch attaches to whichever turn is open on this
+  client when `system.control` "Written" arrives** — there's no
+  correlation between Consolidator's batch-write announcement and any
+  single triggering turn (it's a batch over N turns), so "the current
+  turn" is a simplification pending the "doodle staleness" open question
+  above.
+- **`ConsolidationDoodle` stays client-side-only** — no backend endpoint
+  exists for `source_type: "ui_click"`, and building one wasn't asked for.
+- **Known cosmetic quirk:** the "Live"/"Disconnected" label in `app/page.tsx`
+  reflects `EventSource.onopen`, which in some network setups doesn't fire
+  until the first SSE message actually arrives rather than as soon as
+  headers land — so it can read "Disconnected" while genuinely connected
+  and simply idle. Confirmed functionally working end-to-end (browser
+  verification: typing a message correctly drove Avatar/ThoughtBubbles/
+  ConsolidationDoodle from live backend envelopes); the label itself is
+  just not a reliable idle-state indicator yet.

@@ -4,11 +4,10 @@ import { useState } from "react";
 import type { ConsolidationEpoch } from "@/types/events";
 
 /**
- * Stub for the surface milestone — the real backend seam (`EpochWritten`
- * payload, epoch-level dedup in Consolidator) doesn't exist yet (M4, not
- * built). This click handler only logs what the real one would send: a
- * `ui_click`-tagged Perception.ingest, first click only. No network call,
- * no bus — the SSE endpoint (M5) is what this gets wired to.
+ * M4/M5 landed, but this stays client-side-only by choice: Consolidator has
+ * no `source_type: "ui_click"` ingestion path, and building one wasn't asked
+ * for by the plan. Acknowledging a doodle is purely a display concern
+ * (see README "Assumptions") — it doesn't need to reach the bus.
  */
 function sendUiClickStub(epoch: ConsolidationEpoch) {
   console.log(

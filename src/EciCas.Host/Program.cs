@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using EciCas.Agents.Action;
 using EciCas.Agents.Consolidator;
 using EciCas.Agents.Governance;
@@ -14,15 +16,26 @@ using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Host;
 using EciCas.Substrates;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
-var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+const string CorsPolicy = "morrow-eci";
+
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
     ContentRootPath = AppContext.BaseDirectory,
 });
+
+builder.WebHost.UseUrls(builder.Configuration["Surface:Url"] ?? "http://localhost:5179");
+
+builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
+    policy.WithOrigins(builder.Configuration.GetSection("Surface:AllowedOrigins").Get<string[]>()
+            ?? ["http://localhost:3000"])
+        .AllowAnyHeader()
+        .AllowAnyMethod()));
 
 builder.Services.Configure<GovernanceOptions>(builder.Configuration.GetSection("Governance"));
 builder.Services.Configure<RoutingManifest>(builder.Configuration.GetSection("RoutingManifest"));
@@ -68,18 +81,67 @@ RegisterAgent<ConsolidatorAgent>(builder.Services);
 RegisterAgent<ReflectionAgent>(builder.Services);
 RegisterAgent<ArchiveLogger>(builder.Services);
 RegisterAgent<ConsoleSubscriber>(builder.Services);
+RegisterAgent<SseBroadcaster>(builder.Services);
 
 var app = builder.Build();
 
 var manifest = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<RoutingManifest>>().Value;
 RoutingManifest.Validate(manifest, app.Services.GetServices<IAgent>());
 
+app.UseCors(CorsPolicy);
+
+var jsonOptions = new JsonSerializerOptions
+{
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+};
+
+app.MapPost("/api/perceive", (PerceiveRequest request, PerceptionAgent perceptionAgent) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Text))
+    {
+        return Results.BadRequest();
+    }
+
+    perceptionAgent.Perceive(request.Text);
+    return Results.Accepted();
+});
+
+// One more bus subscriber (plan §M5) — SseBroadcaster fans every envelope out
+// to connected clients; this endpoint just relays one client's channel onto
+// the HTTP response as text/event-stream. No agent knows this exists.
+app.MapGet("/api/stream", async (HttpContext context, SseBroadcaster broadcaster, CancellationToken cancellationToken) =>
+{
+    context.Response.Headers.CacheControl = "no-cache";
+    context.Response.ContentType = "text/event-stream";
+    await context.Response.StartAsync(cancellationToken);
+
+    var reader = broadcaster.Connect(out var clientId);
+    try
+    {
+        await foreach (var envelope in reader.ReadAllAsync(cancellationToken))
+        {
+            var json = JsonSerializer.Serialize(EnvelopeDto.From(envelope), jsonOptions);
+            await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
+            await context.Response.Body.FlushAsync(cancellationToken);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // Client disconnected — expected, not an error.
+    }
+    finally
+    {
+        broadcaster.Disconnect(clientId);
+    }
+});
+
 await app.StartAsync();
 
 var perception = app.Services.GetRequiredService<PerceptionAgent>();
 var activity = app.Services.GetRequiredService<BusActivityTracker>();
 
-Console.WriteLine("ECI-CAS walking skeleton. Type a prompt (empty line to exit).");
+Console.WriteLine($"ECI-CAS surface listening. SSE at {string.Join(", ", app.Urls)}/api/stream. Type a prompt here too (empty line to exit).");
 string? line;
 while (!string.IsNullOrWhiteSpace(line = Console.ReadLine()))
 {
@@ -95,3 +157,5 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
     services.AddSingleton<IAgent>(sp => sp.GetRequiredService<TAgent>());
     services.AddHostedService(sp => sp.GetRequiredService<TAgent>());
 }
+
+internal sealed record PerceiveRequest(string Text);

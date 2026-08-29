@@ -23,4 +23,10 @@ public sealed class MetaBag
 
     /// <summary>Overlays another bag's entries onto this one; keys in <paramref name="other"/> win.</summary>
     public MetaBag Merge(MetaBag other) => new(_values.SetItems(other._values));
+
+    /// <summary>
+    /// Snapshot for serialization at a bus boundary (e.g. the SSE surface).
+    /// Not for agent-to-agent use — agents read through <see cref="Get{T}"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> ToDictionary() => _values;
 }

@@ -6,73 +6,79 @@ import { ThoughtBubbles } from "@/components/ThoughtBubbles";
 import { SecurityIcon } from "@/components/SecurityIcon";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { ConsolidationDoodle } from "@/components/ConsolidationDoodle";
-import { MOCK_TURNS } from "@/lib/mockTurn";
-import type { ConsolidationEpoch } from "@/types/events";
-
-type Stage = "idle" | "thinking" | "verdict" | "speaking";
-const STAGES: Stage[] = ["idle", "thinking", "verdict", "speaking"];
+import { useEciStream } from "@/lib/useEciStream";
+import { sendPerceive } from "@/lib/api";
 
 export default function Home() {
-  const [turnIndex, setTurnIndex] = useState(0);
-  const [stageIndex, setStageIndex] = useState(0);
-  const [epochs, setEpochs] = useState<Record<string, ConsolidationEpoch>>(
-    () => Object.fromEntries(MOCK_TURNS.filter((t) => t.epoch).map((t) => [t.epoch!.epochId, t.epoch!])),
-  );
+  const { turns, connected, acknowledge } = useEciStream();
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
 
-  const turn = MOCK_TURNS[turnIndex];
-  const stage = STAGES[stageIndex];
-  const epoch = turn.epoch ? epochs[turn.epoch.epochId] : undefined;
+  const turn = turns[turns.length - 1];
 
-  function advance() {
-    if (stageIndex < STAGES.length - 1) {
-      setStageIndex(stageIndex + 1);
-    } else {
-      const next = (turnIndex + 1) % MOCK_TURNS.length;
-      setTurnIndex(next);
-      setStageIndex(0);
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!text.trim() || sending) return;
+    setSending(true);
+    try {
+      await sendPerceive(text.trim());
+      setText("");
+    } catch {
+      // Surface layer is down or unreachable — the connection indicator
+      // already reflects that; nothing else to do client-side here.
+    } finally {
+      setSending(false);
     }
-  }
-
-  function acknowledge(epochId: string) {
-    setEpochs((prev) => ({ ...prev, [epochId]: { ...prev[epochId], acknowledged: true } }));
   }
 
   return (
     <main className="flex-1 flex flex-col items-center gap-8 p-10 bg-neutral-50 min-h-full">
       <div className="text-center">
-        <h1 className="text-lg font-semibold text-neutral-800">
-          ECI-CAS Avatar — mock shell (M5/M6/M7 review)
-        </h1>
+        <h1 className="text-lg font-semibold text-neutral-800">ECI-CAS Avatar</h1>
         <p className="text-sm text-neutral-500">
-          Turn {turnIndex + 1} of {MOCK_TURNS.length} · Stage:{" "}
-          <span className="font-mono">{stage}</span>
+          {connected ? "Live" : "Disconnected"} ·{" "}
+          {turn ? <span className="font-mono">{turn.stage}</span> : "waiting for a first thought"}
         </p>
       </div>
 
       <Avatar
-        expression={stage === "idle" ? "neutral" : turn.impulse.expression}
-        reflex={stage === "idle" ? "At rest." : turn.impulse.reflex}
+        expression={turn?.impulse?.expression ?? "neutral"}
+        reflex={turn?.impulse?.reflex ?? "At rest."}
       />
 
-      {stage !== "idle" && <ThoughtBubbles findings={turn.bundle} faded={stage === "speaking"} />}
+      {turn && turn.bundle.length > 0 && (
+        <ThoughtBubbles findings={turn.bundle} faded={turn.stage === "speaking"} />
+      )}
 
-      {(stage === "verdict" || stage === "speaking") && (
+      {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
         <SecurityIcon outcomes={turn.security} />
       )}
 
-      {stage === "speaking" && <SpeechBubble output={turn.output} />}
+      {turn?.stage === "speaking" && turn.output && <SpeechBubble output={turn.output} />}
 
-      {stage === "speaking" && epoch && (
-        <ConsolidationDoodle epoch={epoch} onAcknowledge={acknowledge} />
+      {turn?.stage === "speaking" && turn.epoch && (
+        <ConsolidationDoodle
+          epoch={turn.epoch}
+          onAcknowledge={(epochId) => acknowledge(turn.turnId, epochId)}
+        />
       )}
 
-      <button
-        type="button"
-        onClick={advance}
-        className="mt-4 rounded-full bg-neutral-800 px-5 py-2 text-sm text-white hover:bg-neutral-700"
-      >
-        {stageIndex < STAGES.length - 1 ? "Next stage →" : "Next turn →"}
-      </button>
+      <form onSubmit={handleSubmit} className="mt-4 flex w-full max-w-md gap-2">
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Say something to ECI-CAS…"
+          className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-400"
+        />
+        <button
+          type="submit"
+          disabled={sending || !text.trim()}
+          className="rounded-full bg-neutral-800 px-5 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-40"
+        >
+          Send
+        </button>
+      </form>
     </main>
   );
 }
