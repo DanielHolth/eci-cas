@@ -6,7 +6,7 @@ Phase 0 uses an in-memory, synchronous, single-process bus
 
     events.sensory | events.impulse      | events.governance | events.analytics
     events.intent  | events.personality | events.knowledge  | events.security
-    events.action  | events.archive     | events.consolidator
+    events.action  | events.archive     | events.consolidator | events.reflection
     system.diagnostic   (BootCheck / SystemCheck synthetic pings, §9)
     system.control       (e.g. Governance -> Impulse Frustration signal)
 
@@ -34,15 +34,21 @@ BUSINESS_TOPICS = {
     # v0.35b: the archive-grounded lookup family. Two topics today
     # (Personality, Knowledge); the family is expected to grow.
     "events.personality", "events.knowledge",
-    # Phase 0.9: Consolidator moved from a Governance-fed batch buffer to
-    # a fifth member of Sensory's per-event fan-out, alongside Analytics/
-    # Personality/Knowledge.
+    # Phase 0.9 moved Consolidator from a Governance-fed batch buffer to a
+    # member of Sensory's per-event fan-out; 2026-08-29 moved it back to
+    # Governance, forked off the BUNDLE route Intent also gets — same
+    # topic name throughout, only the publisher changed.
     "events.consolidator",
     # Phase 0.6: Archive's bus door. §5.8 always described Archive as two
     # HTTP-shaped endpoints, and it keeps them — this topic is the
     # asynchronous half, for a writer that has no reason to hold a
     # reference to the store and no reason to wait for the append.
     "events.archive",
+    # dispatch #4 (2026-08-29): Reflection's fork, off Governance's
+    # _conclude() — one event later than Consolidator's BUNDLE fork, since
+    # Reflection needs the FINISHED arc (what Action actually did), not
+    # just what was proposed.
+    "events.reflection",
 }
 SYSTEM_TOPICS = {"system.diagnostic", "system.control"}
 ALL_TOPICS = BUSINESS_TOPICS | SYSTEM_TOPICS

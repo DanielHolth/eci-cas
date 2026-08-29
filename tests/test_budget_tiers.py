@@ -56,53 +56,63 @@ def test_unknown_tier_raises():
 # Each named tier resolves to what the appendix says it should
 # ---------------------------------------------------------------------------
 
-def test_minimal_mocks_analytics_and_points_intent_local():
+def test_minimal_mocks_analytics_and_points_everything_else_fast_local():
     manifest = _with_tier(_load_manifest(), "minimal")
     out = budget_tiers.apply_tier(manifest)
 
     assert out["roles"]["analytics"]["mock"] is True
-    assert out["roles"]["intent"]["substrate"] == budget_tiers.LOCAL_CLASS
-    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.LOCAL_CLASS
+    assert out["roles"]["intent"]["substrate"] == budget_tiers.FAST_LOCAL_CLASS
+    # Consolidator/Reflection get the async SLOW_LOCAL_CLASS, not the
+    # live-path FAST_LOCAL_CLASS — dispatch #5's fast/slow split holds
+    # even inside Minimal's all-local, $0 tier.
+    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.SLOW_LOCAL_CLASS
+    assert out["roles"]["reflection"]["substrate"] == budget_tiers.SLOW_LOCAL_CLASS
     assert out["roles"]["intent"]["context_events"] == budget_tiers.CONTEXT_EVENTS["minimal"]
 
 
-def test_budget_tier_runs_analytics_live_on_local_substrate():
+def test_budget_tier_runs_analytics_live_on_fast_low_substrate():
     manifest = _with_tier(_load_manifest(), "budget")
     out = budget_tiers.apply_tier(manifest)
 
     assert out["roles"]["analytics"]["mock"] is False
-    assert out["roles"]["analytics"]["substrate"] == budget_tiers.LOCAL_CLASS
-    assert out["roles"]["intent"]["substrate"] == budget_tiers.LOCAL_CLASS
-    # Budget tier's consolidation is the one row that's NOT local — a
-    # once-a-day hosted call is still cheap enough to afford (appendix).
-    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.FAST_CLASS
+    assert out["roles"]["analytics"]["substrate"] == budget_tiers.FAST_LOW_CLASS
+    assert out["roles"]["intent"]["substrate"] == budget_tiers.FAST_LOW_CLASS
+    # Budget tier's consolidation/reflection are the async SLOW_LOW_CLASS —
+    # a Mistral fast lane for the live path, an OpenAI slow lane off it.
+    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.SLOW_LOW_CLASS
+    assert out["roles"]["reflection"]["substrate"] == budget_tiers.SLOW_LOW_CLASS
 
 
 def test_default_tier_is_a_noop_because_the_shipped_manifest_already_is_default():
-    """The appendix's Default combination (Analytics/Intent/Consolidation
-    all on the cheap hosted model) is what the manifest already ships
-    with — so "apply Default" and "change nothing" have to be the same
-    operation, or a test/operator overriding roles.analytics.mock for a
-    cheap run would get silently overwritten back to live on every
-    bootstrap (see budget/tiers.py's _NOOP_TIERS)."""
+    """The Default combination (Analytics/Personality/Knowledge on
+    fast-low, Intent on fast-medium, Consolidator/Reflection on
+    slow-medium) is what the manifest already ships with — so "apply
+    Default" and "change nothing" have to be the same operation, or a
+    test/operator overriding roles.analytics.mock for a cheap run would
+    get silently overwritten back to live on every bootstrap (see
+    budget/tiers.py's _NOOP_TIERS)."""
     manifest = _with_tier(_load_manifest(), "default")
     out = budget_tiers.apply_tier(manifest)
 
     assert out is manifest
     assert out["roles"]["analytics"]["mock"] is False
-    assert out["roles"]["analytics"]["substrate"] == budget_tiers.ANALYTICS_DEFAULT_CLASS
+    assert out["roles"]["analytics"]["substrate"] == budget_tiers.FAST_LOW_CLASS
+    assert out["roles"]["intent"]["substrate"] == budget_tiers.FAST_MEDIUM_CLASS
+    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.SLOW_MEDIUM_CLASS
 
 
-def test_super_tier_reserves_specialist_for_consolidation_only():
+def test_super_tier_reserves_the_high_classes_for_intent_and_consolidation():
     manifest = _with_tier(_load_manifest(), "super")
     out = budget_tiers.apply_tier(manifest)
 
     assert out["roles"]["analytics"]["mock"] is False
-    # The live pipeline stays on the cheap model — only consolidation
-    # (rare, async, high-value) spends on the specialist.
-    assert out["roles"]["analytics"]["substrate"] == budget_tiers.ANALYTICS_DEFAULT_CLASS
-    assert out["roles"]["intent"]["substrate"] == budget_tiers.FAST_CLASS
-    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.SPECIALIST_CLASS
+    # The fan-out/lookup roles stay on the cheap fast lane — only Intent
+    # (live, but the persona's voice) and Consolidator/Reflection (async,
+    # high-value) spend on the *-high classes.
+    assert out["roles"]["analytics"]["substrate"] == budget_tiers.FAST_LOW_CLASS
+    assert out["roles"]["intent"]["substrate"] == budget_tiers.FAST_HIGH_CLASS
+    assert out["roles"]["consolidator"]["substrate"] == budget_tiers.SLOW_HIGH_CLASS
+    assert out["roles"]["reflection"]["substrate"] == budget_tiers.SLOW_HIGH_CLASS
 
 
 # ---------------------------------------------------------------------------

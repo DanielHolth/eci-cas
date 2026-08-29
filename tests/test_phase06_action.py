@@ -90,8 +90,34 @@ class TestSinks:
         sink.emit(action_envelope("first"))
         sink.emit(action_envelope("second"))
 
-        lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+        dated = sink._dated_path()
+        lines = [json.loads(l) for l in dated.read_text().splitlines() if l.strip()]
         assert [r["content"] for r in lines] == ["first", "second"]
+
+    def test_file_sink_rotates_by_date(self, tmp_path, monkeypatch):
+        """Mirrors Archive's queue log (`agents/archive/store.py`'s
+        `log_event`): the date is computed fresh per write, not cached at
+        construction, so the file rolls over at midnight without a
+        restart."""
+        import agents.action.sinks as sinks_module
+
+        path = tmp_path / "spoken.jsonl"
+        sink = FileSink(path)
+
+        monkeypatch.setattr(sinks_module.time, "strftime",
+                             lambda fmt, t=None: "2026-01-01" if "%Y-%m-%d" == fmt else "irrelevant")
+        sink.emit(action_envelope("day one"))
+
+        monkeypatch.setattr(sinks_module.time, "strftime",
+                             lambda fmt, t=None: "2026-01-02" if "%Y-%m-%d" == fmt else "irrelevant")
+        sink.emit(action_envelope("day two"))
+
+        assert (tmp_path / "spoken_2026-01-01.jsonl").exists()
+        assert (tmp_path / "spoken_2026-01-02.jsonl").exists()
+        day_one = json.loads((tmp_path / "spoken_2026-01-01.jsonl").read_text())
+        day_two = json.loads((tmp_path / "spoken_2026-01-02.jsonl").read_text())
+        assert day_one["content"] == "day one"
+        assert day_two["content"] == "day two"
 
 
 class TestSinkConfig:
@@ -242,7 +268,7 @@ class TestEndToEnd:
         eco = Recovery(str(path)).bootstrap()
         eco.sensory.ingest("Good morning", source_type="prompt")
 
-        transcript = Path(eco.action.sinks[0].path)
+        transcript = eco.action.sinks[0]._dated_path()
         assert transcript.exists()
         records = [json.loads(l) for l in transcript.read_text().splitlines() if l.strip()]
         assert records, "nothing this system said reached the world"

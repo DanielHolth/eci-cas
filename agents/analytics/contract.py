@@ -41,7 +41,7 @@ class Task(str, Enum):
 
 #: See Task.from_envelope. Kept module-level rather than on the enum
 #: because Enum class bodies turn plain attributes into members.
-SENSORY_TYPES = frozenset({"prompt", "feedback", "vision", "audio", "https"})
+SENSORY_TYPES = frozenset({"prompt", "feedback", "vision", "audio", "https", "ui_click", "idea"})
 
 
 #: What the model is asked to do. One entry, because there is one task.

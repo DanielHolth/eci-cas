@@ -107,6 +107,7 @@ def retrieve_per_path(
             category = category.split("/", 1)[0]
         records = store.query(
             "knowledge",
+            domain="external",
             category=category,
             topic=topic,
             limit=max_per_path,

@@ -59,10 +59,16 @@ HAPPY_PATH_HOPS = [
     ("Sensory", "Impulse"), ("Impulse", "Governance"),
     ("Sensory", "Analytics"), ("Analytics", "Governance"),
     ("Sensory", "Personality"), ("Personality", "Governance"),
-    ("Sensory", "Consolidator"),
+    # Consolidator no longer rides Sensory's fan-out (2026-08-29) — it
+    # gets Governance's BUNDLE fork instead, published just before the
+    # Intent copy (agents/governance/agent.py's emit()).
+    ("Governance", "Consolidator"),
     ("Governance", "Intent"), ("Intent", "Governance"),
     ("Governance", "Security"), ("Security", "Governance"),
     ("Governance", "Action"),
+    # dispatch #4 (2026-08-29): Reflection's fork off _conclude(), one hop
+    # after Action — it needs the FINISHED arc, not just the proposal.
+    ("Governance", "Reflection"),
 ]
 
 
@@ -265,8 +271,8 @@ class TestGovernanceInThePipeline:
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         hops = _hops(eco, event_id)
         assert hops[:2] == HAPPY_PATH_HOPS[:2]
-        assert set(hops[2:7]) == set(HAPPY_PATH_HOPS[2:7])
-        assert hops[7:] == HAPPY_PATH_HOPS[7:]
+        assert set(hops[2:6]) == set(HAPPY_PATH_HOPS[2:6])
+        assert hops[6:] == HAPPY_PATH_HOPS[6:]
 
     def test_governance_holds_no_substrate(self, tmp_path):
         """The claim this phase actually ended up making."""
@@ -421,15 +427,15 @@ class TestBootstrap:
 
 class TestSubstrateRegistry:
     def _manifest(self, entry):
-        return {"substrates": {"fast-reflex": entry}}
+        return {"substrates": {"low": entry}}
 
     def test_vendor_swap_is_a_manifest_edit_and_nothing_else(self):
         anthropic = resolve_substrate(
             self._manifest({"provider": "anthropic", "model": "claude-haiku-4-5"}),
-            "fast-reflex")
+            "low")
         openai = resolve_substrate(
             self._manifest({"provider": "openai", "model": "gpt-4o-mini"}),
-            "fast-reflex")
+            "low")
         assert anthropic.provider_name == "anthropic"
         assert openai.provider_name == "openai-compatible"
         assert isinstance(anthropic, Substrate) and isinstance(openai, Substrate)
@@ -441,7 +447,7 @@ class TestSubstrateRegistry:
         substrate = resolve_substrate(
             self._manifest({"provider": alias, "model": "m", "api_key_env": None,
                             "base_url": "http://localhost:1234/v1"}),
-            "fast-reflex")
+            "low")
         assert substrate.provider_name == expected
 
     def test_undeclared_class_is_an_error(self):
@@ -458,7 +464,7 @@ class TestSubstrateRegistry:
         substrate = resolve_substrate(
             self._manifest({"provider": "echo", "model": "none",
                             "options": {"script": ["hi"]}}),
-            "fast-reflex")
+            "low")
         substrate.validate_credentials()
         assert substrate.complete(system="s", user="u").text == "hi"
 
@@ -467,7 +473,8 @@ class TestSubstrateRegistry:
         the shipped manifest should fail here, not there."""
         with open(MANIFEST_PATH) as f:
             manifest = yaml.safe_load(f)
-        for substrate_class in ("fast-reflex", "orthogonal"):
+        for substrate_class in ("fast-local", "slow-local", "fast-low", "slow-low",
+                                 "fast-medium", "slow-medium", "fast-high", "slow-high"):
             substrate = resolve_substrate(manifest, substrate_class)
             assert substrate.model
             assert substrate.provider_name in ("anthropic", "openai-compatible", "echo")

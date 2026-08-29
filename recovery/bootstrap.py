@@ -52,6 +52,9 @@ from agents.archive_lookup.base import ArchiveLookupBase
 from agents.consolidator.agent import ConsolidatorMock
 from agents.consolidator.base import ConsolidatorBase
 from agents.consolidator.live import ConsolidatorAgent
+from agents.reflection.agent import ReflectionMock
+from agents.reflection.base import ReflectionBase
+from agents.reflection.live import ReflectionAgent
 from agents.security.agent import SecurityAgent, SecurityMock
 from agents.security.rules import RuleSet, RulesError
 from agents.action.agent import ActionAgent, ActionMock
@@ -82,6 +85,7 @@ class Ecosystem:
     analytics: AnalyticsBase           # AnalyticsMock or AnalyticsAgent (§13.4)
     intent: IntentBase                 # IntentMock or IntentAgent (§13.4, Phase 0.4)
     consolidator: ConsolidatorBase     # ConsolidatorMock or ConsolidatorAgent (v0.35f)
+    reflection: ReflectionBase         # ReflectionMock or ReflectionAgent (dispatch #4)
     personality: ArchiveLookupBase     # archive-grounded lookup, identity store (v0.35b)
     security: Any                      # SecurityMock or SecurityAgent (Phase 0.6)
     action: Any                        # ActionMock or ActionAgent (Phase 0.6)
@@ -182,18 +186,28 @@ class Recovery:
         analytics = self._provision_analytics(bus, manifest, archive, budget,
                                                 structured_store=structured_store)
 
-        # Phase 0.9: Consolidator is a fifth member of Sensory's per-event
-        # fan-out (agents/sensory/agent.py's FAN_OUT), alongside Analytics/
-        # Personality — it reads the raw Sensory envelope directly and
-        # writes facts immediately. Nothing here hands it a reference to
-        # anything else; it is provisioned like Personality/Knowledge.
         personality = self._provision_lookup(bus, manifest, archive,
                                              "Personality", budget,
                                              structured_store=structured_store)
 
+        # Consolidator subscribes to "events.consolidator" like any other
+        # role, but nothing publishes to it here — it's fed by Governance's
+        # BUNDLE fork (agents/governance/agent.py's emit()), provisioned
+        # further down. Constructed here anyway, alongside the other
+        # cognitive roles, since order matters only for Governance below.
         consolidator = self._provision_consolidator(bus, manifest, archive,
                                                     budget,
                                                     structured_store=structured_store)
+
+        # Reflection (dispatch #4) is fed by Governance's `_conclude()` fork
+        # on "events.reflection" — same "subscribes, nothing publishes here"
+        # shape as Consolidator above. It also gets a direct `sensory`
+        # reference (read-only: it only ever calls ingest()) so an Idea
+        # outcome can re-enter the pipeline the same way a consolidation
+        # doodle click does.
+        reflection = self._provision_reflection(bus, manifest, budget,
+                                                structured_store=structured_store,
+                                                sensory=sensory)
         intent = self._provision_intent(bus, manifest, archive, budget)
 
         # Governance is provisioned LAST because it is the only role that
@@ -212,8 +226,9 @@ class Recovery:
             ["Analytics"] if analytics.tier == "live" else []) + (
             ["Intent"] if intent.tier == "live" else []) + (
             ["Consolidator"] if consolidator.tier == "live" else []) + (
+            ["Reflection"] if reflection.tier == "live" else []) + (
             ["Personality"] if personality.tier == "live" else [])
-        print(f"[recovery] provisioned {11 - len(real_roles)} mocks + {len(real_roles)} real "
+        print(f"[recovery] provisioned {12 - len(real_roles)} mocks + {len(real_roles)} real "
               f"({', '.join(real_roles)})")
 
         # Step 5: bus binding — done (constructors above subscribed to
@@ -236,7 +251,8 @@ class Recovery:
             manifest=manifest, bus=bus, archive=archive,
             archive_agent=archive_agent, sensory=sensory,
             impulse=impulse, governance=governance, analytics=analytics,
-            intent=intent, consolidator=consolidator, personality=personality,
+            intent=intent, consolidator=consolidator, reflection=reflection,
+            personality=personality,
             security=security, action=action,
             watchdog=watchdog, budget=budget,
         )
@@ -633,6 +649,56 @@ class Recovery:
         )
         print(f"[recovery] consolidator: LIVE tier on substrate "
               f"{substrate.describe()} ({self._price_note(substrate)})")
+        self._warn_unpriced(substrate)
+        return agent
+
+    def _provision_reflection(self, bus: EmbeddedBus, manifest: Dict[str, Any],
+                              budget: Optional[BudgetManager], *,
+                              structured_store=None, sensory=None) -> ReflectionBase:
+        """Select Reflection's tier from `roles.reflection.mock` (dispatch
+        #4, 2026-08-29). Same posture as Consolidator: an unusable
+        substrate is a WARNING, not a bootstrap stop — Reflection gates
+        nothing, and a degraded pass just means one batch's pattern (if
+        any) goes unremembered."""
+        role_config = manifest.get("roles", {}).get("reflection", {}) or {}
+
+        if role_config.get("mock", True):
+            print("[recovery] reflection: MOCK tier (always silent, zero LLM cost)")
+            return ReflectionMock(bus, structured_store=structured_store, sensory=sensory,
+                                  batch_size=int(role_config.get("batch_size", 5)))
+
+        substrate_class = role_config.get("substrate")
+        substrate = None
+        if not substrate_class:
+            print("[recovery] WARNING: reflection is declared real but names no "
+                  "'substrate' class; falling back to the MOCK tier.")
+        else:
+            try:
+                substrate = resolve_substrate(manifest, substrate_class)
+                substrate.validate_credentials()
+            except SubstrateError as exc:
+                print(f"[recovery] WARNING: reflection substrate "
+                      f"'{substrate_class}' is not usable ({exc}); falling back "
+                      f"to the MOCK tier.")
+                substrate = None
+
+        if substrate is None:
+            return ReflectionMock(bus, structured_store=structured_store, sensory=sensory,
+                                  batch_size=int(role_config.get("batch_size", 5)))
+
+        agent = ReflectionAgent(
+            bus, substrate,
+            structured_store=structured_store, sensory=sensory,
+            batch_size=int(role_config.get("batch_size", 5)),
+            system_instruction=role_config.get("system_instruction", ""),
+            temperature=float(role_config.get("temperature", 0.3)),
+            max_tokens=role_config.get("max_tokens"),
+            strict=bool(role_config.get("strict", False)),
+            budget=budget,
+        )
+        print(f"[recovery] reflection: LIVE tier on substrate "
+              f"{substrate.describe()} ({self._price_note(substrate)}), "
+              f"batch_size={agent.batch_size}")
         self._warn_unpriced(substrate)
         return agent
 

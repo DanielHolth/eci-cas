@@ -20,7 +20,6 @@ import pytest
 import yaml
 
 from budget.state import BUDGET, LIVE, BudgetManager, BudgetState, from_manifest
-from bus.envelope import VERDICT_YELLOW, Envelope
 from recovery.bootstrap import Recovery
 from substrates.base import (
     CompletionError,
@@ -79,6 +78,11 @@ def _manifest(tmp_path: Path, *, fail_kind=None, **budget_overrides) -> Path:
         "options": {"fail_kind": fail_kind},
     }
     manifest["roles"]["analytics"]["mock"] = False
+    # The shipped manifest points analytics at "fast-reflex" (a real,
+    # keyed vendor) as of the preprod stress test; this suite needs
+    # analytics on ITS scripted substrate instead, same as it always
+    # pinned "deep-reasoning" back when that was the shipped default.
+    manifest["roles"]["analytics"]["substrate"] = "deep-reasoning"
     # This suite is about Analytics + budget mode; hold Intent
     # deterministic so it needs no credential of its own (Phase 0.4 note,
     # same reasoning as the analytics.mock pin above).
@@ -103,22 +107,9 @@ def _boot(tmp_path: Path, **kwargs):
     return eco
 
 
-def _yellow(eco, proposed="do the thing"):
-    env = Envelope(source="Security", destination="Governance", type="Verdict",
-                   content="rules do not settle this",
-                   meta={"verdict": VERDICT_YELLOW, "proposed_action": proposed})
-    eco.bus.publish("events.governance", env)
-    return env.event_id
-
-
 def _analytics_out(eco, event_id):
     return [e for e in eco.bus.trace()
             if e.event_id == event_id and e.source == "Analytics"][0]
-
-
-def _spoken(eco, event_id):
-    return [str(e.content) for e in eco.bus.trace()
-            if e.event_id == event_id and e.destination == "Action"]
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +312,7 @@ class TestManifestConfig:
             manifest = yaml.safe_load(f)
         m = from_manifest(manifest)
         assert m.enabled is True
-        assert m.spend_cap_usd == pytest.approx(5.0)
+        assert m.spend_cap_usd == pytest.approx(2.0)
         assert m.failure_threshold == 3
 
     def test_a_null_cap_disables_capping(self):
@@ -358,37 +349,20 @@ class TestInThePipeline:
 
         hops = [(e.source, e.destination) for e in eco.bus.trace()
                 if e.event_id == event_id]
-        assert hops[-1] == ("Governance", "Action")
+        assert hops[-2:] == [("Governance", "Action"), ("Governance", "Reflection")]
         assert len(eco.action.executed) == 1
 
         out = _analytics_out(eco, event_id)
-        assert out.meta["analytics"]["proceed"] is True
         assert out.meta["analytics"]["decided_by"] == "budget"
 
-    def test_a_gated_event_declines_in_budget_mode(self, tmp_path):
-        """The asymmetry that matters. Budget mode is most likely to be on
-        when something is already wrong; approving a gate because the
-        reasoner is unavailable would be worse than having no gate.
-
-        v0.35e moved the gate: Security's yellow lane goes to INTENT now,
-        not Analytics, so this is Intent's budget-mode fallback being
-        asserted rather than Analytics' — but the property under test is
-        the same one, and it is exactly why the gating registers had to
-        get a fail-closed fallback when they moved."""
-        eco = _boot(tmp_path)
-        eco.budget.switch_manual("budget")
-        event_id = _yellow(eco, proposed="the unapproved thing")
-
-        intent_out = [e for e in eco.bus.trace()
-                      if e.event_id == event_id and e.source == "Intent"][0]
-        # This suite pins Intent to its mock tier, which declines a gating
-        # register outright (it cannot judge, so it says so) — the same
-        # outcome budget mode produces on the live tier, reported honestly
-        # as deterministic rather than as a degraded call. The live tier's
-        # budget-mode path is asserted in tests/test_phase05_intent_veto.py.
-        assert intent_out.meta["proceed"] is False
-        assert intent_out.meta["intent"]["failed_closed"] is True
-        assert not [s for s in _spoken(eco, event_id) if "the unapproved thing" in s]
+    # Gating no longer runs through Analytics or Intent's substrate call at
+    # all (Phase 0.10): Security/Governance settle green/yellow/red
+    # deterministically, with no model in the loop — so there is no
+    # "budget mode declines a gate" case left to assert here. That
+    # asymmetry (yellow always proceeds after one revision, red blocks
+    # immediately) is covered in tests/test_phase05_intent_veto.py's
+    # test_intent_always_proceeds, test_red_blocks_immediately_no_revision,
+    # and test_budget_mode_still_produces_speech.
 
     def test_a_terminal_failure_latches_mid_run(self, tmp_path):
         eco = _boot(tmp_path, fail_kind="terminal")
@@ -416,12 +390,15 @@ class TestInThePipeline:
 
     def test_a_contract_violation_is_not_a_substrate_failure(self, tmp_path, monkeypatch):
         """The call succeeded and was paid for; the model just answered out
-        of shape. A run of bad JSON must not latch budget mode, or one
-        badly-worded prompt would look like an outage."""
+        of shape. Analytics' contract is plain text (Phase 0.8) — almost
+        any non-empty text is a valid one-line recommendation, so the one
+        thing that still violates it is an empty answer. A run of these
+        must not latch budget mode, or one badly-worded prompt would look
+        like an outage."""
         eco = _boot(tmp_path)
 
         def unparseable(self, request, *, model):
-            return CompletionResponse(text="not json at all", model=model,
+            return CompletionResponse(text="   ", model=model,
                                       provider=self.name,
                                       usage={"input_tokens": 100, "output_tokens": 10})
 

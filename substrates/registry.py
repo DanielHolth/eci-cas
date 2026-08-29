@@ -2,13 +2,13 @@
 Substrate class -> provider resolution (§10.2).
 
 This is the single place the manifest's `substrates:` table is read. An
-agent asks for a class name ("fast-reflex") and gets back a Substrate;
-it never sees a vendor name, a model id or an API key.
+agent asks for a class name ("low") and gets back a Substrate; it never
+sees a vendor name, a model id or an API key.
 
 Manifest shape (all keys optional except `model`):
 
     substrates:
-      fast-reflex:
+      low:
         provider:    "anthropic"            # registry key, default "anthropic"
         model:       "claude-haiku-4-5"     # vendor model id (forensic, §7.4)
         api_key_env: "ANTHROPIC_API_KEY"    # env var holding the credential
@@ -17,9 +17,9 @@ Manifest shape (all keys optional except `model`):
         options:     {}                     # provider-specific extras
         notes:       "live duty: concise, cheap, low-latency"
 
-The v0.32 short form — `fast-reflex: { model: "...", notes: "..." }` — is
-still accepted and defaults to the Anthropic provider, so an existing
-manifest keeps working untouched.
+The v0.32 short form — `low: { model: "...", notes: "..." }` — is still
+accepted and defaults to the Anthropic provider, so an existing manifest
+keeps working untouched.
 """
 from __future__ import annotations
 

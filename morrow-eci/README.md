@@ -1,12 +1,12 @@
-# ECI-CAS Avatar App
+# Morrow-ECI
 
-A Next.js/React/TypeScript scaffold for the "Avatar app" described in
-`docs/roadmap-to-v1.md` (milestones M5–M8) and originally specced in
+A Next.js/React/TypeScript scaffold for the companion app described in
+`docs/roadmap.md` (companion app section) and originally specced in
 `docs/archive/v0-35-parallel-fanout-draft.md` §6/§6a-2. This is the
 frontend companion surface for the ECI-CAS Python backend, which lives
 one level up in this repo.
 
-This pass builds M5's shell (read-only observer + avatar) and M6/M7's
+This pass builds M5's shell (read-only observer + companion) and M6/M7's
 visual states (expressions, thought bubbles, security icon, speech
 bubble) against a **mock event feed** (`lib/mockTurn.ts`) so the UI can
 be reviewed before any live bus wiring exists. M8's "+" doodle is
@@ -65,7 +65,7 @@ reflects this: the Knowledge bubble is clickable when `swarmNodes` is
 present, expanding to show each queried path with its match count and
 a sample — mirroring how `SecurityIcon` reveals detail on click. Colors
 for Analytics (blue) and Knowledge (orange) are pulled directly from
-`tools/console.py`'s `COLORS` table rather than invented, so the avatar
+`tools/console.py`'s `COLORS` table rather than invented, so the companion
 app and the console read as the same system.
 
 ## Open questions for Daniel

@@ -101,7 +101,7 @@ def _manifest(tmp_path: Path, mode: str = "advise_correct", **role_overrides) ->
         manifest = yaml.safe_load(f)
     manifest["storage"]["root"] = str(tmp_path / "archive")
     manifest["budget_tier"] = "custom"
-    manifest["substrates"]["fast-reflex"] = {
+    manifest["substrates"]["fast-medium"] = {
         "provider": ScriptedIntentProvider.name,
         "model": "scripted-intent-v1",
         "api_key_env": None,
@@ -241,21 +241,24 @@ class TestVoicing:
         hops = [(e.source, e.destination) for e in eco.bus.trace()
                if e.event_id == event_id]
 
-        # Phase 0.8: Knowledge removed. Phase 0.9 added Consolidator as a
-        # fan-out member (mocked here; never replies to Governance, so it
-        # contributes one hop, not a pair). Analytics/Personality/Consolidator
-        # dispatch concurrently — their hops can interleave in any order.
+        # Phase 0.8: Knowledge removed. Analytics/Personality dispatch
+        # concurrently — their hops can interleave in any order.
+        # Consolidator no longer rides Sensory's fan-out (2026-08-29) — it
+        # gets Governance's BUNDLE fork instead, published just before the
+        # Intent copy (never replies to Governance, so it contributes one
+        # hop, not a pair).
         assert hops[0] == ("Sensory", "Impulse")
         assert hops[1] == ("Impulse", "Governance")
-        assert set(hops[2:7]) == {
+        assert set(hops[2:6]) == {
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
-            ("Sensory", "Consolidator"),
         }
-        assert hops[7:] == [
+        assert hops[6:] == [
+            ("Governance", "Consolidator"),
             ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),
+            ("Governance", "Reflection"),
         ]
 
 
@@ -317,7 +320,7 @@ class TestBootstrap:
     def test_mock_flag_false_selects_the_live_tier(self, tmp_path):
         eco = Recovery(str(_manifest(tmp_path))).bootstrap()
         assert eco.intent.tier == "live"
-        assert eco.intent.substrate.substrate_class == "fast-reflex"
+        assert eco.intent.substrate.substrate_class == "fast-medium"
 
     def test_an_unusable_substrate_stops_the_bootstrap(self, tmp_path, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -350,8 +353,8 @@ class TestBootstrap:
         with open(path) as f:
             manifest = yaml.safe_load(f)
         manifest["roles"]["consolidator"]["mock"] = False
-        manifest["roles"]["consolidator"]["substrate"] = "orthogonal"
-        manifest["substrates"]["orthogonal"]["api_key_env"] = "SOME_UNSET_ENV_VAR"
+        manifest["roles"]["consolidator"]["substrate"] = "slow-medium"
+        manifest["substrates"]["slow-medium"]["api_key_env"] = "SOME_UNSET_ENV_VAR"
         with open(path, "w") as f:
             yaml.safe_dump(manifest, f)
 
@@ -364,7 +367,7 @@ class TestBootstrap:
         with open(MANIFEST_PATH) as f:
             manifest = yaml.safe_load(f)
         assert manifest["roles"]["intent"]["mock"] is False
-        assert manifest["roles"]["intent"]["substrate"] == "fast-reflex"
+        assert manifest["roles"]["intent"]["substrate"] == "fast-medium"
         assert manifest["phase"] == 0.5
 
 

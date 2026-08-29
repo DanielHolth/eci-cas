@@ -181,17 +181,20 @@ class TestAnthropicAdapter:
 
     def test_the_whole_analytics_contract_survives_the_round_trip(self):
         """Adapter plus contract, end to end: what a real Haiku call will
-        do, minus the model."""
+        do, minus the model. Analytics' contract is plain text (Phase
+        0.8), not JSON — no prefill needed, and there is no "proceed" on
+        Recommendation any more (Analytics was severed from gating under
+        v0.35e)."""
         from agents.analytics import contract
         from agents.analytics.contract import Task
 
-        with _Stub(_anthropic_reply()) as stub:
+        with _Stub(_anthropic_reply(tail="urgent, question\nperson/family")) as stub:
             response = _substrate("anthropic", stub.url, "ECI_TEST_KEY").complete(
-                system="s", user="u", prefill="{")
+                system="s", user="u")
 
         recommendation = contract.parse(response.text, Task.EVALUATE)
-        assert recommendation.proceed is True
-        assert recommendation.recommendation == "Keep it brief."
+        assert recommendation.recommendation == "urgent, question"
+        assert recommendation.knowledge_paths == [{"category": "person", "topic": "family"}]
 
 
 # ---------------------------------------------------------------------------
@@ -295,13 +298,13 @@ def test_the_same_agent_code_runs_on_either_vendor(monkeypatch):
 
     results = []
     for provider, responder, suffix in (
-        ("anthropic", _anthropic_reply(), ""),
-        ("openai", _openai_reply(), "/v1"),
+        ("anthropic", _anthropic_reply(tail="urgent, question\nperson/family"), ""),
+        ("openai", _openai_reply(text="urgent, question\nperson/family"), "/v1"),
     ):
         with _Stub(responder) as stub:
             response = _substrate(provider, stub.url + suffix, "ECI_TEST_KEY").complete(
-                system="s", user="u", prefill="{")
+                system="s", user="u")
         results.append(contract.parse(response.text, Task.EVALUATE))
 
     assert results[0].recommendation == results[1].recommendation
-    assert results[0].proceed == results[1].proceed
+    assert results[0].knowledge_paths == results[1].knowledge_paths

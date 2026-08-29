@@ -2,11 +2,12 @@
 Governance's per-event working set (v0.35a/c/g).
 
 Governance gained one job in v0.35 that it never had before: it has to
-HOLD something. The Sensory fan-out sends four agents their own copy of
-the same event in parallel, and Governance buffers all four answers
-before it can bundle them for Intent. Later in the same event it also
-needs to remember what Security said and what Intent tried, so it can
-hand Consolidator one complete record once Action has run.
+HOLD something. The Sensory fan-out sends Impulse/Analytics/Personality
+their own copy of the same event in parallel, and Governance buffers all
+three answers before it can bundle them for Intent — and, since
+2026-08-29, fork that same bundle to Consolidator. Later in the same
+event it also needs to remember what Security said and what Intent
+tried, so a second (or blocked) pass has the full picture.
 
 Is that a violation of §5.1's "per-event statutory context reset"?
 No — and the distinction is worth stating precisely rather than waving
@@ -69,6 +70,13 @@ class EventState:
     slots: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     #: The Sensory content, verbatim, as first seen by any worker.
     sensory: str = ""
+    #: Sensory's own `source_type` / `ref_event_id` (docs/ideas/
+    #: consolidation-doodle.md), captured the same way `sensory` is —
+    #: first sight, never overwritten — so a `ui_click` event's reference
+    #: to the consolidation pass it's about survives the fan-out/bundle
+    #: round trip to reach Consolidator's fork of the bundle.
+    source_type: str = ""
+    ref_event_id: Optional[str] = None
     #: The highest severity any of the four parallel answers carried.
     #:
     #: This exists because bundling could otherwise LOSE an escalation.
@@ -100,9 +108,12 @@ class EventState:
     #: guess. Captured at the moment it clears Security.
     reflex_action: str = ""
 
-    #: What Intent proposed, most recent last. On a clean event that's one
-    #: entry; on a revised one it's the whole arc (v0.35g).
-    proposals: List[str] = field(default_factory=list)
+    #: Intent's most recent proposed_action, overwritten on each revision
+    #: pass (only the latest matters — unlike the pre-Phase-0.9 `proposals`
+    #: list this replaces, nothing here needs the whole revision history).
+    #: Read once, at conclude time, by the fork to Reflection (dispatch #4,
+    #: 2026-08-29) — Reflection's "what did I actually say" input.
+    final_proposal: str = ""
     #: How many REVISION attempts have been spent (not counting the
     #: original proposal). Bounded by contract.MAX_REVISION_PASSES.
     revision_passes: int = 0
@@ -169,40 +180,6 @@ class EventState:
             entries.append(RecommendationEntry(
                 sender=name, keywords=keywords).to_dict())
         return entries
-
-    def final_proposal(self) -> str:
-        return self.proposals[-1] if self.proposals else ""
-
-    def consolidation_record(self) -> Dict[str, Any]:
-        """The one bundle per event Consolidator receives once Action has
-        run (v0.35g's settled hand-off).
-
-        Deliberately NOT included: Impulse's reflex, Analytics'
-        recommendation text, Personality's and Knowledge's findings. Those
-        agents only ever surface what Archive already holds or stay
-        neutral and never touch it, so repeating them to the agent that
-        writes Archive is redundant."""
-        security: Dict[str, Any] = {"verdict": self.verdict or "green"}
-        if self.security_concern:
-            security["concern"] = self.security_concern
-        if self.revision_passes:
-            security["revisions"] = list(self.proposals[:-1]) or []
-        if self.blocked:
-            security["blocked"] = True
-        record: Dict[str, Any] = {
-            "event_id": self.event_id,
-            "sensory": self.sensory,
-            "security": security,
-            "intent_final": self.final_proposal(),
-        }
-        if self.reflex_fired:
-            # The one piece of Impulse's contribution Consolidator DOES
-            # need. Normally its reflex reading is excluded as redundant
-            # (§v0.35g), but a reflex that actually acted on the world is
-            # not a reading — it is something the persona did, and the
-            # human lived through it.
-            record["reflex_action"] = self.reflex_action
-        return record
 
 
 class BundleBuffer:

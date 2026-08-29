@@ -13,9 +13,12 @@ agents/governance/buffer.py for the one thing this role now holds.
 
 Three jobs, all mechanical
 ---------------------------
-  1. Buffer and bundle. Four agents answer the same event in parallel;
-     Governance collects all four and sends ONE bundled message to Intent
-     (v0.35c). It assembles the envelope and writes none of its contents.
+  1. Buffer and bundle. Impulse/Analytics/Personality answer the same
+     event in parallel; Governance collects all three and sends ONE
+     bundled message to Intent (v0.35c) — and, since 2026-08-29, the same
+     bundle forked to Consolidator, so both see the identical evidence
+     (raw event + the knowledge swarm's retrieval) when they reason about
+     it. It assembles the envelope and writes none of its contents.
 
   2. Dispatch on Security's verdict. Green releases to Action; yellow and
      red both go to Intent as of v0.35e (Analytics is isolated from
@@ -25,9 +28,8 @@ Three jobs, all mechanical
      clearance attempt, and when the budget is gone the event is BLOCKED
      rather than re-asked — the bound that keeps this from live-locking.
 
-  3. Conclude the event. Once Action has run, Governance hands
-     Consolidator one complete record of what happened (v0.35g) and
-     forgets the event.
+  3. Conclude the event. Once Action has run, Governance releases the
+     buffered per-event state and forgets the event (§5.1).
 
 Two properties are enforced here rather than trusted to callers:
 
@@ -215,6 +217,10 @@ class Governance:
             return
         if not state.sensory:
             state.sensory = str(envelope.content)
+        if not state.source_type:
+            state.source_type = str(envelope.meta.get("source_type") or "")
+        if state.ref_event_id is None and envelope.meta.get("ref_event_id") is not None:
+            state.ref_event_id = envelope.meta.get("ref_event_id")
         # §3's OR-upscale-only rule has to survive bundling: see
         # EventState.severity for why taking the max here is load-bearing
         # rather than tidy.
@@ -237,7 +243,7 @@ class Governance:
 
     def _record_intent(self, envelope: Envelope, state: EventState) -> None:
         proposal = str(envelope.meta.get("proposed_action") or envelope.content)
-        state.proposals.append(proposal)
+        state.final_proposal = proposal
         if not state.sensory:
             state.sensory = proposal
 
@@ -449,6 +455,46 @@ class Governance:
         if route.id == routing.BUNDLE.id and state is not None:
             severity = state.severity
 
+        if route.id == routing.BUNDLE.id:
+            # Consolidator rides the same bundle Intent gets (2026-08-29):
+            # the raw sensory content plus whatever the swarm already
+            # retrieved as relevant to this event (meta["knowledge_swarm"]
+            # / meta["knowledge_swarm_detail"]). It used to see the raw
+            # Sensory envelope alone, fed by Sensory's own fan-out
+            # (agents/sensory/agent.py's FAN_OUT) — moved here so it can
+            # judge "does this match something already known" against the
+            # SAME evidence Intent reasons over, instead of guessing at a
+            # consistent subtopic/subject blind.
+            #
+            # Published BEFORE the Intent copy, not after: publish() on
+            # this bus is synchronous and recursive (bus/pubsub.py), so
+            # publishing to Intent first would run Intent's entire
+            # reply-then-Security-then-Action subtree to completion before
+            # control ever returned here — burying this hop deep in the
+            # trace instead of right where the bundle was assembled.
+            consolidator_meta = dict(meta)   # own copy — Envelope.reply
+                                              # doesn't copy, and `meta` is
+                                              # about to be reused below for
+                                              # Intent's copy of the bundle
+            if state is not None:
+                # A ui_click's reference to the consolidation pass it's
+                # about (docs/ideas/consolidation-doodle.md) — Intent has
+                # no use for this, only Consolidator's dedup does.
+                if state.source_type:
+                    consolidator_meta["source_type"] = state.source_type
+                if state.ref_event_id is not None:
+                    consolidator_meta["ref_event_id"] = state.ref_event_id
+            consolidator_out = envelope.reply(
+                source="Governance",
+                destination="Consolidator",
+                type=route.type,
+                content=decision.content,
+                severity=severity,
+                triggered_by=envelope.triggered_by,
+                meta=consolidator_meta,
+            )
+            self.bus.publish("events.consolidator", consolidator_out)
+
         out = envelope.reply(
             source="Governance",
             destination=route.destination,
@@ -526,15 +572,27 @@ class Governance:
     def _conclude(self, state: EventState) -> None:
         """Action has run. Release the buffered bundle and forget the event.
 
-        Phase 0.9: Consolidator no longer waits on this — it reads the raw
-        Sensory envelope directly, as a fifth fan-out member alongside
-        Analytics/Personality (`agents/sensory/agent.py`), so it has
-        nothing left to be handed here."""
+        Consolidator doesn't wait on this any more (Phase 0.9 moved it to
+        the BUNDLE fork, above) — but Reflection does (dispatch #4,
+        2026-08-29): it needs the FINISHED arc (what was said, not just
+        what was proposed), which only exists once Action has actually
+        run, so this is its natural fork point, one event later than
+        Consolidator's."""
         if self.buffer.peek(state.event_id) is None:
             # Already concluded — see the note at the call site. An Action
             # failure re-enters synchronously and concludes the event
             # before the outer frame returns.
             return
+        self.bus.publish("events.reflection", Envelope(
+            source="Governance", destination="Reflection", type="Concluded",
+            content=state.sensory, severity=state.severity,
+            event_id=state.event_id,
+            meta={
+                "final_proposal": state.final_proposal,
+                "verdict": state.verdict or "green",
+                "reflex_action": state.reflex_action,
+            },
+        ))
         self.buffer.release(state.event_id)
         self.metrics["concluded"] += 1
 

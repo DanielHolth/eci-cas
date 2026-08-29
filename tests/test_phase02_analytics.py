@@ -106,7 +106,7 @@ def _manifest(tmp_path: Path, mode: str = "correct", **role_overrides) -> Path:
         manifest = yaml.safe_load(f)
     manifest["storage"]["root"] = str(tmp_path / "archive")
     manifest["budget_tier"] = "custom"
-    manifest["substrates"]["fast-reflex"] = {
+    manifest["substrates"]["fast-low"] = {
         "provider": ScriptedProvider.name,
         "model": "scripted-reasoner-v1",
         "api_key_env": None,
@@ -281,7 +281,7 @@ class TestPipeline:
         analytics_meta = logged[0]["meta"]["analytics"]
         assert analytics_meta["tier"] == "live"
         assert analytics_meta["decided_by"] == "llm"
-        assert analytics_meta["source_substrate"] == "fast-reflex"
+        assert analytics_meta["source_substrate"] == "fast-low"
         assert analytics_meta["source_model"] == "scripted-reasoner-v1"
         assert analytics_meta["usage"]["input_tokens"] == 120
 
@@ -353,7 +353,7 @@ class TestVendorIndependence:
             manifest = yaml.safe_load(f)
         manifest["storage"]["root"] = str(tmp_path / "archive")
         manifest["budget_tier"] = "custom"
-        manifest["substrates"]["fast-reflex"] = {
+        manifest["substrates"]["fast-low"] = {
             "provider": "echo", "model": "some-other-vendor-model",
             "options": {"script": [_reply_correct("")]},
         }
@@ -400,7 +400,7 @@ class TestBootstrap:
 
         eco = Recovery(str(_manifest(tmp_path))).bootstrap()
         assert eco.analytics.tier == "live"
-        assert eco.analytics.substrate.substrate_class == "fast-reflex"
+        assert eco.analytics.substrate.substrate_class == "fast-low"
 
     def test_an_unusable_substrate_stops_the_bootstrap(self, tmp_path, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)

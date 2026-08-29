@@ -2,8 +2,8 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "avatar-app",
-      "runtimeExecutable": "avatar-app\\dev.cmd",
+      "name": "morrow-eci",
+      "runtimeExecutable": "morrow-eci\\dev.cmd",
       "runtimeArgs": [],
       "port": 3000
     }

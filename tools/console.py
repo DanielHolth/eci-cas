@@ -79,20 +79,21 @@ def _color(source: str) -> str:
     return COLORS.get(source, "")
 
 
-#: Sources whose non-final hops repeat content already said elsewhere —
-#: Sensory fans the SAME content out to four destinations (§5.2), and
-#: Governance is a pure dispatcher that re-emits whatever it's handed
-#: under a new envelope at every hop. Shared by print_hop (dims these) and
-#: the console's hop filter (hides these by default) so the two can't
-#: drift out of sync about which hops count as "repeat" — see main().
+#: Sources whose hops repeat content already said elsewhere — Sensory
+#: fans the SAME content out to four destinations (§5.2), and Governance
+#: is a pure dispatcher that re-emits whatever it's handed under a new
+#: envelope at every hop. Shared by print_hop (dims these) and the
+#: console's hop filter (hides these by default) so the two can't drift
+#: out of sync about which hops count as "repeat" — see main().
 REPEATING_SOURCES = {"Sensory", "Governance"}
 
 
 def is_repeat_hop(envelope: Envelope) -> bool:
-    """True for a Sensory/Governance hop that ISN'T the one reaching
-    Action — the actual output is always worth seeing, whatever route
-    produced it."""
-    return envelope.source in REPEATING_SOURCES and envelope.destination != "Action"
+    """True for any Sensory/Governance hop, Action included: Action's own
+    sink (StreamSink) already writes the spoken content to this same
+    stdout once the envelope reaches it, so printing Governance's dispatch
+    hop too was a second, redundant copy of the answer (2026-08-29)."""
+    return envelope.source in REPEATING_SOURCES
 
 
 BUDGET_COMMANDS = {
@@ -169,7 +170,11 @@ def print_knowledge_swarm(envelope: Envelope) -> None:
     genuinely distinct answer like Personality's or Analytics', not a repeat,
     and hiding them as a side effect of hiding Governance's dispatch noise
     was the bug (2026-08-29)."""
-    if envelope.type != "Bundle":
+    # Governance now publishes TWO Bundle-typed envelopes per event
+    # (2026-08-29, agents/governance/agent.py's emit()) — this one to
+    # Intent, and an identical-meta fork to Consolidator. Gate on
+    # destination too, or the same findings print twice.
+    if envelope.type != "Bundle" or envelope.destination != "Intent":
         return
     for i, node in enumerate((envelope.meta or {}).get("knowledge_swarm_detail") or []):
         count = node["count"]
@@ -193,8 +198,8 @@ def main(argv=None) -> int:
              "— repeats of the same content that the default view hides. "
              "This is how the console always used to behave. Without it, "
              "everything else — Impulse, Analytics, Personality, Knowledge, "
-             "Intent, Security, Consolidator — still prints in full; only "
-             "Sensory and Governance are quieted.")
+             "Intent, Security, Consolidator, Reflection — still prints in "
+             "full; only Sensory and Governance are quieted.")
     args = parser.parse_args(argv)
 
     try:
@@ -254,11 +259,35 @@ def main(argv=None) -> int:
     if getattr(eco, "consolidator", None) is not None:
         def _on_consolidator_write(records) -> None:
             for r in records:
-                path = "/".join(str(r.get(p, "")) for p in
-                                 ("category", "topic", "subtopic", "key"))
-                print(f"  {DIM}Consolidator -> knowledge   [{path}] "
+                # subject included when set — omitting it (as this used to)
+                # makes every agent's/person's "tier"-or-whatever-key fact
+                # print as the same line, which reads as overwriting even
+                # when each is landing under a distinct subject.
+                fields = ["category", "topic", "subtopic"]
+                if r.get("subject"):
+                    fields.append("subject")
+                fields.append("key")
+                path = "/".join(str(r.get(p, "")) for p in fields)
+                print(f"  {DIM}Consolidator -> knowledge[{r.get('domain', '')}]   [{path}] "
                       f"= {r.get('value', '')!r}{RESET}")
         eco.consolidator.on_write = _on_consolidator_write
+
+    # Reflection (dispatch #4) never replies to Governance either, and its
+    # passes are batched — most of them land silent, which is exactly the
+    # thing worth being able to see rather than infer from an absence.
+    if getattr(eco, "reflection", None) is not None:
+        def _on_reflect(result) -> None:
+            if result.outcome == "write" and result.write:
+                w = result.write
+                path = "/".join(str(w.get(p, "")) for p in
+                                ("category", "topic", "subtopic", "subject"))
+                print(f"  {DIM}Reflection -> knowledge[{w.get('domain', '')}]   [{path}] "
+                      f"{w.get('key','')} = {w.get('value','')!r}{RESET}")
+            elif result.outcome == "idea":
+                print(f"  {DIM}Reflection -> Sensory   [Idea] {result.idea!r}{RESET}")
+            else:
+                print(f"  {DIM}Reflection -> (silent, nothing new this batch){RESET}")
+        eco.reflection.on_reflect = _on_reflect
 
     while True:
         try:

@@ -96,13 +96,22 @@ class FileSink(Sink):
     records every hop of every event, including the ones that never
     reached the world; this file records only what the world saw. When
     somebody asks "what did it actually do", they should not have to
-    filter a bus trace to find out."""
+    filter a bus trace to find out.
+
+    Date-partitioned like Archive's queue log (`agents/archive/store.py`'s
+    `log_event`): `self.path` is a base (directory + stem), and the actual
+    file written to is recomputed per emit() as `<stem>_<date><suffix>`, so
+    the file rolls over at midnight without needing a restart."""
 
     name = "file"
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _dated_path(self) -> Path:
+        date = time.strftime("%Y-%m-%d", time.gmtime())
+        return self.path.with_name(f"{self.path.stem}_{date}{self.path.suffix}")
 
     def emit(self, envelope: Envelope) -> None:
         record = {
@@ -114,11 +123,12 @@ class FileSink(Sink):
             "expression": envelope.meta.get("expression"),
             "blocked": bool(envelope.meta.get("blocked")),
         }
+        dated_path = self._dated_path()
         try:
-            with self.path.open("a", encoding="utf-8") as f:
+            with dated_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         except OSError as exc:
-            raise SinkError(f"transcript write failed ({self.path}): {exc}") from exc
+            raise SinkError(f"transcript write failed ({dated_path}): {exc}") from exc
 
 
 #: Sink types a manifest may name. Deliberately closed to these: a

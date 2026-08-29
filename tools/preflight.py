@@ -39,7 +39,7 @@ from substrates.registry import resolve_substrate
 #: skipped even if the manifest leaves a stale `substrate` key on them —
 #: Governance in particular carries one for historical reasons and never
 #: uses it (v0.34).
-COGNITIVE_ROLES = ("analytics", "intent", "consolidator")
+COGNITIVE_ROLES = ("analytics", "intent", "consolidator", "reflection")
 
 OK = "  ok   "
 SKIP = " skip  "

@@ -7,10 +7,10 @@ vendor/model backs each cognitive role — Minimal/Budget/Default/Super.
 They compose: any tier can still latch into budget mode on a failure.
 
 A tier names substrate CLASSES (resolved in the manifest's substrates
-table). Three cognitive roles have live implementations: Analytics,
-Intent, and Consolidator. Personality and Knowledge use the lookup
-family tier. Minimal mocks Analytics and lookups; all tiers run Intent
-and Consolidator live.
+table). Four cognitive roles have live implementations: Analytics,
+Intent, Consolidator, and Reflection. Personality and Knowledge use the
+lookup family tier. Minimal mocks Analytics and lookups; all tiers run
+Intent, Consolidator, and Reflection live.
 """
 from __future__ import annotations
 
@@ -28,31 +28,24 @@ TIER_NAMES = (MINIMAL, BUDGET, DEFAULT, SUPER)
 #: manifest's `substrates:` table — a tier NAMES a class, it doesn't
 #: define one (§10.2: only the manifest's substrates table knows the
 #: vendor).
-#: Purpose of each class, not its literal current vendor — that lives in
-#: the manifest's substrates table and can move without this module
-#: changing (§10.2). As of the 2026-08-23 preprod stress test,
-#: local-fast and fast-reflex are deliberately pointed at real hosted
-#: cheap-tier models rather than their normal targets (self-hosted /
-#: claude-haiku-4-5) — see the manifest for the current values and why.
-LOCAL_CLASS = "local-fast"                 # normally self-hosted, keyless
-FAST_CLASS = "fast-reflex"                 # cheap hosted model, live duty
-SPECIALIST_CLASS = "identity-specialist"   # expensive*, rare, consolidation-only
-# * not currently true — see manifest note on identity-specialist
+#:
+#: Dispatch #5 (2026-08-29) replaced local/low/medium/high with two axes:
+#: fast-* for the live/gated path (Analytics, Personality, Knowledge,
+#: Intent), where time-to-first-token is the budget, and slow-* for the
+#: async path (Consolidator, Reflection), which can spend a slower TTFT on
+#: a smarter answer because nothing downstream is waiting on it. Purpose
+#: of each class, not its literal current vendor — that lives in the
+#: manifest's substrates table and can move without this module changing
+#: (§10.2). See the manifest for current vendor/model per class.
+FAST_LOCAL_CLASS = "fast-local"            # self-hosted, keyless; live path
+SLOW_LOCAL_CLASS = "slow-local"            # self-hosted, keyless; async path
+FAST_LOW_CLASS = "fast-low"                # cheap hosted model; live path
+SLOW_LOW_CLASS = "slow-low"                # cheap hosted model; async path
+FAST_MEDIUM_CLASS = "fast-medium"          # Default tier's Intent slot
+SLOW_MEDIUM_CLASS = "slow-medium"          # Default tier's Consolidator/Reflection slot
+FAST_HIGH_CLASS = "fast-high"              # Super tier's Intent slot
+SLOW_HIGH_CLASS = "slow-high"              # Super tier's Consolidator/Reflection slot
 
-#: What Analytics used before this module existed, and what Default/Super
-#: keep pointing it at. Under Phase 1's single-substrate-class rule
-#: (§14) this currently resolves to the exact same model as FAST_CLASS —
-#: but it's the class name the shipped manifest and the existing test
-#: suite already build on (§10.2's "swap the vendor in the table, not
-#: here"), so a tier that claims to match prior behaviour has to name it
-#: specifically rather than assume the two classes are interchangeable
-#: forever.
-ANALYTICS_DEFAULT_CLASS = "fast-reflex"
-
-#: role -> config, per tier. `analytics.substrate: None` means "leave
-#: whatever's declared" — irrelevant while analytics.mock is True, and
-#: there's no reason to clobber an operator's substrate choice for a role
-#: that isn't calling it.
 #: How many concluded events of conversation Intent carries on a live
 #: call (v0.35c, `roles.intent.context_events`). Tier-scaled on Daniel's
 #: call (2026-08-24): this rides on EVERY live call, so it is charged
@@ -69,29 +62,33 @@ TIER_PRESETS: Dict[str, Dict[str, Any]] = {
     MINIMAL: {
         "analytics": {"mock": True, "substrate": None},
         "lookup": {"mock": True, "substrate": None},
-        "intent_live": LOCAL_CLASS,
-        "consolidation": LOCAL_CLASS,
+        "intent_live": FAST_LOCAL_CLASS,
+        "consolidation": SLOW_LOCAL_CLASS,
+        "reflection": SLOW_LOCAL_CLASS,
         "context_events": CONTEXT_EVENTS[MINIMAL],
     },
     BUDGET: {
-        "analytics": {"mock": False, "substrate": LOCAL_CLASS},
-        "lookup": {"mock": False, "substrate": LOCAL_CLASS},
-        "intent_live": LOCAL_CLASS,
-        "consolidation": FAST_CLASS,
+        "analytics": {"mock": False, "substrate": FAST_LOW_CLASS},
+        "lookup": {"mock": False, "substrate": FAST_LOW_CLASS},
+        "intent_live": FAST_LOW_CLASS,
+        "consolidation": SLOW_LOW_CLASS,
+        "reflection": SLOW_LOW_CLASS,
         "context_events": CONTEXT_EVENTS[BUDGET],
     },
     DEFAULT: {
-        "analytics": {"mock": False, "substrate": ANALYTICS_DEFAULT_CLASS},
-        "lookup": {"mock": False, "substrate": FAST_CLASS},
-        "intent_live": FAST_CLASS,
-        "consolidation": FAST_CLASS,
+        "analytics": {"mock": False, "substrate": FAST_LOW_CLASS},
+        "lookup": {"mock": False, "substrate": FAST_LOW_CLASS},
+        "intent_live": FAST_MEDIUM_CLASS,
+        "consolidation": SLOW_MEDIUM_CLASS,
+        "reflection": SLOW_MEDIUM_CLASS,
         "context_events": CONTEXT_EVENTS[DEFAULT],
     },
     SUPER: {
-        "analytics": {"mock": False, "substrate": ANALYTICS_DEFAULT_CLASS},
-        "lookup": {"mock": False, "substrate": FAST_CLASS},
-        "intent_live": FAST_CLASS,
-        "consolidation": SPECIALIST_CLASS,
+        "analytics": {"mock": False, "substrate": FAST_LOW_CLASS},
+        "lookup": {"mock": False, "substrate": FAST_LOW_CLASS},
+        "intent_live": FAST_HIGH_CLASS,
+        "consolidation": SLOW_HIGH_CLASS,
+        "reflection": SLOW_HIGH_CLASS,
         "context_events": CONTEXT_EVENTS[SUPER],
     },
 }
@@ -104,14 +101,14 @@ class UnknownTier(ValueError):
 #: Tiers apply_tier() never mutates the manifest for. `custom` is the
 #: documented escape hatch. `default` joins it for a reason worth being
 #: explicit about: the shipped manifest's roles.* IS the appendix's
-#: Default combination already (Analytics on `deep-reasoning`, Intent's
-#: nodes on `fast-reflex` — both Haiku, per Phase 1's single-class rule),
-#: so "apply Default" and "change nothing" are the same operation. Making
-#: that a real no-op — rather than a preset that happens to reproduce the
-#: status quo — means a test (or an operator) that overrides
-#: `roles.analytics.mock` for a zero-cost run keeps working with no need
-#: to also set `budget_tier: custom`. Only Minimal, Budget and Super
-#: actually rewrite anything.
+#: Default combination already (Analytics/Personality/Knowledge on
+#: `fast-low`, Intent on `fast-medium`, Consolidator/Reflection on
+#: `slow-medium`), so "apply Default" and "change nothing" are the same
+#: operation. Making that a real no-op — rather than a preset that happens
+#: to reproduce the status quo — means a test (or an operator) that
+#: overrides `roles.analytics.mock` for a zero-cost run keeps working with
+#: no need to also set `budget_tier: custom`. Only Minimal, Budget and
+#: Super actually rewrite anything.
 _NOOP_TIERS = (CUSTOM, DEFAULT)
 
 
@@ -209,6 +206,15 @@ def apply_tier(manifest: Dict[str, Any]) -> Dict[str, Any]:
     consolidator["substrate"] = preset["consolidation"]
     roles["consolidator"] = consolidator
 
+    # Reflection (dispatch #4) gets its own preset dimension, separate
+    # from Consolidator's in principle — even though dispatch #5 has them
+    # sharing the same slow-* class per tier, they're named independently
+    # here so a future tier can split them without a module change.
+    reflection = dict(roles.get("reflection") or {})
+    reflection["mock"] = False
+    reflection["substrate"] = preset["reflection"]
+    roles["reflection"] = reflection
+
     out["roles"] = roles
     return out
 
@@ -242,5 +248,6 @@ def describe(manifest: Dict[str, Any]) -> str:
 __all__ = [
     "TIER_NAMES", "TIER_PRESETS", "UnknownTier", "apply_tier", "describe",
     "MINIMAL", "BUDGET", "DEFAULT", "SUPER", "CUSTOM", "CONTEXT_EVENTS",
-    "LOCAL_CLASS", "FAST_CLASS", "SPECIALIST_CLASS", "ANALYTICS_DEFAULT_CLASS",
+    "FAST_LOCAL_CLASS", "SLOW_LOCAL_CLASS", "FAST_LOW_CLASS", "SLOW_LOW_CLASS",
+    "FAST_MEDIUM_CLASS", "SLOW_MEDIUM_CLASS", "FAST_HIGH_CLASS", "SLOW_HIGH_CLASS",
 ]

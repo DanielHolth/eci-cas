@@ -3,13 +3,19 @@ Phase 0.9 — Consolidator as a per-event fact writer.
 
 Consolidator used to buffer concluded events (fed by Governance only
 after Action ran) and reconcile them in batches, extracting facts and
-distilling a narrative delta in one call. That's gone: Consolidator is
-now a fan-out member wired exactly like Personality/Knowledge
-(`agents/archive_lookup/base.py`'s shape) — it receives the raw Sensory
-envelope directly, in parallel with Analytics/Personality, and writes
-whatever that single event states immediately. No buffer, no batch
+distilling a narrative delta in one call. That's gone, and it writes
+whatever a single event states immediately: no buffer, no batch
 threshold, no epochs, no Impulse recalibration, and it never replies to
 Governance.
+
+It briefly ran as a fan-out member wired like Personality (reading the
+raw Sensory envelope directly, blind to everything else the ecosystem
+already knew). As of 2026-08-29 it's wired to Governance's BUNDLE route
+instead (`agents/governance/agent.py`'s emit()) — the same evidence
+Intent reasons over, including whatever the knowledge swarm already
+retrieved as relevant to this event — so it can reuse an existing
+subtopic/subject when this event's fact matches one, instead of
+guessing at a consistent spelling blind.
 """
 from __future__ import annotations
 
@@ -153,6 +159,45 @@ class TestPerEventScope:
 
 
 # ---------------------------------------------------------------------------
+# Reuse cue — the swarm's per-event retrieval, forked from Governance
+# ---------------------------------------------------------------------------
+
+class TestAlreadyKnown:
+    """Consolidator no longer carries a hardcoded rulebook for staying
+    consistent (there was one, briefly, for this system's own agents —
+    removed 2026-08-29: it fixed that one closed set and did nothing for
+    the open-ended one, a user's own family/job/hobbies). The general
+    mechanism is meta["knowledge_swarm"] — Governance's per-event,
+    relevance-bounded retrieval, forked to Consolidator's envelope
+    unchanged from what Intent gets. These tests pin the plumbing, not
+    the judgment call itself (that needs a real model)."""
+
+    def test_the_prompt_surfaces_whatever_the_swarm_already_found(self, tmp_path):
+        archive = ArchiveStore(root=str(tmp_path / "archive"))
+        bus = EmbeddedBus(archive=archive)
+        store = StructuredStore(root=str(tmp_path / "archive"))
+        agent = ConsolidatorAgent(bus, _scripted_substrate("with_writes"), archive,
+                                   structured_store=store)
+        envelope = Envelope(source="Governance", destination="Consolidator",
+                            type="Bundle", content="what's my wife's name again?",
+                            meta={"knowledge_swarm":
+                                  "person/relationship/wife/Yahnessa: marriage_date = 07.03.2004"})
+        prompt = agent._prompt(envelope)
+        assert "ALREADY KNOWN" in prompt
+        assert "wife/Yahnessa" in prompt
+
+    def test_an_empty_swarm_reads_as_nothing_on_file_not_a_blank(self, tmp_path):
+        """A missing/empty meta must not render as silence the model could
+        mistake for "check elsewhere" — it should read as an explicit
+        "there is nothing to reuse here, invent freely"."""
+        archive = ArchiveStore(root=str(tmp_path / "archive"))
+        bus = EmbeddedBus(archive=archive)
+        agent = ConsolidatorAgent(bus, _scripted_substrate("with_writes"), archive)
+        prompt = agent._prompt(_event())
+        assert "(nothing on file yet)" in prompt
+
+
+# ---------------------------------------------------------------------------
 # Multi-instruction writes
 # ---------------------------------------------------------------------------
 
@@ -182,6 +227,67 @@ class TestMultiInstructionWrites:
                                            topic="family", key="name")]
         assert len(matches) == 1
         assert matches[0]["value"] == "Maria"
+
+
+# ---------------------------------------------------------------------------
+# Doodle backend — control-plane notification, event-level dedup
+# (docs/ideas/consolidation-doodle.md)
+# ---------------------------------------------------------------------------
+
+def _click_event(ref_event_id: str, event_id: str) -> Envelope:
+    return Envelope(source="Governance", destination="Consolidator", type="Bundle",
+                    content="the user looked at what was just learned",
+                    event_id=event_id,
+                    meta={"source_type": "ui_click", "ref_event_id": ref_event_id})
+
+
+class TestConsolidationWrittenNotification:
+    def test_a_write_pass_that_writes_something_publishes_on_control(self, tmp_path):
+        eco = _boot(tmp_path, mode="with_writes")
+        notices = []
+        eco.bus.subscribe("system.control", notices.append)
+        event_id = eco.sensory.ingest(
+            "my daughter Susana gets picked up Fridays at 12:00")
+
+        written = [e for e in notices if e.type == "ConsolidationWritten"]
+        assert len(written) == 1
+        assert written[0].meta["event_id"] == event_id
+        assert "Susana" in written[0].content
+
+    def test_an_empty_write_pass_publishes_nothing(self, tmp_path):
+        """A pass that writes nothing (substrate outage, e.g.) has nothing
+        for the doodle to show — no notice, per the module docstring's
+        'skip if records is empty' rule."""
+        eco = _boot(tmp_path, mode="boom")
+        notices = []
+        eco.bus.subscribe("system.control", notices.append)
+        eco.bus.publish("events.consolidator", _event())
+        assert [e for e in notices if e.type == "ConsolidationWritten"] == []
+
+
+class TestDoodleDedup:
+    def test_the_first_click_on_a_pass_runs_normally(self, tmp_path):
+        eco = _boot(tmp_path, mode="with_writes")
+        eco.bus.publish("events.consolidator", _click_event("pass-1", "click-1"))
+        assert eco.consolidator.metrics["events"] == 1
+        assert eco.consolidator.substrate.provider.calls  # the substrate WAS called
+
+    def test_a_repeat_click_on_the_same_pass_is_a_no_op(self, tmp_path):
+        eco = _boot(tmp_path, mode="with_writes")
+        eco.bus.publish("events.consolidator", _click_event("pass-1", "click-1"))
+        calls_after_first = len(eco.consolidator.substrate.provider.calls)
+
+        eco.bus.publish("events.consolidator", _click_event("pass-1", "click-2"))
+        assert len(eco.consolidator.substrate.provider.calls) == calls_after_first
+        assert eco.consolidator.metrics["events"] == 2  # still counted as received
+
+    def test_a_click_on_a_different_pass_is_not_deduped(self, tmp_path):
+        eco = _boot(tmp_path, mode="with_writes")
+        eco.bus.publish("events.consolidator", _click_event("pass-1", "click-1"))
+        calls_after_first = len(eco.consolidator.substrate.provider.calls)
+
+        eco.bus.publish("events.consolidator", _click_event("pass-2", "click-2"))
+        assert len(eco.consolidator.substrate.provider.calls) > calls_after_first
 
 
 # ---------------------------------------------------------------------------
@@ -221,15 +327,24 @@ class TestBootstrap:
 
     def test_an_unusable_substrate_degrades_rather_than_stopping_the_boot(
             self, tmp_path, capsys):
-        eco = _boot(tmp_path, substrate="orthogonal")
+        eco = _boot(tmp_path, substrate="medium")
         assert eco.consolidator.tier == "mock"
         assert eco.intent.tier == "mock"          # live pipeline unaffected
         assert "not usable" in capsys.readouterr().out
 
-    def test_consolidator_is_wired_into_sensorys_fan_out(self, tmp_path):
+    def test_consolidator_is_wired_into_governances_bundle_fork(self, tmp_path):
+        """Not Sensory's fan-out any more (2026-08-29) — Governance forks
+        its BUNDLE route to Consolidator alongside the copy Intent gets,
+        so both reason over the same evidence for this event."""
         eco = _boot(tmp_path)
-        eco.sensory.ingest("my daughter Susana gets picked up Fridays at 12:00")
+        event_id = eco.sensory.ingest(
+            "my daughter Susana gets picked up Fridays at 12:00")
         assert eco.consolidator.metrics["events"] == 1
+
+        hops = [e for e in eco.bus.trace()
+                if e.event_id == event_id and e.destination == "Consolidator"]
+        assert len(hops) == 1
+        assert hops[0].source == "Governance"
 
 
 def _scripted_substrate(mode: str):

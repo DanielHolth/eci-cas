@@ -41,81 +41,66 @@ DEFAULT_SYSTEM_INSTRUCTION = (
 #: The response contract. Code-fixed rather than manifest-only, for the
 #: same reason Analytics' and Intent's are: it must survive an operator
 #: blanking `system_instruction`.
+#:
+#: Deliberately has no special-cased categories, topics, or named entities
+#: (2026-08-29) — an earlier version hand-listed rules for this system's
+#: own agents, which fixed consistency for that one closed set and did
+#: nothing for the open-ended one (a user's family, job, hobbies — never
+#: enumerable in advance). The general mechanism is rule 3: Consolidator
+#: now runs on Governance's bundle (agents/governance/agent.py's BUNDLE
+#: fork) instead of the raw Sensory event, so ALREADY KNOWN below is the
+#: same evidence Intent reasons over — reuse what's already there when
+#: this event's fact matches it, invent freely when it doesn't.
 CONSOLIDATION_RESPONSE_CONTRACT = """
 Reply with a single JSON object and nothing else:
 
   {"writes": [{"category": "<broad domain>",
                "topic": "<grouping within domain>",
-               "subtopic": "<relation or role>",
-               "subject": "<the entity's own name, or \\"\\" if unknown>",
+               "subtopic": "<relation, role, or type>",
+               "subject": "<the entity's own name, or a short description if unnamed>",
                "key": "<attribute name>",
                "value": "<bare datum>"}]}
 
-WRITE RULES — follow exactly:
-1. ONLY write facts the user explicitly stated. Questions are NOT facts —
-   but a message can state facts AND ask a question in the same breath
-   ("Here are the three rules: X, Y, Z. Any questions about them?"). Write
-   the stated facts; only the question part itself is not a fact.
-2. category and topic are SINGLE words or short phrases, NEVER paths with
-   slashes. category = broad domain (person, place, event), topic =
-   grouping (family, relationship, biography).
-3. subtopic is the RELATION/ROLE — "son", "daughter", "mother", "wife",
-   "dog" — never a proper name. It stays the same across everyone who
-   shares that role (two children are both subtopic="son" if both are
-   sons), so a query like "my kids" can find them without already
-   knowing their names.
-4. subject is the entity's own proper name once known ("Marcus",
-   "Yahnessa") — "" if the user hasn't given one yet. This is what keeps
-   two people with the same subtopic from colliding, and what a single
-   person's facts all hang off consistently across calls. Never put the
-   name in subtopic, and never leave subject blank once you've been told it.
-   Multiple keys hang off the same (subtopic, subject) pair:
-     category="person", topic="relationship", subtopic="wife", subject="Yahnessa", key="marriage_date", value="07.03.2004"
-     category="person", topic="family", subtopic="son", subject="Marcus", key="birth_year", value="2007"
-     category="person", topic="family", subtopic="son", subject="Elias", key="birth_year", value="2011"
-     category="person", topic="family", subtopic="mother", subject="Maria", key="occupation", value="nurse"
-5. value must be the bare datum — a name, a date, a place — never a
-   sentence. "Yahnessa" not "Daniel is married to Yahnessa."
-6. One fact per write. Do not pack multiple facts into one value.
-7. If a key already exists under the same category/topic/subtopic/subject,
-   the old value is overwritten — so updating a fact is just writing it
-   again.
-8. A statement about YOUR OWN identity — your name, a trait or preference
-   you've been assigned — is a fact too, and it is never a "person" fact.
-   Use category="system", topic="identity", subtopic="persona", subject="":
-     category="system", topic="identity", subtopic="persona", subject="", key="name", value="Morrow"
-   "person" is reserved for the human and the people they tell you about;
-   mixing your own identity into it is what causes it to be confused with
-   theirs later.
-9. A statement about THIS SYSTEM'S OWN configuration, rules, or mechanics
-   (its security rules, its architecture, how its agents route work) is
-   also a fact, also never a "person" fact, and also never a question even
-   when the user is teaching it to you conversationally. Use
-   category="system" with a topic that names what the fact is about —
-   e.g. topic="security", subtopic="rule", subject="<the rule's own
-   name>":
-     category="system", topic="security", subtopic="rule", subject="bypass-this-system", key="verdict", value="red"
-     category="system", topic="security", subtopic="rule", subject="self-harm-method", key="verdict", value="red"
-   Being told "log this for future reference" is the user stating a fact
-   and asking you to remember it — write it, exactly as you would if they
-   had stated it about themselves.
-   This applies to ANY of this system's own agents/components, not just
-   the ones named above — a message that names an agent and describes
-   what it does, even in passing ("your knowledge agent, the one that
-   reads from your memory"), states a fact about this system just as
-   much as a message naming a security rule does:
-     category="system", topic="architecture", subtopic="agent", subject="Knowledge", key="function", value="reads from memory"
-     category="system", topic="architecture", subtopic="agent", subject="Consolidator", key="function", value="writes new knowledge into memory"
-   Do not require the message to be ABOUT that fact for it to count — a
-   descriptive aside inside a request to test or check something ("let's
-   check if X, the one that does Y, now also does Z") still states that X
-   does Y, exactly as plainly as if it were the whole sentence.
-10. Reuse existing categories and topics from the EXISTING CATEGORIES list
-    when one fits. Create a new category when nothing does — a store that
-    only has "person" facts in it must still be able to gain a "system"
-    one the first time your own identity comes up. Don't invent a synonym
-    for something that already exists, though.
-11. writes may be empty if nothing worth storing was said.
+RULES:
+1. Only write facts explicitly stated in THIS event — never infer,
+   embellish, or guess. A message can state a fact and ask a question in
+   the same breath; write the fact, the question part is not one.
+2. category is the one field that stays a small, reused set (person,
+   place, event, system...) — reuse one from ALREADY KNOWN below when it
+   fits, invent a new one only when nothing does. topic, subtopic,
+   subject and key are NOT a fixed list: invent whatever this event
+   actually calls for.
+3. Check ALREADY KNOWN below first — it's what the knowledge swarm already
+   retrieved as relevant to this event, one entry per line, shaped
+   "category/topic/subtopic[/subject]: key = value". If this event's fact
+   is about something already listed there, reuse that EXACT subtopic and
+   subject spelling (copied from the path, not reworded) so its facts
+   stay together under one identity instead of fragmenting under a
+   near-duplicate. If nothing there matches ALREADY KNOWN either, check
+   the OTHER writes you are producing in this SAME response before
+   inventing anything: the same rule applies to yourself mid-answer as to
+   the swarm — the second write about an entity reuses the first write's
+   exact subtopic and subject, it does not reword them. Only once neither
+   ALREADY KNOWN nor your own other writes have it, invent freely.
+4. subtopic is the entity's stable relation/role/type ("son", "wife",
+   "agent", "rule"), never a proper name — it should stay the same across
+   everyone who shares it. subject is the entity's own proper name once
+   known, and never blank: no name yet doesn't mean nothing to say —
+   describe what it IS ("the Friday meeting", "the car", "this rule")
+   rather than leaving it empty. Only fall back to "this" when even a
+   short description would be a guess. Never put the name in subtopic
+   instead.
+5. subtopic and subject are labels to reuse, not prose to compose — keep
+   each as short as it can be while still identifying the thing.  If an
+   entity has both a full name and a short form (an acronym, a first
+   name), pick the one form you expect to reuse most and use ONLY that
+   one for every write about it in this response — never the full name in
+   one write and the short form in another for the same entity.
+6. value is the bare datum — a name, a date, a place — never a sentence.
+   One fact per write.
+7. Writing again under the same category/topic/subtopic/subject/key
+   overwrites the old value — updating a fact is just writing it again.
+8. writes may be empty if nothing worth storing was said.
 """
 
 
@@ -198,22 +183,21 @@ class ConsolidatorAgent(ConsolidatorBase):
     def _prompt(self, envelope: Envelope) -> str:
         """Just this event, rendered. Deliberately ONE event, not a batch —
         each write is a self-contained fact extraction over what the user
-        just said, nothing else."""
+        just said, nothing else.
+
+        ALREADY KNOWN comes from meta["knowledge_swarm"] — the same
+        per-event, relevance-bounded retrieval Governance already ran for
+        Intent (agents/governance/knowledge_swarm.py), forked to this
+        envelope rather than re-derived. It costs nothing extra to
+        compute and doesn't grow with the size of the knowledge base, only
+        with how much is actually relevant to this one event."""
         lines = [f"EVENT: {envelope.event_id}", ""]
-        sensory = str(envelope.content)[:400]
-        lines.append(f"input: {sensory}")
+        lines.append(f"input: {envelope.content}")
 
         lines.append("")
-        lines.append("EXISTING CATEGORIES/TOPICS (reuse these when they fit):")
-        if self.structured_store is not None:
-            index = self.structured_store.schema_index("knowledge")
-            if index:
-                for entry in index:
-                    lines.append(f"  - {entry['category']}/{entry['topic']}")
-            else:
-                lines.append("  (empty — you may create new categories)")
-        else:
-            lines.append("  (not available)")
+        swarm = str(envelope.meta.get("knowledge_swarm") or "").strip()
+        lines.append("ALREADY KNOWN, relevant to this event:")
+        lines.append(f"  {swarm}" if swarm else "  (nothing on file yet)")
 
         return "\n".join(lines)
 
@@ -248,7 +232,13 @@ class ConsolidatorAgent(ConsolidatorBase):
                     "category": category[:80],
                     "topic": topic[:80],
                     "subtopic": str(w.get("subtopic") or "general")[:80],
-                    "subject": str(w.get("subject") or "")[:80],
+                    # Forced non-empty (2026-08-29): a blank subject reads
+                    # ambiguously downstream (the swarm's own path format
+                    # drops it entirely — see knowledge_swarm.py's
+                    # format_for_intent), so an entity too generic to name
+                    # still gets an explicit placeholder rather than
+                    # silence a reader could mistake for "no entity here".
+                    "subject": str(w.get("subject") or "").strip()[:80] or "this",
                     "key": key[:120],
                     "value": value[:1000],
                 })

@@ -21,15 +21,16 @@ cared.
 
 Three pieces already exist and line up:
 
-* **`EpochWritten` on `system.control`** is already published by
-  `ConsolidatorBase._run()` at the end of every pass. It exists today as
-  the Intent persona-cache refresh ping. A UI layer subscribing to that
+* **`ConsolidationWritten` on `system.control`**, published by
+  `ConsolidatorBase._execute_writes()` after any write pass that actually
+  wrote something (Phase 0.9 removed the old epoch/batch model —
+  Consolidator writes per-event now, so this is keyed on the writing
+  event's `event_id`, not an epoch id). A UI layer subscribing to that
   topic is a void observer — reads, never publishes — which is the same
   pattern `tools/console.py` already uses and the same discipline the
   spec asks of anything watching the bus.
-* **`ArchiveWritten` on `system.control`** (new in Phase 0.6, see
-  `agents/archive/agent.py`) makes individual writes observable too, at
-  a finer grain than the epoch.
+* **`ArchiveWritten` on `system.control`** (Phase 0.6, see
+  `agents/archive/agent.py`) makes individual writes observable too.
 * **The click going back in through `Sensory.ingest(...)`** is correct by
   §5.2 rather than a convenient hack. Sensory is "an input field plus
   source-tagging", and a click genuinely IS a perception — unlike a
@@ -46,40 +47,42 @@ Stated directly, because it's the part most likely to be lost:
 > interesting that I share what I've learned". After that it's a
 > duplicate and Consolidator should ignore it.
 
-So: the **first** click on a given epoch is a real signal and should
-reconcile as one. Every subsequent click on the same epoch is a
-duplicate and Consolidator drops it. Not "the same content again" —
-literally the same epoch being revisited.
+So: the **first** click referencing a given consolidation write-pass
+(its `event_id`) is a real signal and should reconcile as one. Every
+subsequent click on the same one is a duplicate and Consolidator drops
+it. Not "the same content again" — literally the same write-pass being
+revisited.
 
 This also happens to close the feedback loop that would otherwise be a
-problem: consolidation → doodle → click → event → concludes → back into
-Consolidator's batch → consolidation. Harmless at `batch_size: 25`, but
-the dedup rule makes it terminate by construction rather than by
-arithmetic.
+problem: consolidation → doodle → click → event → back into
+Consolidator. The dedup rule makes it terminate by construction — a
+click's own write-pass (if it has one) is a new event_id, and only a
+*repeat* click on the same referenced event_id is suppressed.
 
-## What would need building
+## What was built (2026-08-29)
 
-1. **`EpochWritten` needs a payload.** Today it is a ping — the content
-   is the string `"epoch consolidator_cycle-N written"`. The doodle needs
-   at minimum an epoch id and one human-readable line to render. That
-   summary has to be authored by the live Consolidator tier, which means
-   this idea is coupled to Consolidator's live reasoning and can't fully
-   land before it.
+1. **`ConsolidationWritten` payload.** `agents/consolidator/base.py`'s
+   `_execute_writes()` publishes it on `system.control` after any pass
+   that actually wrote something — event_id plus one human-readable
+   summary line, built with `agents/governance/knowledge_swarm.py`'s
+   `format_for_intent` rather than re-deriving the format.
 
-2. **A `source_type` for UI interaction.** Sensory already tags source
-   types (`prompt`, and the diagnostic pings). A click wants its own tag
-   — something like `ui_click` — so that downstream can tell "the human
-   typed something" from "the human looked at something".
+2. **A `source_type` for UI interaction.** `ui_click` joins Sensory's
+   `VALID_SOURCE_TYPES` (`agents/sensory/agent.py`); `Sensory.ingest()`
+   takes an optional `ref_event_id` that names which consolidation
+   write-pass the click is about (lands in the fan-out's `meta`).
 
-3. **Epoch-level dedup in Consolidator.** The record for a click event
-   carries the epoch id it refers to; `observe()` (or the reconcile pass)
-   drops a click record whose epoch id has already been acknowledged.
-   Cheap: one set of seen epoch ids, persisted with the epoch itself.
+3. **Event-level dedup in Consolidator.** `ConsolidatorBase.on_event()`
+   checks `meta["source_type"] == "ui_click"` and `meta["ref_event_id"]`
+   against an in-memory set of already-acknowledged event_ids; a repeat
+   is a no-op (no substrate call, no writes). In-memory only — losing it
+   on restart is recoverable state loss, consistent with Consolidator's
+   existing fail-open posture.
 
-4. **A UI surface.** Out of scope for this repo. The seam is
+4. **A UI surface.** Still out of scope for this repo. The seam is
    `system.control` for the outbound half and `Sensory.ingest` for the
-   inbound half; nothing about the doodle needs to reach into the
-   pipeline.
+   inbound half; Morrow-ECI's `ConsolidationDoodle.tsx` wires the click
+   (Milestone 2).
 
 ## Open question
 

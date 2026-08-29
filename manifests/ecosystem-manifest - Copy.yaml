@@ -31,15 +31,11 @@ phase: 0.5                            # 0=mockup, 0.1=Governance, 0.2=Analytics,
 # a tier is a design-time choice, budget_mode is a runtime latch, and any
 # tier can still latch into budget mode on a failure or spend cap.
 #
-# Dispatch #5 (2026-08-29): fast-*/slow-* replaced local/low/medium/high —
-# fast-* is the live/gated path (Analytics, Personality, Knowledge,
-# Intent), slow-* is the async path (Consolidator, Reflection) that can
-# tolerate a slower, smarter model because nothing downstream waits on it.
-#
-#   minimal   analytics mocked, everything on fast-local/slow-local — $0
-#   budget    everything on fast-low/slow-low (Mistral fast lane, no local infra)
-#   default   fast-low/slow-medium, Intent on fast-medium (this manifest's shipped behaviour)
-#   super     fast-low/slow-high, Intent on fast-high
+#   minimal   analytics mocked, intent/consolidation on a local model — $0
+#   budget    analytics on a local model, consolidation on fast-reflex
+#   default   everything on fast-reflex (this manifest's prior behaviour)
+#   super     fast-reflex everywhere except consolidation, which gets
+#             identity-specialist
 #   custom    ignore this field; roles.* below apply exactly as written
 #
 # One line, then restart (budget/tiers.py). Overwrites roles.analytics.*
@@ -88,25 +84,12 @@ message_bus:
 # 2026-08-23; validate reachability with your own keys:
 #     python -m tools.preflight --manifest manifests/ecosystem-manifest.yaml --live
 substrates:
-  # Dispatch #5 (2026-08-29): fast-*/slow-* replaces local/low/medium/high.
-  # Two axes now, not one: fast-* is the live/gated path (Analytics,
-  # Personality, Knowledge, Intent) where time-to-first-token is the
-  # budget; slow-* is the async path (Consolidator, Reflection) that can
-  # spend 2sec+ TTFT for a smarter answer because nothing downstream is
-  # waiting on it. EU latency was the trigger: the old `low`
-  # (gpt-5.6-luna, US-hosted OpenAI) was the TTFT floor for every live
-  # call; Mistral's ministral-3b-2512 is EU-hosted (France) and cheap
-  # enough to run fast-low AND fast-medium off the same model.
-  #
-  #   fast-low/fast-medium   ministral-3b-2512 (Mistral, EU) — sub-1sec TTFT
-  #   fast-high              mistral-small-2603 (Mistral, EU)
-  #   slow-low/medium/high   gpt-5.6-luna at reasoning_effort "medium", not
-  #                          "none" — same model as the old `low`/`medium`,
-  #                          but paying its ~2sec+ TTFT for the smarter
-  #                          answer, tolerable off the live path
-  #   fast-local/slow-local  unchanged local/keyless model, split only by
-  #                          max_tokens ceiling (Minimal tier, $0)
-  fast-local:
+  # Minimal/Budget tiers' local model — genuinely free, keyless.
+  # Point base_url at a real Ollama/LM Studio/vLLM endpoint before
+  # running Minimal for real; until then it fails preflight/bootstrap
+  # with "connection refused" rather than silently billing a hosted
+  # model (this exact mistake has happened once before — Phase 0.4).
+  local-fast:
     provider: "ollama"                # openai-compatible adapter, §10.2
     model: "llama3.1:8b"
     api_key_env: null                 # keyless — a local runtime needs no key
@@ -114,110 +97,43 @@ substrates:
     max_tokens: 512
     timeout_sec: 120                  # local inference is slower than a hosted API
     price_per_mtok: { input: 0.00, output: 0.00 }
-    notes: "Minimal tier's live-path local model. Point base_url at your actual Ollama/LM Studio/vLLM endpoint."
+    notes: "Minimal/Budget tiers' local model. Point base_url at your actual Ollama/LM Studio/vLLM endpoint."
 
-  slow-local:
-    provider: "ollama"
-    model: "llama3.1:8b"
-    api_key_env: null
-    base_url: "http://localhost:11434/v1"
-    max_tokens: 2048                  # Consolidator/Reflection need the larger ceiling
-    timeout_sec: 120
-    price_per_mtok: { input: 0.00, output: 0.00 }
-    notes: "Minimal tier's async-path local model. Same model as fast-local, larger max_tokens."
-
-  fast-low:
-    provider: "mistral"               # openai-compatible adapter, §10.2
-    model: "ministral-3b-2512"
-    api_key_env: "MISTRAL_API_KEY"
-    base_url: "https://api.mistral.ai/v1"
-    max_tokens: 512
-    timeout_sec: 30                   # sub-1sec TTFT is the point of this class
-    price_per_mtok: { input: 0.1, output: 0.1 }  # unverified estimate — confirm against Mistral's current pricing page before relying on the cost estimate
-    notes: "Analytics/Personality/Knowledge live-path slot. EU-hosted (France) for latency (dispatch #5, 2026-08-29)."
-
-  fast-medium:
-    provider: "mistral"
-    model: "mistral-small-2603"
-    api_key_env: "MISTRAL_API_KEY"
-    base_url: "https://api.mistral.ai/v1"
-    max_tokens: 1024                  # Intent's replies need a little more room than a keyword advisory
-    timeout_sec: 30
-    price_per_mtok: { input: 0.1, output: 0.1 }  # unverified estimate — confirm against Mistral's current pricing page before relying on the cost estimate
-    notes: "Same model as fast-low (dispatch #5 states them equal); Intent's default slot."
-
-  fast-high:
-    provider: "mistral"
-    model: "mistral-small-2603"
-    api_key_env: "MISTRAL_API_KEY"
-    base_url: "https://api.mistral.ai/v1"
-    max_tokens: 2048
-    timeout_sec: 30
-    price_per_mtok: { input: 0.15, output: 0.6 }  # unverified estimate — confirm against Mistral's current pricing page before relying on the cost estimate
-    notes: "Super tier's Intent slot — smarter Mistral model, still EU/fast."
-
-  slow-low:
-    provider: "openai"
+  # PREPROD STRESS TEST (deliberate, temporary): cheapest real OpenAI
+  # model, swapped in to press bottlenecks (odd JSON, contract
+  # violations, latency, rate limits) before prod. Was claude-haiku-4-5.
+  fast-reflex:
+    provider: "openai"                # openai-compatible adapter, §10.2
     model: "gpt-5.6-luna"
     api_key_env: "OPENAI_API_KEY"
+    max_tokens: 512
+    timeout_sec: 60                   # one hung call would hang the whole bus (§3)
+    price_per_mtok: { input: 0.20, output: 1.20 }
+    options: { reasoning_effort: "none", token_param: "max_completion_tokens" }  # luna is reasoning-capable (max/xhigh/high/medium/low/none); pin to its non-reasoning tier so minor swarm-job calls don't default to medium effort. token_param: confirmed via the reactive probe that luna rejects max_tokens like nano did — pinned now to skip the probe (and its NOTE) entirely.
+    notes: "PREPROD STRESS TEST — cheapest OpenAI model. Was gpt-5.4-nano, before that claude-haiku-4-5-20251001."
+
+  # Reserved for Phase 3 multi-substrate diversity (§7.5). Untouched by
+  # the preprod stress test — still Haiku, not part of that pass.
+  orthogonal:
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+    api_key_env: "ANTHROPIC_API_KEY"
     max_tokens: 1024
     timeout_sec: 60
-    price_per_mtok: { input: 0.20, output: 1.20 }
-    options: { reasoning_effort: "medium", token_param: "max_completion_tokens", temperature_locked: true }  # "medium" not "none": async path can pay luna's 2sec+ TTFT for the smarter answer (dispatch #5). temperature_locked: confirmed via a live 400 that luna at reasoning_effort "medium" only accepts its default temperature — pinned to skip the reactive probe (2026-08-29).
-    notes: "Budget tier's Consolidator/Reflection slot."
+    price_per_mtok: { input: 1.00, output: 5.00 }   # CHECK against current vendor pricing
+    notes: "unused until Phase 3 multi-substrate diversity, §7.5"
 
-  slow-medium:
-    provider: "openai"
-    model: "gpt-5.6-luna"
-    api_key_env: "OPENAI_API_KEY"
+  # Super tier's consolidation slot — deliberately expensive, rare
+  # (once-a-day epoch writing, never the live pipeline). A real,
+  # well-behaved, non-cheapest model to consolidate against.
+  identity-specialist:
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+    api_key_env: "ANTHROPIC_API_KEY"
     max_tokens: 2048
-    timeout_sec: 60
-    price_per_mtok: { input: 0.20, output: 1.20 }
-    options: { reasoning_effort: "medium", token_param: "max_completion_tokens", temperature_locked: true }
-    notes: "Default tier's Consolidator/Reflection slot."
-
-  slow-high:
-    provider: "openai"
-    model: "gpt-5.6-luna"
-    api_key_env: "OPENAI_API_KEY"
-    max_tokens: 4096
-    timeout_sec: 60
-    price_per_mtok: { input: 0.20, output: 1.20 }
-    options: { reasoning_effort: "medium", token_param: "max_completion_tokens", temperature_locked: true }
-    notes: "Super tier's Consolidator/Reflection slot. Same model as slow-low/medium today; give it a real specialist before prod, see docs/phase-0.2.2-budget-tiers.md."
-
-  # --- Pre-dispatch-#5 classes (2026-08-23 pricing), kept as reference ---
-  # local:
-  #   provider: "ollama"
-  #   model: "llama3.1:8b"
-  #   api_key_env: null
-  #   base_url: "http://localhost:11434/v1"
-  #   max_tokens: 512
-  #   timeout_sec: 120
-  #   price_per_mtok: { input: 0.00, output: 0.00 }
-  # low:
-  #   provider: "openai"
-  #   model: "gpt-5.6-luna"
-  #   api_key_env: "OPENAI_API_KEY"
-  #   max_tokens: 512
-  #   timeout_sec: 60
-  #   price_per_mtok: { input: 0.20, output: 1.20 }
-  #   options: { reasoning_effort: "none", token_param: "max_completion_tokens" }
-  # medium:
-  #   provider: "openai"
-  #   model: "gpt-5.6-luna"
-  #   api_key_env: "OPENAI_API_KEY"
-  #   max_tokens: 2048
-  #   timeout_sec: 60
-  #   price_per_mtok: { input: 0.20, output: 1.20 }
-  #   options: { reasoning_effort: "none", token_param: "max_completion_tokens" }
-  # high:
-  #   provider: "anthropic"
-  #   model: "claude-haiku-4-5-20251001"
-  #   api_key_env: "ANTHROPIC_API_KEY"
-  #   max_tokens: 2048
-  #   timeout_sec: 120
-  #   price_per_mtok: { input: 1.00, output: 5.00 }
+    timeout_sec: 120
+    price_per_mtok: { input: 1.00, output: 5.00 }
+    notes: "Super tier consolidation only; not used by the live pipeline. Real specialist (e.g. Opus) TBD before prod — see docs/phase-0.2.2-budget-tiers.md."
 
   # Worked examples of the same contract pointed elsewhere — swap a class
   # above to one of these shapes to change vendor with no code change.
@@ -311,7 +227,7 @@ roles:
   analytics:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
-    substrate: "fast-low"     # swap the vendor in the table above, not here
+    substrate: "fast-reflex"          # swap the vendor in the table above, not here
     temperature: 0.2
     max_tokens: 512                   # recommendations are 1-3 sentences
     # Raise on an unusable substrate answer instead of degrading. Off by
@@ -335,7 +251,7 @@ roles:
   intent:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
-    substrate: "fast-medium"  # v0.35f: flat, like Analytics — the
+    substrate: "fast-reflex"          # v0.35f: flat, like Analytics — the
                                       # per-node `nodes:` list went away with
                                       # the fleet/rotation model (§7 superseded)
     temperature: 0.7
@@ -383,7 +299,7 @@ roles:
   personality:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
-    substrate: "fast-low"
+    substrate: "fast-reflex"
     temperature: 0.2
     query_limit: 8                    # bounded read — this runs on every event
     system_instruction: |
@@ -394,7 +310,7 @@ roles:
   knowledge:
     tier: cognitive
     mock: false
-    substrate: "fast-low"
+    substrate: "fast-reflex"
     temperature: 0.2
     query_limit: 8
     # Phase 0.8: structured-archive swarm retrieval. Analytics picks N
@@ -412,14 +328,20 @@ roles:
       people, places, prior stories. Local knowledge only, not general
       world knowledge.
 
-  # Consolidator — sole writer of long-term memory. Per-event since Phase
-  # 0.9 (no batch, no epochs): one reasoning pass over Governance's BUNDLE
-  # fork per event, emitting N mechanical Archive writes (v0.35g's Option
-  # B taken to its conclusion).
+  # Consolidator — NEW in v0.35f. The entire former "Consolidating" mode
+  # of Intent, on its own: batches concluded events, reasons over the
+  # batch in ONE call, and emits N mechanical Archive writes (v0.35g's
+  # Option B taken to its conclusion). Sole writer of long-term memory.
+  #
+  # Runs OFF the live dispatch path on a background worker thread
+  # (`synchronous: false`), so the one event per batch that trips the
+  # threshold doesn't make the human wait on a slow reconciliation call.
+  # Set `synchronous: true` to make a run deterministic for debugging —
+  # which is also what every offline test fixture does.
   consolidator:
     tier: cognitive
     mock: false                       # set true for a zero-cost ecosystem
-    substrate: "slow-medium"    # "slow-high" needs Super tier's specialist; see budget/tiers.py
+    substrate: "fast-reflex"            # identity-specialist needs ANTHROPIC_API_KEY; Super tier overrides back
     # fast-reflex's own max_tokens (512) is sized for a short reply, not
     # for "extract every fact in this event" — a single dense message
     # (a whole agent roster, a long story) can legitimately produce many
@@ -436,26 +358,3 @@ roles:
       system. You extract facts from the user's own words, one event at a
       time, and decide what is worth remembering and where it belongs.
       You never speak to the human and you never gate anything.
-
-  # Reflection — dispatch #4 (2026-08-29). Meta-cognition over CONCLUDED
-  # episodes: every `batch_size` events, looks back for a durable pattern
-  # (not a summary) and either writes one domain="internal" insight,
-  # raises one Idea back through Sensory, or stays silent — the common
-  # case. Fed by Governance's `_conclude()` fork, off the live dispatch
-  # path entirely; gates nothing, same as Consolidator.
-  reflection:
-    tier: cognitive
-    mock: false                       # set true for a zero-cost ecosystem
-    substrate: "slow-medium"           # needs the 2048-token ceiling — a batch
-                                        # of `batch_size` incidents + prior learnings
-                                        # blows past fast-low's 512 (2026-08-29)
-    max_tokens: 2048
-    temperature: 0.3
-    batch_size: 5
-    system_instruction: |
-      You are REFLECTION: the meta-cognitive agent of a multi-agent
-      system. You look back over a batch of concluded incidents and
-      decide whether there is a real, durable pattern worth remembering —
-      not a summary of what happened, a lesson about how you tend to
-      react. You never speak to the human directly and you never gate
-      anything.

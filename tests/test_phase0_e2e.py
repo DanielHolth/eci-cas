@@ -104,26 +104,29 @@ class TestPhase0ExitCriteria:
 
         hops = [(env.source, env.destination) for env in eco.bus.trace() if env.event_id == event_id]
 
-        # Phase 0.8: Knowledge removed (swarm replaces it). Phase 0.9 added
-        # Consolidator as a fan-out member — it never replies to Governance,
-        # so it contributes one hop, not a pair. Impulse is still first and
-        # synchronous; Analytics, Personality, and Consolidator fan out
-        # concurrently — their relative order isn't guaranteed.
+        # Phase 0.8: Knowledge removed (swarm replaces it). Impulse is
+        # still first and synchronous; Analytics and Personality fan out
+        # concurrently — their relative order isn't guaranteed. Consolidator
+        # no longer rides this fan-out (2026-08-29) — it gets Governance's
+        # BUNDLE fork instead, published just before the Intent copy; it
+        # never replies to Governance, so it contributes one hop, not a
+        # pair.
         assert hops[0] == ("Sensory", "Impulse")
         assert hops[1] == ("Impulse", "Governance")
 
-        concurrent = set(hops[2:7])
+        concurrent = set(hops[2:6])
         assert concurrent == {
             ("Sensory", "Analytics"), ("Analytics", "Governance"),
             ("Sensory", "Personality"), ("Personality", "Governance"),
-            ("Sensory", "Consolidator"),
         }
-        assert len(hops[2:7]) == 5, "each of the two repliers answers once, plus Consolidator's one-way hop"
+        assert len(hops[2:6]) == 4, "each of the two repliers answers once"
 
-        assert hops[7:] == [
+        assert hops[6:] == [
+            ("Governance", "Consolidator"),
             ("Governance", "Intent"), ("Intent", "Governance"),
             ("Governance", "Security"), ("Security", "Governance"),
             ("Governance", "Action"),
+            ("Governance", "Reflection"),
         ]
 
     def test_action_success_is_silent(self, tmp_path):
@@ -331,16 +334,18 @@ class TestActionFailureHandling:
         sensory_hops = [env for env in all_hops
                         if env.event_id == event_id and env.source == "Sensory"]
 
-        # Four: the v0.35a/0.9 fan-out, all from the ONE original ingest.
-        # What matters here is unchanged — none of them is a failure
-        # re-entry, and nothing was published back INTO Sensory.
-        assert len(sensory_hops) == 4
+        # Three: the v0.35a fan-out (Consolidator moved off it 2026-08-29 —
+        # see agents/governance/agent.py's BUNDLE fork), all from the ONE
+        # original ingest. What matters here is unchanged — none of them
+        # is a failure re-entry, and nothing was published back INTO
+        # Sensory.
+        assert len(sensory_hops) == 3
         assert {env.type for env in sensory_hops} == {"prompt"}
-        # Phase 0.8: Knowledge removed. Phase 0.9 added Consolidator.
-        # Impulse stays first; the rest's relative order isn't guaranteed.
+        # Phase 0.8: Knowledge removed. Impulse stays first; the rest's
+        # relative order isn't guaranteed.
         destinations = [env.destination for env in sensory_hops]
         assert destinations[0] == "Impulse"
-        assert set(destinations[1:]) == {"Analytics", "Personality", "Consolidator"}
+        assert set(destinations[1:]) == {"Analytics", "Personality"}
         assert not [env for env in all_hops
                     if env.event_id == event_id and env.destination == "Sensory"]
 

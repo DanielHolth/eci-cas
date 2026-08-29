@@ -62,6 +62,19 @@ def _boot(tmp_path: Path, **overrides):
     return eco
 
 
+def _seed_identity(tmp_path: Path) -> None:
+    """Personality's structured-store slice (category="trait", see
+    STRUCTURED_LOOKUP_PATHS) is populated by a one-time operator script
+    in production (agents/archive/seed_structured.py), not by Recovery's
+    bootstrap — so a fresh tmp_path archive starts genuinely empty. Tests
+    that need Personality to see its own seeded traits have to write them
+    the same way that script does."""
+    from agents.archive.seed_structured import IDENTITY_SEED
+    from agents.archive.structured_store import StructuredStore
+
+    StructuredStore(root=str(tmp_path / "archive")).write("identity", IDENTITY_SEED)
+
+
 def _standalone(tmp_path, role: str, **kwargs):
     archive = ArchiveStore(root=str(tmp_path / "archive"))
     bus = EmbeddedBus(archive=archive)
@@ -165,15 +178,25 @@ class TestSingleEventScope:
         assert seen["kind"] == ROLE_STORES[role]
 
     def test_each_agent_reads_only_its_own_store(self, tmp_path):
+        """Personality reads the structured store's identity/"trait" slice
+        (STRUCTURED_LOOKUP_PATHS) since Phase 0.8, not the legacy
+        ArchiveStore any more — so this spies on the wrapper Personality
+        actually holds (`eco.personality.archive`), not `eco.archive`."""
+        _seed_identity(tmp_path)
         eco = _boot(tmp_path)
         kinds = []
-        original = eco.archive.query
+        # eco.personality.archive is a _ReadOnlyStructuredArchive
+        # (__slots__, no room for a patched attribute of its own) that
+        # forwards to a plain StructuredStore instance — spy one level
+        # further down, on that.
+        store = eco.personality.archive._store
+        original = store.query
 
         def spy(kind, *a, **kw):
             kinds.append(kind)
             return original(kind, *a, **kw)
 
-        eco.archive.query = spy
+        store.query = spy
         eco.bus.publish("events.personality", _event())
         assert set(kinds) == {"identity"}
 
@@ -215,6 +238,7 @@ class TestMockTier:
         """It reports that records exist, not that they matter — the
         distinction the live tier is actually for. Overstating it here
         would make the fan-out tests pass for the wrong reason."""
+        _seed_identity(tmp_path)
         eco = _boot(tmp_path)
         eco.bus.publish("events.personality", _event())   # identity is seeded
         out = [e for e in eco.bus.trace() if e.source == "Personality"][0]

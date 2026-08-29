@@ -89,6 +89,28 @@ def _is_max_tokens_rename_error(exc: Exception) -> bool:
     return bool(_MAX_TOKENS_RENAME_HINT.search(haystack))
 
 
+#: Same shape of problem as the max_tokens rename above, different
+#: parameter: OpenAI's reasoning-family models (o-series, gpt-5.x at a
+#: non-"none" reasoning_effort) accept only their default `temperature`
+#: (1) and 400 on any other value — again a MODEL-level restriction the
+#: installed SDK's signature can't predict, caught reactively on the
+#: vendor's own error text (dispatch #5, 2026-08-29: hit in production
+#: the moment `slow-*` classes moved luna from reasoning_effort "none" to
+#: "medium").
+_TEMPERATURE_UNSUPPORTED_HINT = re.compile(
+    r"unsupported value.{0,40}'?temperature'?.{0,120}default",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _is_temperature_unsupported_error(exc: Exception) -> bool:
+    haystack = str(exc)
+    body = getattr(exc, "body", None)
+    if body:
+        haystack += " " + str(body)
+    return bool(_TEMPERATURE_UNSUPPORTED_HINT.search(haystack))
+
+
 def _classify(exc: Exception) -> Tuple[FailureKind, Optional[int]]:
     """Map a vendor exception onto a FailureKind and status code.
 
@@ -296,6 +318,12 @@ class OpenAICompatibleProvider(LLMProvider):
     #: the same model once per role instead of once per process.
     _token_param_by_model: Dict[str, str] = {}
 
+    #: model -> True once it's told us (via a 400) that it only accepts
+    #: its default `temperature`. Same reasoning as _token_param_by_model
+    #: above — class-level so the discovery (and its NOTE) happens once
+    #: per process, not once per role.
+    _temperature_locked_by_model: Dict[str, bool] = {}
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.unsupported_params: Set[str] = set()
@@ -346,10 +374,16 @@ class OpenAICompatibleProvider(LLMProvider):
             messages.append({"role": "assistant", "content": request.prefill})
 
         kwargs: Dict[str, Any] = {"model": model, "messages": messages}
-        optional: Dict[str, Any] = {
-            "max_tokens": request.max_tokens,
-            "temperature": request.temperature,
-        }
+        optional: Dict[str, Any] = {"max_tokens": request.max_tokens}
+        if (self.options.get("temperature_locked")
+                or self._temperature_locked_by_model.get(model)):
+            # Manifest-pinned (`options: {temperature_locked: true}`) or
+            # already confirmed via a prior 400 — this model only accepts
+            # its default temperature, so don't send the field at all
+            # rather than spend a failing round trip re-discovering it.
+            pass
+        else:
+            optional["temperature"] = request.temperature
         if request.timeout_sec:
             optional["timeout"] = request.timeout_sec
         reasoning_effort = self.options.get("reasoning_effort")
@@ -380,28 +414,34 @@ class OpenAICompatibleProvider(LLMProvider):
         self._note_dropped(dropped)
         kwargs.update(kept)
 
-        try:
-            response = client.chat.completions.create(**kwargs)
-        except Exception as exc:
-            if "max_tokens" in kwargs and _is_max_tokens_rename_error(exc):
-                # Model-level rejection the SDK signature couldn't predict
-                # (see _is_max_tokens_rename_error). Retry once with the
-                # renamed parameter and remember it, so every later call
-                # against this model goes straight there instead of
-                # spending a failing round trip first.
-                self._token_param_by_model[model] = "max_completion_tokens"
-                kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
-                print(f"[substrate] NOTE: model '{model}' rejected 'max_tokens' "
-                      f"('Use max_completion_tokens instead'); retrying with the "
-                      f"renamed parameter and remembering this for later calls.",
-                      file=sys.stderr)
-                try:
-                    response = client.chat.completions.create(**kwargs)
-                except Exception as exc2:
-                    kind, status = _classify(exc2)
-                    raise CompletionError(f"openai-compatible completion failed: {exc2}",
-                                          kind=kind, status_code=status) from exc2
-            else:
+        # Two model-level quirks the installed SDK's signature can't
+        # predict (see _is_max_tokens_rename_error and
+        # _is_temperature_unsupported_error) are each caught reactively
+        # and retried once, remembered per model so later calls against
+        # the same model go straight there instead of spending a failing
+        # round trip. Each branch permanently removes the offending key
+        # from kwargs before looping, so this always terminates.
+        while True:
+            try:
+                response = client.chat.completions.create(**kwargs)
+                break
+            except Exception as exc:
+                if "max_tokens" in kwargs and _is_max_tokens_rename_error(exc):
+                    self._token_param_by_model[model] = "max_completion_tokens"
+                    kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+                    print(f"[substrate] NOTE: model '{model}' rejected 'max_tokens' "
+                          f"('Use max_completion_tokens instead'); retrying with the "
+                          f"renamed parameter and remembering this for later calls.",
+                          file=sys.stderr)
+                    continue
+                if "temperature" in kwargs and _is_temperature_unsupported_error(exc):
+                    self._temperature_locked_by_model[model] = True
+                    del kwargs["temperature"]
+                    print(f"[substrate] NOTE: model '{model}' rejected a non-default "
+                          f"'temperature' (reasoning models often only accept their "
+                          f"default); retrying without it and remembering this for "
+                          f"later calls.", file=sys.stderr)
+                    continue
                 kind, status = _classify(exc)
                 raise CompletionError(f"openai-compatible completion failed: {exc}",
                                       kind=kind, status_code=status) from exc

@@ -4,7 +4,7 @@
  * agents/security/agent.py, docs/archive/v0-35-parallel-fanout-draft.md)
  * so that swapping the mock feed (lib/mockTurn.ts) for a real
  * `system.control` / `events.*` subscription is a drop-in later, not a
- * rewrite. See avatar-app/README.md — "what this app is allowed to do".
+ * rewrite. See morrow-eci/README.md — "what this app is allowed to do".
  */
 
 /** Impulse's fixed, closed expression vocabulary (agents/impulse/agent.py EXPRESSIONS). */

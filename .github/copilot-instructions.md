@@ -28,7 +28,9 @@ applyTo: "**/*.cs,**/*.csproj"
 ## ECI-CAS Specifics
 
 - Agents implement `IAgent` → `Task HandleAsync(Envelope envelope, CancellationToken ct)`.
-- In-process pub-sub bus via `IMessageBus`: topic-based, envelope-centric.
+- In-process pub-sub bus via `IMessageBus`: topic-based, envelope-centric,
+  queue-per-agent, fire-and-forget publish — `Publish()` must never await
+  a subscriber's own handling. See `docs/csharp-rebuild-spec.md`.
 - Fan-out uses `Task.WhenAll` for parallel agent dispatch.
 - `SemaphoreSlim` for async synchronisation (governance buffering).
 - `Severity` enum with OR-upscale-only rule — never lower upstream severity.

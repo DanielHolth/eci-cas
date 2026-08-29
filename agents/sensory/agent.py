@@ -21,7 +21,10 @@ from typing import Optional
 from bus.envelope import Envelope, new_event_id, SEVERITY_LEVELS
 from bus.pubsub import EmbeddedBus
 
-VALID_SOURCE_TYPES = {"prompt", "feedback", "vision", "audio", "https"}
+#: "idea" (dispatch #4, 2026-08-29): the Reflection Agent's re-entry point
+#: — a resurfaced pattern genuinely IS a perception, the same reasoning
+#: docs/ideas/consolidation-doodle.md makes for "ui_click".
+VALID_SOURCE_TYPES = {"prompt", "feedback", "vision", "audio", "https", "ui_click", "idea"}
 
 #: The v0.35a fan-out. Impulse first — see ingest(). Order is otherwise
 #: irrelevant to correctness (Governance bundles on completeness, not
@@ -32,10 +35,6 @@ FAN_OUT = (
     ("Impulse", "events.impulse"),
     ("Analytics", "events.analytics"),
     ("Personality", "events.personality"),
-    # Phase 0.9: Consolidator moved here from a Governance-fed batch
-    # buffer — it gets the same raw event as the other archive-grounded
-    # workers and writes facts immediately, never replying to Governance.
-    ("Consolidator", "events.consolidator"),
 )
 
 #: The subset of FAN_OUT dispatched concurrently (2026-08-25, Daniel) —
@@ -53,15 +52,27 @@ class Sensory:
 
     def ingest(self, content, source_type: str = "prompt",
                severity: str = "Neutral", triggered_by: str = "sensory",
-               event_id: Optional[str] = None) -> str:
+               event_id: Optional[str] = None,
+               ref_event_id: Optional[str] = None) -> str:
         """External injection point (§13.1). Returns the event_id so
-        callers/tests can correlate the resulting trace."""
+        callers/tests can correlate the resulting trace.
+
+        `ref_event_id` is the one addition the consolidation doodle needs
+        (docs/ideas/consolidation-doodle.md): a `ui_click` is its own new
+        event (it gets its own `event_id` like anything else), but it
+        needs to say WHICH consolidation write-pass it's about — the
+        event_id of the Consolidator pass the click references. Kept
+        minimal on purpose: this is the one piece of caller-supplied
+        context the doodle needs, not a general extra-meta passthrough."""
         if source_type not in VALID_SOURCE_TYPES:
             raise ValueError(f"Unknown source type '{source_type}'. Valid: {VALID_SOURCE_TYPES}")
         if severity not in SEVERITY_LEVELS:
             raise ValueError(f"Unknown severity '{severity}'. Valid: {SEVERITY_LEVELS}")
 
         eid = event_id or new_event_id()
+        meta = {"source_type": source_type}
+        if ref_event_id is not None:
+            meta["ref_event_id"] = ref_event_id
 
         # v0.35a: the four-way fan-out. Each worker gets its OWN envelope
         # — same event_id, same verbatim content, its own destination —
@@ -72,7 +83,7 @@ class Sensory:
                 source="Sensory", destination=destination, type=source_type,
                 content=content, severity=severity, event_id=eid,
                 triggered_by=triggered_by,
-                meta={"source_type": source_type},
+                meta=dict(meta),
             )
 
         # Impulse is published to first, synchronously, deliberately: it

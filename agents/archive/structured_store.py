@@ -14,6 +14,17 @@ ENTITY ("Marcus", "Susana") — what keeps two sons from colliding and a
 single child's facts from fragmenting. Consolidator always writes both;
 neither is asked to carry the other's job.
 
+domain (2026-08-29, dispatch #4): the one dimension above category —
+"external" is signal from the world (everything Consolidator writes,
+sourced from what the user said), "internal" is the Reflection Agent's
+own derived insight about itself (agents/reflection/). Every existing
+caller predates this field and means "external" — DEFAULT_DOMAIN is the
+back-compat default for write()/upsert()/query() so none of them had to
+change their call sites. It is part of upsert()'s dedup key alongside
+category/topic/subtopic/subject/key: the same path can independently
+hold one external fact and one internal reflection without either
+overwriting the other.
+
 Storage layout:
     /archive/
       /structured/   knowledge.parquet
@@ -29,7 +40,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 
+#: See the domain paragraph above. Every write()/upsert() call in this
+#: codebase predates domain and means this.
+DEFAULT_DOMAIN = "external"
+
 SCHEMA = pa.schema([
+    ("domain", pa.string()),
     ("category", pa.string()),
     ("topic", pa.string()),
     ("subtopic", pa.string()),
@@ -62,6 +78,7 @@ class StructuredStore:
         rows = []
         for r in records:
             rows.append({
+                "domain": str(r.get("domain") or DEFAULT_DOMAIN),
                 "category": str(r.get("category", "")),
                 "topic": str(r.get("topic", "")),
                 "subtopic": str(r.get("subtopic", "")),
@@ -81,18 +98,28 @@ class StructuredStore:
         return len(rows)
 
     def query(self, kind: str, *,
+              domain: Optional[str] = None,
               category: Optional[str] = None,
               topic: Optional[str] = None,
               subtopic: Optional[str] = None,
               subject: Optional[str] = None,
               key: Optional[str] = None,
               limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Query with predicate pushdown on category/topic/subtopic/subject/key."""
+        """Query with predicate pushdown on domain/category/topic/subtopic/subject/key.
+
+        domain is left unfiltered (None) by default rather than defaulting
+        to "external" — an old row written before this field existed reads
+        back as domain="external" (DEFAULT_DOMAIN, applied at write time),
+        so an unfiltered query already returns every external row exactly
+        as before; only a caller that explicitly wants ONE domain (the
+        swarm wants "external", Reflection wants "internal") passes one."""
         path = self._file_for(kind)
         if not path.exists():
             return []
 
         filters = []
+        if domain:
+            filters.append(("domain", "==", domain))
         if category:
             filters.append(("category", "==", category))
         if topic:
@@ -110,23 +137,31 @@ class StructuredStore:
             results = results[-limit:]
         return results
 
-    def schema_index(self, kind: str) -> List[Dict[str, Any]]:
+    def schema_index(self, kind: str, *, domain: str = DEFAULT_DOMAIN) -> List[Dict[str, Any]]:
         """Return distinct (category, topic) pairs — the routing map
-        Analytics reads to know what paths exist to choose from."""
+        Analytics reads to know what paths exist to choose from.
+
+        Scoped to domain="external" by default: this feeds Analytics'
+        knowledge_paths for ordinary conversation, which has no business
+        routing a user's question at Reflection's own internal insights —
+        those surface, if at all, through an Idea ping re-entering as a
+        normal event, not through direct retrieval."""
         path = self._file_for(kind)
         if not path.exists():
             return []
-        table = pq.read_table(path, columns=["category", "topic"])
+        table = pq.read_table(path, columns=["domain", "category", "topic"],
+                              filters=[("domain", "==", domain)] if domain else None)
         pairs = {(row["category"], row["topic"]) for row in table.to_pylist()}
         return [{"category": c, "topic": t} for c, t in sorted(pairs)]
 
     def upsert(self, kind: str, records: List[Dict[str, Any]]) -> Dict[str, int]:
         """Write records, overwriting any existing row with the same
-        (category, topic, subtopic, subject, key)."""
+        (domain, category, topic, subtopic, subject, key)."""
         path = self._file_for(kind)
         rows = []
         for r in records:
             rows.append({
+                "domain": str(r.get("domain") or DEFAULT_DOMAIN),
                 "category": str(r.get("category", "")),
                 "topic": str(r.get("topic", "")),
                 "subtopic": str(r.get("subtopic", "")),
@@ -141,9 +176,9 @@ class StructuredStore:
         updated = 0
         if path.exists():
             existing = pq.read_table(path)
-            new_keys = {(r["category"], r["topic"], r["subtopic"], r["subject"], r["key"]) for r in rows}
+            new_keys = {(r["domain"], r["category"], r["topic"], r["subtopic"], r["subject"], r["key"]) for r in rows}
             keep_mask = [
-                (row["category"], row["topic"], row["subtopic"], row["subject"], row["key"]) not in new_keys
+                (row["domain"], row["category"], row["topic"], row["subtopic"], row["subject"], row["key"]) not in new_keys
                 for row in existing.to_pylist()
             ]
             updated = sum(1 for k in keep_mask if not k)

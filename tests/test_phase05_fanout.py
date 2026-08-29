@@ -69,18 +69,21 @@ def _hops(eco, event_id):
 # ---------------------------------------------------------------------------
 
 class TestFanOut:
-    def test_one_ingest_produces_four_copies(self, tmp_path):
+    def test_one_ingest_produces_three_copies(self, tmp_path):
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         out = [e for e in eco.bus.trace()
                if e.event_id == event_id and e.source == "Sensory"]
-        # Phase 0.8: Knowledge removed (swarm replaces it). Phase 0.9 added
-        # Consolidator as a fan-out member. Impulse is still first and
-        # synchronous; the other three's order isn't guaranteed.
+        # Phase 0.8: Knowledge removed (swarm replaces it). Consolidator
+        # moved off this fan-out 2026-08-29 — it now rides Governance's
+        # BUNDLE fork instead (agents/governance/agent.py), seeing the
+        # same evidence Intent sees rather than the raw event alone.
+        # Impulse is still first and synchronous; the other two's order
+        # isn't guaranteed.
         destinations = [e.destination for e in out]
         assert destinations[0] == "Impulse"
-        assert set(destinations[1:]) == {"Analytics", "Personality", "Consolidator"}
-        assert len(destinations) == 4
+        assert set(destinations[1:]) == {"Analytics", "Personality"}
+        assert len(destinations) == 3
 
     def test_every_copy_carries_the_same_event_id_and_content(self, tmp_path):
         """Four answers to one event have to stay distinguishable from one
@@ -109,17 +112,41 @@ class TestFanOut:
                     and e.source in DEFAULT_WORKERS}
         assert answered == set(DEFAULT_WORKERS)
 
+    def test_ui_click_is_a_valid_source_type_and_carries_its_ref(self, tmp_path):
+        """docs/ideas/consolidation-doodle.md: the doodle's click re-enters
+        through Sensory.ingest tagged ui_click, carrying which
+        consolidation write-pass (event_id) it's about."""
+        eco = _boot(tmp_path)
+        event_id = eco.sensory.ingest(
+            "the user looked at what was just learned",
+            source_type="ui_click", ref_event_id="pass-1")
+        out = [e for e in eco.bus.trace()
+               if e.event_id == event_id and e.source == "Sensory"]
+        assert out
+        for envelope in out:
+            assert envelope.meta["source_type"] == "ui_click"
+            assert envelope.meta["ref_event_id"] == "pass-1"
+
+    def test_ref_event_id_is_absent_when_not_given(self, tmp_path):
+        eco = _boot(tmp_path)
+        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
+        out = [e for e in eco.bus.trace()
+               if e.event_id == event_id and e.source == "Sensory"]
+        assert out
+        for envelope in out:
+            assert "ref_event_id" not in envelope.meta
+
 
 # ---------------------------------------------------------------------------
 # v0.35c — buffering and bundling
 # ---------------------------------------------------------------------------
 
 class TestBundling:
-    def test_the_bundle_fires_once_on_the_fourth_answer(self, tmp_path):
+    def test_the_bundle_fires_once_on_the_third_answer(self, tmp_path):
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         bundles = [e for e in eco.bus.trace()
-                   if e.event_id == event_id and e.type == "Bundle"]
+                   if e.event_id == event_id and e.type == "Bundle" and e.destination == "Intent"]
         assert len(bundles) == 1
         assert eco.governance.metrics["held"] == 2      # the first two waited
 
@@ -132,7 +159,7 @@ class TestBundling:
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         bundle = [e for e in eco.bus.trace()
-                  if e.event_id == event_id and e.type == "Bundle"][0]
+                  if e.event_id == event_id and e.type == "Bundle" and e.destination == "Intent"][0]
         senders = {entry["sender"] for entry in bundle.meta["recommendations"]}
         # Analytics always has something to say; Personality/Knowledge may
         # be silent on a fresh archive (empty findings are omitted, not
@@ -152,7 +179,7 @@ class TestBundling:
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         bundle = [e for e in eco.bus.trace()
-                  if e.event_id == event_id and e.type == "Bundle"][0]
+                  if e.event_id == event_id and e.type == "Bundle" and e.destination == "Intent"][0]
         assert str(bundle.content) == PROMPT
 
     def test_the_bundle_carries_no_gate_at_all(self, tmp_path):
@@ -166,7 +193,7 @@ class TestBundling:
         eco = _boot(tmp_path)
         event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
         bundle = [e for e in eco.bus.trace()
-                  if e.event_id == event_id and e.type == "Bundle"][0]
+                  if e.event_id == event_id and e.type == "Bundle" and e.destination == "Intent"][0]
         assert "proceed" not in bundle.meta
         assert "concern" not in bundle.meta
         analytics_entry = next(e for e in bundle.meta["recommendations"]
@@ -218,7 +245,7 @@ class TestBundling:
         eco.impulse.vectors["urgency"] = 0.95
         event_id = eco.sensory.ingest("something urgent", source_type="prompt")
         bundle = [e for e in eco.bus.trace()
-                  if e.event_id == event_id and e.type == "Bundle"][0]
+                  if e.event_id == event_id and e.type == "Bundle" and e.destination == "Intent"][0]
         assert bundle.severity == "Elevated"
 
     def test_governance_holds_nothing_once_an_event_concludes(self, tmp_path):
@@ -342,7 +369,7 @@ class TestCriticalReflex:
         event_id = eco.sensory.ingest("nothing special", source_type="prompt")
         assert eco.governance.metrics["reflexes"] == 0
         assert [e for e in eco.bus.trace()
-                if e.event_id == event_id and e.type == "Bundle"]
+                if e.event_id == event_id and e.type == "Bundle" and e.destination == "Intent"]
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +408,31 @@ class TestConsolidatorFanOut:
         eco.sensory.ingest(PROMPT, source_type="prompt")
         out = [e for e in eco.bus.trace() if e.source == "Consolidator"]
         assert out == []
+
+
+class TestDoodleReferenceReachesConsolidator:
+    """The click's ref_event_id has to survive Governance rebuilding the
+    BUNDLE route's meta from scratch (2026-08-25's fix for the arrival-
+    order leak) to actually reach Consolidator's dedup check."""
+
+    def test_a_ui_clicks_ref_event_id_rides_the_consolidator_fork(self, tmp_path):
+        eco = _boot(tmp_path)
+        event_id = eco.sensory.ingest(
+            "the user looked at what was just learned",
+            source_type="ui_click", ref_event_id="pass-1")
+        to_consolidator = [e for e in eco.bus.trace()
+                           if e.event_id == event_id and e.destination == "Consolidator"]
+        assert to_consolidator
+        assert to_consolidator[0].meta.get("source_type") == "ui_click"
+        assert to_consolidator[0].meta.get("ref_event_id") == "pass-1"
+
+    def test_a_normal_events_consolidator_fork_carries_no_ref(self, tmp_path):
+        eco = _boot(tmp_path)
+        event_id = eco.sensory.ingest(PROMPT, source_type="prompt")
+        to_consolidator = [e for e in eco.bus.trace()
+                           if e.event_id == event_id and e.destination == "Consolidator"]
+        assert to_consolidator
+        assert "ref_event_id" not in to_consolidator[0].meta
 
 
 # ---------------------------------------------------------------------------

@@ -2,9 +2,9 @@
 Substrate client layer — provider-agnostic LLM access (§10.2).
 
 The spec's rule is that the ecosystem declares *substrate classes*
-("fast-reflex" / "deep-reasoning" / "orthogonal"), never vendor model
-names, and that the class -> vendor mapping lives in exactly one place
-(the manifest). This module is the code-side half of that contract:
+("local" / "low" / "medium" / "high"), never vendor model names, and
+that the class -> vendor mapping lives in exactly one place (the
+manifest). This module is the code-side half of that contract:
 agents ask for a substrate class and receive an object they can call,
 with no idea which vendor is behind it.
 

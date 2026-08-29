@@ -1,5 +1,7 @@
 PyYAML==6.0.3
 pytest==8.4.2
+pyarrow==25.0.1     # agents/archive/structured_store.py imports it unconditionally,
+                    # unlike the vendor SDKs below — required, not optional.
 
 # Vendor SDKs are deliberately NOT pinned here (§10.2). Every substrate
 # provider imports its SDK lazily, so the ecosystem bootstraps, runs its
