@@ -3,6 +3,7 @@ using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reasoning;
+using EciCas.Agents.Recall;
 using EciCas.Agents.Self;
 using EciCas.Bus;
 using EciCas.Core;
@@ -38,6 +39,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Reasoning", envelope.Meta.Get<string>(ReasoningAgent.AdviceKey));
+        AppendAdvice(prompt, "Recall", envelope.Meta.Get<string>(RecallAgent.ResultsKey));
         AppendAdvice(prompt, "Self", envelope.Meta.Get<string>(SelfAgent.AdviceKey));
 
         var revisionConcern = envelope.Meta.Get<string>(GovernanceAgent.RevisionConcernKey);

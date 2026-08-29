@@ -1,3 +1,4 @@
+using EciCas.Agents.Consolidator;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -5,29 +6,87 @@ using Microsoft.Extensions.Logging;
 namespace EciCas.Agents.Self;
 
 /// <summary>
-/// Identity lookup. M2: a fixed snippet — IArchiveStore (M4) doesn't exist
-/// yet, so there is nothing to read. Becomes a thin adapter over stored
-/// persona/identity records once M4 lands; deterministic either way, so no
-/// substrate call and no CognitiveAgent&lt;T&gt; base.
+/// Identity lookup: a persona snippet read from IArchiveStore and cached,
+/// re-hydrated whenever Consolidator announces a new epoch on
+/// system.control (a write could have touched the persona record). Falls
+/// back to a fixed snippet when the store has nothing under "self/identity"
+/// yet — nothing writes persona records in this pass, so that's the only
+/// path exercised today; the cache/invalidation plumbing is real and ready
+/// for whenever persona editing lands. Deterministic tier either way — no
+/// substrate call, so no CognitiveAgent&lt;T&gt; base.
 /// </summary>
 public sealed class SelfAgent : AgentBase
 {
     public const string AdviceKey = "self.advice";
 
-    private const string IdentitySnippet = "I'm ECI, here to help.";
+    private const string IdentityPath = "self/identity";
+    private const string DefaultIdentitySnippet = "I'm ECI, here to help.";
 
     private readonly IMessageBus _bus;
+    private readonly IArchiveStore _store;
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
+    private string? _cachedIdentity;
 
-    public SelfAgent(IMessageBus bus, BusActivityTracker activity, ILogger<SelfAgent> logger)
-        : base(bus, activity, logger) => _bus = bus;
+    public SelfAgent(IMessageBus bus, BusActivityTracker activity, ILogger<SelfAgent> logger, IArchiveStore store)
+        : base(bus, activity, logger)
+    {
+        _bus = bus;
+        _store = store;
+    }
 
     public override string Name => "Self";
-    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception];
+    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.SystemControl];
 
-    public override Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
+    public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(AdviceKey, IdentitySnippet));
+        switch (envelope.Topic)
+        {
+            case Topics.Perception:
+                await OnPerceptionAsync(envelope, cancellationToken).ConfigureAwait(false);
+                break;
+            case Topics.SystemControl:
+                OnControl(envelope);
+                break;
+        }
+    }
+
+    private async Task OnPerceptionAsync(Envelope envelope, CancellationToken cancellationToken)
+    {
+        var identity = await GetIdentityAsync(cancellationToken).ConfigureAwait(false);
+        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(AdviceKey, identity));
         _bus.Publish(Topics.Advisories, advisory);
-        return Task.CompletedTask;
+    }
+
+    private void OnControl(Envelope envelope)
+    {
+        if (envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey) == ConsolidatorAgent.WrittenKind)
+        {
+            _cachedIdentity = null;
+        }
+    }
+
+    private async Task<string> GetIdentityAsync(CancellationToken cancellationToken)
+    {
+        if (_cachedIdentity is { } cached)
+        {
+            return cached;
+        }
+
+        await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_cachedIdentity is { } cachedAfterLock)
+            {
+                return cachedAfterLock;
+            }
+
+            var records = await _store.LookupAsync([IdentityPath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
+            _cachedIdentity = records.Count > 0 ? records[0].Content : DefaultIdentitySnippet;
+            return _cachedIdentity;
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
     }
 }

@@ -1,10 +1,13 @@
 using System.Net.Http.Headers;
 using EciCas.Agents.Action;
+using EciCas.Agents.Consolidator;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reasoning;
+using EciCas.Agents.Recall;
+using EciCas.Agents.Reflection;
 using EciCas.Agents.Security;
 using EciCas.Agents.Self;
 using EciCas.Bus;
@@ -25,6 +28,9 @@ builder.Services.Configure<GovernanceOptions>(builder.Configuration.GetSection("
 builder.Services.Configure<RoutingManifest>(builder.Configuration.GetSection("RoutingManifest"));
 builder.Services.Configure<BudgetOptions>(builder.Configuration.GetSection("Budget"));
 builder.Services.Configure<SubstrateProviderOptions>(builder.Configuration.GetSection("SubstrateProvider"));
+builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Recall"));
+builder.Services.Configure<ConsolidatorOptions>(builder.Configuration.GetSection("Consolidator"));
+builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("Reflection"));
 
 builder.Services.AddSingleton<BusActivityTracker>();
 builder.Services.AddSingleton<IMessageBus, ChannelBus>();
@@ -46,14 +52,20 @@ builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();
 var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");
 builder.Services.AddSingleton(SecurityRuleSet.Load(securityRulesPath));
 
+var archivePath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Path"] ?? "memory.jsonl");
+builder.Services.AddSingleton<IArchiveStore>(new JsonlArchiveStore(archivePath));
+
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
 RegisterAgent<ReasoningAgent>(builder.Services);
+RegisterAgent<RecallAgent>(builder.Services);
 RegisterAgent<SelfAgent>(builder.Services);
 RegisterAgent<GovernanceAgent>(builder.Services);
 RegisterAgent<IntentAgent>(builder.Services);
 RegisterAgent<SecurityAgent>(builder.Services);
 RegisterAgent<ActionAgent>(builder.Services);
+RegisterAgent<ConsolidatorAgent>(builder.Services);
+RegisterAgent<ReflectionAgent>(builder.Services);
 RegisterAgent<ArchiveLogger>(builder.Services);
 RegisterAgent<ConsoleSubscriber>(builder.Services);
 

@@ -14,6 +14,9 @@ public sealed class ReasoningAgent : CognitiveAgent<string>
 {
     public const string AdviceKey = "reasoning.advice";
 
+    /// <summary>Proposed Recall lookup paths, carried on the events.lookup-paths envelope's Meta.</summary>
+    public const string LookupPathsKey = "reasoning.lookup_paths";
+
     private readonly IMessageBus _bus;
 
     public ReasoningAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReasoningAgent> logger, ISubstrateProvider substrate)
@@ -39,5 +42,28 @@ public sealed class ReasoningAgent : CognitiveAgent<string>
     {
         var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(AdviceKey, result));
         _bus.Publish(Topics.Advisories, advisory);
+
+        // Always published, even empty on fallback/no-signal text — Recall's
+        // roster slot in Governance's bundle needs a reply every time, or the
+        // bundle would only ever complete via timeout. See plan §3.4.
+        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
+        var paths = ProposePaths(text);
+        var lookup = envelope.Derive(Topics.LookupPaths, Name, envelope.Severity, MetaBag.Empty.With(LookupPathsKey, paths));
+        _bus.Publish(Topics.LookupPaths, lookup);
     }
+
+    /// <summary>
+    /// Deterministic MVP heuristic, not a substrate call: significant words
+    /// (5+ letters) from the perceived text, lowercased and deduped, capped
+    /// at 3. A real implementation would let the substrate itself propose
+    /// (category, topic) pairs; this keeps Recall's roster slot filled
+    /// without a second cognitive round-trip per perception event.
+    /// </summary>
+    private static string[] ProposePaths(string text) =>
+        text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(word => new string(word.Where(char.IsLetter).ToArray()).ToLowerInvariant())
+            .Where(word => word.Length >= 5)
+            .Distinct()
+            .Take(3)
+            .ToArray();
 }
