@@ -4,15 +4,15 @@ import { useState } from "react";
 import type { ConsolidationEpoch } from "@/types/events";
 
 /**
- * Stub for M8 — the real backend seam (`EpochWritten` payload, epoch-level
- * dedup in Consolidator) doesn't exist yet (M3, not built). This click
- * handler only logs what the real one would send: a `ui_click`-tagged
- * Sensory.ingest, first click only, per Daniel's dedup rule
- * (docs/ideas/consolidation-doodle.md). No network call, no bus.
+ * Stub for the surface milestone — the real backend seam (`EpochWritten`
+ * payload, epoch-level dedup in Consolidator) doesn't exist yet (M4, not
+ * built). This click handler only logs what the real one would send: a
+ * `ui_click`-tagged Perception.ingest, first click only. No network call,
+ * no bus — the SSE endpoint (M5) is what this gets wired to.
  */
 function sendUiClickStub(epoch: ConsolidationEpoch) {
   console.log(
-    `[stub] Sensory.ingest(source_type: "ui_click", epoch_id: "${epoch.epochId}") — would fire once M3 lands`,
+    `[stub] Perception.ingest(source_type: "ui_click", epoch_id: "${epoch.epochId}") — would fire once M4/M5 land`,
   );
 }
 
