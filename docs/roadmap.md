@@ -17,6 +17,14 @@ plain bus subscriber. Full design capture:
 [`csharp-rebuild-spec.md`](csharp-rebuild-spec.md). Standing rule for
 all bus work here: `AGENTS.md`'s Architecture section.
 
+**M1 (walking skeleton) is done.** Perception → Governance → Intent →
+Security → Governance → Action runs end-to-end via
+`dotnet run --project src/EciCas.Host`, with `ArchiveLogger` recording
+every hop to `archive.jsonl`. Next up is M2 — the cognitive layer
+(`CognitiveAgent<T>`, real `ISubstrateProvider`, budget tiers, and the
+Reasoning/Recall/Self/Impulse agents) — see
+[`handover.md`](handover.md).
+
 ## Morrow-ECI (frontend)
 
 `morrow-eci/` is the Next.js companion surface — a Jarvis/tamagotchi
@@ -35,7 +43,7 @@ where cloud connectivity is unreliable. Scope TBD: fine-tuning,
 quantization, latency targets.
 
 **Android native client.** On-device minimal-tier agent running the
-full 12-role system, or a remote-client mode where only Sensory and
+full 12-role system, or a remote-client mode where only Perception and
 Action cross process boundaries and all reasoning stays server-side.
 Stretch: iOS via shared business logic. Needs UI parity with
 Morrow-ECI.
@@ -51,18 +59,18 @@ knowledge graph. Surface: Morrow-ECI profile picker.
 
 **Voice recognition for user detection.** Speaker ID as the primary
 detector (continuous, harder to spoof than camera alone), camera as a
-fallback for ambiguous cases. Integration point: Sensory, before
+fallback for ambiguous cases. Integration point: Perception, before
 Impulse fires. Needs baseline voice samples from the original user.
 
 **Biometric + camera authentication.** Device biometrics authenticate
 the original user at unlock; a different person picking up the device
 triggers camera-based profile-creation. Surface: lock screen / auth
-flow. Backend: a user-context field on Sensory's meta.
+flow. Backend: a user-context field on Perception's meta.
 
-**Diary knowledge category.** A Knowledge category for entries that
+**Diary knowledge category.** A Recall category for entries that
 accumulate rather than overwrite — recurring appointments, dated
 milestones — so a new doctor's visit doesn't clobber the last one.
-Query: Knowledge surfaces diary entries in temporal order, not as
+Query: Recall surfaces diary entries in temporal order, not as
 overwriting facts.
 
 These layer on top of the core system and don't block the C# rebuild
@@ -76,4 +84,4 @@ diary-aware knowledge archiving
 ```
 
 Profiles and auth are Morrow-ECI surface features; diary is a
-knowledge-agent feature that can be prototyped independently.
+Recall-agent feature that can be prototyped independently.

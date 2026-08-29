@@ -25,7 +25,10 @@ Consolidator "asynchronous, off the live path." It never was, in the only
 sense that matters: wall-clock blocking.
 
 Daniel's own architectural picture (dictated 2026-08-29, captured here
-verbatim in spirit):
+verbatim in spirit — agent names below are as originally dictated;
+Sensory→Perception, Analytics→Reasoning, Knowledge→Recall,
+Personality→Self were renamed afterward, see the roster table in the
+foundation plan):
 
 > Sensory gets an input and pushes one message to a topic. Governance
 > picks that up and sends new messages to Impulse, Analytics, and
@@ -43,13 +46,21 @@ That is the target. The Python system is not being bent to fit it
 retroactively — see `docs/current-spec.md`'s new header note. This is a
 clean rebuild, in C#, as its own milestone, in its own chat context.
 
+**Update (2026-08-30): M1 walking skeleton is built and this design is
+proven end-to-end.** Perception → Governance (bundle + verdict gate) →
+Intent (mock) → Security (stub) → Governance → Action runs a real
+prompt-in/reply-out turn with a full `archive.jsonl` audit trail. What
+follows is the original design capture; where it says "the new project
+should decide," that decision is now recorded — see "Open decisions,
+resolved" below.
+
 ## Target architecture
 
 **One queue and one worker per agent, no exceptions.** Each agent owns
 an inbound queue (`Channel<Envelope>` is the natural .NET fit) and a
 single dedicated consumer loop (or a small worker pool, if an agent's
-own contract calls for internal parallelism — e.g. Analytics fanning out
-to N Knowledge workers). `IMessageBus.Publish()` is fire-and-forget: it
+own contract calls for internal parallelism — e.g. Reasoning fanning out
+to N Recall workers). `IMessageBus.Publish()` is fire-and-forget: it
 enqueues onto every subscriber's channel and returns immediately. No
 publish call may ever await a subscriber's handling.
 
@@ -115,7 +126,7 @@ rather than accidental:**
 ## What ports as-is vs what doesn't
 
 **Ports as business logic, not architecture:** every agent's actual
-decision-making — Impulse's appraisal, Analytics' keyword reasoning,
+decision-making — Impulse's appraisal, Reasoning's keyword reasoning,
 Intent's persona contract, Security's rule engine, the severity
 OR-upscale-only rule, the green/yellow/red gating semantics, budget
 tiers and substrate classes. `docs/current-spec.md` remains the
@@ -127,31 +138,26 @@ role as a synchronous orchestrator, any code that relies on one agent's
 handling finishing before another's starts, and any test that asserts
 exact cross-agent interleaving.
 
-## Open decisions for the new project to make
+## Open decisions, resolved
 
-- Does Analytics call Knowledge workers directly (agent-to-agent), or
-  does that fan-out still route through Governance/the bus? Either is
-  structurally fine under true decoupling; Daniel left this to the new
-  project's judgment.
-- `Channel<T>` + `IHostedService` per agent (in-process, single
-  deployable) vs. a real external broker (e.g. a lightweight local queue)
-  if the C# rebuild is expected to eventually split agents across
-  processes/machines. Start in-process; don't build for a distributed
-  deployment nobody's asked for yet.
-- How Governance's per-event state survives a process restart, if at
-  all — the Python system's storage-first principle
-  (`docs/current-spec.md` §1.2) may or may not need to carry over
-  identically once state isn't held inside one synchronous call frame.
+These were left open here; the foundation plan (see `AGENTS.md` → Docs)
+has since settled all three:
+
+- Reasoning's fan-out to Recall routes through the bus (`events.lookup-paths`
+  → Recall → `events.advisories`), never agent-to-agent, and Recall
+  aggregates its N-way parallel lookup into exactly one report so
+  Governance's bundle roster stays static.
+- In-process `Channel<T>` + `IHostedService` per agent, one deployable.
+  No external broker — not needed yet.
+- Governance's per-event bundle state does not need to survive a
+  restart; it lives only for the duration of one in-flight turn.
+  Durable state (what a turn concluded) is Archive's job, not
+  Governance's — consistent with Governance staying decision-only.
 
 ## Relationship to existing C# scaffolding
 
-`.github/copilot-instructions.md` and
-`.github/prompts/convert-agent.prompt.md` already exist for a *mechanical
-per-agent port* and mostly still hold (DI, `IAgent`, records, `async`/await
-for I/O, xUnit conventions). Two things in `copilot-instructions.md`
-need re-reading against this doc before the new project starts:
-"In-process pub-sub bus via `IMessageBus`: topic-based, envelope-centric"
-under-specifies the point of this whole document — it should say
-queue-per-agent, fire-and-forget publish, no awaiting subscribers. Treat
-that file as a style guide to keep, not an architecture decision that
-already settled this question.
+M1 (the walking skeleton) is built: `src/EciCas.Host`, `EciCas.Core`,
+`EciCas.Bus`, and `EciCas.Agents/{Perception,Governance,Intent,Security,Action}`
+all exist and pass `dotnet test EciCas.slnx`. `.github/copilot-instructions.md`
+describes the bus correctly (queue-per-agent, fire-and-forget) and lists
+`EciCas.Host` in its project layout.

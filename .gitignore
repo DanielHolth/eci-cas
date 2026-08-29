@@ -3,6 +3,9 @@ bin/
 obj/
 *.user
 
+# Runtime output
+archive.jsonl
+
 # Secrets — manifest references env var NAMES only, never values.
 # Real keys live in .env, which is never committed.
 .env

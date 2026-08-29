@@ -1,6 +1,7 @@
 # Agent instructions
 
-Be terse. No preamble, no restating the request, no trailing summary unless asked. Prefer diffs/snippets over full file dumps. If in doubt, cut it.
+Be terse. No preamble, no restating the request, no trailing summary
+unless asked. Prefer diffs/snippets over full file dumps.
 
 Write the least code/tests/docs that fully satisfies the requirement — no
 speculative abstractions, no redundant test variants for the same claim,

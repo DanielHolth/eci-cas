@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EciCas.Agents/EciCas.Agents.csproj" />
+    <Project Path="src/EciCas.Bus/EciCas.Bus.csproj" />
+    <Project Path="src/EciCas.Core/EciCas.Core.csproj" />
+    <Project Path="src/EciCas.Host/EciCas.Host.csproj" />
+    <Project Path="src/EciCas.Substrates/EciCas.Substrates.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EciCas.Tests/EciCas.Tests.csproj" />
+  </Folder>
+</Solution>

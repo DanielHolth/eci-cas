@@ -34,7 +34,7 @@ applyTo: "**/*.cs,**/*.csproj"
 - Fan-out uses `Task.WhenAll` for parallel agent dispatch.
 - `SemaphoreSlim` for async synchronisation (governance buffering).
 - `Severity` enum with OR-upscale-only rule — never lower upstream severity.
-- Security verdicts: Green → Action, Yellow → Intent REVIEW, Red → Intent REVISE.
+- Security verdicts: Green → Action, Yellow → one Intent revision then proceed, Red → deterministic Blocked notice (never reaches Action).
 - Budget tiers drive substrate selection — never hardcode model names.
 - Substrate providers implement `ISubstrateProvider`, registered via DI.
 
@@ -53,4 +53,5 @@ applyTo: "**/*.cs,**/*.csproj"
 - `EciCas.Bus` — pub-sub, envelope routing.
 - `EciCas.Agents` — all agent implementations.
 - `EciCas.Substrates` — provider interfaces and implementations.
+- `EciCas.Host` — Generic Host wiring, DI registration, `ConsoleSubscriber`, `ArchiveLogger`, routing manifest.
 - `EciCas.Tests` — all tests.

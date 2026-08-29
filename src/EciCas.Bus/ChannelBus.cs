@@ -1,0 +1,64 @@
+using System.Collections.Concurrent;
+using System.Threading.Channels;
+using EciCas.Core;
+
+namespace EciCas.Bus;
+
+/// <summary>
+/// Topic with per-subscriber queue. Publish does TryWrite to every matching
+/// writer (exact-topic subscribers plus Topics.All wildcard subscribers) and
+/// returns immediately — it never awaits a subscriber. Unbounded channels by
+/// design: a bounded channel with backpressure would reintroduce the
+/// publisher-blocks-on-subscriber bug this rebuild exists to fix.
+/// </summary>
+public sealed class ChannelBus : IMessageBus
+{
+    private readonly ConcurrentDictionary<string, List<ChannelWriter<Envelope>>> _subscribers = new();
+    private readonly BusActivityTracker _activity;
+
+    public ChannelBus(BusActivityTracker activity) => _activity = activity;
+
+    public void Publish(string topic, Envelope envelope)
+    {
+        if (_subscribers.TryGetValue(topic, out var exact))
+        {
+            lock (exact)
+            {
+                foreach (var writer in exact)
+                {
+                    _activity.OnEnqueue();
+                    writer.TryWrite(envelope);
+                }
+            }
+        }
+
+        if (topic != Topics.All && _subscribers.TryGetValue(Topics.All, out var wildcard))
+        {
+            lock (wildcard)
+            {
+                foreach (var writer in wildcard)
+                {
+                    _activity.OnEnqueue();
+                    writer.TryWrite(envelope);
+                }
+            }
+        }
+    }
+
+    public ChannelReader<Envelope> Subscribe(string topic)
+    {
+        var channel = Channel.CreateUnbounded<Envelope>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false,
+        });
+
+        var writers = _subscribers.GetOrAdd(topic, static _ => []);
+        lock (writers)
+        {
+            writers.Add(channel.Writer);
+        }
+
+        return channel.Reader;
+    }
+}
