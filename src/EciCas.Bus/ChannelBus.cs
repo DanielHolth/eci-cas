@@ -49,7 +49,9 @@ public sealed class ChannelBus : IMessageBus
     {
         var channel = Channel.CreateUnbounded<Envelope>(new UnboundedChannelOptions
         {
-            SingleReader = true,
+            // Not SingleReader: AgentBase.WorkerCount can spin more than one
+            // ConsumeAsync loop over the same reader.
+            SingleReader = false,
             SingleWriter = false,
         });
 

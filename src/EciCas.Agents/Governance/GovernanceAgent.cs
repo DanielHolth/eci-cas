@@ -15,6 +15,7 @@ namespace EciCas.Agents.Governance;
 public sealed class GovernanceAgent : AgentBase
 {
     private readonly IMessageBus _bus;
+    private readonly ILogger<GovernanceAgent> _logger;
     private readonly GovernanceOptions _options;
     private readonly ConcurrentDictionary<Guid, BundleState> _bundles = new();
 
@@ -22,6 +23,7 @@ public sealed class GovernanceAgent : AgentBase
         : base(bus, activity, logger)
     {
         _bus = bus;
+        _logger = logger;
         _options = options.Value;
     }
 
@@ -48,16 +50,30 @@ public sealed class GovernanceAgent : AgentBase
 
     private void OnPerception(Envelope perception)
     {
-        var state = _bundles.GetOrAdd(perception.CorrelationId, _ => new BundleState(perception));
+        var state = _bundles.GetOrAdd(perception.CorrelationId, _ => new BundleState());
+
+        bool justArrived;
+        lock (state)
+        {
+            justArrived = state.Perception is null;
+            state.Perception = perception;
+        }
+
+        if (justArrived)
+        {
+            _ = RunTimeoutAsync(state);
+        }
+
         TryComplete(state);
     }
 
     private void OnAdvisory(Envelope advisory)
     {
-        if (!_bundles.TryGetValue(advisory.CorrelationId, out var state))
-        {
-            return;
-        }
+        // GetOrAdd, not TryGetValue: Governance runs one consumer loop per
+        // subscribed topic, so an advisory can arrive before this agent's own
+        // Perception-topic loop has processed the originating event. Without
+        // this, that advisory would be silently and permanently dropped.
+        var state = _bundles.GetOrAdd(advisory.CorrelationId, _ => new BundleState());
 
         lock (state)
         {
@@ -67,25 +83,53 @@ public sealed class GovernanceAgent : AgentBase
         TryComplete(state);
     }
 
-    private void TryComplete(BundleState state)
+    private async Task RunTimeoutAsync(BundleState state)
     {
+        try
+        {
+            await Task.Delay(_options.BundleTimeoutMs, state.TimeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        TryComplete(state, forced: true);
+    }
+
+    private void TryComplete(BundleState state, bool forced = false)
+    {
+        Envelope perception;
         lock (state)
         {
-            if (state.Completed)
+            if (state.Completed || state.Perception is null)
             {
                 return;
             }
 
-            if (!_options.BundleRoster.All(state.Advisories.ContainsKey))
+            if (!forced && !_options.BundleRoster.All(state.Advisories.ContainsKey))
             {
                 return;
             }
 
             state.Completed = true;
+            perception = state.Perception;
         }
 
-        var severity = SeverityExtensions.MaxOf(state.Advisories.Values.Select(a => a.Severity).Append(state.Perception.Severity));
-        var bundle = state.Perception.Derive(Topics.Bundle, Name, severity, state.Perception.Meta);
+        state.TimeoutCts.Cancel();
+
+        if (forced)
+        {
+            var missing = _options.BundleRoster.Except(state.Advisories.Keys).ToList();
+            if (missing.Count > 0)
+            {
+                _logger.LogWarning("Governance bundle {CorrelationId} completed on timeout, missing advisors: {Missing}",
+                    perception.CorrelationId, string.Join(", ", missing));
+            }
+        }
+
+        var severity = SeverityExtensions.MaxOf(state.Advisories.Values.Select(a => a.Severity).Append(perception.Severity));
+        var bundle = perception.Derive(Topics.Bundle, Name, severity, perception.Meta);
         _bus.Publish(Topics.Bundle, bundle);
     }
 
@@ -106,10 +150,11 @@ public sealed class GovernanceAgent : AgentBase
         _bundles.TryRemove(verdict.CorrelationId, out _);
     }
 
-    private sealed class BundleState(Envelope perception)
+    private sealed class BundleState
     {
-        public Envelope Perception { get; } = perception;
+        public Envelope? Perception { get; set; }
         public Dictionary<string, Envelope> Advisories { get; } = [];
         public bool Completed { get; set; }
+        public CancellationTokenSource TimeoutCts { get; } = new();
     }
 }
