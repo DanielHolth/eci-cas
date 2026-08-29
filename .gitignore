@@ -1,45 +1,10 @@
-# --- Python (GitHub's standard Python template) ---
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-htmlcov/
-.coverage
-.coverage.*
-.tox/
-.venv/
-venv/
-env/
-ENV/
-
-# --- ECI-CAS specific ---
-# Local Archive data (Phase 0 JSON files / later SQLite / Parquet) —
-# generated at runtime, never committed. §5.8 storage phases.
-data/archive/
-*.jsonl
+# --- .NET ---
+bin/
+obj/
+*.user
 
 # Secrets — manifest references env var NAMES only, never values.
 # Real keys live in .env, which is never committed.
 .env
 .env.*
 !.env.example
-security_rules.json
