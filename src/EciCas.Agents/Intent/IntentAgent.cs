@@ -1,4 +1,5 @@
 using System.Text;
+using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reasoning;
@@ -38,6 +39,12 @@ public sealed class IntentAgent : CognitiveAgent<string>
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Reasoning", envelope.Meta.Get<string>(ReasoningAgent.AdviceKey));
         AppendAdvice(prompt, "Self", envelope.Meta.Get<string>(SelfAgent.AdviceKey));
+
+        var revisionConcern = envelope.Meta.Get<string>(GovernanceAgent.RevisionConcernKey);
+        if (!string.IsNullOrEmpty(revisionConcern))
+        {
+            prompt.Append(" [Revise — Security flagged: ").Append(revisionConcern).Append(']');
+        }
 
         return prompt.ToString();
     }

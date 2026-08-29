@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Security;
 using EciCas.Bus;
@@ -10,10 +11,14 @@ namespace EciCas.Agents.Governance;
 
 /// <summary>
 /// Decision-only: bundles the advisory fan-out, gates Action on Security's
-/// verdict, and produces the conclusion. Nothing else — see plan §3.3.
+/// verdict (green/yellow/red per plan §3.3's matrix), and produces the
+/// conclusion. Nothing else.
 /// </summary>
 public sealed class GovernanceAgent : AgentBase
 {
+    /// <summary>Carries Security's concern into a re-issued Bundle so Intent can revise. Set only on a revision pass.</summary>
+    public const string RevisionConcernKey = "governance.revision_concern";
+
     private readonly IMessageBus _bus;
     private readonly ILogger<GovernanceAgent> _logger;
     private readonly GovernanceOptions _options;
@@ -129,29 +134,81 @@ public sealed class GovernanceAgent : AgentBase
         }
 
         var severity = SeverityExtensions.MaxOf(state.Advisories.Values.Select(a => a.Severity).Append(perception.Severity));
-        // Fold each advisory's own meta into the bundle so its content (not just
-        // its severity) reaches Intent — advisories carried nothing downstream
-        // before this, silently discarding whatever Reasoning/Self/Impulse said.
-        var meta = state.Advisories.Values.Aggregate(perception.Meta, (acc, advisory) => acc.Merge(advisory.Meta));
+        var meta = BuildBundleMeta(state);
         var bundle = perception.Derive(Topics.Bundle, Name, severity, meta);
         _bus.Publish(Topics.Bundle, bundle);
     }
+
+    /// <summary>
+    /// Folds each advisory's own meta into the perceived event's meta so
+    /// content (not just severity) reaches Intent — reused for the initial
+    /// bundle and for re-issuing one on a revision pass.
+    /// </summary>
+    private static MetaBag BuildBundleMeta(BundleState state) =>
+        state.Advisories.Values.Aggregate(state.Perception!.Meta, (acc, advisory) => acc.Merge(advisory.Meta));
 
     private void OnVerdict(Envelope verdict)
     {
         var value = verdict.Meta.Get<Verdict>(SecurityAgent.VerdictKey);
         var reply = verdict.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
+        var isReflex = verdict.Meta.Get<bool>(ImpulseAgent.ReflexKey);
 
-        if (value == Verdict.Green)
+        // GetOrAdd: a reflex verdict can outrace Governance's own
+        // Perception-topic loop, same reason OnAdvisory needs it.
+        var state = _bundles.GetOrAdd(verdict.CorrelationId, _ => new BundleState());
+
+        if (value == Verdict.Yellow && !isReflex)
         {
-            var action = verdict.Derive(Topics.Action, Name, verdict.Severity, MetaBag.Empty.With(IntentAgent.ReplyKey, reply));
-            _bus.Publish(Topics.Action, action);
+            Envelope? revisionBundle = null;
+            lock (state)
+            {
+                if (state.RevisionCount < _options.MaxRevisionPasses)
+                {
+                    state.RevisionCount++;
+                    var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey) ?? string.Empty;
+                    var revisionMeta = BuildBundleMeta(state).With(RevisionConcernKey, concern);
+                    revisionBundle = state.Perception!.Derive(Topics.Bundle, Name, verdict.Severity, revisionMeta);
+                }
+            }
+
+            if (revisionBundle is not null)
+            {
+                // Not concluded: this Yellow bought exactly one Intent
+                // revision pass. A second Yellow on the revised proposal
+                // falls through below and proceeds to Action regardless —
+                // blocking on mere ambiguity would make every unresolved
+                // judgment call a hard stop, which is Red's job, not Yellow's.
+                _bus.Publish(Topics.Bundle, revisionBundle);
+                return;
+            }
         }
 
-        var conclusion = verdict.Derive(Topics.Conclusion, Name, verdict.Severity, MetaBag.Empty.With(IntentAgent.ReplyKey, reply).With(SecurityAgent.VerdictKey, value));
+        var replyToSpeak = value == Verdict.Red ? BlockedReply(verdict) : reply;
+        var action = verdict.Derive(Topics.Action, Name, verdict.Severity,
+            MetaBag.Empty.With(IntentAgent.ReplyKey, replyToSpeak).With(SecurityAgent.VerdictKey, value));
+        _bus.Publish(Topics.Action, action);
+
+        if (isReflex)
+        {
+            // The reflex reaction reached the human, but the event is not
+            // over: Intent's considered reply still follows behind it, and
+            // THAT is what concludes the event — see plan §3.5.
+            return;
+        }
+
+        var conclusion = verdict.Derive(Topics.Conclusion, Name, verdict.Severity,
+            MetaBag.Empty.With(IntentAgent.ReplyKey, replyToSpeak).With(SecurityAgent.VerdictKey, value));
         _bus.Publish(Topics.Conclusion, conclusion);
 
         _bundles.TryRemove(verdict.CorrelationId, out _);
+    }
+
+    private static string BlockedReply(Envelope verdict)
+    {
+        var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey);
+        return string.IsNullOrEmpty(concern)
+            ? "I can't help with that."
+            : $"I can't help with that: {concern}";
     }
 
     private sealed class BundleState
@@ -159,6 +216,7 @@ public sealed class GovernanceAgent : AgentBase
         public Envelope? Perception { get; set; }
         public Dictionary<string, Envelope> Advisories { get; } = [];
         public bool Completed { get; set; }
+        public int RevisionCount { get; set; }
         public CancellationTokenSource TimeoutCts { get; } = new();
     }
 }

@@ -8,14 +8,17 @@ namespace EciCas.Agents.Impulse;
 
 /// <summary>
 /// Fast deterministic appraisal, plus the Critical reflex: a second publisher
-/// on events.proposal alongside Intent, so Security's gate and Governance's
-/// verdict handling need no reflex-specific branch — see plan §3.5. The
-/// "don't double-conclude a reflex + considered reply" refinement is M3
-/// (gating matrix) work and is not attempted here.
+/// on events.proposal alongside Intent, so Security's gate needs no
+/// reflex-specific branch — see plan §3.5. The reflex proposal carries
+/// <see cref="ReflexKey"/> so Governance can tell it apart from Intent's
+/// considered proposal and avoid double-concluding the event (M3).
 /// </summary>
 public sealed class ImpulseAgent : AgentBase
 {
     public const string AdviceKey = "impulse.advice";
+
+    /// <summary>Set on the reflex's own proposal. Absent (default false) on Intent's considered proposal.</summary>
+    public const string ReflexKey = "impulse.reflex";
 
     private static readonly string[] CriticalTriggers = ["help", "emergency", "urgent"];
 
@@ -42,7 +45,8 @@ public sealed class ImpulseAgent : AgentBase
         if (isCritical)
         {
             var reply = "This sounds urgent — I'm on it right away.";
-            var proposal = envelope.Derive(Topics.Proposal, Name, severity, MetaBag.Empty.With(IntentAgent.ReplyKey, reply));
+            var proposal = envelope.Derive(Topics.Proposal, Name, severity,
+                MetaBag.Empty.With(IntentAgent.ReplyKey, reply).With(ReflexKey, true));
             _bus.Publish(Topics.Proposal, proposal);
         }
 

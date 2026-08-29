@@ -10,4 +10,7 @@ public sealed class GovernanceOptions
 {
     public string[] BundleRoster { get; set; } = [];
     public int BundleTimeoutMs { get; set; } = 4000;
+
+    /// <summary>How many Intent revision passes a Yellow verdict buys before Governance proceeds to Action anyway.</summary>
+    public int MaxRevisionPasses { get; set; } = 1;
 }

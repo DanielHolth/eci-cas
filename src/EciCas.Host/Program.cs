@@ -43,6 +43,9 @@ builder.Services.AddHttpClient<OpenAiCompatibleSubstrateProvider>((sp, http) =>
 });
 builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();
 
+var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");
+builder.Services.AddSingleton(SecurityRuleSet.Load(securityRulesPath));
+
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
 RegisterAgent<ReasoningAgent>(builder.Services);

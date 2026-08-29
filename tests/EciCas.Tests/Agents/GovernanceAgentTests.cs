@@ -1,4 +1,5 @@
 using EciCas.Agents.Governance;
+using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Security;
 using EciCas.Bus;
@@ -55,7 +56,7 @@ public class GovernanceAgentTests
     }
 
     [Fact]
-    public async Task Action_NeverExecutes_BeforeSecurityClears()
+    public async Task RedVerdict_NeverSpeaksTheOriginalReply_OnlyABlockedNotice()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
@@ -66,10 +67,77 @@ public class GovernanceAgentTests
         await agent.HandleAsync(perception, CancellationToken.None);
 
         var redVerdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
-            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Red).With(IntentAgent.ReplyKey, "should never run"));
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Red).With(IntentAgent.ReplyKey, "should never run verbatim"));
         await agent.HandleAsync(redVerdict, CancellationToken.None);
 
+        // Red still reaches Action (per the gating matrix: a deterministic
+        // Blocked notice, immediately, no revision attempt) but the
+        // original reply text must never be the one spoken.
+        Assert.True(actionReader.TryRead(out var action));
+        var spoken = action!.Meta.Get<string>(IntentAgent.ReplyKey);
+        Assert.DoesNotContain("should never run verbatim", spoken);
+    }
+
+    [Fact]
+    public async Task YellowVerdict_TriggersOneRevisionPass_ThenProceedsRegardless()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var bundleReader = bus.Subscribe(Topics.Bundle);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, []);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+        // Empty roster completes the bundle immediately on Perception — drain
+        // that first (unrelated) bundle before looking for the revision one.
+        Assert.True(bundleReader.TryRead(out _));
+
+        var firstYellow = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Yellow).With(SecurityAgent.ConcernKey, "ambiguous").With(IntentAgent.ReplyKey, "first draft"));
+        await agent.HandleAsync(firstYellow, CancellationToken.None);
+
+        // One revision pass: re-issued on Bundle, not yet an Action.
+        Assert.True(bundleReader.TryRead(out var revisionBundle));
+        Assert.Equal("ambiguous", revisionBundle!.Meta.Get<string>(GovernanceAgent.RevisionConcernKey));
         Assert.False(actionReader.TryRead(out _));
+
+        var secondYellow = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Yellow).With(SecurityAgent.ConcernKey, "still ambiguous").With(IntentAgent.ReplyKey, "revised draft"));
+        await agent.HandleAsync(secondYellow, CancellationToken.None);
+
+        // Revision passes exhausted: proceeds to Action anyway.
+        Assert.True(actionReader.TryRead(out var action));
+        Assert.Equal("revised draft", action!.Meta.Get<string>(IntentAgent.ReplyKey));
+        Assert.False(bundleReader.TryRead(out _));
+    }
+
+    [Fact]
+    public async Task ReflexVerdict_ActsButDoesNotConclude()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var conclusionReader = bus.Subscribe(Topics.Conclusion);
+        var agent = CreateAgent(bus, activity, []);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Elevated);
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var reflexVerdict = perception.Derive(Topics.Verdict, "Security", Severity.Elevated,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "on it")
+                .With(ImpulseAgent.ReflexKey, true));
+        await agent.HandleAsync(reflexVerdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out _));
+        Assert.False(conclusionReader.TryRead(out _));
+
+        var consideredVerdict = perception.Derive(Topics.Verdict, "Security", Severity.Elevated,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "here's the full answer"));
+        await agent.HandleAsync(consideredVerdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out _));
+        Assert.True(conclusionReader.TryRead(out _));
     }
 
     [Fact]

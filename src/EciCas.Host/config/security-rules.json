@@ -1,0 +1,108 @@
+{
+  "version": "1.0.0",
+  "notes": [
+    "Security's rule set. Deterministic, auditable, no model.",
+    "A rule fires when (any of `any` matches) AND (all of `all` match) AND (none of `unless` matches).",
+    "Rules are ORDER-INDEPENDENT: every rule is tested and the highest verdict wins.",
+    "There is no 'green' rule. Green is the absence of a match; use `unless` to narrow a rule.",
+    "Red = blocked by rule, no revision attempt. Yellow = the rules do not cover it, Intent revises once.",
+    "Patterns are .NET regex, matched case-insensitively against the proposed reply text."
+  ],
+  "rules": [
+    {
+      "id": "disclose-credentials",
+      "verdict": "Yellow",
+      "description": "Never emit anything shaped like a live secret, whatever the reason given.",
+      "any": [
+        "\\bsk-[A-Za-z0-9_\\-]{16,}",
+        "\\bghp_[A-Za-z0-9]{20,}",
+        "\\bAKIA[0-9A-Z]{12,}",
+        "-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+        "\\b(?:api[_ -]?key|secret[_ -]?key|access[_ -]?token|password)\\b\\s*[:=]\\s*\\S{6,}"
+      ],
+      "concern": "The proposed reply appears to contain a credential or secret. Revise if you can drop it."
+    },
+    {
+      "id": "impersonate-a-person",
+      "verdict": "Yellow",
+      "description": "Speaking AS a named real person, as opposed to about them.",
+      "any": [
+        "\\b(?:pretend|pose|act|speak|write)\\s+(?:to\\s+be|as(?:\\s+if)?)\\s+(?:a\\s+)?(?:real\\s+)?(?:person|human|doctor|lawyer|police|officer|agent)\\b",
+        "\\bi\\s+am\\s+(?:a\\s+)?(?:licensed|certified|real)\\s+(?:doctor|physician|lawyer|attorney|therapist|nurse)\\b",
+        "\\bthis\\s+is\\s+not\\s+an\\s+ai\\b"
+      ],
+      "concern": "The proposed reply claims to be a person or a credentialed professional. That is a judgment call for Intent, not settled by the rules."
+    },
+    {
+      "id": "irreversible-world-effect",
+      "verdict": "Yellow",
+      "description": "Action executes literally. Anything destructive must not reach it by accident.",
+      "any": [
+        "\\brm\\s+-rf\\b",
+        "\\bDROP\\s+(?:TABLE|DATABASE)\\b",
+        "\\bformat\\s+[A-Za-z]:",
+        "\\b(?:delete|wipe|erase|purge)\\s+(?:all|every|the\\s+entire)\\b",
+        "\\bgit\\s+push\\s+--force\\b"
+      ],
+      "concern": "The proposed reply would destroy data irreversibly. Revise if this wasn't intended literally."
+    },
+    {
+      "id": "spend-money",
+      "verdict": "Yellow",
+      "description": "No autonomous spending. Ever, at any amount.",
+      "any": [
+        "\\b(?:purchase|buy|order|pay|transfer|wire|send)\\b[^.!?]{0,40}\\b(?:\\$|usd|eur|nok|dollars?|euros?)\\s?\\d",
+        "\\bcheckout\\b[^.!?]{0,20}\\b(?:card|payment)\\b",
+        "\\bcredit\\s+card\\s+(?:number|details)\\b"
+      ],
+      "concern": "The proposed reply would commit money. Revise if this wasn't meant literally."
+    },
+    {
+      "id": "medical-dosage-instruction",
+      "verdict": "Yellow",
+      "description": "Describing a drug is fine; instructing a dose is a judgment call.",
+      "any": [
+        "\\btake\\s+\\d+\\s*(?:mg|ml|g|tablets?|pills?|capsules?)\\b",
+        "\\b\\d+\\s*(?:mg|ml)\\b[^.!?]{0,30}\\b(?:every|per)\\s+\\d+\\s*(?:hours?|days?)\\b"
+      ],
+      "unless": [
+        "\\b(?:ask|consult|speak\\s+to|talk\\s+to)\\s+(?:a|your)\\s+(?:doctor|pharmacist|physician)\\b"
+      ],
+      "concern": "The reply reads as a specific dosing instruction. Not a rule violation, but it should be a considered choice, not a slip."
+    },
+    {
+      "id": "weapons-and-precursors",
+      "verdict": "Red",
+      "description": "Synthesis or construction detail for weapons capable of mass harm.",
+      "all": [
+        "\\b(?:synthes(?:is|ise|ize)|manufactur|produc|build|construct|assembl|make)\\w*\\b",
+        "\\b(?:nerve\\s+agent|sarin|vx\\b|ricin|anthrax|smallpox|enriched\\s+uranium|plutonium|pipe\\s+bomb|ied\\b|explosive\\s+device)\\b"
+      ],
+      "concern": "The proposed reply gives construction or synthesis detail for a weapon capable of mass harm. Blocked by rule."
+    },
+    {
+      "id": "self-harm-method",
+      "verdict": "Red",
+      "description": "Method detail, specifically. Talking ABOUT the subject is not this rule.",
+      "all": [
+        "\\b(?:how\\s+to|method|way|steps?|instructions?|dose|lethal)\\b",
+        "\\b(?:kill\\s+(?:yourself|myself|themselves)|suicide|overdose|self-harm|end\\s+(?:your|my)\\s+life)\\b"
+      ],
+      "unless": [
+        "\\b(?:helpline|hotline|crisis|support|resources?|reach\\s+out|talk\\s+to\\s+someone|988|samaritans)\\b"
+      ],
+      "concern": "The proposed reply supplies method detail for self-harm. Blocked by rule. Discussing the subject or offering support is not blocked."
+    },
+    {
+      "id": "bypass-this-system",
+      "verdict": "Red",
+      "description": "A reply whose content argues for disabling the checks around it.",
+      "any": [
+        "\\b(?:ignore|disregard|override|bypass|disable|turn\\s+off)\\b[^.!?]{0,40}\\b(?:security|rules?|guidelines?|restrictions?|safeguards?|governance)\\b",
+        "\\bdeveloper\\s+mode\\b",
+        "\\bjailbreak\\b"
+      ],
+      "concern": "The proposed reply argues for disabling the checks it is currently passing through. This system's constraints are not negotiable from inside the pipeline."
+    }
+  ]
+}
