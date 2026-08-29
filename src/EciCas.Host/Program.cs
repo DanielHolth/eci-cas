@@ -1,13 +1,19 @@
+using System.Net.Http.Headers;
 using EciCas.Agents.Action;
 using EciCas.Agents.Governance;
+using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Reasoning;
 using EciCas.Agents.Security;
+using EciCas.Agents.Self;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Host;
+using EciCas.Substrates;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
@@ -17,11 +23,30 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 
 builder.Services.Configure<GovernanceOptions>(builder.Configuration.GetSection("Governance"));
 builder.Services.Configure<RoutingManifest>(builder.Configuration.GetSection("RoutingManifest"));
+builder.Services.Configure<BudgetOptions>(builder.Configuration.GetSection("Budget"));
+builder.Services.Configure<SubstrateProviderOptions>(builder.Configuration.GetSection("SubstrateProvider"));
 
 builder.Services.AddSingleton<BusActivityTracker>();
 builder.Services.AddSingleton<IMessageBus, ChannelBus>();
 
+builder.Services.AddSingleton<MockSubstrateProvider>();
+builder.Services.AddHttpClient<OpenAiCompatibleSubstrateProvider>((sp, http) =>
+{
+    var options = sp.GetRequiredService<IOptions<SubstrateProviderOptions>>().Value;
+    http.BaseAddress = new Uri(options.BaseUrl);
+
+    var apiKey = Environment.GetEnvironmentVariable(options.ApiKeyEnvironmentVariable);
+    if (!string.IsNullOrEmpty(apiKey))
+    {
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+    }
+});
+builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();
+
 RegisterAgent<PerceptionAgent>(builder.Services);
+RegisterAgent<ImpulseAgent>(builder.Services);
+RegisterAgent<ReasoningAgent>(builder.Services);
+RegisterAgent<SelfAgent>(builder.Services);
 RegisterAgent<GovernanceAgent>(builder.Services);
 RegisterAgent<IntentAgent>(builder.Services);
 RegisterAgent<SecurityAgent>(builder.Services);

@@ -20,4 +20,7 @@ public sealed class MetaBag
     public T? Get<T>(string key) => _values.TryGetValue(key, out var value) && value is T typed ? typed : default;
 
     public bool ContainsKey(string key) => _values.ContainsKey(key);
+
+    /// <summary>Overlays another bag's entries onto this one; keys in <paramref name="other"/> win.</summary>
+    public MetaBag Merge(MetaBag other) => new(_values.SetItems(other._values));
 }

@@ -129,7 +129,11 @@ public sealed class GovernanceAgent : AgentBase
         }
 
         var severity = SeverityExtensions.MaxOf(state.Advisories.Values.Select(a => a.Severity).Append(perception.Severity));
-        var bundle = perception.Derive(Topics.Bundle, Name, severity, perception.Meta);
+        // Fold each advisory's own meta into the bundle so its content (not just
+        // its severity) reaches Intent — advisories carried nothing downstream
+        // before this, silently discarding whatever Reasoning/Self/Impulse said.
+        var meta = state.Advisories.Values.Aggregate(perception.Meta, (acc, advisory) => acc.Merge(advisory.Meta));
+        var bundle = perception.Derive(Topics.Bundle, Name, severity, meta);
         _bus.Publish(Topics.Bundle, bundle);
     }
 

@@ -17,12 +17,14 @@ plain bus subscriber. Full design capture:
 [`csharp-rebuild-spec.md`](csharp-rebuild-spec.md). Standing rule for
 all bus work here: `AGENTS.md`'s Architecture section.
 
-**M1 (walking skeleton) is done.** Perception → Governance → Intent →
-Security → Governance → Action runs end-to-end via
-`dotnet run --project src/EciCas.Host`, with `ArchiveLogger` recording
-every hop to `archive.jsonl`. Next up is M2 — the cognitive layer
-(`CognitiveAgent<T>`, real `ISubstrateProvider`, budget tiers, and the
-Reasoning/Recall/Self/Impulse agents) — see
+**M1 and M2 are done.** Perception → {Impulse, Reasoning, Self} →
+Governance → Intent (real substrate call) → Security → Governance →
+Action runs end-to-end via `dotnet run --project src/EciCas.Host`,
+with `ArchiveLogger` recording every hop to `archive.jsonl`.
+`CognitiveAgent<T>`, `ISubstrateProvider` + registry (mock + one live
+OpenAI-compatible HTTP provider), and budget tiers via config are all
+in place. Next up is M3 — safety and gating (Security's real rule
+engine, the Critical reflex's double-conclusion guard) — see
 [`handover.md`](handover.md).
 
 ## Morrow-ECI (frontend)
