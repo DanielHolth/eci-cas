@@ -14,7 +14,7 @@ public class GovernanceAgentTests
 {
     private static GovernanceAgent CreateAgent(IMessageBus bus, BusActivityTracker activity, string[] roster) =>
         new(bus, activity, NullLogger<GovernanceAgent>.Instance, Options.Create(new GovernanceOptions { BundleRoster = roster }),
-            new JsonlArchiveStore(Path.GetTempFileName()));
+            new JsonlAgentStateStore(Path.GetTempFileName()));
 
     [Theory]
     [InlineData("A")]
@@ -149,7 +149,7 @@ public class GovernanceAgentTests
         var bus = new ChannelBus(activity);
         var actionReader = bus.Subscribe(Topics.Action);
         var systemControlReader = bus.Subscribe(Topics.SystemControl);
-        var store = new JsonlArchiveStore(Path.GetTempFileName());
+        var store = new JsonlAgentStateStore(Path.GetTempFileName());
         var agent = new GovernanceAgent(bus, activity, NullLogger<GovernanceAgent>.Instance,
             Options.Create(new GovernanceOptions { BundleRoster = [] }), store);
         var impulse = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store);

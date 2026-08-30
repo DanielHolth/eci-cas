@@ -67,11 +67,11 @@ public sealed class ImpulseAgent : AgentBase
     private static readonly DriveVectors NegativeNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0, SocialDrive: -0.05, Temperature: -0.1);
 
     private readonly IMessageBus _bus;
-    private readonly IArchiveStore _store;
+    private readonly IAgentStateStore _store;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private DriveVectors? _cached;
 
-    public ImpulseAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ImpulseAgent> logger, IArchiveStore store)
+    public ImpulseAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ImpulseAgent> logger, IAgentStateStore store)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -138,7 +138,7 @@ public sealed class ImpulseAgent : AgentBase
             _cacheLock.Release();
         }
 
-        var record = new ArchiveRecord(DrivePath, JsonSerializer.Serialize(updated), DateTimeOffset.UtcNow, ArchiveDomain.Internal);
+        var record = new AgentStateRecord(DrivePath, JsonSerializer.Serialize(updated), DateTimeOffset.UtcNow, ArchiveDomain.Internal);
         await _store.WriteAsync([record], cancellationToken).ConfigureAwait(false);
     }
 

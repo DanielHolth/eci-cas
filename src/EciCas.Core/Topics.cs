@@ -12,7 +12,7 @@ public static class Topics
     public const string Perception = "events.perception";
     public const string Advisories = "events.advisories";
     public const string Proposal = "events.proposal";
-    public const string LookupPaths = "events.lookup-paths";
+    public const string SelectedTriples = "events.selected-triples";
     public const string Bundle = "events.bundle";
     public const string Action = "events.action";
     public const string Conclusion = "events.conclusion";

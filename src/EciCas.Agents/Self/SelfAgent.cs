@@ -23,11 +23,11 @@ public sealed class SelfAgent : AgentBase
     private const string DefaultIdentitySnippet = "I'm ECI, here to help.";
 
     private readonly IMessageBus _bus;
-    private readonly IArchiveStore _store;
+    private readonly IAgentStateStore _store;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private string? _cachedIdentity;
 
-    public SelfAgent(IMessageBus bus, BusActivityTracker activity, ILogger<SelfAgent> logger, IArchiveStore store)
+    public SelfAgent(IMessageBus bus, BusActivityTracker activity, ILogger<SelfAgent> logger, IAgentStateStore store)
         : base(bus, activity, logger)
     {
         _bus = bus;

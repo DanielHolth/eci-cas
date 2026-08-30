@@ -1,6 +1,6 @@
 using EciCas.Agents.Consolidator;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Recall;
+using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -19,22 +19,19 @@ public class ConsolidatorAgentTests
     private static IOptions<AgentSubstrateManifest> Manifest() =>
         Options.Create(new AgentSubstrateManifest { Agents = { ["Consolidator"] = new AgentSubstrateEntry { Class = "fast-low" } } });
 
+    private const string FactLine = "category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28";
+
     [Fact]
     public async Task FlushesAndAnnouncesWritten_AtBatchSize()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var control = bus.Subscribe(Topics.SystemControl);
-        var path = Path.GetTempFileName();
-        var store = new JsonlArchiveStore(path);
-        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("person/family/marcus: birth_date = 2020-08-28", TimeSpan.Zero, 10, 0m)));
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
-        // Each turn's fact dual-writes under its own path plus keyword
-        // paths, so BatchSize (which counts records, not turns) needs
-        // headroom for that — 3 stays below the 2-record first turn but
-        // crosses at the 4-record second one.
         var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 3 }));
+            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 2 }));
 
         var first = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "turn one"));
@@ -48,21 +45,18 @@ public class ConsolidatorAgentTests
         Assert.True(control.TryRead(out var written));
         Assert.Equal(ConsolidatorAgent.WrittenKind, written!.Meta.Get<string>(ConsolidatorAgent.ControlKindKey));
 
-        var records = await store.LookupAsync(["person/family/marcus"], maxPerPath: 10, CancellationToken.None);
+        var records = await store.LookupAsync(new ArchiveTriple("person", "family", "son"), maxRows: 10, CancellationToken.None);
         Assert.Equal(2, records.Count);
+        Assert.All(records, r => Assert.Equal("2020-08-28", r.Value));
     }
 
     [Fact]
     public async Task WhenNothingExplicitlyStated_WritesNothing()
     {
-        // Matches the Python prototype's Consolidator: no deterministic
-        // fallback write, so a low-content/meta turn with no LLM-extracted
-        // fact yields zero archive records.
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var control = bus.Subscribe(Topics.SystemControl);
-        var path = Path.GetTempFileName();
-        var store = new JsonlArchiveStore(path);
+        var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 10, 0m)));
 
         var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
@@ -73,17 +67,16 @@ public class ConsolidatorAgentTests
         await agent.HandleAsync(bundle, CancellationToken.None);
 
         Assert.False(control.TryRead(out _));
-        Assert.False(File.Exists(path) && File.ReadAllLines(path).Any(l => !string.IsNullOrWhiteSpace(l)));
+        Assert.Empty(store.Index);
     }
 
     [Fact]
-    public async Task WhenUseSubstrateIsTrue_AddsExtractedFactToBatch_ReachableByBothPaths()
+    public async Task WhenUseSubstrateIsTrue_AddsExtractedFactToBatch_WithScoredImportance()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
-        var path = Path.GetTempFileName();
-        var store = new JsonlArchiveStore(path);
-        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("person/family/marcus: birth_date = 2020-08-28", TimeSpan.Zero, 10, 0m)));
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
         var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
             substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
@@ -92,12 +85,10 @@ public class ConsolidatorAgentTests
             MetaBag.Empty.With(PerceptionAgent.TextKey, "our son's birthday was yesterday"));
         await agent.HandleAsync(bundle, CancellationToken.None);
 
-        var byOwnPath = await store.LookupAsync(["person/family/marcus"], maxPerPath: 10, CancellationToken.None);
-        Assert.Single(byOwnPath);
-        Assert.Equal("person/family/marcus/birth_date = 2020-08-28", byOwnPath[0].Content);
-
-        var byKeyword = await store.LookupAsync(SignificantWords.Extract("birth_date = 2020-08-28"), maxPerPath: 10, CancellationToken.None);
-        Assert.Contains(byKeyword, r => r.Content == "person/family/marcus/birth_date = 2020-08-28");
+        var records = await store.LookupAsync(new ArchiveTriple("person", "family", "son"), maxRows: 10, CancellationToken.None);
+        Assert.Single(records);
+        Assert.Equal("marcus holth", records[0].Subject);
+        Assert.Equal(0.6, records[0].Importance);
     }
 
     [Fact]
@@ -106,8 +97,7 @@ public class ConsolidatorAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var control = bus.Subscribe(Topics.SystemControl);
-        var path = Path.GetTempFileName();
-        var store = new JsonlArchiveStore(path);
+        var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
 
         var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
@@ -118,6 +108,29 @@ public class ConsolidatorAgentTests
         await agent.HandleAsync(bundle, CancellationToken.None);
 
         Assert.False(control.TryRead(out _));
-        Assert.False(File.Exists(path) && File.ReadAllLines(path).Any(l => !string.IsNullOrWhiteSpace(l)));
+        Assert.Empty(store.Index);
+    }
+
+    [Fact]
+    public async Task WhenTriggeredBySelf_HardSkips_NeverCallsSubstrate()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
+        var store = new InMemoryArchiveStore();
+        var called = false;
+        var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)); });
+
+        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+
+        var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "whether the trip dates still work")
+                .With(ReflectionAgent.TriggeredByKey, "self"));
+        await agent.HandleAsync(bundle, CancellationToken.None);
+
+        Assert.False(control.TryRead(out _));
+        Assert.False(called);
+        Assert.Empty(store.Index);
     }
 }

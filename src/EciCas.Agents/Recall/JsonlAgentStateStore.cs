@@ -5,19 +5,17 @@ namespace EciCas.Agents.Recall;
 using EciCas.Core;
 
 /// <summary>
-/// JSONL-backed IArchiveStore: append-only writes, full-scan lookup. A
-/// library, not a bus citizen — see plan §3.3. Parquet is the natural
-/// upgrade once Recall needs predicate pushdown; nothing above this
-/// interface would need to change.
+/// JSONL-backed IAgentStateStore: append-only writes, full-scan lookup. A
+/// library, not a bus citizen — see plan §3.3.
 /// </summary>
-public sealed class JsonlArchiveStore : IArchiveStore
+public sealed class JsonlAgentStateStore : IAgentStateStore
 {
     private readonly string _path;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public JsonlArchiveStore(string path) => _path = path;
+    public JsonlAgentStateStore(string path) => _path = path;
 
-    public async Task<IReadOnlyList<ArchiveRecord>> LookupAsync(IReadOnlyList<string> paths, int maxPerPath, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AgentStateRecord>> LookupAsync(IReadOnlyList<string> paths, int maxPerPath, CancellationToken cancellationToken)
     {
         if (paths.Count == 0)
         {
@@ -25,7 +23,7 @@ public sealed class JsonlArchiveStore : IArchiveStore
         }
 
         var pathSet = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var results = new List<ArchiveRecord>();
+        var results = new List<AgentStateRecord>();
         var perPathCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -45,7 +43,7 @@ public sealed class JsonlArchiveStore : IArchiveStore
                     continue;
                 }
 
-                var record = JsonSerializer.Deserialize<ArchiveRecord>(lines[i])!;
+                var record = JsonSerializer.Deserialize<AgentStateRecord>(lines[i])!;
                 if (!pathSet.Contains(record.Path))
                 {
                     continue;
@@ -69,7 +67,7 @@ public sealed class JsonlArchiveStore : IArchiveStore
         return results;
     }
 
-    public async Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken)
+    public async Task WriteAsync(IReadOnlyList<AgentStateRecord> records, CancellationToken cancellationToken)
     {
         if (records.Count == 0)
         {

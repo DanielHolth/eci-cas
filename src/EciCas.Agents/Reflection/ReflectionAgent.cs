@@ -35,10 +35,17 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     public const string TriggeredByKey = "perception.triggered_by";
     public const string SourceTypeKey = "perception.source_type";
     public const string ReflectedKind = "Reflected";
-    private const string ReflectionPathAnchor = "reflection";
+
+    private const string FixedCategory = "self";
+    private const string FixedTopic = "reflection";
+    private const string FixedSubject = "self";
+    private const string FixedKey = "insight";
+    private const double QuietImportance = 0.1;
+    private const double PushedImportance = 0.2;
 
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
+    private readonly IAgentStateStore _stateStore;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly ILogger _logger;
@@ -46,12 +53,13 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private readonly List<BufferedConclusion> _pending = [];
     private readonly object _pendingLock = new();
 
-    public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, IArchiveStore store,
+    public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, IArchiveStore store, IAgentStateStore stateStore,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
+        _stateStore = stateStore;
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _logger = logger;
@@ -120,13 +128,15 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         var shouldPush = maxGeneration < _options.MaxIdeaGeneration && eagerness >= _options.EagernessThreshold;
 
         var now = DateTimeOffset.UtcNow;
-        // Same multi-path write ConsolidatorAgent does: one record per
-        // significant-word path (plus the fixed "reflection" anchor), so a
-        // later Reasoning-proposed lookup on any of those words intersects
-        // this idea — see §6 of the redesign plan.
+        // Category/Topic are fixed (self/reflection); Subtopic is the LLM's
+        // own free-text functional label per candidate — not constrained to
+        // an enumerated list, so nuance isn't lost to a fixed vocabulary.
+        // Importance is fixed by role (quiet vs. pushed), not LLM-scored —
+        // candidate.Score stays purely for picking `best` among the batch.
         var internalRecords = candidates
-            .SelectMany(candidate => SignificantWords.Extract(candidate.Idea).Append(ReflectionPathAnchor).Distinct()
-                .Select(path => new ArchiveRecord(path, candidate.Idea, now, ArchiveDomain.Internal)))
+            .Select(candidate => new ArchiveRecord(
+                FixedCategory, FixedTopic, candidate.Subtopic, FixedSubject, FixedKey, candidate.Idea,
+                now, ArchiveDomain.Internal, candidate == best && shouldPush ? PushedImportance : QuietImportance))
             .ToList();
         await _store.WriteAsync(internalRecords, cancellationToken).ConfigureAwait(false);
 
@@ -146,7 +156,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     private async Task<double> GetEagernessAsync(CancellationToken cancellationToken)
     {
-        var records = await _store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
+        var records = await _stateStore.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
         var vectors = records.Count > 0
             ? JsonSerializer.Deserialize<DriveVectors>(records[0].Content) ?? new DriveVectors()
             : new DriveVectors();
@@ -163,9 +173,12 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         return $"""
             From these recent replies, propose follow-up thoughts or questions worth
             exploring later. Respond with zero or more lines, each formatted as
-            "score: idea" where score is 0.0-1.0 insight-worthiness (e.g.
-            "0.7: whether the trip dates still work with the deadline"). If nothing
-            stands out, respond with nothing.
+            "score|subtopic|idea" where score is 0.0-1.0 insight-worthiness and
+            subtopic is a short (1-2 word) functional label for the kind of
+            thought it is — pick whatever label fits best, e.g. pattern,
+            hypothesis, meta-rule, synthesis, question, or another label of your
+            own choosing (e.g. "0.7|hypothesis|whether the trip dates still work
+            with the deadline"). If nothing stands out, respond with nothing.
 
             Replies:
             {turns}
@@ -177,17 +190,18 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         var candidates = new List<Candidate>();
         foreach (var line in response.Split('\n'))
         {
-            var separator = line.IndexOf(':');
-            if (separator <= 0)
+            var parts = line.Split('|');
+            if (parts.Length != 3)
             {
                 continue;
             }
 
-            var scoreText = line[..separator].Trim();
-            var idea = line[(separator + 1)..].Trim();
-            if (idea.Length > 0 && double.TryParse(scoreText, out var score))
+            var scoreText = parts[0].Trim();
+            var subtopic = parts[1].Trim();
+            var idea = parts[2].Trim();
+            if (idea.Length > 0 && subtopic.Length > 0 && double.TryParse(scoreText, out var score))
             {
-                candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), idea));
+                candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), subtopic, idea));
             }
         }
 
@@ -195,5 +209,5 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     }
 
     private sealed record BufferedConclusion(string ReplyText, int Generation);
-    private sealed record Candidate(double Score, string Idea);
+    private sealed record Candidate(double Score, string Subtopic, string Idea);
 }

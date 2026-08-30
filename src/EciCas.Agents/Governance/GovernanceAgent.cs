@@ -40,10 +40,10 @@ public sealed class GovernanceAgent : AgentBase
     private readonly IMessageBus _bus;
     private readonly ILogger<GovernanceAgent> _logger;
     private readonly GovernanceOptions _options;
-    private readonly IArchiveStore _store;
+    private readonly IAgentStateStore _store;
     private readonly ConcurrentDictionary<Guid, BundleState> _bundles = new();
 
-    public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options, IArchiveStore store)
+    public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options, IAgentStateStore store)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -259,7 +259,7 @@ public sealed class GovernanceAgent : AgentBase
         _bus.Publish(Topics.SystemControl, control);
 
         var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey) ?? "blocked";
-        var alertRecord = new ArchiveRecord(SecurityAlertPathAnchor, $"{expression}: {concern}", DateTimeOffset.UtcNow, ArchiveDomain.Internal);
+        var alertRecord = new AgentStateRecord(SecurityAlertPathAnchor, $"{expression}: {concern}", DateTimeOffset.UtcNow, ArchiveDomain.Internal);
         await _store.WriteAsync([alertRecord], cancellationToken).ConfigureAwait(false);
 
         return meta.With(ExpressionKey, expression).With(SecurityAlertKey, true);

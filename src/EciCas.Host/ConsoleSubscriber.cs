@@ -38,7 +38,9 @@ public sealed class ConsoleSubscriber : AgentBase
         switch (envelope.Topic)
         {
             case Topics.Advisories when envelope.PublishedBy == "Recall":
-                Console.WriteLine($"  [read] {envelope.Meta.Get<string>(RecallAgent.ResultsKey)}");
+                var facts = envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey) ?? [];
+                var read = facts.Count == 0 ? "nothing on file" : string.Join("; ", facts.Select(f => $"{f.Subject} {f.Key} = {f.Value}"));
+                Console.WriteLine($"  [read] {read}");
                 break;
             case Topics.Action:
                 PrintAction(envelope);

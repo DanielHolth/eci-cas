@@ -1,28 +1,53 @@
 namespace EciCas.Core;
 
 /// <summary>
-/// Owns files, schema, epochs, concurrency, and every method over the data —
-/// including N-way parallel lookup. A library, not a bus citizen; Recall is
-/// the thin bus adapter that applies tier policy on top of this. See plan
-/// §3.3. Implemented in M4.
+/// Knowledge-swarm archive: the semantic two-stage store (Reasoning selects
+/// Category/Topic/Subtopic triples, Recall reads rows within a triple).
+/// One record per fact, nine fields, all lowercase by convention.
 /// </summary>
 public interface IArchiveStore
 {
-    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(IReadOnlyList<string> paths, int maxPerPath, CancellationToken cancellationToken);
+    /// <summary>Distinct (Category, Topic, Subtopic) triples currently indexed, for Reasoning's selection prompt.</summary>
+    IReadOnlyList<ArchiveTriple> Index { get; }
+
+    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchiveTriple triple, int maxRows, CancellationToken cancellationToken);
 
     Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken);
 }
 
-public sealed record ArchiveRecord(string Path, string Content, DateTimeOffset Timestamp, string Domain = ArchiveDomain.External);
+public sealed record ArchiveTriple(string Category, string Topic, string Subtopic);
 
-/// <summary>
-/// Distinguishes an ordinary fact (Consolidator's keyword writes) from a
-/// derived insight (Reflection's own thoughts) sharing the same path space —
-/// see roadmap.md's "Reflection Agent redesign". Not a retrieval filter:
-/// RecallAgent surfaces both, this only labels origin.
-/// </summary>
+public sealed record ArchiveRecord(
+    string Category,
+    string Topic,
+    string Subtopic,
+    string Subject,
+    string Key,
+    string Value,
+    DateTimeOffset Timestamp,
+    string Domain = ArchiveDomain.External,
+    double Importance = 0.5)
+{
+    public ArchiveTriple Triple => new(Category, Topic, Subtopic);
+}
+
 public static class ArchiveDomain
 {
     public const string External = "external";
     public const string Internal = "internal";
 }
+
+/// <summary>
+/// Single-key state-blob storage — today's exact shape, unchanged. Used by
+/// SelfAgent's identity, ImpulseAgent's drive vectors, Governance's
+/// frustration log, and Reflection's eagerness read. Deliberately distinct
+/// from IArchiveStore: these are not knowledge-swarm facts.
+/// </summary>
+public interface IAgentStateStore
+{
+    Task<IReadOnlyList<AgentStateRecord>> LookupAsync(IReadOnlyList<string> paths, int maxPerPath, CancellationToken cancellationToken);
+
+    Task WriteAsync(IReadOnlyList<AgentStateRecord> records, CancellationToken cancellationToken);
+}
+
+public sealed record AgentStateRecord(string Path, string Content, DateTimeOffset Timestamp, string Domain = ArchiveDomain.External);

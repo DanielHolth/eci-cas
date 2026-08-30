@@ -12,13 +12,13 @@ namespace EciCas.Tests.Agents;
 
 public class ImpulseAgentTests
 {
-    private static (ImpulseAgent Agent, ChannelReader<Envelope> Advisories, ChannelReader<Envelope> Proposals, IArchiveStore Store) Create()
+    private static (ImpulseAgent Agent, ChannelReader<Envelope> Advisories, ChannelReader<Envelope> Proposals, IAgentStateStore Store) Create()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var advisories = bus.Subscribe(Topics.Advisories);
         var proposals = bus.Subscribe(Topics.Proposal);
-        var store = new JsonlArchiveStore(Path.GetTempFileName());
+        var store = new JsonlAgentStateStore(Path.GetTempFileName());
         var agent = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store);
         return (agent, advisories, proposals, store);
     }

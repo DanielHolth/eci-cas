@@ -1,5 +1,7 @@
 using EciCas.Agents.Perception;
+using EciCas.Agents.Reasoning;
 using EciCas.Agents.Recall;
+using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -57,6 +59,14 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        // Reflection's own reposted ideas arrive back through events.perception
+        // like any other turn — without this skip, Consolidator would archive
+        // the persona's own prior thought as if the user had said it.
+        if (envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self")
+        {
+            return;
+        }
+
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
         if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
@@ -87,8 +97,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         }
 
         await _store.WriteAsync(batch, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("{Agent} wrote {Count} records: {Paths}",
-            Name, batch.Count, string.Join(", ", batch.Select(r => r.Path)));
+        _logger.LogInformation("{Agent} wrote {Count} records: {Triples}",
+            Name, batch.Count, string.Join(", ", batch.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}")));
 
         var epochId = Guid.NewGuid();
         var written = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
@@ -103,18 +113,33 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private async Task<IReadOnlyList<ArchiveRecord>> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
     {
-        var known = PromptCap.Apply(envelope.Meta.Get<string>(RecallAgent.ResultsKey) ?? "nothing on file");
+        var selected = envelope.Meta.Get<IReadOnlyList<ArchiveTriple>>(ReasoningAgent.SelectedTriplesKey) ?? [];
+        var known = selected.Count == 0
+            ? "none"
+            : string.Join(", ", selected.Select(t => $"{t.Category}/{t.Topic}/{t.Subtopic}"));
         text = PromptCap.Apply(text);
         var prompt = $"""
-            Known facts under related topics: {known}
+            Existing related triples (category/topic/subtopic) already in the
+            archive: {known}
 
-            From this turn, extract any new facts worth remembering long-term that
-            aren't already covered above. Only extract facts the user explicitly
-            stated — never infer, guess, or embellish. Respond with zero or more
-            lines, each formatted as "path: content" (e.g. "person/family/marcus:
-            birth_date = 2020-08-28"). Reuse a path from the known facts above when
-            the subject clearly matches; only invent a new path for a genuinely new
-            subject. If there's nothing explicitly stated, respond with nothing.
+            From this turn, extract any new facts worth remembering long-term.
+            Only extract facts the user explicitly stated — never infer, guess,
+            or embellish. Respond with zero or more lines, each formatted as:
+
+            category=... topic=... subtopic=... subject=... key=... value=...
+
+            Category (1 word), Topic (1 word), and Subtopic (1-2 words) group
+            the fact — match one of the existing triples above when the subject
+            clearly fits; only invent a new triple for a genuinely new kind of
+            fact. Subject (1-2 words) is usually a unique entity; Key (1-3
+            words) is the attribute; Value (1-5 content words, no filler) is
+            the content itself.
+
+            Examples:
+            category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28
+            category=event topic=wedding subtopic=family subject=maria holth key=location value=drammen kirke
+
+            If there's nothing explicitly stated, respond with nothing.
 
             Turn: {text}
             """;
@@ -134,44 +159,76 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     }
 
     /// <summary>
-    /// Each extracted fact is written under both its own LLM-invented path
-    /// (preserves the structured category/topic intent facts are meant to
-    /// have) and its SignificantWords-derived keyword paths — the same
-    /// paths ReasoningAgent proposes when querying — so a later flat lookup
-    /// actually finds it. Without the second write, an LLM-extracted fact is
-    /// archived but unreachable through the real Reasoning/Recall pipeline.
-    ///
-    /// The stored Content is prefixed with the fact's own path
-    /// ("path/content", one continuous path down to the value) regardless of
-    /// which path a given record was filed under — so whichever query
-    /// matches, what comes back still shows the fact's full structured
-    /// lineage, not just its bare value. This is also what makes
-    /// IntentAgent's response contract rule about "system/" vs "person/"
-    /// path prefixes actually have something to key off of.
+    /// Importance is scored per an explicit priority list rather than left
+    /// to the LLM to infer a numeric scale: a name is more durably useful
+    /// than a birthday/title, which in turn outranks an address.
     /// </summary>
     private static List<ArchiveRecord> ParseFacts(string response, DateTimeOffset timestamp)
     {
         var records = new List<ArchiveRecord>();
         foreach (var line in response.Split('\n'))
         {
-            var separator = line.IndexOf(':');
-            if (separator <= 0)
+            var fields = ParseFields(line);
+            if (fields is null)
             {
                 continue;
             }
 
-            var path = line[..separator].Trim();
-            var content = line[(separator + 1)..].Trim();
-            if (path.Length == 0 || content.Length == 0)
-            {
-                continue;
-            }
-
-            var labeledContent = $"{path}/{content}";
-            var paths = SignificantWords.Extract(content).Append(path).Distinct();
-            records.AddRange(paths.Select(p => new ArchiveRecord(p, labeledContent, timestamp)));
+            var (category, topic, subtopic, subject, key, value) = fields.Value;
+            var importance = Importance(key);
+            records.Add(new ArchiveRecord(category, topic, subtopic, subject, key, value, timestamp, ArchiveDomain.External, importance));
         }
 
         return records;
+    }
+
+    private static (string Category, string Topic, string Subtopic, string Subject, string Key, string Value)? ParseFields(string line)
+    {
+        // Field values may contain spaces (e.g. "subject=marcus holth"), so
+        // split on the fixed key= markers rather than whitespace.
+        var keys = new[] { "category=", "topic=", "subtopic=", "subject=", "key=", "value=" };
+        var indices = keys.Select(k => line.IndexOf(k, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (indices.Any(i => i < 0))
+        {
+            return null;
+        }
+
+        var order = Enumerable.Range(0, keys.Length).OrderBy(i => indices[i]).ToArray();
+        var values = new string[keys.Length];
+        for (var i = 0; i < order.Length; i++)
+        {
+            var idx = order[i];
+            var start = indices[idx] + keys[idx].Length;
+            var end = i + 1 < order.Length ? indices[order[i + 1]] : line.Length;
+            values[idx] = line[start..end].Trim();
+        }
+
+        if (values.Any(v => v.Length == 0))
+        {
+            return null;
+        }
+
+        return (values[0], values[1], values[2], values[3], values[4], values[5]);
+    }
+
+    private static double Importance(string key)
+    {
+        var lowered = key.ToLowerInvariant();
+        if (lowered.Contains("name"))
+        {
+            return 0.8;
+        }
+
+        if (lowered.Contains("birth") || lowered.Contains("title"))
+        {
+            return 0.6;
+        }
+
+        if (lowered.Contains("address"))
+        {
+            return 0.4;
+        }
+
+        return 0.5;
     }
 }

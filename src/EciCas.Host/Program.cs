@@ -58,6 +58,7 @@ builder.Services.Configure<RoutingManifest>(builder.Configuration.GetSection("Ro
 builder.Services.Configure<SubstrateOptions>(builder.Configuration.GetSection("Substrates"));
 builder.Services.Configure<AgentSubstrateManifest>(builder.Configuration.GetSection("AgentSubstrates"));
 builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Recall"));
+builder.Services.Configure<ReasoningOptions>(builder.Configuration.GetSection("Reasoning"));
 builder.Services.Configure<ConsolidatorOptions>(builder.Configuration.GetSection("Consolidator"));
 builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("Reflection"));
 builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
@@ -100,14 +101,21 @@ builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();
 var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");
 builder.Services.AddSingleton(SecurityRuleSet.Load(securityRulesPath));
 
-var archivePath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Path"] ?? "memory.jsonl");
-var seedMemoryPath = Path.Combine(AppContext.BaseDirectory, "config", "seed-memory.jsonl");
-if (!File.Exists(archivePath) && File.Exists(seedMemoryPath))
+var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Path"] ?? "memory.jsonl");
+builder.Services.AddSingleton<IAgentStateStore>(new JsonlAgentStateStore(agentStatePath));
+
+var archiveDirectory = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Directory"] ?? "archive");
+var seedNeeded = !File.Exists(Path.Combine(archiveDirectory, "system.parquet"));
+var archiveStore = new ParquetArchiveStore(archiveDirectory);
+if (seedNeeded)
 {
-    File.Copy(seedMemoryPath, archivePath);
+    var seedRecord = new ArchiveRecord(
+        Category: "system", Topic: "identity", Subtopic: "persona", Subject: "this", Key: "name", Value: "morrow",
+        Timestamp: DateTimeOffset.UtcNow, Domain: ArchiveDomain.External, Importance: 0.5);
+    await archiveStore.WriteAsync([seedRecord], CancellationToken.None);
 }
 
-builder.Services.AddSingleton<IArchiveStore>(new JsonlArchiveStore(archivePath));
+builder.Services.AddSingleton<IArchiveStore>(archiveStore);
 
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);

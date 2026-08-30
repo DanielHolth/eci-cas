@@ -2,7 +2,6 @@ using System.Text;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Reasoning;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Self;
 using EciCas.Bus;
@@ -47,10 +46,10 @@ public sealed class IntentAgent : CognitiveAgent<string>
         - Never start with "You asked", "You mentioned", "I think you're asking",
           or any paraphrase of what the human said.
         - Talk like a person, not a system explaining itself.
-        - A Knowledge fact whose path starts with "system/" describes YOU (your
-          own name, traits, preferences) — never attribute it to the human. A
-          fact whose path starts with "person/" describes the human or someone
-          they've told you about.
+        - A recalled fact with category "system" describes YOU (your own name,
+          traits, preferences) — never attribute it to the human. A fact with
+          category "person" describes the human or someone they've told you
+          about.
         """;
 
     private readonly IMessageBus _bus;
@@ -71,9 +70,8 @@ public sealed class IntentAgent : CognitiveAgent<string>
             .Append("\n\nReply to: ").Append(text);
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
-        AppendAdvice(prompt, "Reasoning", envelope.Meta.Get<string>(ReasoningAgent.AdviceKey));
-        AppendAdvice(prompt, "Recall", envelope.Meta.Get<string>(RecallAgent.ResultsKey));
         AppendAdvice(prompt, "Self", envelope.Meta.Get<string>(SelfAgent.AdviceKey));
+        AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey));
 
         var revisionConcern = envelope.Meta.Get<string>(GovernanceAgent.RevisionConcernKey);
         if (!string.IsNullOrEmpty(revisionConcern))
@@ -92,20 +90,29 @@ public sealed class IntentAgent : CognitiveAgent<string>
         }
     }
 
+    /// <summary>
+    /// Recall's recalled facts as one section, already sorted by Importance —
+    /// no External/Internal split. A Category=self fact naturally reads as
+    /// the persona's own prior thought, a Category=person/other fact as
+    /// stated information, without a separate instructed section.
+    /// </summary>
+    private static void AppendRecalledFacts(StringBuilder prompt, IReadOnlyList<ArchiveRecord>? facts)
+    {
+        if (facts is null || facts.Count == 0)
+        {
+            return;
+        }
+
+        var joined = string.Join("; ", facts.Select(f => $"[{f.Category}] {f.Subject} {f.Key} = {f.Value}"));
+        prompt.Append(" [Recall: ").Append(PromptCap.Apply(joined)).Append(']');
+    }
+
     protected override string ParseResult(SubstrateResult result) => result.Text.Trim();
 
     protected override string FallbackResult(Envelope envelope) => "I'm having trouble thinking that through right now.";
 
     protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics)
     {
-        // Only a real substrate reply can parrot — FallbackResult is fixed
-        // text with nothing upstream to echo, so this can't loop back into
-        // itself when CognitiveAgent<T>'s catch re-invokes Publish below.
-        if (diagnostics is not null && ParrotGuard.IsParroting(result, envelope.Meta.Get<string>(ReasoningAgent.AdviceKey)))
-        {
-            throw new InvalidOperationException($"{Name} response parrots Reasoning's advisory instead of voicing it: {result[..Math.Min(result.Length, 200)]}");
-        }
-
         var proposal = envelope.Derive(Topics.Proposal, Name, envelope.Severity, MetaBag.Empty.With(ReplyKey, result));
         _bus.Publish(Topics.Proposal, proposal);
     }

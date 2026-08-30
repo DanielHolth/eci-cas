@@ -3,12 +3,12 @@ using EciCas.Core;
 
 namespace EciCas.Tests.Agents;
 
-public class JsonlArchiveStoreTests
+public class JsonlAgentStateStoreTests
 {
     [Fact]
     public async Task LookupAsync_WithNoFile_ReturnsEmpty()
     {
-        var store = new JsonlArchiveStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jsonl"));
+        var store = new JsonlAgentStateStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jsonl"));
         var results = await store.LookupAsync(["self/identity"], maxPerPath: 3, CancellationToken.None);
         Assert.Empty(results);
     }
@@ -16,13 +16,13 @@ public class JsonlArchiveStoreTests
     [Fact]
     public async Task WriteThenLookup_ReturnsNewestFirst_CappedPerPath()
     {
-        var store = new JsonlArchiveStore(Path.GetTempFileName());
+        var store = new JsonlAgentStateStore(Path.GetTempFileName());
 
         await store.WriteAsync(
             [
-                new ArchiveRecord("turn", "first", DateTimeOffset.UtcNow),
-                new ArchiveRecord("turn", "second", DateTimeOffset.UtcNow),
-                new ArchiveRecord("other", "unrelated", DateTimeOffset.UtcNow),
+                new AgentStateRecord("turn", "first", DateTimeOffset.UtcNow),
+                new AgentStateRecord("turn", "second", DateTimeOffset.UtcNow),
+                new AgentStateRecord("other", "unrelated", DateTimeOffset.UtcNow),
             ],
             CancellationToken.None);
 
