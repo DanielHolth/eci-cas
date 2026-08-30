@@ -121,6 +121,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         try
         {
             var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             return ParseFacts(result.Text, envelope.Timestamp);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
