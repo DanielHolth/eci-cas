@@ -81,20 +81,36 @@ worked example, every field filled:
 ```
 category=person  topic=family  subtopic=son  subject=marcus holth
 key=birthdate  value=2020-08-28
+
+category=event  topic=wedding  subtopic=family  subject=maria holth
+key=location  value=drammen kirke
 ```
+
+The second example is deliberate: `person`/`family` and `event`/`wedding`
+are two structurally different category types (an entity-centered record vs.
+an occurrence-centered one) — the writer needs both shapes to learn the
+category/topic split isn't just "person stuff," it's a real taxonomy.
 
 - `Category` — 1 word.
 - `Topic` — 1 word.
-- `Subtopic`, `Subject` — 1-2 words each.
+- `Subtopic`, `Subject` — 1-2 words each. `Subject` is usually a unique name
+  or entity (a person, a specific event); `Key` is the attribute of that
+  subject being recorded (`birthdate`, `location`) — the two play different
+  roles even though both are short.
 - `Key` — 1-3 words.
 - `Value` — 1-5 content words (semantically-loaded terms only — no stop/
   filler words like "is"/"it"/"the", and no full sentences).
 - `Timestamp`.
 - `Domain` (`Internal`/`External`) — now load-bearing: gates which of
   Intent's two result arrays (see below) a record surfaces in.
-- `Importance` (0.0-1.0) — set by the writer (Consolidator/Reflection) at
-  write time; a name outranks a birthdate which outranks a home address, as
-  a guide for the writer LLM's own judgment. Used to pre-trim a topic's
+- `Importance` (0.0-1.0) — set by the writer at write time. `Consolidator`
+  scores it per the rules the user gave (name > birthday/title > address,
+  etc. — the writer's own judgment against that ordering, not a fixed
+  lookup table). `Reflection`'s self-generated ideas always get a fixed
+  score instead of a rules-based one: 0.1 for an idea archived quietly,
+  0.2 for one judged worthy of pushing back onto `events.perception` — internal
+  ideas stay low-importance by construction, so they don't crowd out real
+  facts in a topic's importance-sorted trim. Used to pre-trim a topic's
   candidate rows deterministically before any knowledge LLM sees them, so a
   topic with 10,000 rows doesn't just get truncated by recency.
 
@@ -105,11 +121,27 @@ writers, both are shown the current bundle's existing category/topic
 selections (the same data Intent receives) and instructed to match an
 existing pair before inventing a new one.
 
-**Category/topic index.** One `index.parquet` holding the distinct
-`(category, topic)` pairs plus each category's Parquet filename —
-incrementally updated on write, cached in memory the same way `SelfAgent`
-caches persona state (invalidated on the write epoch broadcast on
-`system.control`, not re-read from disk every event).
+**Consolidator gets the strictest writer instructions.** "Strict" doesn't
+mean a content blocklist — it means enforced discipline on which fields are
+*structural* vs. *free*: `Category`/`Topic`/`Subtopic` must follow
+consistent, matched-against-the-existing-index conventions (this is what
+keeps the taxonomy from drifting across a model swap — the rule is about
+form, not content), while `Subject`/`Key` have more latitude since they're
+naming a specific real-world entity/attribute pair that can't be
+pre-enumerated. This distinction (rigid structural fields vs. flexible
+content fields) needs to be explicit in Consolidator's prompt, not just
+implied by field length limits, so a weaker substitute model still holds
+the taxonomy together.
+
+**Category/topic/subtopic index.** One `index.parquet` holding the distinct
+`(category, topic, subtopic)` triples present in the archive, plus each
+category's Parquet filename. Read once at boot to hydrate an in-memory
+cache (the selector LLM needs a populated index on the very first event,
+not just after the first live write) and then updated in-memory on every
+subsequent write — appended to, not re-read from disk. Same lifecycle as
+`SelfAgent`'s persona cache otherwise: invalidated/refreshed on the write
+epoch broadcast on `system.control` if a write happened out from under the
+in-memory copy (e.g. the seed import), never re-read from disk per event.
 
 **Reasoning — selector only, no advisory text.** `ReasoningAgent` drops its
 current "offer relevant reasoning" advisory sentence entirely — Intent now
@@ -123,7 +155,13 @@ appearing literally in the question.
 each of Reasoning's X selected `(category, topic, subtopic)` triples,
 `RecallAgent` opens that category's Parquet shard, pre-trims candidate rows
 by `Importance` down to `MaxPerTopic`, and fires one substrate call scoped
-to *only* that triple's candidates, picking Y relevant rows. Implementation
+to *only* that triple's candidates, picking Y relevant rows. The prompt for
+that call shows **only `Subject`/`Key`/`Value`** — `Category`/`Topic`/
+`Subtopic` are withheld (the call is already scoped to one fixed triple, so
+repeating them is redundant) and `Timestamp`/`Domain`/`Importance` are
+withheld too, to keep the knowledge LLM's context as lean as possible. Rows
+are still handed to it pre-sorted by `Importance` descending (Archive does
+the sort; the LLM never needs the raw score to pick well). Implementation
 detail: this is X parallel calls made from inside one `RecallAgent.HandleAsync`
 (matching how the existing per-path lookup already works), not X separate
 bus agents or a Governance roster change — each call's prompt and result
