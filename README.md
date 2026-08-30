@@ -85,9 +85,11 @@ before the bus starts rather than silently falling back to mock.
 
 To swap a whole bundle of provider/model choices at once, set the `Tier`
 config value (env var or `--Tier=X`) to layer in `appsettings.<Tier>.json`
-over the defaults — see `appsettings.Minimal.json`/`Budget.json`/`Super.json`
-for examples. This is an operator-only escape hatch for now: nothing
-automated edits this config or restarts the process on your behalf.
+over the defaults — `Minimal` (all mock, $0), `Budget` (cheap live models),
+`Default` (the real vendor/model mix — Mistral for `fast-*`, OpenAI for
+`slow-*`), and `Super` (highest-tier models). This is an operator-only
+escape hatch for now: nothing automated edits this config or restarts the
+process on your behalf.
 
 If `dotnet run` throws `Routing manifest drift` or `Agent substrate manifest
 drift` on startup, it's almost always a stale build — the agent roster or
