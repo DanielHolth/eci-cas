@@ -159,7 +159,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     private static string BuildBatchPrompt(List<BufferedConclusion> batch)
     {
-        var turns = string.Join("\n", batch.Select((b, i) => $"{i + 1}. {b.ReplyText}"));
+        var turns = string.Join("\n", batch.Select((b, i) => $"{i + 1}. {PromptCap.Apply(b.ReplyText)}"));
         return $"""
             From these recent replies, propose follow-up thoughts or questions worth
             exploring later. Respond with zero or more lines, each formatted as

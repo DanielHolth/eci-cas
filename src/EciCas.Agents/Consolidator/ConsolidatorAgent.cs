@@ -103,7 +103,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private async Task<IReadOnlyList<ArchiveRecord>> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
     {
-        var known = envelope.Meta.Get<string>(RecallAgent.ResultsKey) ?? "nothing on file";
+        var known = PromptCap.Apply(envelope.Meta.Get<string>(RecallAgent.ResultsKey) ?? "nothing on file");
+        text = PromptCap.Apply(text);
         var prompt = $"""
             Known facts under related topics: {known}
 

@@ -65,7 +65,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     protected override string BuildPrompt(Envelope envelope)
     {
-        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
+        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
 
         var prompt = new StringBuilder(SystemInstruction).Append('\n').Append(ResponseContract)
             .Append("\n\nReply to: ").Append(text);
@@ -88,7 +88,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
     {
         if (!string.IsNullOrEmpty(advice))
         {
-            prompt.Append(" [").Append(source).Append(": ").Append(advice).Append(']');
+            prompt.Append(" [").Append(source).Append(": ").Append(PromptCap.Apply(advice)).Append(']');
         }
     }
 

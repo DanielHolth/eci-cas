@@ -7,11 +7,14 @@ using Microsoft.Extensions.Options;
 namespace EciCas.Agents.Recall;
 
 /// <summary>
-/// Thin bus adapter over IArchiveStore: applies tier policy (MaxPerPath),
-/// runs the store's internal N-way lookup, and folds the result into
-/// exactly one advisory. Deterministic tier — no substrate call. See plan
-/// §3.3/§3.4: the store does the parallel work, this agent only decides how
-/// much of it to ask for.
+/// Thin bus adapter over IArchiveStore: applies tier policy (MaxPaths caps
+/// how many of Reasoning's proposed paths are queried at all, MaxPerPath
+/// caps records per path — the same two knobs as the Python prototype's
+/// knowledge-swarm SWARM_TIERS table, scaled down for a store with no
+/// downstream relevance filter), runs the store's internal N-way lookup,
+/// and folds the result into exactly one advisory. Deterministic tier — no
+/// substrate call. See plan §3.3/§3.4: the store does the parallel work,
+/// this agent only decides how much of it to ask for.
 /// </summary>
 public sealed class RecallAgent : AgentBase
 {
@@ -35,7 +38,8 @@ public sealed class RecallAgent : AgentBase
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         var paths = envelope.Meta.Get<string[]>(ReasoningAgent.LookupPathsKey) ?? [];
-        var records = await _store.LookupAsync(paths, _options.MaxPerPath, cancellationToken).ConfigureAwait(false);
+        var activePaths = paths.Length > _options.MaxPaths ? paths[.._options.MaxPaths] : paths;
+        var records = await _store.LookupAsync(activePaths, _options.MaxPerPath, cancellationToken).ConfigureAwait(false);
 
         var text = records.Count == 0
             ? "nothing on file"

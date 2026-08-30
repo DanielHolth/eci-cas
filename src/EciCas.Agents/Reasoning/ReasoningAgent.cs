@@ -30,7 +30,7 @@ public sealed class ReasoningAgent : CognitiveAgent<string>
 
     protected override string BuildPrompt(Envelope envelope)
     {
-        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
+        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
         return $"In one concise sentence, offer relevant reasoning or a useful angle on: {text}";
     }
 

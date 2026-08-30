@@ -37,6 +37,18 @@ public sealed class ImpulseAgent : AgentBase
 
     private static readonly string[] CriticalTriggers = ["help", "emergency", "urgent"];
 
+    /// <summary>
+    /// §5.4's Somatic shortcut, scoped down: Python ties this to a physical
+    /// Sensory input tagging approval/disapproval, with Impulse shifting
+    /// instantly and Intent reviewing alignment retroactively. No physical
+    /// sensor channel exists here, and there's no case for porting one just
+    /// for this — a keyword flag on the perceived text, same discipline as
+    /// CriticalTriggers above, gives the same "instant shift, no Intent
+    /// pre-approval" shape without a state machine.
+    /// </summary>
+    private static readonly string[] PositiveTriggers = ["thanks", "thank you", "great job", "well done", "awesome"];
+    private static readonly string[] NegativeTriggers = ["that's wrong", "that's not right", "terrible", "bad job"];
+
     /// <summary>Fixed, named nudge applied on a critical event — same discipline as Python's FRUSTRATION_NUDGE: something may ask for a shift, but the number that lands is written here, in code.</summary>
     private static readonly DriveVectors CriticalNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0.15, SocialDrive: 0, Temperature: -0.05);
 
@@ -47,6 +59,12 @@ public sealed class ImpulseAgent : AgentBase
     /// signals a blocked exchange over system.control, never a direct call.
     /// </summary>
     private static readonly DriveVectors FrustrationNudge = new(Curiosity: 0, Fatigue: 0.05, Urgency: 0.15, SocialDrive: 0, Temperature: -0.05);
+
+    /// <summary>Direct approval, applied instantly — warmer and less fatigued, no urgency change.</summary>
+    private static readonly DriveVectors PositiveNudge = new(Curiosity: 0.05, Fatigue: -0.05, Urgency: 0, SocialDrive: 0.1, Temperature: 0.1);
+
+    /// <summary>Direct disapproval, applied instantly — cooler and a little more fatigued, smaller than a security block.</summary>
+    private static readonly DriveVectors NegativeNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0, SocialDrive: -0.05, Temperature: -0.1);
 
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
@@ -93,6 +111,15 @@ public sealed class ImpulseAgent : AgentBase
             _bus.Publish(Topics.Proposal, proposal);
 
             await NudgeAsync(CriticalNudge, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (PositiveTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
+        {
+            await NudgeAsync(PositiveNudge, cancellationToken).ConfigureAwait(false);
+        }
+        else if (NegativeTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
+        {
+            await NudgeAsync(NegativeNudge, cancellationToken).ConfigureAwait(false);
         }
     }
 

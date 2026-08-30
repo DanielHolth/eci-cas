@@ -73,6 +73,39 @@ public class ImpulseAgentTests
     }
 
     [Fact]
+    public async Task WhenTextIsApproving_NudgesWarmerInstantly()
+    {
+        var (agent, _, _, store) = Create();
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "great job on that"));
+
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var records = await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None);
+        Assert.Single(records);
+        var vectors = JsonSerializer.Deserialize<DriveVectors>(records[0].Content)!;
+        var baseline = new DriveVectors();
+        Assert.True(vectors.Temperature > baseline.Temperature);
+        Assert.True(vectors.SocialDrive > baseline.SocialDrive);
+    }
+
+    [Fact]
+    public async Task WhenTextIsDisapproving_NudgesCoolerInstantly()
+    {
+        var (agent, _, _, store) = Create();
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "that's wrong, try again"));
+
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var records = await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None);
+        Assert.Single(records);
+        var vectors = JsonSerializer.Deserialize<DriveVectors>(records[0].Content)!;
+        var baseline = new DriveVectors();
+        Assert.True(vectors.Temperature < baseline.Temperature);
+    }
+
+    [Fact]
     public async Task WhenTextIsRoutine_DoesNotWriteDriveVectors()
     {
         var (agent, _, _, store) = Create();
