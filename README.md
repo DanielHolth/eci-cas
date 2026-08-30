@@ -103,6 +103,7 @@ dotnet clean src/EciCas.Host && dotnet build src/EciCas.Host && dotnet run --pro
 
 - [`docs/architecture.md`](docs/architecture.md) — system design: agent roster, bus mechanics, storage, verification
 - [`docs/roadmap.md`](docs/roadmap.md) — what's ahead, open design questions
+- [`docs/gap-analysis.md`](docs/gap-analysis.md) — business-logic parity vs. the Python prototype
 - [`AGENTS.md`](AGENTS.md) — standing engineering rules (loose coupling/async is non-negotiable)
 
 The Python prototype this project replaced lives, unmodified, in a

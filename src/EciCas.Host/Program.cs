@@ -38,6 +38,13 @@ if (!string.IsNullOrEmpty(tier))
     builder.Configuration.AddJsonFile($"appsettings.{tier}.json", optional: true, reloadOnChange: false);
 }
 
+// Shorthand for Console:Verbose, same spirit as the bare Tier switch above.
+var verbose = builder.Configuration["Verbose"];
+if (!string.IsNullOrEmpty(verbose))
+{
+    builder.Configuration["Console:Verbose"] = verbose;
+}
+
 builder.WebHost.UseUrls(builder.Configuration["Surface:Url"] ?? "http://localhost:5179");
 
 builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
@@ -53,6 +60,7 @@ builder.Services.Configure<AgentSubstrateManifest>(builder.Configuration.GetSect
 builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Recall"));
 builder.Services.Configure<ConsolidatorOptions>(builder.Configuration.GetSection("Consolidator"));
 builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("Reflection"));
+builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
 
 builder.Services.AddSingleton<BusActivityTracker>();
 builder.Services.AddSingleton<IMessageBus, ChannelBus>();

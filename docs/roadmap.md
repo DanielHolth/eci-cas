@@ -54,6 +54,17 @@ diary-aware knowledge archiving
 Profiles and auth are Morrow-ECI surface features; diary is a
 Recall-agent feature that can be prototyped independently.
 
+## Data quality
+
+**Normalize archive writes to English.** Consolidator and Reflection both
+write `ArchiveRecord`s straight from whatever language the turn (or the
+substrate's own reply) happened to be in. A user (or a persona) switching
+languages mid-conversation currently produces separate archive entries for
+the same fact under different words, since lookup is keyword/path-based, not
+semantic — no dedup happens across languages. Translating to English before
+write (or before path/keyword extraction) would keep one fact as one entry
+regardless of what language it arrived in.
+
 ## Open design questions
 
 **Swappable personas.** Switching which persona is active ("which

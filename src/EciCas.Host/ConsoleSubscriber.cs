@@ -1,37 +1,69 @@
 using EciCas.Agents.Intent;
+using EciCas.Agents.Recall;
+using EciCas.Agents.Security;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Host;
 
 /// <summary>
-/// An ordinary subscriber, not a display hook baked into any agent. Prints
-/// the voiced answer when it sees events.action; every other envelope is a
-/// one-line trace. No agent knows this exists.
+/// An ordinary subscriber, not a display hook baked into any agent. No agent
+/// knows this exists. By default prints only what a user actually cares
+/// about per turn — what Recall read, what Intent said or Security blocked
+/// (both come off the same events.action envelope) — leaving substrate cost
+/// and Consolidator/Reflection writes to their own ILogger lines (see
+/// appsettings.json's Logging:LogLevel). Verbose restores the old
+/// exhaustive one-line-per-envelope trace for debugging.
 /// </summary>
 public sealed class ConsoleSubscriber : AgentBase
 {
-    public ConsoleSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<ConsoleSubscriber> logger)
-        : base(bus, activity, logger)
-    {
-    }
+    private readonly ConsoleOptions _options;
+
+    public ConsoleSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<ConsoleSubscriber> logger, IOptions<ConsoleOptions> options)
+        : base(bus, activity, logger) => _options = options.Value;
 
     public override string Name => "ConsoleSubscriber";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.All];
 
     public override Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        if (_options.Verbose)
+        {
+            PrintVerbose(envelope);
+            return Task.CompletedTask;
+        }
+
+        switch (envelope.Topic)
+        {
+            case Topics.Advisories when envelope.PublishedBy == "Recall":
+                Console.WriteLine($"  [read] {envelope.Meta.Get<string>(RecallAgent.ResultsKey)}");
+                break;
+            case Topics.Action:
+                PrintAction(envelope);
+                break;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static void PrintAction(Envelope envelope)
+    {
+        var reply = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
+        var verdict = envelope.Meta.Get<Verdict>(SecurityAgent.VerdictKey);
+        Console.WriteLine(verdict == Verdict.Red ? $"  [blocked] {reply}" : $"> {reply}");
+    }
+
+    private static void PrintVerbose(Envelope envelope)
+    {
         if (envelope.Topic == Topics.Action)
         {
-            var reply = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
-            Console.WriteLine($"> {reply}");
+            PrintAction(envelope);
         }
         else
         {
             Console.WriteLine($"  [{envelope.Topic}] {envelope.PublishedBy} ({envelope.Severity})");
         }
-
-        return Task.CompletedTask;
     }
 }

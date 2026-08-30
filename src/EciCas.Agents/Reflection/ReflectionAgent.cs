@@ -21,12 +21,14 @@ public sealed class ReflectionAgent : CognitiveAgent<string>
     public const string ReflectedKind = "Reflected";
 
     private readonly IMessageBus _bus;
+    private readonly ILogger<ReflectionAgent> _logger;
     private readonly ReflectionOptions _options;
 
     public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options)
         : base(bus, activity, logger, substrate, agentSubstrates)
     {
         _bus = bus;
+        _logger = logger;
         _options = options.Value;
     }
 
@@ -62,6 +64,11 @@ public sealed class ReflectionAgent : CognitiveAgent<string>
     protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics)
     {
         PublishReflected(envelope);
+
+        if (!string.IsNullOrEmpty(result))
+        {
+            _logger.LogInformation("{Agent} wrote idea: {Idea}", Name, result);
+        }
 
         // A new arc, not a continuation: this idea starts its own correlation
         // (Envelope.Create), one generation higher than the conclusion that

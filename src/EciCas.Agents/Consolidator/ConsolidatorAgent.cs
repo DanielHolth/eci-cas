@@ -91,6 +91,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         }
 
         await _store.WriteAsync(batch, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("{Agent} wrote {Count} records: {Paths}",
+            Name, batch.Count, string.Join(", ", batch.Select(r => r.Path)));
 
         var epochId = Guid.NewGuid();
         var written = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
