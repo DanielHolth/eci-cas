@@ -101,6 +101,12 @@ var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configura
 builder.Services.AddSingleton(SecurityRuleSet.Load(securityRulesPath));
 
 var archivePath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Path"] ?? "memory.jsonl");
+var seedMemoryPath = Path.Combine(AppContext.BaseDirectory, "config", "seed-memory.jsonl");
+if (!File.Exists(archivePath) && File.Exists(seedMemoryPath))
+{
+    File.Copy(seedMemoryPath, archivePath);
+}
+
 builder.Services.AddSingleton<IArchiveStore>(new JsonlArchiveStore(archivePath));
 
 RegisterAgent<PerceptionAgent>(builder.Services);

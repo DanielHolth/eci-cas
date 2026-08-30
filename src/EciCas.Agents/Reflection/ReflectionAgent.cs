@@ -1,4 +1,6 @@
+using System.Text.Json;
 using EciCas.Agents.Consolidator;
+using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
@@ -9,25 +11,49 @@ using Microsoft.Extensions.Options;
 namespace EciCas.Agents.Reflection;
 
 /// <summary>
-/// Publishes self-generated ideas back onto events.perception — downstream
-/// nothing knows the difference from external input (plan §3.6). Guarded by
-/// Generation so an idea -> arc -> conclusion -> idea chain can't loop
-/// forever spending on LLM calls; capped at ReflectionOptions.MaxIdeaGeneration.
+/// Buffers concluded turns (same _pending shape as ConsolidatorAgent) and,
+/// once ReflectionOptions.BatchSize accumulates, makes one substrate call
+/// scoring candidate follow-up ideas. The best-ranked candidate is pushed
+/// back onto events.perception — downstream nothing knows the difference
+/// from external input (plan §3.6) — only when persona drive-vector state
+/// (read from IArchiveStore at ImpulseAgent.DrivePath, never a direct
+/// reference to ImpulseAgent) reads eager enough; otherwise it's archived
+/// quietly like every other candidate. See roadmap.md's "Reflection Agent
+/// redesign (drive-gated, batched)".
+///
+/// Implements ICognitiveAgent directly rather than inheriting
+/// CognitiveAgent&lt;T&gt;: one substrate call per BATCH, not per envelope,
+/// doesn't fit that base class's model — same rationale ConsolidatorAgent's
+/// own doc comment gives for its choice.
+///
+/// Generation still guards against an idea -> arc -> conclusion -> idea loop
+/// spending forever on LLM calls: a batch whose max generation is already at
+/// MaxIdeaGeneration is scored (so nothing is lost) but never pushed.
 /// </summary>
-public sealed class ReflectionAgent : CognitiveAgent<string>
+public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 {
     public const string TriggeredByKey = "perception.triggered_by";
     public const string SourceTypeKey = "perception.source_type";
     public const string ReflectedKind = "Reflected";
+    private const string ReflectionPathAnchor = "reflection";
 
     private readonly IMessageBus _bus;
-    private readonly ILogger<ReflectionAgent> _logger;
+    private readonly IArchiveStore _store;
+    private readonly ISubstrateProvider _substrate;
+    private readonly AgentSubstrateManifest _agentSubstrates;
+    private readonly ILogger _logger;
     private readonly ReflectionOptions _options;
+    private readonly List<BufferedConclusion> _pending = [];
+    private readonly object _pendingLock = new();
 
-    public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options)
-        : base(bus, activity, logger, substrate, agentSubstrates)
+    public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, IArchiveStore store,
+        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options)
+        : base(bus, activity, logger)
     {
         _bus = bus;
+        _store = store;
+        _substrate = substrate;
+        _agentSubstrates = agentSubstrates.Value;
         _logger = logger;
         _options = options.Value;
     }
@@ -35,55 +61,139 @@ public sealed class ReflectionAgent : CognitiveAgent<string>
     public override string Name => "Reflection";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Conclusion];
 
-    protected override FallbackPosture Fallback => FallbackPosture.Closed;
-
-    protected override string BuildPrompt(Envelope envelope)
-    {
-        var reply = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
-        return $"In one short sentence, note a follow-up thought or question worth exploring later, prompted by having just said: {reply}";
-    }
-
-    protected override string ParseResult(SubstrateResult result) => result.Text.Trim();
-
-    protected override string FallbackResult(Envelope envelope) => string.Empty;
-
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (envelope.Generation >= _options.MaxIdeaGeneration)
+        var reply = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
+
+        List<BufferedConclusion>? batch = null;
+        lock (_pendingLock)
         {
-            // At the cap, no idea can be spawned regardless of what the
-            // substrate would say — skip the call entirely rather than
-            // paying for a result Publish would just discard.
-            PublishReflected(envelope);
+            _pending.Add(new BufferedConclusion(reply, envelope.Generation));
+            if (_pending.Count >= _options.BatchSize)
+            {
+                batch = [.. _pending];
+                _pending.Clear();
+            }
+        }
+
+        if (batch is null)
+        {
             return;
         }
 
-        await base.HandleAsync(envelope, cancellationToken).ConfigureAwait(false);
+        await FlushAsync(batch, cancellationToken).ConfigureAwait(false);
     }
 
-    protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics)
+    private async Task FlushAsync(List<BufferedConclusion> batch, CancellationToken cancellationToken)
     {
-        PublishReflected(envelope);
-
-        if (!string.IsNullOrEmpty(result))
+        if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
         {
-            _logger.LogInformation("{Agent} wrote idea: {Idea}", Name, result);
+            throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
-        // A new arc, not a continuation: this idea starts its own correlation
-        // (Envelope.Create), one generation higher than the conclusion that
-        // prompted it — the loop guard the generation cap enforces in
-        // HandleAsync above, before this method is ever called.
-        var idea = Envelope.Create(Topics.Perception, Name, Severity.Restful,
-            MetaBag.Empty.With(PerceptionAgent.TextKey, result).With(TriggeredByKey, "self").With(SourceTypeKey, "idea"),
-            generation: envelope.Generation + 1);
-        _bus.Publish(Topics.Perception, idea);
-    }
+        List<Candidate> candidates;
+        try
+        {
+            var result = await _substrate.CompleteAsync(entry.Class, BuildBatchPrompt(batch), cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            candidates = ParseCandidates(result.Text);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Closed fallback posture: a broken substrate call skips this
+            // flush entirely — nothing pushed, nothing archived — rather
+            // than guessing at an idea. Matches ConsolidatorAgent's
+            // ExtractFactsAsync swallow-and-log for the same failure mode.
+            _logger.LogWarning(ex, "{Agent} batch-scoring substrate call failed, skipping flush", Name);
+            return;
+        }
 
-    private void PublishReflected(Envelope envelope)
-    {
-        var reflected = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        var best = candidates.MaxBy(c => c.Score)!;
+        var maxGeneration = batch.Max(b => b.Generation);
+        var eagerness = await GetEagernessAsync(cancellationToken).ConfigureAwait(false);
+        var shouldPush = maxGeneration < _options.MaxIdeaGeneration && eagerness >= _options.EagernessThreshold;
+
+        var now = DateTimeOffset.UtcNow;
+        // Same multi-path write ConsolidatorAgent does: one record per
+        // significant-word path (plus the fixed "reflection" anchor), so a
+        // later Reasoning-proposed lookup on any of those words intersects
+        // this idea — see §6 of the redesign plan.
+        var internalRecords = candidates
+            .SelectMany(candidate => SignificantWords.Extract(candidate.Idea).Append(ReflectionPathAnchor).Distinct()
+                .Select(path => new ArchiveRecord(path, candidate.Idea, now, ArchiveDomain.Internal)))
+            .ToList();
+        await _store.WriteAsync(internalRecords, cancellationToken).ConfigureAwait(false);
+
+        if (shouldPush)
+        {
+            _logger.LogInformation("{Agent} pushed idea: {Idea}", Name, best.Idea);
+            var idea = Envelope.Create(Topics.Perception, Name, Severity.Restful,
+                MetaBag.Empty.With(PerceptionAgent.TextKey, best.Idea).With(TriggeredByKey, "self").With(SourceTypeKey, "idea"),
+                generation: maxGeneration + 1);
+            _bus.Publish(Topics.Perception, idea);
+        }
+
+        var reflected = Envelope.Create(Topics.SystemControl, Name, Severity.Neutral,
             MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectedKind));
         _bus.Publish(Topics.SystemControl, reflected);
     }
+
+    private async Task<double> GetEagernessAsync(CancellationToken cancellationToken)
+    {
+        var records = await _store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
+        var vectors = records.Count > 0
+            ? JsonSerializer.Deserialize<DriveVectors>(records[0].Content) ?? new DriveVectors()
+            : new DriveVectors();
+
+        // Ports Python's `engagement` appraisal axis (curiosity - 0.4*fatigue)
+        // from agents/impulse/agent.py — the closest existing analog to "eager
+        // enough to share an idea"; no new formula invented.
+        return Math.Clamp(vectors.Curiosity - 0.4 * vectors.Fatigue, 0.0, 1.0);
+    }
+
+    private static string BuildBatchPrompt(List<BufferedConclusion> batch)
+    {
+        var turns = string.Join("\n", batch.Select((b, i) => $"{i + 1}. {b.ReplyText}"));
+        return $"""
+            From these recent replies, propose follow-up thoughts or questions worth
+            exploring later. Respond with zero or more lines, each formatted as
+            "score: idea" where score is 0.0-1.0 insight-worthiness (e.g.
+            "0.7: whether the trip dates still work with the deadline"). If nothing
+            stands out, respond with nothing.
+
+            Replies:
+            {turns}
+            """;
+    }
+
+    private static List<Candidate> ParseCandidates(string response)
+    {
+        var candidates = new List<Candidate>();
+        foreach (var line in response.Split('\n'))
+        {
+            var separator = line.IndexOf(':');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var scoreText = line[..separator].Trim();
+            var idea = line[(separator + 1)..].Trim();
+            if (idea.Length > 0 && double.TryParse(scoreText, out var score))
+            {
+                candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), idea));
+            }
+        }
+
+        return candidates;
+    }
+
+    private sealed record BufferedConclusion(string ReplyText, int Generation);
+    private sealed record Candidate(double Score, string Idea);
 }

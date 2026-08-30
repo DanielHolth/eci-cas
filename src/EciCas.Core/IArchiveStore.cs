@@ -13,4 +13,16 @@ public interface IArchiveStore
     Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken);
 }
 
-public sealed record ArchiveRecord(string Path, string Content, DateTimeOffset Timestamp);
+public sealed record ArchiveRecord(string Path, string Content, DateTimeOffset Timestamp, string Domain = ArchiveDomain.External);
+
+/// <summary>
+/// Distinguishes an ordinary fact (Consolidator's keyword writes) from a
+/// derived insight (Reflection's own thoughts) sharing the same path space —
+/// see roadmap.md's "Reflection Agent redesign". Not a retrieval filter:
+/// RecallAgent surfaces both, this only labels origin.
+/// </summary>
+public static class ArchiveDomain
+{
+    public const string External = "external";
+    public const string Internal = "internal";
+}

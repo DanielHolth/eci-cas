@@ -21,6 +21,38 @@ public sealed class IntentAgent : CognitiveAgent<string>
 {
     public const string ReplyKey = "intent.reply";
 
+    /// <summary>
+    /// Ported verbatim from the Python prototype's
+    /// agents/intent/live.py DEFAULT_SYSTEM_INSTRUCTION.
+    /// </summary>
+    private const string SystemInstruction =
+        "You are INTENT: the voice of a multi-agent system. " +
+        "Be concise and natural — short, direct replies. " +
+        "If Security is red, revise or your message is blocked. If Security is " +
+        "yellow, it's a judgment call, not a violation — revise if you can " +
+        "address the concern, but it will go out either way.";
+
+    /// <summary>
+    /// Ported verbatim from the Python prototype's
+    /// agents/intent/contract.py RESPONSE_CONTRACT.
+    /// </summary>
+    private const string ResponseContract = """
+        Reply with your response to the human. Nothing else — no JSON,
+        labels, no preamble, no wrapping.
+
+        RULES:
+        - One sentence, two at most. Never longer.
+        - Answer the question directly. Do not restate it, do not narrate
+          your reasoning, do not ask what the human meant.
+        - Never start with "You asked", "You mentioned", "I think you're asking",
+          or any paraphrase of what the human said.
+        - Talk like a person, not a system explaining itself.
+        - A Knowledge fact whose path starts with "system/" describes YOU (your
+          own name, traits, preferences) — never attribute it to the human. A
+          fact whose path starts with "person/" describes the human or someone
+          they've told you about.
+        """;
+
     private readonly IMessageBus _bus;
 
     public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates)
@@ -35,7 +67,8 @@ public sealed class IntentAgent : CognitiveAgent<string>
     {
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
-        var prompt = new StringBuilder("Reply to: ").Append(text);
+        var prompt = new StringBuilder(SystemInstruction).Append('\n').Append(ResponseContract)
+            .Append("\n\nReply to: ").Append(text);
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Reasoning", envelope.Meta.Get<string>(ReasoningAgent.AdviceKey));

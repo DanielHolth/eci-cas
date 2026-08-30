@@ -15,13 +15,15 @@ namespace EciCas.Agents.Consolidator;
 /// system.control so Self can invalidate its persona cache.
 ///
 /// Implements ICognitiveAgent directly rather than inheriting
-/// CognitiveAgent&lt;T&gt;: the deterministic write always happens regardless
-/// of substrate use, and results batch rather than publish one-shot, neither
-/// of which fits that base class's model. When AgentSubstrates:Agents'
-/// Consolidator entry has UseSubstrate true, an extra substrate call proposes
-/// richer facts grounded in Recall's own lookup results — already present on
-/// this same Bundle envelope via GovernanceAgent.BuildBundleMeta — biasing it
-/// to reuse paths Recall just showed it instead of minting near-duplicates.
+/// CognitiveAgent&lt;T&gt;: results batch rather than publish one-shot, which
+/// doesn't fit that base class's model. Every turn goes through one substrate
+/// call (ExtractFactsAsync) grounded in Recall's own lookup results — already
+/// present on this same Bundle envelope via GovernanceAgent.BuildBundleMeta —
+/// biasing it to reuse paths Recall just showed it instead of minting
+/// near-duplicates. No deterministic fallback write exists: only facts the
+/// LLM judges explicitly stated get archived, matching the Python
+/// prototype's Consolidator, which relies entirely on the same LLM
+/// discipline and may legitimately write nothing for a turn.
 /// </summary>
 public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
 {
@@ -57,22 +59,16 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     {
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
-        // Write under the same significant-word paths Reasoning proposes when
-        // querying (see SignificantWords) so a later lookup actually
-        // intersects what got stored here — plus a fixed "turn" anchor so
-        // short/low-signal turns are still recoverable by category.
-        var paths = SignificantWords.Extract(text).Append("turn").Distinct();
-        var newRecords = paths.Select(path => new ArchiveRecord(path, text, envelope.Timestamp)).ToList();
-
         if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
         {
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
-        if (entry.UseSubstrate)
-        {
-            newRecords.AddRange(await ExtractFactsAsync(envelope, text, entry.Class, cancellationToken).ConfigureAwait(false));
-        }
+        // No deterministic fallback write: only what the LLM judges to be an
+        // explicitly-stated fact gets archived (see ExtractFactsAsync's
+        // prompt) — a turn with nothing worth remembering yields zero
+        // records, same as the Python prototype's Consolidator.
+        var newRecords = await ExtractFactsAsync(envelope, text, entry.Class, cancellationToken).ConfigureAwait(false);
 
         List<ArchiveRecord>? batch = null;
         lock (_pendingLock)
@@ -101,9 +97,9 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     }
 
     /// <summary>
-    /// A broken or unavailable substrate call must never block the
-    /// deterministic write above — errors are logged and swallowed, same
-    /// posture as FallbackPosture.Closed on CognitiveAgent&lt;T&gt;.
+    /// A broken or unavailable substrate call skips this turn's write
+    /// entirely — errors are logged and swallowed, same posture as
+    /// FallbackPosture.Closed on CognitiveAgent&lt;T&gt;.
     /// </summary>
     private async Task<IReadOnlyList<ArchiveRecord>> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
     {
@@ -112,10 +108,12 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             Known facts under related topics: {known}
 
             From this turn, extract any new facts worth remembering long-term that
-            aren't already covered above. Respond with zero or more lines, each
-            formatted as "path: content" (e.g. "person/family/marcus: birth_date = 2020-08-28").
-            Reuse a path from the known facts above when the subject clearly matches;
-            only invent a new path for a genuinely new subject. If there's nothing new, respond with nothing.
+            aren't already covered above. Only extract facts the user explicitly
+            stated — never infer, guess, or embellish. Respond with zero or more
+            lines, each formatted as "path: content" (e.g. "person/family/marcus:
+            birth_date = 2020-08-28"). Reuse a path from the known facts above when
+            the subject clearly matches; only invent a new path for a genuinely new
+            subject. If there's nothing explicitly stated, respond with nothing.
 
             Turn: {text}
             """;
@@ -134,6 +132,22 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         }
     }
 
+    /// <summary>
+    /// Each extracted fact is written under both its own LLM-invented path
+    /// (preserves the structured category/topic intent facts are meant to
+    /// have) and its SignificantWords-derived keyword paths — the same
+    /// paths ReasoningAgent proposes when querying — so a later flat lookup
+    /// actually finds it. Without the second write, an LLM-extracted fact is
+    /// archived but unreachable through the real Reasoning/Recall pipeline.
+    ///
+    /// The stored Content is prefixed with the fact's own path
+    /// ("path/content", one continuous path down to the value) regardless of
+    /// which path a given record was filed under — so whichever query
+    /// matches, what comes back still shows the fact's full structured
+    /// lineage, not just its bare value. This is also what makes
+    /// IntentAgent's response contract rule about "system/" vs "person/"
+    /// path prefixes actually have something to key off of.
+    /// </summary>
     private static List<ArchiveRecord> ParseFacts(string response, DateTimeOffset timestamp)
     {
         var records = new List<ArchiveRecord>();
@@ -147,10 +161,14 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
 
             var path = line[..separator].Trim();
             var content = line[(separator + 1)..].Trim();
-            if (path.Length > 0 && content.Length > 0)
+            if (path.Length == 0 || content.Length == 0)
             {
-                records.Add(new ArchiveRecord(path, content, timestamp));
+                continue;
             }
+
+            var labeledContent = $"{path}/{content}";
+            var paths = SignificantWords.Extract(content).Append(path).Distinct();
+            records.AddRange(paths.Select(p => new ArchiveRecord(p, labeledContent, timestamp)));
         }
 
         return records;

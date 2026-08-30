@@ -1,7 +1,9 @@
+using System.Text.Json;
 using System.Threading.Channels;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Recall;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,20 +12,21 @@ namespace EciCas.Tests.Agents;
 
 public class ImpulseAgentTests
 {
-    private static (ImpulseAgent Agent, ChannelReader<Envelope> Advisories, ChannelReader<Envelope> Proposals) Create()
+    private static (ImpulseAgent Agent, ChannelReader<Envelope> Advisories, ChannelReader<Envelope> Proposals, IArchiveStore Store) Create()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var advisories = bus.Subscribe(Topics.Advisories);
         var proposals = bus.Subscribe(Topics.Proposal);
-        var agent = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance);
-        return (agent, advisories, proposals);
+        var store = new JsonlArchiveStore(Path.GetTempFileName());
+        var agent = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store);
+        return (agent, advisories, proposals, store);
     }
 
     [Fact]
     public async Task WhenTextIsCritical_PublishesAdvisoryAndReflexProposal()
     {
-        var (agent, advisories, proposals) = Create();
+        var (agent, advisories, proposals, _) = Create();
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "emergency, need help now"));
 
@@ -40,7 +43,7 @@ public class ImpulseAgentTests
     [Fact]
     public async Task WhenTextIsRoutine_PublishesAdvisoryOnly()
     {
-        var (agent, advisories, proposals) = Create();
+        var (agent, advisories, proposals, _) = Create();
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "what's the weather"));
 
@@ -48,5 +51,37 @@ public class ImpulseAgentTests
 
         Assert.True(advisories.TryRead(out _));
         Assert.False(proposals.TryRead(out _));
+    }
+
+    [Fact]
+    public async Task WhenTextIsCritical_NudgesAndPersistsDriveVectors()
+    {
+        var (agent, _, _, store) = Create();
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "emergency, need help now"));
+
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var records = await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None);
+        Assert.Single(records);
+        Assert.Equal(ArchiveDomain.Internal, records[0].Domain);
+
+        var vectors = JsonSerializer.Deserialize<DriveVectors>(records[0].Content)!;
+        var baseline = new DriveVectors();
+        Assert.True(vectors.Urgency > baseline.Urgency);
+        Assert.True(vectors.Fatigue > baseline.Fatigue);
+    }
+
+    [Fact]
+    public async Task WhenTextIsRoutine_DoesNotWriteDriveVectors()
+    {
+        var (agent, _, _, store) = Create();
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "what's the weather"));
+
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var records = await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None);
+        Assert.Empty(records);
     }
 }
