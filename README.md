@@ -41,11 +41,46 @@ dotnet run --project src/EciCas.Host       # interactive prompt loop (SSE + cons
 cd morrow-eci && npm install && npm run dev   # companion UI at localhost:3000
 ```
 
-Keywords: **local dev setup**, **getting started**, **quickstart**,
-**dotnet run**, **npm run dev**. No API key needed — every `Budget:Tiers`
-entry defaults to `"mock"`. To use a live substrate, set the environment
-variable named in `appsettings.json`'s `SubstrateProvider` config (default
-`OPENAI_API_KEY`) — never put a literal key in config.
+No API key needed — every substrate class under `Substrates:Classes` in
+`appsettings.json` defaults to `"mock"`. To go live, add a provider under
+`Substrates:Providers` (base URL + the *name* of the env var holding its
+key — never a literal key in config) and point one or more classes at it.
+Multiple providers can be live simultaneously — e.g. `fast-*` classes on
+Mistral, `slow-*` on OpenAI — since each class picks its provider
+independently:
+
+```jsonc
+"Substrates": {
+  "Providers": {
+    "openai":  { "BaseUrl": "https://api.openai.com/v1/",  "ApiKeyEnvironmentVariable": "OPENAI_API_KEY" },
+    "mistral": { "BaseUrl": "https://api.mistral.ai/v1/",  "ApiKeyEnvironmentVariable": "MISTRAL_API_KEY" }
+  },
+  "Classes": {
+    "fast-low":     { "Provider": "mistral", "Model": "ministral-3b-2512" },
+    "slow-medium":  { "Provider": "openai",  "Model": "gpt-4o" }
+  }
+}
+```
+
+Which class each cognitive agent (Intent, Reasoning, Reflection) uses comes
+from `AgentSubstrates:Agents` in `appsettings.json` — an operator can retarget
+a role, or add a class like `fast-local`, without touching C#. Both this and
+`Substrates:Classes` are validated at startup, so a typo in either one fails
+loud before the bus starts rather than silently falling back to mock.
+
+To swap a whole bundle of provider/model choices at once, set the `Tier`
+config value (env var or `--Tier=X`) to layer in `appsettings.<Tier>.json`
+over the defaults — see `appsettings.Minimal.json`/`Budget.json`/`Super.json`
+for examples. This is an operator-only escape hatch for now: nothing
+automated edits this config or restarts the process on your behalf.
+
+If `dotnet run` throws `Routing manifest drift` or `Agent substrate manifest
+drift` on startup, it's almost always a stale build — the agent roster or
+manifest changed since the last compile. Clean and rebuild:
+
+```bash
+dotnet clean src/EciCas.Host && dotnet build src/EciCas.Host && dotnet run --project src/EciCas.Host
+```
 
 ## Docs
 

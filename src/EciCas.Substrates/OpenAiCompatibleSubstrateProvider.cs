@@ -8,27 +8,29 @@ using Microsoft.Extensions.Options;
 namespace EciCas.Substrates;
 
 /// <summary>
-/// The one live substrate provider: talks to any OpenAI-compatible
-/// /chat/completions endpoint. HttpClient's BaseAddress and bearer token are
-/// configured once at DI registration time (see Program.cs) from
-/// SubstrateProviderOptions plus the environment variable it names.
+/// Talks to any OpenAI-compatible /chat/completions endpoint — OpenAI,
+/// Mistral, Ollama, or anything else that speaks the same wire format. One
+/// instance per configured provider, keyed by provider name (see
+/// Program.cs); its HttpClient's BaseAddress and bearer token are bound at
+/// DI-registration time from that provider's ProviderEndpoint entry.
 /// </summary>
 public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _http;
-    private readonly SubstrateProviderOptions _options;
+    private readonly IOptions<SubstrateOptions> _options;
 
-    public OpenAiCompatibleSubstrateProvider(HttpClient http, IOptions<SubstrateProviderOptions> options)
+    public OpenAiCompatibleSubstrateProvider(HttpClient http, IOptions<SubstrateOptions> options)
     {
         _http = http;
-        _options = options.Value;
+        _options = options;
     }
 
     public async Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
     {
-        var model = _options.Models.GetValueOrDefault(substrateClass, substrateClass);
+        var options = _options.Value;
+        var model = options.Classes.GetValueOrDefault(substrateClass)?.Model ?? substrateClass;
         var request = new ChatCompletionRequest(model, [new ChatMessage("user", prompt)]);
 
         var started = Stopwatch.GetTimestamp();
@@ -41,7 +43,7 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
 
         var text = payload.Choices.Count > 0 ? payload.Choices[0].Message.Content : string.Empty;
         var tokens = payload.Usage?.TotalTokens;
-        var cost = tokens is int t ? t * _options.CostPerTokenUsd : (decimal?)null;
+        var cost = tokens is int t ? t * options.CostPerTokenUsd : (decimal?)null;
 
         return new SubstrateResult(text, elapsed, tokens, cost);
     }

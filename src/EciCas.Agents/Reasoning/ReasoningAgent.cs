@@ -2,6 +2,7 @@ using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Agents.Reasoning;
 
@@ -19,13 +20,12 @@ public sealed class ReasoningAgent : CognitiveAgent<string>
 
     private readonly IMessageBus _bus;
 
-    public ReasoningAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReasoningAgent> logger, ISubstrateProvider substrate)
-        : base(bus, activity, logger, substrate) => _bus = bus;
+    public ReasoningAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReasoningAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates)
+        : base(bus, activity, logger, substrate, agentSubstrates) => _bus = bus;
 
     public override string Name => "Reasoning";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception];
 
-    protected override string SubstrateClass => "fast-medium";
     protected override FallbackPosture Fallback => FallbackPosture.Open;
 
     protected override string BuildPrompt(Envelope envelope)

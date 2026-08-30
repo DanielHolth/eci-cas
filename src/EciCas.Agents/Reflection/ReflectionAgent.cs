@@ -23,8 +23,8 @@ public sealed class ReflectionAgent : CognitiveAgent<string>
     private readonly IMessageBus _bus;
     private readonly ReflectionOptions _options;
 
-    public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, ISubstrateProvider substrate, IOptions<ReflectionOptions> options)
-        : base(bus, activity, logger, substrate)
+    public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options)
+        : base(bus, activity, logger, substrate, agentSubstrates)
     {
         _bus = bus;
         _options = options.Value;
@@ -33,7 +33,6 @@ public sealed class ReflectionAgent : CognitiveAgent<string>
     public override string Name => "Reflection";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Conclusion];
 
-    protected override string SubstrateClass => "slow-low";
     protected override FallbackPosture Fallback => FallbackPosture.Closed;
 
     protected override string BuildPrompt(Envelope envelope)

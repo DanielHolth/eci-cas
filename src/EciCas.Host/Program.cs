@@ -29,6 +29,15 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = AppContext.BaseDirectory,
 });
 
+// Optional tier layer (env var Tier or --Tier=X) — an operator picks a bundle
+// of substrate/vendor choices without editing appsettings.json directly. No
+// default tier: unset Tier means no extra layer, i.e. today's behavior.
+var tier = builder.Configuration["Tier"];
+if (!string.IsNullOrEmpty(tier))
+{
+    builder.Configuration.AddJsonFile($"appsettings.{tier}.json", optional: true, reloadOnChange: false);
+}
+
 builder.WebHost.UseUrls(builder.Configuration["Surface:Url"] ?? "http://localhost:5179");
 
 builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
@@ -39,8 +48,8 @@ builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
 
 builder.Services.Configure<GovernanceOptions>(builder.Configuration.GetSection("Governance"));
 builder.Services.Configure<RoutingManifest>(builder.Configuration.GetSection("RoutingManifest"));
-builder.Services.Configure<BudgetOptions>(builder.Configuration.GetSection("Budget"));
-builder.Services.Configure<SubstrateProviderOptions>(builder.Configuration.GetSection("SubstrateProvider"));
+builder.Services.Configure<SubstrateOptions>(builder.Configuration.GetSection("Substrates"));
+builder.Services.Configure<AgentSubstrateManifest>(builder.Configuration.GetSection("AgentSubstrates"));
 builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Recall"));
 builder.Services.Configure<ConsolidatorOptions>(builder.Configuration.GetSection("Consolidator"));
 builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("Reflection"));
@@ -49,17 +58,35 @@ builder.Services.AddSingleton<BusActivityTracker>();
 builder.Services.AddSingleton<IMessageBus, ChannelBus>();
 
 builder.Services.AddSingleton<MockSubstrateProvider>();
-builder.Services.AddHttpClient<OpenAiCompatibleSubstrateProvider>((sp, http) =>
-{
-    var options = sp.GetRequiredService<IOptions<SubstrateProviderOptions>>().Value;
-    http.BaseAddress = new Uri(options.BaseUrl);
 
-    var apiKey = Environment.GetEnvironmentVariable(options.ApiKeyEnvironmentVariable);
-    if (!string.IsNullOrEmpty(apiKey))
+// One named HttpClient + keyed ISubstrateProvider per configured live
+// provider (see Substrates:Providers in appsettings.json) — this is how
+// e.g. OpenAI and Mistral can both be live at once, each backing whichever
+// substrate classes name it as their Provider.
+foreach (var providerSection in builder.Configuration.GetSection("Substrates:Providers").GetChildren())
+{
+    var providerName = providerSection.Key;
+    var baseUrl = providerSection["BaseUrl"]
+        ?? throw new InvalidOperationException($"Substrate provider '{providerName}' is missing BaseUrl.");
+    var apiKeyEnvironmentVariable = providerSection["ApiKeyEnvironmentVariable"];
+
+    builder.Services.AddHttpClient(providerName, http =>
     {
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-    }
-});
+        http.BaseAddress = new Uri(baseUrl);
+
+        var apiKey = apiKeyEnvironmentVariable is null ? null : Environment.GetEnvironmentVariable(apiKeyEnvironmentVariable);
+        if (!string.IsNullOrEmpty(apiKey))
+        {
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
+    });
+
+    builder.Services.AddKeyedSingleton<ISubstrateProvider>(providerName, (sp, key) =>
+        new OpenAiCompatibleSubstrateProvider(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient((string)key!),
+            sp.GetRequiredService<IOptions<SubstrateOptions>>()));
+}
+
 builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();
 
 var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");
@@ -87,6 +114,11 @@ var app = builder.Build();
 
 var manifest = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<RoutingManifest>>().Value;
 RoutingManifest.Validate(manifest, app.Services.GetServices<IAgent>());
+
+// Cheap re-read of the same cached singletons resolved above, not a re-construction.
+var agentSubstrates = app.Services.GetRequiredService<IOptions<AgentSubstrateManifest>>().Value;
+var substrateOptions = app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value;
+AgentSubstrateManifestValidator.Validate(agentSubstrates, substrateOptions, app.Services.GetServices<IAgent>());
 
 app.UseCors(CorsPolicy);
 

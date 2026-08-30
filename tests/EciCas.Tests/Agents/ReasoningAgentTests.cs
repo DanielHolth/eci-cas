@@ -4,6 +4,7 @@ using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Tests.Agents;
 
@@ -15,7 +16,8 @@ public class ReasoningAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var advisories = bus.Subscribe(Topics.Advisories);
-        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, new MockSubstrateProvider());
+        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, new MockSubstrateProvider(),
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Reasoning"] = "fast-medium" } }));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "what's for dinner?"));

@@ -8,6 +8,7 @@ using EciCas.Agents.Self;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Agents.Intent;
 
@@ -22,13 +23,12 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     private readonly IMessageBus _bus;
 
-    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate)
-        : base(bus, activity, logger, substrate) => _bus = bus;
+    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates)
+        : base(bus, activity, logger, substrate, agentSubstrates) => _bus = bus;
 
     public override string Name => "Intent";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Bundle];
 
-    protected override string SubstrateClass => "fast-medium";
     protected override FallbackPosture Fallback => FallbackPosture.Open;
 
     protected override string BuildPrompt(Envelope envelope)

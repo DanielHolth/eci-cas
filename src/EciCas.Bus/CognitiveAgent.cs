@@ -1,5 +1,6 @@
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Bus;
 
@@ -14,25 +15,35 @@ public enum FallbackPosture
     Closed,
 }
 
+/// <summary>Marker for agents whose substrate class comes from AgentSubstrateManifest, so Host can validate the manifest's coverage without reflecting over open generics.</summary>
+public interface ICognitiveAgent
+{
+}
+
+/// <summary>Agent name -> logical substrate class (e.g. "fast-low", "slow-medium"), config-driven so an operator can retarget a role without a rebuild. Validated at startup — see AgentSubstrateManifestValidator.</summary>
+public sealed class AgentSubstrateManifest
+{
+    public Dictionary<string, string> Agents { get; set; } = [];
+}
+
 /// <summary>
 /// An agent whose result comes from a substrate call rather than fixed logic:
 /// builds a prompt, calls ISubstrateProvider, and publishes the parsed result
 /// (or a fallback, per Fallback) with latency/token/cost diagnostics logged.
 /// </summary>
-public abstract class CognitiveAgent<TResult> : AgentBase
+public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
 {
     private readonly ISubstrateProvider _substrate;
     private readonly ILogger _logger;
+    private readonly AgentSubstrateManifest _agentSubstrates;
 
-    protected CognitiveAgent(IMessageBus bus, BusActivityTracker activity, ILogger logger, ISubstrateProvider substrate)
+    protected CognitiveAgent(IMessageBus bus, BusActivityTracker activity, ILogger logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates)
         : base(bus, activity, logger)
     {
         _substrate = substrate;
         _logger = logger;
+        _agentSubstrates = agentSubstrates.Value;
     }
-
-    /// <summary>Logical substrate class (e.g. "fast-low", "slow-medium") — resolved to a concrete provider by the substrate registry, not by this agent.</summary>
-    protected abstract string SubstrateClass { get; }
 
     protected abstract FallbackPosture Fallback { get; }
 
@@ -47,11 +58,16 @@ public abstract class CognitiveAgent<TResult> : AgentBase
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        if (!_agentSubstrates.Agents.TryGetValue(Name, out var substrateClass))
+        {
+            throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+        }
+
         var prompt = BuildPrompt(envelope);
 
         try
         {
-            var diagnostics = await _substrate.CompleteAsync(SubstrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            var diagnostics = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, {Cost} cost",
                 Name, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
 

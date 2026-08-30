@@ -19,6 +19,7 @@ public class ReflectionAgentTests
         var perceptions = bus.Subscribe(Topics.Perception);
         var control = bus.Subscribe(Topics.SystemControl);
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new MockSubstrateProvider(),
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Reflection"] = "slow-low" } }),
             Options.Create(new ReflectionOptions { MaxIdeaGeneration = 1 }));
 
         var conclusion = Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral,
@@ -39,6 +40,7 @@ public class ReflectionAgentTests
         var bus = new ChannelBus(activity);
         var perceptions = bus.Subscribe(Topics.Perception);
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new MockSubstrateProvider(),
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Reflection"] = "slow-low" } }),
             Options.Create(new ReflectionOptions { MaxIdeaGeneration = 1 }));
 
         var conclusion = Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral,

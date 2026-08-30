@@ -6,6 +6,7 @@ using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Tests.Agents;
 
@@ -17,7 +18,8 @@ public class IntentAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var proposals = bus.Subscribe(Topics.Proposal);
-        var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider());
+        var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = "fast-medium" } }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
             .With(PerceptionAgent.TextKey, "how's the weather")
