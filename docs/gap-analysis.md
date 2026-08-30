@@ -100,41 +100,18 @@ citation rather than raw text.
 
 ## Reflection Agent — structural gap, not just a tuning knob
 
-Per Dispatch #4 in the Python roadmap, Reflection is fed by Governance's
-conclude-fork on `events.reflection` **one hop after** Consolidator's own
-fork — specifically because it needs the finished arc (what Intent said,
-what Action did), not just the proposal. It **accumulates `batch_size`
-concluded events (default 5)** before firing at all, then looks for a
-durable pattern across the batch and produces **at most one of**: a
-`domain="internal"` archive write (its own derived insight, tagged
-distinctly from Consolidator's `domain="external"` facts via a `domain`
-field that's part of the store's dedup key), or an Idea ping back through
-Perception.
-
 C#'s [ReflectionAgent.cs](../src/EciCas.Agents/Reflection/ReflectionAgent.cs)
-differs on every one of those points:
+fires on every single conclusion (no batching) and unconditionally reposts
+an idea to `events.perception` every time, which reruns the *entire*
+pipeline (Reasoning read, Consolidator write, Intent reply) as a second
+full turn — the direct cause of the doubled console output/cost per real
+message reported this session. This diverges from Python's actual batched,
+at-most-one-output design (Dispatch #4).
 
-- Fires on **every single** conclusion — no batching. `ReflectionOptions.MaxIdeaGeneration`
-  is a different axis entirely (recursion depth of self-spawned ideas), not
-  Python's `batch_size` (events accumulated before reflecting at all).
-- `ArchiveRecord` (see [IArchiveStore.cs](../src/EciCas.Core/IArchiveStore.cs))
-  has no `Domain` field — there is no way to write an "internal insight"
-  distinct from an ordinary fact.
-- Never chooses between writing an insight or pinging an idea — it
-  unconditionally reposts an idea to `events.perception` every time,
-  which reruns the *entire* pipeline (Reasoning read, Consolidator write,
-  Intent reply) as a second full turn. What looks like "Reflection writing
-  to the archive" is actually Consolidator's ordinary keyword write firing
-  a second time off the fake turn, not a real internal-domain insight.
-
-This is the direct cause of the doubled console output/cost per real
-message reported this session (every user turn currently produces two full
-passes through Reasoning/Consolidator/Intent, one real and one
-Reflection-triggered). A proper fix needs: subscribing after Consolidator's
-fork instead of on every `Topics.Conclusion`, an event-accumulation buffer
-gated by a `batch_size`-equivalent option, a `Domain` field on
-`ArchiveRecord`, and replacing the unconditional idea-repost with an
-either/or driven by what the substrate actually returns.
+The fix has grown into new scope (persona drive-vector state gating
+whether an idea is surfaced or just archived) beyond a same-shape port —
+see [`roadmap.md`'s "Reflection Agent redesign"](roadmap.md#reflection-agent-redesign-drive-gated-batched)
+for the full design.
 
 ## Console verbosity fix (this session)
 

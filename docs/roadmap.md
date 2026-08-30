@@ -65,6 +65,59 @@ semantic — no dedup happens across languages. Translating to English before
 write (or before path/keyword extraction) would keep one fact as one entry
 regardless of what language it arrived in.
 
+## Reflection Agent redesign (drive-gated, batched)
+
+Today's `ReflectionAgent` (see [`gap-analysis.md`](gap-analysis.md) for how
+it diverges from the Python original) fires on every single conclusion and
+unconditionally reposts an "idea" back onto `events.perception`, which
+reruns the entire pipeline as a second full turn — doubling substrate cost
+and console output per real message, with no batching and no way to write
+a quiet internal insight instead of a loud one.
+
+The replacement, sketched in conversation:
+
+- **Buffer, not immediate action.** Accumulate concluded events in-memory
+  (same shape as `ConsolidatorAgent._pending`) instead of reflecting on
+  every one. A new `ReflectionOptions.BatchSize` (mirroring
+  `ConsolidatorOptions.BatchSize`) decides when enough has accumulated to
+  look for a pattern — matching Python's `batch_size` (default 5).
+- **`Domain` field on `ArchiveRecord`.** `"external"` for Consolidator's
+  ordinary keyword writes (the default), `"internal"` for Reflection's own
+  derived insights, sharing the same path space but distinguishable and
+  independently dedup'd — this is currently missing entirely; there is no
+  way today to tell an ordinary fact from Reflection's own thought.
+- **Rank, don't spam.** When a batch surfaces more than one candidate idea,
+  Reflection ranks them and treats only the single best one as a candidate
+  for surfacing — every other candidate (and the top one, if it isn't
+  surfaced — see below) is written to the archive as `domain="internal"`
+  knowledge. Nothing is discarded; it just isn't always spoken.
+- **Drive-gated push vs. write.** Whether the best-ranked idea gets pushed
+  back through `events.perception` (visible, spoken path) or just written
+  as internal knowledge depends on persona drive state — an eager/curious
+  persona that judges the idea too good to sit on pushes it; otherwise it's
+  written quietly and stays retrievable (the user can still ask about it
+  later via ordinary Recall lookup, it's just not proactively volunteered).
+  This is the same "impulse vector" state Python's `current-spec.md` §5.3
+  (slow-coloring feedback) and §5.4 (somatic shortcut) describe and that
+  [`gap-analysis.md`](gap-analysis.md) already flags as entirely absent from
+  the C# port — **this redesign depends on that drive-vector state existing
+  somewhere first**, most likely living on `ImpulseAgent` since that's
+  where Python kept it. Needs its own design pass: how the state is
+  represented and persisted across turns, how Reflection (a different,
+  decoupled agent) reads it without C#'s loose-coupling rule turning into a
+  direct agent-to-agent reference, and what threshold value counts as
+  "eager enough to push."
+- **Scoring mechanism, open.** However ranking/eagerness gets decided, it's
+  probably one substrate call per batch that returns candidate ideas plus
+  either a confidence/insight-worthiness score or enough text for a
+  deterministic ranking step to compare — same shape as `ConsolidatorAgent`'s
+  existing `ParseFacts`-style line parsing, not a new pattern.
+
+This is new scope beyond a straight gap-fix — it introduces persistent
+persona state that doesn't exist anywhere in C# today, not just a Reflection
+change — so it needs a real plan (and probably the drive-vector design
+question resolved) before implementation starts.
+
 ## Open design questions
 
 **Swappable personas.** Switching which persona is active ("which
