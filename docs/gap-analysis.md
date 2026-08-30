@@ -1,5 +1,10 @@
 # Gap analysis — Python business logic vs. C# implementation
 
+**Note:** not everything below is an oversight. See
+[Intentionally left out](#intentionally-left-out) for behaviors that were
+deliberately scoped out of the C# port rather than missed — don't file
+follow-up work against those without checking that section first.
+
 Compares the C# rebuild against `eci-cas-python-prototype/docs/current-spec.md`,
 which `csharp-rebuild-spec.md` names as the canonical reference for what each
 agent is *supposed to decide*. `docs/archive/ECI-spec-v0-40.md` is a
@@ -29,91 +34,87 @@ design, not counted as gaps:
 | §4.1 | Fallback posture: non-gating fails open, gating fails closed | `FallbackPosture.Open`/`Closed` on [CognitiveAgent.cs](../src/EciCas.Bus/CognitiveAgent.cs) — Intent is Open, Reflection is Closed |
 | §7.3 | Manifest-driven substrate swap | `Substrates:Providers`/`Classes` + tier files |
 | Dispatch #4/#5 | Reflection agent (12th role); `fast-*`/`slow-*` substrate naming | present |
+| §5.3 (partial), §5.4 | Persistent drive-vector state (`ImpulseAgent.DrivePath`), Reflection eagerness gating reading it, and a keyword-triggered Somatic-shortcut nudge on approval/disapproval phrases | [ImpulseAgent.cs](../src/EciCas.Agents/Impulse/ImpulseAgent.cs), [ReflectionAgent.cs](../src/EciCas.Agents/Reflection/ReflectionAgent.cs) — see "Reflection Agent" below for what §5.3's Consolidator-side slow-coloring feedback still lacks |
+| §2.1 | Knowledge-swarm tier scaling — `RecallOptions.MaxPaths` caps how many of Reasoning's proposed paths get queried, alongside the existing `MaxPerPath`, scaled per tier in `appsettings.*.json` | [RecallAgent.cs](../src/EciCas.Agents/Recall/RecallAgent.cs), [RecallOptions.cs](../src/EciCas.Agents/Recall/RecallOptions.cs) |
+| Dispatch #4 (batching) | Reflection batches conclusions (`ReflectionOptions.BatchSize`) and scores candidates in one call rather than firing per turn; a candidate is only reposted to `events.perception` when persona eagerness clears a threshold, otherwise archived quietly | [ReflectionAgent.cs](../src/EciCas.Agents/Reflection/ReflectionAgent.cs) — see [`roadmap.md`](roadmap.md#reflection-agent-redesign-drive-gated-batched) for the design this replaced |
 
 ## Missing
 
 - **§3.2 Blocked-notice sequence, steps 2-4.** Only step 1 (deterministic
   Blocked template, [GovernanceAgent.cs:212-218](../src/EciCas.Agents/Governance/GovernanceAgent.cs))
   exists. No frustration nudge back to Impulse on Red (urgency +0.15,
-  fatigue +0.05, temperature -0.05) — moot today since no agent holds any
-  persistent drive-vector state to nudge. No `meta.expression` emotional-word
-  tagging. No `security_alert: true` cold-storage log.
+  fatigue +0.05, temperature -0.05) — drive-vector state now exists
+  ([ImpulseAgent.cs](../src/EciCas.Agents/Impulse/ImpulseAgent.cs)) so this
+  is now a small logic patch, not blocked on missing state. No
+  `meta.expression` emotional-word tagging. No `security_alert: true`
+  cold-storage log.
 - **§4.2 `is_parroting()`.** No linguistic-boundary/near-verbatim-echo check
   anywhere; Intent has no in-character refusal lead-in, just one generic
-  prompt (see also "Prompt composition" below).
-- **§5.3 Slow-coloring feedback** and **§5.4 Somatic shortcut.** Neither can
-  exist yet — there is no drive-vector state anywhere in the C# port for a
-  Consolidator pass to nudge or for Impulse to shift instantly. This is the
-  single largest missing piece: not a small logic patch, but a new kind of
-  per-persona persistent state that doesn't exist today.
+  prompt.
+- **§5.3 Slow-coloring feedback (Consolidator side).** Drive-vector state
+  and the Somatic instant-shift shortcut are now ported (see above); what's
+  still missing is Consolidator nudging drive state gradually based on
+  archived-fact sentiment/theme over time, as opposed to Impulse's
+  keyword-triggered instant shifts.
 - **§6.1 Watchdog.** Confirmed absent — no file matches `Watchdog`, liveness,
   or heartbeat anywhere in `src`. No 5-level escalation ladder, no
-  idle-musing timer. (Already flagged informally earlier this session.)
+  idle-musing timer.
 - **§6.2 Recovery bootstrap.** No dedicated 7-step IaC-style sequencer or
   `BootCheck` liveness step. `Program.cs` + `AgentSubstrateManifestValidator`
   + routing-manifest validation cover config-drift detection (fail loud on
   startup), which is a partial, differently-shaped analog.
-- **§7.2 Budget Mode auto-latch.** Confirmed not ported — deliberately scoped
-  out earlier this session; only per-event cost logging exists, not the
-  spend-cap/manual/terminal/transient auto-latch to deterministic fallbacks.
-- **§2.1 Knowledge-swarm tier-scaling.** `RecallOptions.MaxPerPath` is a
-  single flat value, not scaled by `budget_tier`; `RecallAgent` also doesn't
-  fan out to multiple parallel knowledge agents — it asks `IArchiveStore`
-  once, which does its own internal N-way path lookup. Similar result,
-  not tier-adjustable today.
 
-## Agent behavior differences (from manual smoke-testing this session)
+## Intentionally left out
 
-Requested explicitly: the C# agents behave noticeably differently from the
-Python originals in one respect the spec review above doesn't capture —
-**prompt composition compounds without bound.**
+Not gaps — scoped out on purpose. Listed here so they don't get re-flagged
+as oversights or picked up as follow-up work without a fresh decision to do so.
 
-Every `CognitiveAgent<T>` prompt (`IntentAgent.BuildPrompt`,
-`ReflectionAgent.BuildPrompt`) is built by literally appending upstream
-agents' advisory *text* in `[Source: ...]` brackets. Advisory text itself
-often already contains earlier bracketed advisories (e.g. Intent's own
-reply, which Reflection then quotes verbatim as "having just said: ...").
-Against the mock substrate — which echoes its input back prefixed with
-`[mock:class]` rather than producing a short synthetic reply — this is
-visible immediately:
+- **Messaging-plumbing differences** (see top of this doc): Python's
+  synchronous recursive `publish()` vs. C#'s decoupled per-agent queues;
+  Governance-as-orchestrator vs. Governance-as-bus-listener; Reasoning
+  calling Knowledge directly vs. publishing lookup paths for Recall to
+  answer independently. Per `csharp-rebuild-spec.md`'s explicit framing,
+  the port targets business logic, not architecture — these are
+  by-design divergences, not things to reconcile.
+- **§7.2 Budget Mode auto-latch.** Deliberately scoped out — only
+  per-event cost logging exists (`ISubstrateProvider` results log estimated
+  cost at default log level), not the spend-cap/manual/terminal/transient
+  auto-latch to deterministic fallbacks. Revisit only if real substrate
+  spend becomes a concern worth automating around.
 
-```
-> [mock:fast-medium] Reply to: [mock:slow-low] In one short sentence, note a
-  follow-up thought ... having just said: [mock:fast-medium] Reply to: Hi
-  [Impulse: no immediate concern] [Reasoning: ... Hi] [Recall: nothing on
-  file] [Self: I'm ECI, here to help.] [Impulse: flagged as urgent]
-  [Reasoning: ... [Recall: ... Hello there ...] ...
-```
+## Prompt composition growth — resolved
 
-Each Reflection→Perception→Intent→Reflection loop re-embeds the full text of
-every prior hop, so the prompt (and, against a mock provider, the reply) grows
-generation over generation instead of staying a short, current-turn-scoped
-message. Against a real substrate this mostly wastes tokens/cost rather than
-visibly corrupting the reply (a real model summarizes rather than echoing),
-but it's still unbounded context growth with no trim/summarize step — Python's
-`current-spec.md` describes advisories as short one-line contributions folded
-into a single considered-reply call, not literal string concatenation across
-turns. Worth a follow-up: either cap what `AppendAdvice` includes (e.g. only
-the immediate turn's advisories, never a Reflection-sourced reply) or have
-`ReflectionAgent`/`IntentAgent` treat the "having just said" turn as a nested
-citation rather than raw text.
+Previously flagged from manual smoke-testing: every `CognitiveAgent<T>`
+prompt (`IntentAgent.BuildPrompt`, `ReflectionAgent.BuildPrompt`,
+`ConsolidatorAgent.ExtractFactsAsync`) built its prompt by literally
+appending upstream agents' advisory *text*, which could itself already
+contain earlier bracketed advisories (e.g. Intent's reply, which Reflection
+then quoted verbatim). Each Reflection→Perception→Intent→Reflection loop
+re-embedded the full text of every prior hop, so the prompt grew generation
+over generation instead of staying a short, current-turn-scoped message.
 
-## Reflection Agent — structural gap, not just a tuning knob
+Fixed by [PromptCap.cs](../src/EciCas.Core/PromptCap.cs): every piece of
+upstream text is capped (240 chars, `…`-truncated) at the point it's folded
+into a prompt — the ceiling per hop stays fixed no matter how many
+generations deep a loop runs, rather than trying to track or trim history.
+Applied at `IntentAgent.BuildPrompt`/`AppendAdvice`, `ReasoningAgent.BuildPrompt`,
+and `ConsolidatorAgent.ExtractFactsAsync`.
+
+## Reflection Agent — resolved (drive-gated, batched)
 
 C#'s [ReflectionAgent.cs](../src/EciCas.Agents/Reflection/ReflectionAgent.cs)
-fires on every single conclusion (no batching) and unconditionally reposts
-an idea to `events.perception` every time, which reruns the *entire*
-pipeline (Reasoning read, Consolidator write, Intent reply) as a second
-full turn — the direct cause of the doubled console output/cost per real
-message reported this session. This diverges from Python's actual batched,
-at-most-one-output design (Dispatch #4).
+previously fired on every single conclusion (no batching) and unconditionally
+reposted an idea to `events.perception` every time, rerunning the *entire*
+pipeline as a second full turn — the direct cause of doubled console
+output/cost per real message. Now batches conclusions
+(`ReflectionOptions.BatchSize`), scores candidates in one substrate call, and
+only reposts the best-scored idea when persona eagerness (read from
+`ImpulseAgent.DrivePath`) clears `EagernessThreshold` and idea generation is
+below `MaxIdeaGeneration` — otherwise the candidate is archived quietly. See
+[`roadmap.md`'s "Reflection Agent redesign"](roadmap.md#reflection-agent-redesign-drive-gated-batched)
+for the design this implements.
 
-The fix has grown into new scope (persona drive-vector state gating
-whether an idea is surfaced or just archived) beyond a same-shape port —
-see [`roadmap.md`'s "Reflection Agent redesign"](roadmap.md#reflection-agent-redesign-drive-gated-batched)
-for the full design.
-
-## Console verbosity fix (this session)
+## Console verbosity fix
 
 Separately from the above, the interactive console output was addressed
 directly rather than filed as a gap: `ConsoleSubscriber` (see
