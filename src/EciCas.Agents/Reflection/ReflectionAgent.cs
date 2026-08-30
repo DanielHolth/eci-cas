@@ -71,12 +71,19 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        // Same prompt Intent itself was given (reply-to text, Impulse/Self
+        // advice, Recall's picked facts with their full category/topic/
+        // subtopic path) plus what it sent out — Governance forwards both
+        // unchanged from Intent's own Proposal through Verdict/Action/
+        // Conclusion (see IntentAgent.PromptKey) so Reflection can weigh a
+        // reply against exactly what it had access to, not just the text.
+        var prompt = envelope.Meta.Get<string>(IntentAgent.PromptKey) ?? string.Empty;
         var reply = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
 
         List<BufferedConclusion>? batch = null;
         lock (_pendingLock)
         {
-            _pending.Add(new BufferedConclusion(reply, envelope.Generation));
+            _pending.Add(new BufferedConclusion(prompt, reply, envelope.Generation));
             if (_pending.Count >= _options.BatchSize)
             {
                 batch = [.. _pending];
@@ -169,18 +176,23 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     private static string BuildBatchPrompt(List<BufferedConclusion> batch)
     {
-        var turns = string.Join("\n", batch.Select((b, i) => $"{i + 1}. {PromptCap.Apply(b.ReplyText)}"));
+        var turns = string.Join("\n\n", batch.Select((b, i) =>
+            $"{i + 1}. Given: {PromptCap.Apply(b.Prompt)}\n   Replied: {PromptCap.Apply(b.ReplyText)}"));
         return $"""
-            From these recent replies, propose follow-up thoughts or questions worth
-            exploring later. Respond with zero or more lines, each formatted as
-            "score|subtopic|idea" where score is 0.0-1.0 insight-worthiness and
-            subtopic is a short (1-2 word) functional label for the kind of
-            thought it is — pick whatever label fits best, e.g. pattern,
-            hypothesis, meta-rule, synthesis, question, or another label of your
-            own choosing (e.g. "0.7|hypothesis|whether the trip dates still work
-            with the deadline"). If nothing stands out, respond with nothing.
+            From these recent interactions — what Intent was given (the turn,
+            any advice, and recalled facts) and how it replied — propose
+            follow-up thoughts or questions worth exploring later. Respond
+            with zero or more lines, each formatted as "score|subtopic|idea"
+            where score is 0.0-1.0 insight-worthiness and subtopic is a short
+            (1-2 word) functional label for the kind of thought it is — pick
+            whatever label fits best, e.g. pattern, hypothesis, meta-rule,
+            synthesis, question, or another label of your own choosing. Idea
+            is 1-5 content words, no filler — the same terse value style as a
+            Consolidator fact, not a full sentence (e.g.
+            "0.7|hypothesis|trip dates vs deadline"). If nothing stands out,
+            respond with nothing.
 
-            Replies:
+            Interactions:
             {turns}
             """;
     }
@@ -208,6 +220,6 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         return candidates;
     }
 
-    private sealed record BufferedConclusion(string ReplyText, int Generation);
+    private sealed record BufferedConclusion(string Prompt, string ReplyText, int Generation);
     private sealed record Candidate(double Score, string Subtopic, string Idea);
 }

@@ -28,7 +28,7 @@ public class CognitiveAgentTests
         protected override string BuildPrompt(Envelope envelope) => "prompt";
         protected override string ParseResult(SubstrateResult result) => result.Text;
         protected override string FallbackResult(Envelope envelope) => "fallback";
-        protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics) => Published = result;
+        protected override void Publish(Envelope envelope, string prompt, string result, SubstrateResult? diagnostics) => Published = result;
     }
 
     [Fact]

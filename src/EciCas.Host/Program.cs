@@ -19,6 +19,7 @@ using EciCas.Substrates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
 const string CorsPolicy = "morrow-eci";
@@ -46,6 +47,11 @@ if (!string.IsNullOrEmpty(verbose))
 }
 
 builder.WebHost.UseUrls(builder.Configuration["Surface:Url"] ?? "http://localhost:5179");
+
+// One line per agent per Information-level log call, colored per agent —
+// warnings/errors keep the stock two-line shape. See AgentConsoleFormatter.
+builder.Logging.AddConsole(options => options.FormatterName = AgentConsoleFormatter.FormatterName)
+    .AddConsoleFormatter<AgentConsoleFormatter, ConsoleFormatterOptions>();
 
 builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
     policy.WithOrigins(builder.Configuration.GetSection("Surface:AllowedOrigins").Get<string[]>()

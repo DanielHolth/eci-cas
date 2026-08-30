@@ -1,3 +1,4 @@
+using EciCas.Agents.Perception;
 using EciCas.Agents.Reasoning;
 using EciCas.Bus;
 using EciCas.Core;
@@ -64,8 +65,22 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
-        var perTripleResults = await Task.WhenAll(triples.Select(t => PickAsync(t, entry.Class, cancellationToken))).ConfigureAwait(false);
-        var picked = perTripleResults.SelectMany(r => r).OrderByDescending(r => r.Importance).ToList();
+        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+        var perTripleResults = await Task.WhenAll(triples.Select(t => PickAsync(t, text, entry.Class, cancellationToken))).ConfigureAwait(false);
+        var picked = perTripleResults.SelectMany(r => r.Facts).OrderByDescending(r => r.Importance).ToList();
+
+        // One line for the whole turn, not one per triple: aggregate latency
+        // (wall-clock across the parallel calls, not summed) and sum tokens/
+        // cost across every triple that actually reached the substrate.
+        var diagnostics = perTripleResults.Select(r => r.Diagnostics).Where(d => d is not null).Select(d => d!).ToList();
+        if (diagnostics.Count > 0)
+        {
+            var paths = picked.Count == 0
+                ? "nothing on file"
+                : string.Join(", ", picked.Select(f => $"{f.Category}/{f.Topic}/{f.Subtopic}/{f.Subject}/{f.Key} = {f.Value}"));
+            _logger.LogInformation("{Agent} {Paths} ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
+                Name, paths, diagnostics.Max(d => d.Latency.TotalMilliseconds), diagnostics.Sum(d => d.TokenCount), diagnostics.Sum(d => d.Cost));
+        }
 
         Publish(envelope, picked);
     }
@@ -79,43 +94,54 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     /// <summary>
     /// One substrate call scoped to a single triple's candidates. Failure is
     /// non-gating and isolated: a broken call contributes nothing for this
-    /// triple, no retry, no turn-level failure.
+    /// triple, no retry, no turn-level failure. Diagnostics travel back with
+    /// the facts instead of being logged here, so HandleAsync can fold every
+    /// triple's numbers into one line per turn.
     /// </summary>
-    private async Task<IReadOnlyList<ArchiveRecord>> PickAsync(ArchiveTriple triple, string substrateClass, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics)> PickAsync(ArchiveTriple triple, string text, string substrateClass, CancellationToken cancellationToken)
     {
         var candidates = await _store.LookupAsync(triple, _options.MaxPerTopic, cancellationToken).ConfigureAwait(false);
         if (candidates.Count == 0)
         {
-            return [];
+            return ([], null);
         }
 
         try
         {
-            var result = await _substrate.CompleteAsync(substrateClass, BuildPrompt(candidates), cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            return ParsePicked(result.Text, candidates);
+            var result = await _substrate.CompleteAsync(substrateClass, BuildPrompt(text, candidates), cancellationToken).ConfigureAwait(false);
+            return (ParsePicked(result.Text, candidates), result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "{Agent} lookup for {Category}/{Topic}/{Subtopic} failed, skipping", Name, triple.Category, triple.Topic, triple.Subtopic);
-            return [];
+            return ([], null);
         }
     }
 
-    private static string BuildPrompt(IReadOnlyList<ArchiveRecord> candidates)
+    private static string BuildPrompt(string text, IReadOnlyList<ArchiveRecord> candidates)
     {
         // Category/Topic/Subtopic withheld — redundant with scope. Timestamp/
         // Domain/Importance withheld to keep context lean. Rows are already
         // pre-sorted by Importance by the store, not re-sorted here.
+        //
+        // The turn's own text is included so picking is relevance-to-THIS-
+        // question, not just "important in general" — without it a category
+        // like "system" (the assistant's own name/traits) would look just as
+        // pickable for a question about the HUMAN's name as an actual
+        // person-category row, since nothing here ranked one over the other.
         var rows = string.Join("\n", candidates.Select((r, i) => $"{i}. {r.Subject} {r.Key} = {r.Value}"));
         return $"""
             Candidate facts (index: subject key = value), most important first:
             {rows}
 
-            Pick up to {MaxPickedPerTriple} rows actually relevant right now —
-            respond with just their index numbers, comma-separated (e.g. "0, 2").
-            If none are relevant, respond with nothing.
+            Pick up to {MaxPickedPerTriple} rows that actually help answer this
+            turn — respond with just their index numbers, comma-separated
+            (e.g. "0, 2"). A row is only relevant if it's about the same thing
+            being asked about (e.g. a fact about the assistant itself does not
+            answer a question about the human, and vice versa). If none are
+            relevant, respond with nothing.
+
+            Turn: {text}
             """;
     }
 

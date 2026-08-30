@@ -208,7 +208,11 @@ public sealed class GovernanceAgent : AgentBase
         }
 
         var replyToSpeak = value == Verdict.Red ? BlockedReply(verdict) : reply;
-        var actionMeta = MetaBag.Empty.With(IntentAgent.ReplyKey, replyToSpeak).With(SecurityAgent.VerdictKey, value);
+        var prompt = verdict.Meta.Get<string>(IntentAgent.PromptKey) ?? string.Empty;
+        var actionMeta = MetaBag.Empty
+            .With(IntentAgent.ReplyKey, replyToSpeak)
+            .With(IntentAgent.PromptKey, prompt)
+            .With(SecurityAgent.VerdictKey, value);
         if (value == Verdict.Red)
         {
             actionMeta = await AppendFrustrationAsync(verdict, actionMeta, cancellationToken).ConfigureAwait(false);

@@ -55,12 +55,21 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
 
     protected override IReadOnlyList<ArchiveTriple> FallbackResult(Envelope envelope) => [];
 
-    protected override void Publish(Envelope envelope, IReadOnlyList<ArchiveTriple> result, SubstrateResult? diagnostics)
+    protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchiveTriple> result, SubstrateResult? diagnostics)
     {
         // Always published, even empty on fallback/no-index/no-signal text —
         // Recall's roster slot in Governance's bundle needs a reply every
         // time, or the bundle would only ever complete via timeout.
-        var selection = envelope.Derive(Topics.SelectedTriples, Name, envelope.Severity, MetaBag.Empty.With(SelectedTriplesKey, result));
+        //
+        // TextKey is carried forward explicitly: Envelope.Derive starts a
+        // fresh Meta rather than merging the parent's, so without this
+        // Recall's picking prompt would have no idea what was actually asked
+        // and could only rank candidates by generic importance — which is how
+        // an unrelated "system/.../name" row used to outrank everything for
+        // a question about the human's own name.
+        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
+        var meta = MetaBag.Empty.With(SelectedTriplesKey, result).With(PerceptionAgent.TextKey, text);
+        var selection = envelope.Derive(Topics.SelectedTriples, Name, envelope.Severity, meta);
         _bus.Publish(Topics.SelectedTriples, selection);
     }
 
@@ -74,7 +83,7 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
         var index = _store.Index;
         if (index.Count == 0)
         {
-            Publish(envelope, [], diagnostics: null);
+            Publish(envelope, string.Empty, [], diagnostics: null);
             return;
         }
 
@@ -86,12 +95,12 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
             var result = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            Publish(envelope, ParseTriples(result.Text, index), result);
+            Publish(envelope, prompt, ParseTriples(result.Text, index), result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "{Agent} substrate call failed, fallback posture {Posture}", Name, Fallback);
-            Publish(envelope, [], diagnostics: null);
+            Publish(envelope, prompt, [], diagnostics: null);
         }
     }
 

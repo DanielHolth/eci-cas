@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reasoning;
 using EciCas.Agents.Recall;
@@ -41,6 +42,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     private readonly ILogger _logger;
     private readonly List<ArchiveRecord> _pending = [];
     private readonly object _pendingLock = new();
+    private int _bundlesSinceFlush;
 
     public ConsolidatorAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ConsolidatorAgent> logger, IArchiveStore store,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ConsolidatorOptions> options)
@@ -80,14 +82,30 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         // records, same as the Python prototype's Consolidator.
         var newRecords = await ExtractFactsAsync(envelope, text, entry.Class, cancellationToken).ConfigureAwait(false);
 
+        // One line every turn regardless of whether anything was flushed —
+        // without this the only visible signal was the substrate-call
+        // latency line, which says nothing about whether extraction actually
+        // found a fact, so a silent parsing failure (e.g. the model using
+        // "key: value" instead of the requested "key=value") looked
+        // identical to a turn that legitimately had nothing to remember.
+        _logger.LogInformation("{Agent} extracted {Count}: {Facts}", Name, newRecords.Count,
+            newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}")));
+
+        // Flushes every BatchSize turns processed, not every BatchSize facts
+        // extracted — most turns state nothing worth remembering, so counting
+        // accumulated facts could leave a single just-stated fact (e.g. a
+        // name) sitting invisible in memory for many turns, or lost entirely
+        // on restart, waiting for enough *other* facts to come along.
         List<ArchiveRecord>? batch = null;
         lock (_pendingLock)
         {
             _pending.AddRange(newRecords);
-            if (_pending.Count >= _options.BatchSize)
+            _bundlesSinceFlush++;
+            if (_bundlesSinceFlush >= _options.BatchSize && _pending.Count > 0)
             {
                 batch = [.. _pending];
                 _pending.Clear();
+                _bundlesSinceFlush = 0;
             }
         }
 
@@ -119,27 +137,31 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             : string.Join(", ", selected.Select(t => $"{t.Category}/{t.Topic}/{t.Subtopic}"));
         text = PromptCap.Apply(text);
         var prompt = $"""
-            Existing related triples (category/topic/subtopic) already in the
-            archive: {known}
+            Extract every fact the user explicitly stated about themselves or
+            someone/something else in this turn — a name, a place, a
+            relationship, a preference, anything concrete. Do not infer,
+            guess, or embellish beyond what was said. A turn with an obvious
+            stated fact (e.g. "my name is X") must never come back empty.
 
-            From this turn, extract any new facts worth remembering long-term.
-            Only extract facts the user explicitly stated — never infer, guess,
-            or embellish. Respond with zero or more lines, each formatted as:
-
+            Respond with one line per fact:
             category=... topic=... subtopic=... subject=... key=... value=...
 
-            Category (1 word), Topic (1 word), and Subtopic (1-2 words) group
-            the fact — match one of the existing triples above when the subject
-            clearly fits; only invent a new triple for a genuinely new kind of
-            fact. Subject (1-2 words) is usually a unique entity; Key (1-3
-            words) is the attribute; Value (1-5 content words, no filler) is
-            the content itself.
+            Category (1 word), Topic (1 word), Subtopic (1-2 words) group the
+            fact — reuse one of these existing triples when it clearly fits:
+            {known}
+            Otherwise invent a new one; there being no existing match is not
+            a reason to skip the fact. Subject (1-2 words) is usually a
+            unique entity, named — for a fact about the user themselves, use
+            their own name once stated, or "owner" before it's known. Key
+            (1-3 words) is the attribute. Value (1-5 content words, no
+            filler) is the content itself.
 
             Examples:
+            category=person topic=family subtopic=owner subject=daniel key=name value=daniel
             category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28
             category=event topic=wedding subtopic=family subject=maria holth key=location value=drammen kirke
 
-            If there's nothing explicitly stated, respond with nothing.
+            Only if truly nothing was stated, respond with nothing.
 
             Turn: {text}
             """;
@@ -149,7 +171,18 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            return ParseFacts(result.Text, envelope.Timestamp);
+            var facts = ParseFacts(result.Text, envelope.Timestamp);
+
+            // The "extracted 0: nothing" line doesn't say WHY — surface the
+            // raw response so a genuine model refusal is distinguishable
+            // from a parseable-but-unexpected shape ParseFields still
+            // rejects.
+            if (facts.Count == 0)
+            {
+                _logger.LogInformation("{Agent} raw response (0 parsed): {Response}", Name, result.Text);
+            }
+
+            return facts;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -163,11 +196,20 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     /// to the LLM to infer a numeric scale: a name is more durably useful
     /// than a birthday/title, which in turn outranks an address.
     /// </summary>
+    private static readonly Regex CategoryBlockSplit = new(@"(?=\bcategory\s*[:=])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static List<ArchiveRecord> ParseFacts(string response, DateTimeOffset timestamp)
     {
         var records = new List<ArchiveRecord>();
-        foreach (var line in response.Split('\n'))
+
+        // Split on each "category=" marker rather than on newlines: the
+        // requested one-line-per-fact shape isn't reliable — a small model
+        // will just as often put each key=value pair on its own line — so a
+        // fact's fields are flattened back onto one line before parsing
+        // regardless of how the response broke them up.
+        foreach (var block in CategoryBlockSplit.Split(response))
         {
+            var line = string.Join(' ', block.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
             var fields = ParseFields(line);
             if (fields is null)
             {
@@ -182,33 +224,49 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         return records;
     }
 
+    private static readonly Regex ColonFieldPattern = new(
+        @"\b(category|topic|subtopic|subject|key|value)\s*:\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static (string Category, string Topic, string Subtopic, string Subject, string Key, string Value)? ParseFields(string line)
     {
+        // Smaller models don't reliably stick to the requested "key=value"
+        // shape and often write "key: value" instead — normalize that before
+        // the fixed-marker split below rather than silently dropping every
+        // line that deviates.
+        line = ColonFieldPattern.Replace(line.TrimStart('-', '*', '•', ' ', '\t'), "$1=");
+
         // Field values may contain spaces (e.g. "subject=marcus holth"), so
-        // split on the fixed key= markers rather than whitespace.
+        // split on the fixed key= markers rather than whitespace. Topic/
+        // Subtopic (indices 1/2) are grouping labels the model sometimes
+        // drops or duplicates (e.g. "topic=self topic=identity" with no
+        // subtopic at all) — those default rather than losing the whole
+        // fact; Category/Subject/Key/Value are the fact itself and stay
+        // required.
         var keys = new[] { "category=", "topic=", "subtopic=", "subject=", "key=", "value=" };
         var indices = keys.Select(k => line.IndexOf(k, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (indices.Any(i => i < 0))
+        if (indices[0] < 0 || indices[3] < 0 || indices[4] < 0 || indices[5] < 0)
         {
             return null;
         }
 
-        var order = Enumerable.Range(0, keys.Length).OrderBy(i => indices[i]).ToArray();
-        var values = new string[keys.Length];
-        for (var i = 0; i < order.Length; i++)
+        var present = Enumerable.Range(0, keys.Length).Where(i => indices[i] >= 0).OrderBy(i => indices[i]).ToArray();
+        var values = new string?[keys.Length];
+        for (var i = 0; i < present.Length; i++)
         {
-            var idx = order[i];
+            var idx = present[i];
             var start = indices[idx] + keys[idx].Length;
-            var end = i + 1 < order.Length ? indices[order[i + 1]] : line.Length;
+            var end = i + 1 < present.Length ? indices[present[i + 1]] : line.Length;
             values[idx] = line[start..end].Trim();
         }
 
-        if (values.Any(v => v.Length == 0))
+        if (values[0]!.Length == 0 || values[3]!.Length == 0 || values[4]!.Length == 0 || values[5]!.Length == 0)
         {
             return null;
         }
 
-        return (values[0], values[1], values[2], values[3], values[4], values[5]);
+        var topic = string.IsNullOrEmpty(values[1]) ? "general" : values[1]!;
+        var subtopic = string.IsNullOrEmpty(values[2]) ? "general" : values[2]!;
+        return (values[0]!, topic, subtopic, values[3]!, values[4]!, values[5]!);
     }
 
     private static double Importance(string key)

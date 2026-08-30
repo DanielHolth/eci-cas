@@ -1,5 +1,4 @@
 using EciCas.Agents.Intent;
-using EciCas.Agents.Recall;
 using EciCas.Agents.Security;
 using EciCas.Bus;
 using EciCas.Core;
@@ -11,11 +10,11 @@ namespace EciCas.Host;
 /// <summary>
 /// An ordinary subscriber, not a display hook baked into any agent. No agent
 /// knows this exists. By default prints only what a user actually cares
-/// about per turn — what Recall read, what Intent said or Security blocked
-/// (both come off the same events.action envelope) — leaving substrate cost
-/// and Consolidator/Reflection writes to their own ILogger lines (see
-/// appsettings.json's Logging:LogLevel). Verbose restores the old
-/// exhaustive one-line-per-envelope trace for debugging.
+/// about per turn — what Intent said or Security blocked (both come off the
+/// same events.action envelope) — leaving what Recall read and substrate
+/// cost/Consolidator/Reflection writes to their own ILogger lines (see
+/// appsettings.json's Logging:LogLevel and AgentConsoleFormatter). Verbose
+/// restores the old exhaustive one-line-per-envelope trace for debugging.
 /// </summary>
 public sealed class ConsoleSubscriber : AgentBase
 {
@@ -35,16 +34,9 @@ public sealed class ConsoleSubscriber : AgentBase
             return Task.CompletedTask;
         }
 
-        switch (envelope.Topic)
+        if (envelope.Topic == Topics.Action)
         {
-            case Topics.Advisories when envelope.PublishedBy == "Recall":
-                var facts = envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey) ?? [];
-                var read = facts.Count == 0 ? "nothing on file" : string.Join("; ", facts.Select(f => $"{f.Subject} {f.Key} = {f.Value}"));
-                Console.WriteLine($"  [read] {read}");
-                break;
-            case Topics.Action:
-                PrintAction(envelope);
-                break;
+            PrintAction(envelope);
         }
 
         return Task.CompletedTask;

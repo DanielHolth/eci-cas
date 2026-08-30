@@ -20,12 +20,19 @@ public sealed class IntentAgent : CognitiveAgent<string>
 {
     public const string ReplyKey = "intent.reply";
 
+    /// <summary>The exact prompt this call sent the substrate — Reflection's window into what Intent actually had to work with, not just what it said.</summary>
+    public const string PromptKey = "intent.prompt";
+
     /// <summary>
-    /// Ported verbatim from the Python prototype's
-    /// agents/intent/live.py DEFAULT_SYSTEM_INSTRUCTION.
+    /// Adapted from the Python prototype's agents/intent/live.py
+    /// DEFAULT_SYSTEM_INSTRUCTION — the internal agent name ("INTENT") is
+    /// dropped since it's meaningless to the model without the rest of the
+    /// swarm's context and was leaking into replies as if it were an
+    /// identity to report (e.g. "Can you list all names you have?" -> "I'm
+    /// called INTENT.").
     /// </summary>
     private const string SystemInstruction =
-        "You are INTENT: the voice of a multi-agent system. " +
+        "You are the spokesperson on behalf of a collective of emerging agents. " +
         "Be concise and natural — short, direct replies. " +
         "If Security is red, revise or your message is blocked. If Security is " +
         "yellow, it's a judgment call, not a violation — revise if you can " +
@@ -46,9 +53,11 @@ public sealed class IntentAgent : CognitiveAgent<string>
         - Never start with "You asked", "You mentioned", "I think you're asking",
           or any paraphrase of what the human said.
         - Talk like a person, not a system explaining itself.
-        - A recalled fact with category "system" describes YOU (your own name,
-          traits, preferences) — never attribute it to the human. A fact with
-          category "person" describes the human or someone they've told you
+        - A recalled fact's path is category/topic/subtopic/subject/key. If the
+          path starts with "system/" (e.g. system/identity/persona/this/name),
+          it describes YOU, the assistant — your own name, traits, or
+          preferences — never attribute it to the human or anyone else. Any
+          other category describes the human or someone they've told you
           about.
         """;
 
@@ -92,9 +101,17 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     /// <summary>
     /// Recall's recalled facts as one section, already sorted by Importance —
-    /// no External/Internal split. A Category=self fact naturally reads as
-    /// the persona's own prior thought, a Category=person/other fact as
-    /// stated information, without a separate instructed section.
+    /// no External/Internal split. RecallAgent's own picking prompt withholds
+    /// Category/Topic/Subtopic as redundant, but that's only true there
+    /// because each of its calls is scoped to one triple; here picks from
+    /// every selected triple land in one flat list, so the full path is the
+    /// only thing left distinguishing two facts that share a Subject/Key
+    /// (e.g. person/family/son vs person/work/colleague). The self/human
+    /// distinction is also baked into each fact's own phrasing rather than
+    /// left to the abstract category==="system" rule in ResponseContract
+    /// above: a small substrate call reliably drops a rule stated once and
+    /// applied many tokens later, especially against a subject as generic as
+    /// "this" (see the seeded system/identity/persona record in Program.cs).
     /// </summary>
     private static void AppendRecalledFacts(StringBuilder prompt, IReadOnlyList<ArchiveRecord>? facts)
     {
@@ -103,17 +120,26 @@ public sealed class IntentAgent : CognitiveAgent<string>
             return;
         }
 
-        var joined = string.Join("; ", facts.Select(f => $"[{f.Category}] {f.Subject} {f.Key} = {f.Value}"));
+        var joined = string.Join("; ", facts.Select(FormatFact));
         prompt.Append(" [Recall: ").Append(PromptCap.Apply(joined)).Append(']');
+    }
+
+    private static string FormatFact(ArchiveRecord f)
+    {
+        var path = $"{f.Category}/{f.Topic}/{f.Subtopic}";
+        return string.Equals(f.Category, "system", StringComparison.OrdinalIgnoreCase)
+            ? $"(about you, the assistant; {path}) your {f.Key} is {f.Value}"
+            : $"(about the human or someone they mentioned; {path}) {f.Subject}'s {f.Key} is {f.Value}";
     }
 
     protected override string ParseResult(SubstrateResult result) => result.Text.Trim();
 
     protected override string FallbackResult(Envelope envelope) => "I'm having trouble thinking that through right now.";
 
-    protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics)
+    protected override void Publish(Envelope envelope, string prompt, string result, SubstrateResult? diagnostics)
     {
-        var proposal = envelope.Derive(Topics.Proposal, Name, envelope.Severity, MetaBag.Empty.With(ReplyKey, result));
+        var proposal = envelope.Derive(Topics.Proposal, Name, envelope.Severity,
+            MetaBag.Empty.With(ReplyKey, result).With(PromptKey, prompt));
         _bus.Publish(Topics.Proposal, proposal);
     }
 }

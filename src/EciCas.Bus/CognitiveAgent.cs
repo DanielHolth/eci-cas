@@ -64,7 +64,14 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
     /// <summary>Only called when Fallback is Open.</summary>
     protected abstract TResult FallbackResult(Envelope envelope);
 
-    protected abstract void Publish(Envelope envelope, TResult result, SubstrateResult? diagnostics);
+    /// <summary>
+    /// `prompt` is the exact text BuildPrompt produced for this call (or, on
+    /// a UseSubstrate:false agent, still built for the caller's record even
+    /// though no substrate call used it) — Intent forwards it verbatim so
+    /// Reflection can later see exactly what it was given, not just what it
+    /// said back.
+    /// </summary>
+    protected abstract void Publish(Envelope envelope, string prompt, TResult result, SubstrateResult? diagnostics);
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
@@ -73,13 +80,13 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
+        var prompt = BuildPrompt(envelope);
+
         if (!entry.UseSubstrate)
         {
-            Publish(envelope, FallbackResult(envelope), diagnostics: null);
+            Publish(envelope, prompt, FallbackResult(envelope), diagnostics: null);
             return;
         }
-
-        var prompt = BuildPrompt(envelope);
 
         try
         {
@@ -87,7 +94,7 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
 
-            Publish(envelope, ParseResult(diagnostics), diagnostics);
+            Publish(envelope, prompt, ParseResult(diagnostics), diagnostics);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -95,7 +102,7 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
 
             if (Fallback == FallbackPosture.Open)
             {
-                Publish(envelope, FallbackResult(envelope), diagnostics: null);
+                Publish(envelope, prompt, FallbackResult(envelope), diagnostics: null);
             }
         }
     }
