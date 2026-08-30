@@ -60,6 +60,9 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
     turn = emptyTurn(turnId);
     turns.set(turnId, turn);
     order.push(turnId);
+    while (order.length > MAX_TURNS) {
+      turns.delete(order.shift()!);
+    }
   }
 
   switch (raw.topic) {

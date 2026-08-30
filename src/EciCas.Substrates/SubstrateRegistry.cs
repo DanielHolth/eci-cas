@@ -1,4 +1,5 @@
 using EciCas.Core;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace EciCas.Substrates;
@@ -13,19 +14,26 @@ public sealed class SubstrateRegistry : ISubstrateProvider
 {
     private readonly BudgetOptions _budget;
     private readonly MockSubstrateProvider _mock;
-    private readonly OpenAiCompatibleSubstrateProvider _live;
+    private readonly IServiceProvider _services;
 
-    public SubstrateRegistry(IOptions<BudgetOptions> budget, MockSubstrateProvider mock, OpenAiCompatibleSubstrateProvider live)
+    // OpenAiCompatibleSubstrateProvider is a typed HttpClient (AddHttpClient<T>),
+    // registered transient on purpose so IHttpClientFactory can rotate its
+    // handler. Resolving it per call (rather than capturing one instance in
+    // this singleton's constructor) keeps that rotation working instead of
+    // pinning one HttpMessageHandler for the process's lifetime.
+    public SubstrateRegistry(IOptions<BudgetOptions> budget, MockSubstrateProvider mock, IServiceProvider services)
     {
         _budget = budget.Value;
         _mock = mock;
-        _live = live;
+        _services = services;
     }
 
     public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
     {
         var tier = _budget.Tiers.GetValueOrDefault(substrateClass, "mock");
-        ISubstrateProvider provider = tier == "live" ? _live : _mock;
+        ISubstrateProvider provider = tier == "live"
+            ? _services.GetRequiredService<OpenAiCompatibleSubstrateProvider>()
+            : _mock;
         return provider.CompleteAsync(substrateClass, prompt, cancellationToken);
     }
 }

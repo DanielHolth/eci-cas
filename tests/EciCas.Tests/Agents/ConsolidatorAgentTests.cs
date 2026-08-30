@@ -37,4 +37,30 @@ public class ConsolidatorAgentTests
         var records = await store.LookupAsync(["turn"], maxPerPath: 10, CancellationToken.None);
         Assert.Equal(2, records.Count);
     }
+
+    [Fact]
+    public async Task WritesUnderSignificantWordPaths_SoRecallCanFindThem()
+    {
+        // Regression for the M4 loop being silently broken: Reasoning only
+        // proposes lookup paths for 5+ letter words, so Consolidator must
+        // write under those same paths, not just the fixed "turn" category.
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var path = Path.GetTempFileName();
+        var store = new JsonlArchiveStore(path);
+
+        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
+            Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+
+        var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "What did we plan for dinner?"));
+        await agent.HandleAsync(bundle, CancellationToken.None);
+
+        var proposedPaths = SignificantWords.Extract("What did we plan for dinner?");
+        Assert.Contains("dinner", proposedPaths);
+
+        var records = await store.LookupAsync(proposedPaths, maxPerPath: 10, CancellationToken.None);
+        Assert.Single(records);
+        Assert.Equal("What did we plan for dinner?", records[0].Content);
+    }
 }

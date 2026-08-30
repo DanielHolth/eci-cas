@@ -43,7 +43,7 @@ eci-cas/
 ## Running it
 
 ```bash
-dotnet test EciCas.slnx              # 9 tests
+dotnet test EciCas.slnx
 dotnet run --project src/EciCas.Host  # interactive prompt loop
 ```
 

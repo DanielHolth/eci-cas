@@ -105,6 +105,8 @@ public sealed class GovernanceAgent : AgentBase
     private void TryComplete(BundleState state, bool forced = false)
     {
         Envelope perception;
+        List<Envelope> advisorySnapshot;
+        List<string> advisoryKeys;
         lock (state)
         {
             if (state.Completed || state.Perception is null)
@@ -119,13 +121,15 @@ public sealed class GovernanceAgent : AgentBase
 
             state.Completed = true;
             perception = state.Perception;
+            advisorySnapshot = [.. state.Advisories.Values];
+            advisoryKeys = [.. state.Advisories.Keys];
         }
 
         state.TimeoutCts.Cancel();
 
         if (forced)
         {
-            var missing = _options.BundleRoster.Except(state.Advisories.Keys).ToList();
+            var missing = _options.BundleRoster.Except(advisoryKeys).ToList();
             if (missing.Count > 0)
             {
                 _logger.LogWarning("Governance bundle {CorrelationId} completed on timeout, missing advisors: {Missing}",
@@ -133,8 +137,8 @@ public sealed class GovernanceAgent : AgentBase
             }
         }
 
-        var severity = SeverityExtensions.MaxOf(state.Advisories.Values.Select(a => a.Severity).Append(perception.Severity));
-        var meta = BuildBundleMeta(state);
+        var severity = SeverityExtensions.MaxOf(advisorySnapshot.Select(a => a.Severity).Append(perception.Severity));
+        var meta = BuildBundleMeta(perception, advisorySnapshot);
         var bundle = perception.Derive(Topics.Bundle, Name, severity, meta);
         _bus.Publish(Topics.Bundle, bundle);
     }
@@ -142,10 +146,12 @@ public sealed class GovernanceAgent : AgentBase
     /// <summary>
     /// Folds each advisory's own meta into the perceived event's meta so
     /// content (not just severity) reaches Intent — reused for the initial
-    /// bundle and for re-issuing one on a revision pass.
+    /// bundle and for re-issuing one on a revision pass. Takes a snapshot
+    /// rather than the live BundleState.Advisories dictionary, since callers
+    /// enumerate outside the lock that guards concurrent writers.
     /// </summary>
-    private static MetaBag BuildBundleMeta(BundleState state) =>
-        state.Advisories.Values.Aggregate(state.Perception!.Meta, (acc, advisory) => acc.Merge(advisory.Meta));
+    private static MetaBag BuildBundleMeta(Envelope perception, IReadOnlyList<Envelope> advisories) =>
+        advisories.Aggregate(perception.Meta, (acc, advisory) => acc.Merge(advisory.Meta));
 
     private void OnVerdict(Envelope verdict)
     {
@@ -166,7 +172,7 @@ public sealed class GovernanceAgent : AgentBase
                 {
                     state.RevisionCount++;
                     var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey) ?? string.Empty;
-                    var revisionMeta = BuildBundleMeta(state).With(RevisionConcernKey, concern);
+                    var revisionMeta = BuildBundleMeta(state.Perception!, [.. state.Advisories.Values]).With(RevisionConcernKey, concern);
                     revisionBundle = state.Perception!.Derive(Topics.Bundle, Name, verdict.Severity, revisionMeta);
                 }
             }

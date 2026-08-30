@@ -28,7 +28,7 @@ a reflex + the considered reply that follows it" refinement is M3
 Try it:
 
 ```bash
-dotnet test EciCas.slnx              # 20 tests
+dotnet test EciCas.slnx
 dotnet run --project src/EciCas.Host  # interactive prompt loop
 ```
 

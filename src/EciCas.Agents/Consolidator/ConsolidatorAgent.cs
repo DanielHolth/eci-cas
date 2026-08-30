@@ -39,12 +39,18 @@ public sealed class ConsolidatorAgent : AgentBase
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
-        var record = new ArchiveRecord("turn", text, envelope.Timestamp);
+
+        // Write under the same significant-word paths Reasoning proposes when
+        // querying (see SignificantWords) so a later lookup actually
+        // intersects what got stored here — plus a fixed "turn" anchor so
+        // short/low-signal turns are still recoverable by category.
+        var paths = SignificantWords.Extract(text).Append("turn").Distinct();
+        var newRecords = paths.Select(path => new ArchiveRecord(path, text, envelope.Timestamp)).ToList();
 
         List<ArchiveRecord>? batch = null;
         lock (_pendingLock)
         {
-            _pending.Add(record);
+            _pending.AddRange(newRecords);
             if (_pending.Count >= _options.BatchSize)
             {
                 batch = [.. _pending];

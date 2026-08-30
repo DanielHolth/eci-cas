@@ -24,12 +24,19 @@ public class SubstrateRegistryTests
         return new OpenAiCompatibleSubstrateProvider(http, Options.Create(new SubstrateProviderOptions()));
     }
 
+    /// <summary>Resolves exactly one instance, mirroring DI resolving a typed
+    /// HttpClient — enough to test SubstrateRegistry without a real container.</summary>
+    private sealed class SingleInstanceServiceProvider(object instance) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType.IsInstanceOfType(instance) ? instance : null;
+    }
+
     [Fact]
     public async Task WhenTierIsUnlistedOrMock_RoutesToMockProvider()
     {
         var budget = Options.Create(new BudgetOptions { Tiers = { ["fast-low"] = "mock" } });
         var live = CreateLiveProvider("""{"choices":[],"usage":null}""");
-        var registry = new SubstrateRegistry(budget, new MockSubstrateProvider(), live);
+        var registry = new SubstrateRegistry(budget, new MockSubstrateProvider(), new SingleInstanceServiceProvider(live));
 
         var result = await registry.CompleteAsync("fast-low", "hello", CancellationToken.None);
 
@@ -42,7 +49,7 @@ public class SubstrateRegistryTests
         const string json = """{"choices":[{"message":{"role":"assistant","content":"live answer"}}],"usage":{"total_tokens":42}}""";
         var budget = Options.Create(new BudgetOptions { Tiers = { ["fast-high"] = "live" } });
         var live = CreateLiveProvider(json);
-        var registry = new SubstrateRegistry(budget, new MockSubstrateProvider(), live);
+        var registry = new SubstrateRegistry(budget, new MockSubstrateProvider(), new SingleInstanceServiceProvider(live));
 
         var result = await registry.CompleteAsync("fast-high", "hello", CancellationToken.None);
 

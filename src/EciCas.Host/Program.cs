@@ -146,7 +146,14 @@ string? line;
 while (!string.IsNullOrWhiteSpace(line = Console.ReadLine()))
 {
     perception.Perceive(line);
-    await activity.WhenIdleAsync(TimeSpan.FromSeconds(10));
+    try
+    {
+        await activity.WhenIdleAsync(TimeSpan.FromSeconds(10));
+    }
+    catch (OperationCanceledException)
+    {
+        Console.WriteLine("(still working...)");
+    }
 }
 
 await app.StopAsync();

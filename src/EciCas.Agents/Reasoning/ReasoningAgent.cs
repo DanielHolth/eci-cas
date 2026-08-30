@@ -47,23 +47,8 @@ public sealed class ReasoningAgent : CognitiveAgent<string>
         // roster slot in Governance's bundle needs a reply every time, or the
         // bundle would only ever complete via timeout. See plan §3.4.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
-        var paths = ProposePaths(text);
+        var paths = SignificantWords.Extract(text);
         var lookup = envelope.Derive(Topics.LookupPaths, Name, envelope.Severity, MetaBag.Empty.With(LookupPathsKey, paths));
         _bus.Publish(Topics.LookupPaths, lookup);
     }
-
-    /// <summary>
-    /// Deterministic MVP heuristic, not a substrate call: significant words
-    /// (5+ letters) from the perceived text, lowercased and deduped, capped
-    /// at 3. A real implementation would let the substrate itself propose
-    /// (category, topic) pairs; this keeps Recall's roster slot filled
-    /// without a second cognitive round-trip per perception event.
-    /// </summary>
-    private static string[] ProposePaths(string text) =>
-        text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(word => new string(word.Where(char.IsLetter).ToArray()).ToLowerInvariant())
-            .Where(word => word.Length >= 5)
-            .Distinct()
-            .Take(3)
-            .ToArray();
 }

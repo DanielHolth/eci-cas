@@ -46,23 +46,38 @@ public sealed class ReflectionAgent : CognitiveAgent<string>
 
     protected override string FallbackResult(Envelope envelope) => string.Empty;
 
-    protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics)
+    public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        var reflected = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
-            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectedKind));
-        _bus.Publish(Topics.SystemControl, reflected);
-
         if (envelope.Generation >= _options.MaxIdeaGeneration)
         {
+            // At the cap, no idea can be spawned regardless of what the
+            // substrate would say — skip the call entirely rather than
+            // paying for a result Publish would just discard.
+            PublishReflected(envelope);
             return;
         }
 
+        await base.HandleAsync(envelope, cancellationToken).ConfigureAwait(false);
+    }
+
+    protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics)
+    {
+        PublishReflected(envelope);
+
         // A new arc, not a continuation: this idea starts its own correlation
         // (Envelope.Create), one generation higher than the conclusion that
-        // prompted it — the loop guard the generation cap enforces above.
+        // prompted it — the loop guard the generation cap enforces in
+        // HandleAsync above, before this method is ever called.
         var idea = Envelope.Create(Topics.Perception, Name, Severity.Restful,
             MetaBag.Empty.With(PerceptionAgent.TextKey, result).With(TriggeredByKey, "self").With(SourceTypeKey, "idea"),
             generation: envelope.Generation + 1);
         _bus.Publish(Topics.Perception, idea);
+    }
+
+    private void PublishReflected(Envelope envelope)
+    {
+        var reflected = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
+            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectedKind));
+        _bus.Publish(Topics.SystemControl, reflected);
     }
 }

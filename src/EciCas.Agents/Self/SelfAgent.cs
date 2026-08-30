@@ -45,7 +45,7 @@ public sealed class SelfAgent : AgentBase
                 await OnPerceptionAsync(envelope, cancellationToken).ConfigureAwait(false);
                 break;
             case Topics.SystemControl:
-                OnControl(envelope);
+                await OnControlAsync(envelope, cancellationToken).ConfigureAwait(false);
                 break;
         }
     }
@@ -57,11 +57,25 @@ public sealed class SelfAgent : AgentBase
         _bus.Publish(Topics.Advisories, advisory);
     }
 
-    private void OnControl(Envelope envelope)
+    private async Task OnControlAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey) == ConsolidatorAgent.WrittenKind)
+        if (envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey) != ConsolidatorAgent.WrittenKind)
+        {
+            return;
+        }
+
+        // Must take the same lock GetIdentityAsync holds across its store
+        // call — otherwise an invalidation landing between that call
+        // returning and the cache assignment gets silently overwritten by
+        // the now-stale result.
+        await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
             _cachedIdentity = null;
+        }
+        finally
+        {
+            _cacheLock.Release();
         }
     }
 
