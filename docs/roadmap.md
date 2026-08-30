@@ -65,7 +65,7 @@ semantic — no dedup happens across languages. Translating to English before
 write (or before path/keyword extraction) would keep one fact as one entry
 regardless of what language it arrived in.
 
-## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage)
+## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — design finalized
 
 Today's `RecallAgent`/`JsonlArchiveStore` do purely deterministic retrieval —
 literal ≥5-letter word extraction from the raw turn text
@@ -73,44 +73,105 @@ literal ≥5-letter word extraction from the raw turn text
 matching against `ArchiveRecord.Path`, newest-N-per-path truncation, no
 relevance ranking (see [`gap-analysis.md`](gap-analysis.md) §2.1). This
 diverges from the Python prototype's actual design, which is semantic at
-both stages:
+both stages. Design is now settled; implementation not yet started.
 
-1. A category/topic-selector LLM reads the *distinct* `(category, topic)`
-   pairs present in the archive (a small, bounded index regardless of total
-   row count) and picks X relevant to the current turn — genuine meaning
-   matching, e.g. "tell me about your system" maps to `architecture`/
-   `identity` without either word appearing literally in the question.
-2. One knowledge LLM per selected `(category, topic)` reads the rows under
-   that pair and picks Y by relevance, not recency.
+**Record schema.** Replaces the flat `Path`/`Content` shape. One full
+worked example, every field filled:
 
-Results are collected into a buffer and handed to Intent as a clean
-path+value array.
+```
+category=person  topic=family  subtopic=son  subject=marcus holth
+key=birthdate  value=2020-08-28
+```
 
-**Storage scaling — one Parquet file per category.** Confirmed on the
-roadmap: partitioning the archive by category (rather than one monolithic
-file/store) keeps lookups routed directly to the relevant shard and keeps
-predicate pushdown cheap per file. This is a storage/routing fix, not a
-substitute for bounding candidate-set size within a category — a single
-category can still hold far more rows than fit in one LLM's context (up to
-billions, per discussion), so per-category partitioning alone doesn't solve
-unbounded fan-in to the knowledge LLM.
+- `Category` — 1 word.
+- `Topic` — 1 word.
+- `Subtopic`, `Subject` — 1-2 words each.
+- `Key` — 1-3 words.
+- `Value` — 1-5 content words (semantically-loaded terms only — no stop/
+  filler words like "is"/"it"/"the", and no full sentences).
+- `Timestamp`.
+- `Domain` (`Internal`/`External`) — now load-bearing: gates which of
+  Intent's two result arrays (see below) a record surfaces in.
+- `Importance` (0.0-1.0) — set by the writer (Consolidator/Reflection) at
+  write time; a name outranks a birthdate which outranks a home address, as
+  a guide for the writer LLM's own judgment. Used to pre-trim a topic's
+  candidate rows deterministically before any knowledge LLM sees them, so a
+  topic with 10,000 rows doesn't just get truncated by recency.
 
-**Query shape — keep the two-stage swarm, deepen only on demand.** Decision:
-don't default to a fixed deeper tree (e.g. a 3-level 1→3→9 swarm) — that
-pays for many extra substrate calls even when a category's row count is
-small. Instead, keep the two-layer query (selector LLM → one knowledge LLM
-per selected category) as the default, and only have the initial
-selector LLM spawn a *larger* swarm — an extra selection layer under a
-specific category — if that category's candidate set is still too large for
-one knowledge LLM's context after the per-category Parquet shard narrows it
-down. Depth grows adaptively with actual data skew, not uniformly for every
-lookup.
+Writers (Consolidator and Reflection) share this exact schema and prompt
+shape — same params on the Archive write call either way, `Domain`
+distinguishing which agent wrote it. To prevent topic-name drift across
+writers, both are shown the current bundle's existing category/topic
+selections (the same data Intent receives) and instructed to match an
+existing pair before inventing a new one.
 
-This needs its own design pass before implementation: how `IArchiveStore`
-represents category/topic as first-class queryable fields (today `Path` is
-one flat string), how the selector LLM's "distinct pairs" index gets
-computed/maintained cheaply as the archive grows, and what threshold
-triggers the adaptive third layer.
+**Category/topic index.** One `index.parquet` holding the distinct
+`(category, topic)` pairs plus each category's Parquet filename —
+incrementally updated on write, cached in memory the same way `SelfAgent`
+caches persona state (invalidated on the write epoch broadcast on
+`system.control`, not re-read from disk every event).
+
+**Reasoning — selector only, no advisory text.** `ReasoningAgent` drops its
+current "offer relevant reasoning" advisory sentence entirely — Intent now
+owns all advisory/reply framing. Reasoning's one substrate call instead
+reads the cached index and returns X selected `(category, topic, subtopic)`
+triples for the current turn — genuine semantic matching, e.g. "tell me
+about your system" maps to `system`/`architecture` without either word
+appearing literally in the question.
+
+**Recall — one substrate call per selected triple, run in parallel.** For
+each of Reasoning's X selected `(category, topic, subtopic)` triples,
+`RecallAgent` opens that category's Parquet shard, pre-trims candidate rows
+by `Importance` down to `MaxPerTopic`, and fires one substrate call scoped
+to *only* that triple's candidates, picking Y relevant rows. Implementation
+detail: this is X parallel calls made from inside one `RecallAgent.HandleAsync`
+(matching how the existing per-path lookup already works), not X separate
+bus agents or a Governance roster change — each call's prompt and result
+must stay scoped to its single triple, never see another triple's rows.
+`MaxPerTopic` default: 50 (tune per tier alongside `MaxPaths`/`MaxPerPath`
+once real usage data exists).
+
+Recall becomes substrate-calling, gated by the existing `UseSubstrate` tier
+flag with a deterministic (recency-capped) fallback underneath —
+`FallbackPosture.Open`: a failed or unavailable Recall call just means
+Intent's reply is less well-grounded that turn, not a blocked turn.
+
+**Two arrays into Intent.** `RecallAgent` returns External and Internal
+result sets separately (gated by `Domain`). `IntentAgent.BuildPrompt`
+presents them as two distinctly-instructed sections: External knowledge is
+stated as fact and weighs heavier; Internal (Reflection-derived) knowledge
+is voiced as tentative inference — this lets Intent draw on a detected
+pattern confrontationally ("are you sure you went to the gym today? your
+BMI says otherwise") without treating its own inference as a stated fact.
+This is a second, independent surfacing path alongside `ReflectionAgent`'s
+existing drive-gated proactive push.
+
+**Storage scaling — one Parquet file per category.** Categories are
+discovered, not predefined — created lazily on first write; "what
+categories exist" is a directory listing plus `index.parquet`. Partitioning
+by category keeps lookups routed directly to the relevant shard and keeps
+predicate pushdown cheap per file — this is a storage/routing fix, not a
+substitute for the `Importance`-based per-topic trim above, since a single
+category can still hold far more rows than fit in one LLM's context.
+
+**Query shape — keep the two-stage swarm, deepen only on demand.** Default
+stays selector LLM → one knowledge LLM per selected triple (not a fixed
+deeper tree like a 1→3→9 swarm, which pays for extra substrate calls even
+when a topic's row count is small). If a selected triple's candidate set is
+still too large for one knowledge LLM's context after the per-category
+shard and `Importance` trim, the selector spawns a larger swarm under that
+one triple instead of applying uniform extra depth everywhere.
+
+**`memory.jsonl` retirement.** The current live JSONL store is retired
+outright under the new schema, not migrated — re-seeded once from the
+*original* prototype Parquet data (not from the polluted live file; see
+`ConsolidatorAgent`/self-write-pollution note above). One-time throwaway
+conversion script, same pattern as the earlier `seed-memory.jsonl` import.
+
+Still open before implementation: exact `IArchiveStore` interface method
+shapes, and whether Consolidator skips extraction outright for
+Reflection-originated (`triggered_by:"self"`) turns vs. always tagging them
+`Domain=Internal` and letting low `Importance` do the filtering naturally.
 
 ## Reflection Agent redesign (drive-gated, batched)
 
