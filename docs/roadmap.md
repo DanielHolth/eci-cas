@@ -138,10 +138,12 @@ the taxonomy together.
 category's Parquet filename. Read once at boot to hydrate an in-memory
 cache (the selector LLM needs a populated index on the very first event,
 not just after the first live write) and then updated in-memory on every
-subsequent write — appended to, not re-read from disk. Same lifecycle as
-`SelfAgent`'s persona cache otherwise: invalidated/refreshed on the write
-epoch broadcast on `system.control` if a write happened out from under the
-in-memory copy (e.g. the seed import), never re-read from disk per event.
+subsequent write whose `(category, topic, subtopic)` isn't already present
+in the cache — appended to, not re-read from disk, and not re-appended for
+a triple that's already indexed. Same lifecycle as `SelfAgent`'s persona
+cache otherwise: invalidated/refreshed on the write epoch broadcast on
+`system.control` if a write happened out from under the in-memory copy
+(e.g. the seed import), never re-read from disk per event.
 
 **Reasoning — selector only, no advisory text.** `ReasoningAgent` drops its
 current "offer relevant reasoning" advisory sentence entirely — Intent now
@@ -206,10 +208,18 @@ outright under the new schema, not migrated — re-seeded once from the
 `ConsolidatorAgent`/self-write-pollution note above). One-time throwaway
 conversion script, same pattern as the earlier `seed-memory.jsonl` import.
 
-Still open before implementation: exact `IArchiveStore` interface method
-shapes, and whether Consolidator skips extraction outright for
-Reflection-originated (`triggered_by:"self"`) turns vs. always tagging them
-`Domain=Internal` and letting low `Importance` do the filtering naturally.
+**Consolidator hard-skips self-triggered turns.** A turn whose `meta` shows
+`TriggeredByKey="self"` (Reflection's own idea, looped back through
+`events.perception`) is never passed to `ExtractFactsAsync` at all —
+Reflection already wrote that idea correctly (`Domain=Internal`, its own
+fixed `Importance`) before pushing it, so Consolidator re-extracting from
+it would either duplicate the record or, worse, mis-tag it `External` as
+today's bug does. This closes the self-referential-pollution root cause
+identified earlier this session.
+
+Design is now complete. `IArchiveStore`'s exact method shapes are an
+implementation-time detail (no product/behavior decision left to make) —
+settled during the implementation plan/coding pass, not here.
 
 ## Reflection Agent redesign (drive-gated, batched)
 
