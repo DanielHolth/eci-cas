@@ -20,10 +20,20 @@ public interface ICognitiveAgent
 {
 }
 
-/// <summary>Agent name -> logical substrate class (e.g. "fast-low", "slow-medium"), config-driven so an operator can retarget a role without a rebuild. Validated at startup — see AgentSubstrateManifestValidator.</summary>
+/// <summary>Per-agent substrate assignment: which logical class backs it, and whether it calls a substrate at all.</summary>
+public sealed class AgentSubstrateEntry
+{
+    /// <summary>A key into SubstrateOptions.Classes (e.g. "fast-low", "slow-medium").</summary>
+    public string Class { get; set; } = "";
+
+    /// <summary>False means this agent never calls the substrate — HandleAsync publishes FallbackResult directly. Defaults true so existing entries are unaffected.</summary>
+    public bool UseSubstrate { get; set; } = true;
+}
+
+/// <summary>Agent name -> substrate assignment, config-driven so an operator can retarget a role (or turn its LLM use off) without a rebuild. Validated at startup — see AgentSubstrateManifestValidator.</summary>
 public sealed class AgentSubstrateManifest
 {
-    public Dictionary<string, string> Agents { get; set; } = [];
+    public Dictionary<string, AgentSubstrateEntry> Agents { get; set; } = [];
 }
 
 /// <summary>
@@ -58,16 +68,22 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (!_agentSubstrates.Agents.TryGetValue(Name, out var substrateClass))
+        if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
         {
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+        }
+
+        if (!entry.UseSubstrate)
+        {
+            Publish(envelope, FallbackResult(envelope), diagnostics: null);
+            return;
         }
 
         var prompt = BuildPrompt(envelope);
 
         try
         {
-            var diagnostics = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            var diagnostics = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, {Cost} cost",
                 Name, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
 

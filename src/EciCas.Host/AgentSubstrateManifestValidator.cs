@@ -16,16 +16,16 @@ public static class AgentSubstrateManifestValidator
         var cognitiveAgentNames = registeredAgents.OfType<ICognitiveAgent>().Cast<IAgent>().Select(a => a.Name).ToHashSet();
         var errors = new List<string>();
 
-        foreach (var (name, substrateClass) in manifest.Agents)
+        foreach (var (name, entry) in manifest.Agents)
         {
             if (!cognitiveAgentNames.Contains(name))
             {
                 errors.Add($"manifest declares '{name}' but no such cognitive agent is registered");
             }
 
-            if (!substrates.Classes.ContainsKey(substrateClass))
+            if (!substrates.Classes.ContainsKey(entry.Class))
             {
-                errors.Add($"'{name}' is assigned substrate class '{substrateClass}', which is not declared under Substrates:Classes");
+                errors.Add($"'{name}' is assigned substrate class '{entry.Class}', which is not declared under Substrates:Classes");
             }
         }
 

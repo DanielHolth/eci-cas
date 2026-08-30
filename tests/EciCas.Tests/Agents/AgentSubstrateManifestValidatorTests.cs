@@ -27,7 +27,7 @@ public class AgentSubstrateManifestValidatorTests
     [Fact]
     public void WhenManifestMatchesCognitiveAgents_DoesNotThrow()
     {
-        var manifest = new AgentSubstrateManifest { Agents = { ["Intent"] = "fast-medium" } };
+        var manifest = new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } };
         var agents = new IAgent[] { new StubCognitiveAgent("Intent") };
 
         var exception = Record.Exception(() => AgentSubstrateManifestValidator.Validate(manifest, OptionsWithClass("fast-medium"), agents));
@@ -37,7 +37,7 @@ public class AgentSubstrateManifestValidatorTests
     [Fact]
     public void WhenManifestDeclaresUnregisteredAgent_Throws()
     {
-        var manifest = new AgentSubstrateManifest { Agents = { ["Ghost"] = "fast-medium" } };
+        var manifest = new AgentSubstrateManifest { Agents = { ["Ghost"] = new AgentSubstrateEntry { Class = "fast-medium" } } };
         var agents = Array.Empty<IAgent>();
 
         Assert.Throws<InvalidOperationException>(() => AgentSubstrateManifestValidator.Validate(manifest, OptionsWithClass("fast-medium"), agents));
@@ -55,7 +55,16 @@ public class AgentSubstrateManifestValidatorTests
     [Fact]
     public void WhenSubstrateClassIsUnknown_Throws()
     {
-        var manifest = new AgentSubstrateManifest { Agents = { ["Intent"] = "typo-class" } };
+        var manifest = new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "typo-class" } } };
+        var agents = new IAgent[] { new StubCognitiveAgent("Intent") };
+
+        Assert.Throws<InvalidOperationException>(() => AgentSubstrateManifestValidator.Validate(manifest, OptionsWithClass("fast-medium"), agents));
+    }
+
+    [Fact]
+    public void WhenSubstrateClassIsUnknown_ThrowsEvenWhenUseSubstrateIsFalse()
+    {
+        var manifest = new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "typo-class", UseSubstrate = false } } };
         var agents = new IAgent[] { new StubCognitiveAgent("Intent") };
 
         Assert.Throws<InvalidOperationException>(() => AgentSubstrateManifestValidator.Validate(manifest, OptionsWithClass("fast-medium"), agents));

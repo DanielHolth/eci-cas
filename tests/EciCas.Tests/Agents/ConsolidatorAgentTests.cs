@@ -3,6 +3,7 @@ using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
 using EciCas.Bus;
 using EciCas.Core;
+using EciCas.Substrates;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -10,6 +11,14 @@ namespace EciCas.Tests.Agents;
 
 public class ConsolidatorAgentTests
 {
+    private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
+    {
+        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+    }
+
+    private static IOptions<AgentSubstrateManifest> ManifestWith(bool useSubstrate) =>
+        Options.Create(new AgentSubstrateManifest { Agents = { ["Consolidator"] = new AgentSubstrateEntry { Class = "fast-low", UseSubstrate = useSubstrate } } });
+
     [Fact]
     public async Task FlushesAndAnnouncesWritten_AtBatchSize()
     {
@@ -20,7 +29,7 @@ public class ConsolidatorAgentTests
         var store = new JsonlArchiveStore(path);
 
         var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            Options.Create(new ConsolidatorOptions { BatchSize = 2 }));
+            new MockSubstrateProvider(), ManifestWith(useSubstrate: false), Options.Create(new ConsolidatorOptions { BatchSize = 2 }));
 
         var first = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "turn one"));
@@ -50,7 +59,7 @@ public class ConsolidatorAgentTests
         var store = new JsonlArchiveStore(path);
 
         var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+            new MockSubstrateProvider(), ManifestWith(useSubstrate: false), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "What did we plan for dinner?"));
@@ -62,5 +71,46 @@ public class ConsolidatorAgentTests
         var records = await store.LookupAsync(proposedPaths, maxPerPath: 10, CancellationToken.None);
         Assert.Single(records);
         Assert.Equal("What did we plan for dinner?", records[0].Content);
+    }
+
+    [Fact]
+    public async Task WhenUseSubstrateIsTrue_AddsExtractedFactToBatch()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var path = Path.GetTempFileName();
+        var store = new JsonlArchiveStore(path);
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("person/family/marcus: birth_date = 2020-08-28", TimeSpan.Zero, 10, 0m)));
+
+        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
+            substrate, ManifestWith(useSubstrate: true), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+
+        var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "our son's birthday was yesterday"));
+        await agent.HandleAsync(bundle, CancellationToken.None);
+
+        var records = await store.LookupAsync(["person/family/marcus"], maxPerPath: 10, CancellationToken.None);
+        Assert.Single(records);
+        Assert.Equal("birth_date = 2020-08-28", records[0].Content);
+    }
+
+    [Fact]
+    public async Task WhenSubstrateCallFails_DeterministicWriteStillLands()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var path = Path.GetTempFileName();
+        var store = new JsonlArchiveStore(path);
+        var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
+
+        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
+            substrate, ManifestWith(useSubstrate: true), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+
+        var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "turn one"));
+        await agent.HandleAsync(bundle, CancellationToken.None);
+
+        var records = await store.LookupAsync(["turn"], maxPerPath: 10, CancellationToken.None);
+        Assert.Single(records);
     }
 }

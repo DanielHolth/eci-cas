@@ -19,7 +19,7 @@ public class IntentAgentTests
         var bus = new ChannelBus(activity);
         var proposals = bus.Subscribe(Topics.Proposal);
         var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
-            Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = "fast-medium" } }));
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
             .With(PerceptionAgent.TextKey, "how's the weather")

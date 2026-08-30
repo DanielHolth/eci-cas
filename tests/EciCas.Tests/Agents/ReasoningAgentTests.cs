@@ -17,7 +17,7 @@ public class ReasoningAgentTests
         var bus = new ChannelBus(activity);
         var advisories = bus.Subscribe(Topics.Advisories);
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, new MockSubstrateProvider(),
-            Options.Create(new AgentSubstrateManifest { Agents = { ["Reasoning"] = "fast-medium" } }));
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Reasoning"] = new AgentSubstrateEntry { Class = "fast-medium" } } }));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "what's for dinner?"));

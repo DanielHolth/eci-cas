@@ -13,8 +13,8 @@ public class CognitiveAgentTests
             respond(substrateClass, prompt);
     }
 
-    private static IOptions<AgentSubstrateManifest> ManifestWith(string substrateClass) =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Test"] = substrateClass } });
+    private static IOptions<AgentSubstrateManifest> ManifestWith(string substrateClass, bool useSubstrate = true) =>
+        Options.Create(new AgentSubstrateManifest { Agents = { ["Test"] = new AgentSubstrateEntry { Class = substrateClass, UseSubstrate = useSubstrate } } });
 
     private sealed class TestCognitiveAgent(IMessageBus bus, BusActivityTracker activity, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates)
         : CognitiveAgent<string>(bus, activity, NullLogger.Instance, substrate, agentSubstrates)
@@ -68,6 +68,21 @@ public class CognitiveAgentTests
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
         Assert.Null(agent.Published);
+    }
+
+    [Fact]
+    public async Task WhenUseSubstrateIsFalse_PublishesFallbackWithoutCallingSubstrate()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var called = false;
+        var substrate = new StubSubstrate((_, _) => { called = true; return Task.FromResult(new SubstrateResult("real answer", TimeSpan.Zero, 10, 0m)); });
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low", useSubstrate: false));
+
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
+
+        Assert.False(called);
+        Assert.Equal("fallback", agent.Published);
     }
 
     [Fact]
