@@ -65,6 +65,53 @@ semantic — no dedup happens across languages. Translating to English before
 write (or before path/keyword extraction) would keep one fact as one entry
 regardless of what language it arrived in.
 
+## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage)
+
+Today's `RecallAgent`/`JsonlArchiveStore` do purely deterministic retrieval —
+literal ≥5-letter word extraction from the raw turn text
+(`SignificantWords.Extract`) proposing lookup paths, then exact-string
+matching against `ArchiveRecord.Path`, newest-N-per-path truncation, no
+relevance ranking (see [`gap-analysis.md`](gap-analysis.md) §2.1). This
+diverges from the Python prototype's actual design, which is semantic at
+both stages:
+
+1. A category/topic-selector LLM reads the *distinct* `(category, topic)`
+   pairs present in the archive (a small, bounded index regardless of total
+   row count) and picks X relevant to the current turn — genuine meaning
+   matching, e.g. "tell me about your system" maps to `architecture`/
+   `identity` without either word appearing literally in the question.
+2. One knowledge LLM per selected `(category, topic)` reads the rows under
+   that pair and picks Y by relevance, not recency.
+
+Results are collected into a buffer and handed to Intent as a clean
+path+value array.
+
+**Storage scaling — one Parquet file per category.** Confirmed on the
+roadmap: partitioning the archive by category (rather than one monolithic
+file/store) keeps lookups routed directly to the relevant shard and keeps
+predicate pushdown cheap per file. This is a storage/routing fix, not a
+substitute for bounding candidate-set size within a category — a single
+category can still hold far more rows than fit in one LLM's context (up to
+billions, per discussion), so per-category partitioning alone doesn't solve
+unbounded fan-in to the knowledge LLM.
+
+**Query shape — keep the two-stage swarm, deepen only on demand.** Decision:
+don't default to a fixed deeper tree (e.g. a 3-level 1→3→9 swarm) — that
+pays for many extra substrate calls even when a category's row count is
+small. Instead, keep the two-layer query (selector LLM → one knowledge LLM
+per selected category) as the default, and only have the initial
+selector LLM spawn a *larger* swarm — an extra selection layer under a
+specific category — if that category's candidate set is still too large for
+one knowledge LLM's context after the per-category Parquet shard narrows it
+down. Depth grows adaptively with actual data skew, not uniformly for every
+lookup.
+
+This needs its own design pass before implementation: how `IArchiveStore`
+represents category/topic as first-class queryable fields (today `Path` is
+one flat string), how the selector LLM's "distinct pairs" index gets
+computed/maintained cheaply as the archive grows, and what threshold
+triggers the adaptive third layer.
+
 ## Reflection Agent redesign (drive-gated, batched)
 
 Today's `ReflectionAgent` (see [`gap-analysis.md`](gap-analysis.md) for how
