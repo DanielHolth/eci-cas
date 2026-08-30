@@ -98,6 +98,14 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     protected override void Publish(Envelope envelope, string result, SubstrateResult? diagnostics)
     {
+        // Only a real substrate reply can parrot — FallbackResult is fixed
+        // text with nothing upstream to echo, so this can't loop back into
+        // itself when CognitiveAgent<T>'s catch re-invokes Publish below.
+        if (diagnostics is not null && ParrotGuard.IsParroting(result, envelope.Meta.Get<string>(ReasoningAgent.AdviceKey)))
+        {
+            throw new InvalidOperationException($"{Name} response parrots Reasoning's advisory instead of voicing it: {result[..Math.Min(result.Length, 200)]}");
+        }
+
         var proposal = envelope.Derive(Topics.Proposal, Name, envelope.Severity, MetaBag.Empty.With(ReplyKey, result));
         _bus.Publish(Topics.Proposal, proposal);
     }
