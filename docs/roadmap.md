@@ -202,11 +202,20 @@ still too large for one knowledge LLM's context after the per-category
 shard and `Importance` trim, the selector spawns a larger swarm under that
 one triple instead of applying uniform extra depth everywhere.
 
-**`memory.jsonl` retirement.** The current live JSONL store is retired
-outright under the new schema, not migrated — re-seeded once from the
-*original* prototype Parquet data (not from the polluted live file; see
-`ConsolidatorAgent`/self-write-pollution note above). One-time throwaway
-conversion script, same pattern as the earlier `seed-memory.jsonl` import.
+**`memory.jsonl` retirement — seed with one record, not a data migration.**
+The current live JSONL store is retired outright under the new schema, no
+conversion script, no re-import of the prototype's `knowledge.parquet`/
+`identity.parquet` rows (34 + 3 rows — dropped entirely, not carried
+forward). The archive boots with exactly one file, `system.parquet`, one
+row:
+
+```
+domain=external  category=system  topic=identity  subtopic=persona
+subject=this  key=name  value=morrow  importance=0.5  timestamp=now()
+```
+
+`SelfAgent`'s existing identity store/file is separate and explicitly out
+of scope here — untouched by this migration, keeps whatever it does today.
 
 **Consolidator hard-skips self-triggered turns.** A turn whose `meta` shows
 `TriggeredByKey="self"` (Reflection's own idea, looped back through
