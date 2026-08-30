@@ -1,6 +1,7 @@
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
+using EciCas.Agents.Recall;
 using EciCas.Agents.Security;
 using EciCas.Bus;
 using EciCas.Core;
@@ -12,7 +13,8 @@ namespace EciCas.Tests.Agents;
 public class GovernanceAgentTests
 {
     private static GovernanceAgent CreateAgent(IMessageBus bus, BusActivityTracker activity, string[] roster) =>
-        new(bus, activity, NullLogger<GovernanceAgent>.Instance, Options.Create(new GovernanceOptions { BundleRoster = roster }));
+        new(bus, activity, NullLogger<GovernanceAgent>.Instance, Options.Create(new GovernanceOptions { BundleRoster = roster }),
+            new JsonlArchiveStore(Path.GetTempFileName()));
 
     [Theory]
     [InlineData("A")]
@@ -138,6 +140,39 @@ public class GovernanceAgentTests
 
         Assert.True(actionReader.TryRead(out _));
         Assert.True(conclusionReader.TryRead(out _));
+    }
+
+    [Fact]
+    public async Task RedVerdict_AttachesExpressionAndNudgesImpulse()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var systemControlReader = bus.Subscribe(Topics.SystemControl);
+        var store = new JsonlArchiveStore(Path.GetTempFileName());
+        var agent = new GovernanceAgent(bus, activity, NullLogger<GovernanceAgent>.Instance,
+            Options.Create(new GovernanceOptions { BundleRoster = [] }), store);
+        var impulse = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var redVerdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Red).With(SecurityAgent.ConcernKey, "policy violation")
+                .With(IntentAgent.ReplyKey, "should never run verbatim"));
+        await agent.HandleAsync(redVerdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var action));
+        Assert.True(action!.Meta.Get<bool>(GovernanceAgent.SecurityAlertKey));
+        Assert.False(string.IsNullOrEmpty(action.Meta.Get<string>(GovernanceAgent.ExpressionKey)));
+
+        Assert.True(systemControlReader.TryRead(out var control));
+        await impulse.HandleAsync(control!, CancellationToken.None);
+
+        var records = await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None);
+        Assert.Single(records);
+        var vectors = System.Text.Json.JsonSerializer.Deserialize<DriveVectors>(records[0].Content)!;
+        Assert.True(vectors.Urgency > new DriveVectors().Urgency);
     }
 
     [Fact]

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using EciCas.Agents.Consolidator;
+using EciCas.Agents.Governance;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
@@ -30,13 +32,21 @@ public sealed class ImpulseAgent : AgentBase
     /// <summary>Set on the reflex's own proposal. Absent (default false) on Intent's considered proposal.</summary>
     public const string ReflexKey = "impulse.reflex";
 
-    /// <summary>Archive path holding the current DriveVectors, JSON-serialized. Read directly by ReflectionAgent.</summary>
+    /// <summary>Archive path holding the current DriveVectors, JSON-serialized. Read directly by ReflectionAgent and GovernanceAgent.</summary>
     public const string DrivePath = "impulse/drive";
 
     private static readonly string[] CriticalTriggers = ["help", "emergency", "urgent"];
 
     /// <summary>Fixed, named nudge applied on a critical event — same discipline as Python's FRUSTRATION_NUDGE: something may ask for a shift, but the number that lands is written here, in code.</summary>
     private static readonly DriveVectors CriticalNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0.15, SocialDrive: 0, Temperature: -0.05);
+
+    /// <summary>
+    /// Ported verbatim from Python's FRUSTRATION_NUDGE (agents/impulse/agent.py):
+    /// more urgency (this mattered and it didn't work), a little more fatigue
+    /// (it cost something), slightly less warmth — applied when Governance
+    /// signals a blocked exchange over system.control, never a direct call.
+    /// </summary>
+    private static readonly DriveVectors FrustrationNudge = new(Curiosity: 0, Fatigue: 0.05, Urgency: 0.15, SocialDrive: 0, Temperature: -0.05);
 
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
@@ -51,10 +61,20 @@ public sealed class ImpulseAgent : AgentBase
     }
 
     public override string Name => "Impulse";
-    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception];
+    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.SystemControl];
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        if (envelope.Topic == Topics.SystemControl)
+        {
+            if (envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey) == GovernanceAgent.FrustrationKind)
+            {
+                await NudgeAsync(FrustrationNudge, cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var isCritical = CriticalTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase));
 
@@ -72,14 +92,14 @@ public sealed class ImpulseAgent : AgentBase
                 MetaBag.Empty.With(IntentAgent.ReplyKey, reply).With(ReflexKey, true));
             _bus.Publish(Topics.Proposal, proposal);
 
-            await NudgeAsync(cancellationToken).ConfigureAwait(false);
+            await NudgeAsync(CriticalNudge, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task NudgeAsync(CancellationToken cancellationToken)
+    private async Task NudgeAsync(DriveVectors nudge, CancellationToken cancellationToken)
     {
         var current = await GetVectorsAsync(cancellationToken).ConfigureAwait(false);
-        var updated = current.Add(CriticalNudge);
+        var updated = current.Add(nudge);
 
         await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

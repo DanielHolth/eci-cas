@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using EciCas.Agents.Consolidator;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Security;
@@ -19,23 +21,41 @@ public sealed class GovernanceAgent : AgentBase
     /// <summary>Carries Security's concern into a re-issued Bundle so Intent can revise. Set only on a revision pass.</summary>
     public const string RevisionConcernKey = "governance.revision_concern";
 
+    /// <summary>
+    /// system.control kind published on a Red verdict — mirrors
+    /// ConsolidatorAgent.WrittenKind/ReflectionAgent.ReflectedKind's
+    /// convention. ImpulseAgent listens for this to apply FrustrationNudge,
+    /// with no direct reference between the two agents.
+    /// </summary>
+    public const string FrustrationKind = "Frustration";
+
+    /// <summary>The face the persona's current drive-vector state implies, attached to a blocked Action/Conclusion so what reaches the human at least matches how it feels.</summary>
+    public const string ExpressionKey = "governance.expression";
+
+    /// <summary>Set true on a blocked Action/Conclusion so downstream consumers can tell a security block from an ordinary reply without inspecting VerdictKey.</summary>
+    public const string SecurityAlertKey = "governance.security_alert";
+
+    private const string SecurityAlertPathAnchor = "security_alert";
+
     private readonly IMessageBus _bus;
     private readonly ILogger<GovernanceAgent> _logger;
     private readonly GovernanceOptions _options;
+    private readonly IArchiveStore _store;
     private readonly ConcurrentDictionary<Guid, BundleState> _bundles = new();
 
-    public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options)
+    public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options, IArchiveStore store)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _logger = logger;
         _options = options.Value;
+        _store = store;
     }
 
     public override string Name => "Governance";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.Advisories, Topics.Verdict];
 
-    public override Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
+    public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         switch (envelope.Topic)
         {
@@ -46,11 +66,9 @@ public sealed class GovernanceAgent : AgentBase
                 OnAdvisory(envelope);
                 break;
             case Topics.Verdict:
-                OnVerdict(envelope);
+                await OnVerdictAsync(envelope, cancellationToken).ConfigureAwait(false);
                 break;
         }
-
-        return Task.CompletedTask;
     }
 
     private void OnPerception(Envelope perception)
@@ -153,7 +171,7 @@ public sealed class GovernanceAgent : AgentBase
     private static MetaBag BuildBundleMeta(Envelope perception, IReadOnlyList<Envelope> advisories) =>
         advisories.Aggregate(perception.Meta, (acc, advisory) => acc.Merge(advisory.Meta));
 
-    private void OnVerdict(Envelope verdict)
+    private async Task OnVerdictAsync(Envelope verdict, CancellationToken cancellationToken)
     {
         var value = verdict.Meta.Get<Verdict>(SecurityAgent.VerdictKey);
         var reply = verdict.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
@@ -190,8 +208,13 @@ public sealed class GovernanceAgent : AgentBase
         }
 
         var replyToSpeak = value == Verdict.Red ? BlockedReply(verdict) : reply;
-        var action = verdict.Derive(Topics.Action, Name, verdict.Severity,
-            MetaBag.Empty.With(IntentAgent.ReplyKey, replyToSpeak).With(SecurityAgent.VerdictKey, value));
+        var actionMeta = MetaBag.Empty.With(IntentAgent.ReplyKey, replyToSpeak).With(SecurityAgent.VerdictKey, value);
+        if (value == Verdict.Red)
+        {
+            actionMeta = await AppendFrustrationAsync(verdict, actionMeta, cancellationToken).ConfigureAwait(false);
+        }
+
+        var action = verdict.Derive(Topics.Action, Name, verdict.Severity, actionMeta);
         _bus.Publish(Topics.Action, action);
 
         if (isReflex)
@@ -202,8 +225,7 @@ public sealed class GovernanceAgent : AgentBase
             return;
         }
 
-        var conclusion = verdict.Derive(Topics.Conclusion, Name, verdict.Severity,
-            MetaBag.Empty.With(IntentAgent.ReplyKey, replyToSpeak).With(SecurityAgent.VerdictKey, value));
+        var conclusion = verdict.Derive(Topics.Conclusion, Name, verdict.Severity, actionMeta);
         _bus.Publish(Topics.Conclusion, conclusion);
 
         _bundles.TryRemove(verdict.CorrelationId, out _);
@@ -215,6 +237,32 @@ public sealed class GovernanceAgent : AgentBase
         return string.IsNullOrEmpty(concern)
             ? "I can't help with that."
             : $"I can't help with that: {concern}";
+    }
+
+    /// <summary>
+    /// A Red verdict is the actual block path: nudge Impulse's drive state
+    /// via system.control (never a direct call — same loose-coupling
+    /// discipline ReflectionAgent's push-vs-write gate follows), attach the
+    /// resulting expression to the blocked Action/Conclusion, and write a
+    /// durable cold-storage record so the alert is queryable later.
+    /// </summary>
+    private async Task<MetaBag> AppendFrustrationAsync(Envelope verdict, MetaBag meta, CancellationToken cancellationToken)
+    {
+        var records = await _store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
+        var vectors = records.Count > 0
+            ? JsonSerializer.Deserialize<DriveVectors>(records[0].Content) ?? new DriveVectors()
+            : new DriveVectors();
+        var expression = vectors.Expression();
+
+        var control = Envelope.Create(Topics.SystemControl, Name, Severity.Elevated,
+            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, FrustrationKind));
+        _bus.Publish(Topics.SystemControl, control);
+
+        var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey) ?? "blocked";
+        var alertRecord = new ArchiveRecord(SecurityAlertPathAnchor, $"{expression}: {concern}", DateTimeOffset.UtcNow, ArchiveDomain.Internal);
+        await _store.WriteAsync([alertRecord], cancellationToken).ConfigureAwait(false);
+
+        return meta.With(ExpressionKey, expression).With(SecurityAlertKey, true);
     }
 
     private sealed class BundleState
