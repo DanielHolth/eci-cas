@@ -1,8 +1,7 @@
 # Morrow-ECI
 
 A Next.js/React/TypeScript scaffold for the companion app described in
-the C# rebuild plan (`docs/csharp-rebuild-spec.md` — see the "Milestones"
-and "Project layout" sections). This is the frontend companion surface
+the C# rebuild plan (`docs/architecture.md`). This is the frontend companion surface
 for the ECI-CAS backend, which lives one level up in this repo
 (`src/EciCas.*`).
 

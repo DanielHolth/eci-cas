@@ -1,41 +1,8 @@
 # ECI-CAS — Roadmap
 
-## Active — C# rebuild, genuinely decoupled agents
-
-This repo is now the C# rebuild only. It replaces the Python prototype
-that used to live here — a bus that dispatched synchronously and
-recursively instead of decoupling agents, which meant Consolidator and
-Reflection were never actually off the live reply path despite every
-doc calling them "asynchronous." That prototype is preserved in a
-sibling folder/repo, `eci-cas-python-prototype`, pushed to its own
-remote as a fallback — see [`handover.md`](handover.md).
-
-The rebuild is a from-scratch design, not a mechanical port: one queue
-+ one listener per agent, fire-and-forget publish, Governance as a
-plain listener rather than a synchronous orchestrator, console as a
-plain bus subscriber. Full design capture:
-[`csharp-rebuild-spec.md`](csharp-rebuild-spec.md). Standing rule for
-all bus work here: `AGENTS.md`'s Architecture section.
-
-**M1 and M2 are done.** Perception → {Impulse, Reasoning, Self} →
-Governance → Intent (real substrate call) → Security → Governance →
-Action runs end-to-end via `dotnet run --project src/EciCas.Host`,
-with `ArchiveLogger` recording every hop to `archive.jsonl`.
-`CognitiveAgent<T>`, `ISubstrateProvider` + registry (mock + one live
-OpenAI-compatible HTTP provider), and budget tiers via config are all
-in place. Next up is M3 — safety and gating (Security's real rule
-engine, the Critical reflex's double-conclusion guard) — see
-[`handover.md`](handover.md).
-
-## Morrow-ECI (frontend)
-
-`morrow-eci/` is the Next.js companion surface — a Jarvis/tamagotchi
-hybrid, currently rendering against a mocked event feed
-(`morrow-eci/lib/mockTurn.ts`). Once the C# backend publishes real
-`system.control` / `events.*` envelopes, swap the mock feed for a real
-subscription (void-observer only) and wire `ConsolidationDoodle.tsx`'s
-click to a real `ingest(source_type: "ui_click", ref_event_id: ...)`
-call. Blocked on the C# backend existing, not on any frontend work.
+The C# backend and its Next.js companion surface (`morrow-eci/`) are both
+built and wired end to end — see [`architecture.md`](architecture.md) for
+what exists. This tracks what's still ahead.
 
 ## Long-term goals
 
@@ -45,7 +12,7 @@ where cloud connectivity is unreliable. Scope TBD: fine-tuning,
 quantization, latency targets.
 
 **Android native client.** On-device minimal-tier agent running the
-full 12-role system, or a remote-client mode where only Perception and
+full agent roster, or a remote-client mode where only Perception and
 Action cross process boundaries and all reasoning stays server-side.
 Stretch: iOS via shared business logic. Needs UI parity with
 Morrow-ECI.
@@ -53,7 +20,7 @@ Morrow-ECI.
 ## Companion & knowledge extensions (not started)
 
 Four capabilities for device-sharing and persistent user identity, none
-built yet, all backend features to design once the C# agents exist:
+built yet:
 
 **Multi-user profiles.** Multiple users per device; a new name in
 conversation offers to create a profile. Each profile is a separate
@@ -75,10 +42,9 @@ milestones — so a new doctor's visit doesn't clobber the last one.
 Query: Recall surfaces diary entries in temporal order, not as
 overwriting facts.
 
-These layer on top of the core system and don't block the C# rebuild
-or Morrow-ECI. Voice + biometric + camera compose as one "who is this"
-pipeline feeding profile context, which diary-aware archiving then
-reads:
+These layer on top of the core system and don't block anything else.
+Voice + biometric + camera compose as one "who is this" pipeline feeding
+profile context, which diary-aware archiving then reads:
 
 ```
 biometric unlock → voice/camera check → profile context →
@@ -87,3 +53,23 @@ diary-aware knowledge archiving
 
 Profiles and auth are Morrow-ECI surface features; diary is a
 Recall-agent feature that can be prototyped independently.
+
+## Open design questions
+
+**Swappable personas.** Switching which persona is active ("which
+tamagotchi am I playing with today?"). Recall should stay shared
+across personas (it's "what happened," not character); Self should
+not — each persona needs its own trait bank that only develops while
+active. Open question: does a swap create a new Intent instance or
+re-hydrate the same one from a different store? Probably wants its own
+design doc before any code — this is the largest single piece of
+unscoped work in the project.
+
+**Match input to output, not just retrieve.** Self and Recall
+currently answer "what does the archive say that's relevant to this
+event" — a retrieval question. The sharper version is "given this
+event, what do I already know that changes how I should read it" — an
+inference question. Tension: archive-lookup's own design principle is
+"report what the records say, not what you happen to know — never
+invent a record." Pushing toward inference risks turning Recall/Self
+into a second Reasoning. Needs a real design conversation.

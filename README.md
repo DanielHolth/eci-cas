@@ -7,19 +7,14 @@ Reasoning, Recall, Self, Governance, Intent, Security, Action,
 Consolidator, Reflection. Personality emerges from the interplay of
 narrowly specialized roles, not from any single agent.
 
-This repo is the **C# rebuild**: a from-scratch redesign with
-genuinely decoupled, independently-listening agents (queue-per-agent,
-fire-and-forget publish — see [`docs/csharp-rebuild-spec.md`](docs/csharp-rebuild-spec.md)
-for the target architecture and why). **M1 (walking skeleton) is done** —
-`dotnet run --project src/EciCas.Host` takes a prompt and returns a
-voiced reply through Perception → Governance → Intent → Security →
-Governance → Action, with every hop logged to `archive.jsonl`. See
-[`docs/handover.md`](docs/handover.md) for what's next.
+Agents are genuinely decoupled — one queue and one listener per agent,
+fire-and-forget publish, no agent calls or knows about another directly.
+See [`docs/architecture.md`](docs/architecture.md) for the full design.
 
-The original Python implementation that motivated this rebuild lives,
-unmodified, in a sibling folder/repo — `eci-cas-python-prototype` —
-pushed to its own remote as a fallback reference. It is not part of
-this repo and nothing here depends on it.
+A prompt goes in through Perception, fans out to advisory agents,
+resolves through Governance's security gate, and comes out as a voiced
+reply through Action — every hop logged to `archive.jsonl` and streamed
+live to the `morrow-eci/` companion UI over SSE.
 
 ## Structure
 
@@ -27,32 +22,41 @@ this repo and nothing here depends on it.
 eci-cas/
   EciCas.slnx
   src/
-    EciCas.Core/            Envelope, MetaBag, Severity, Verdict, Topics, IAgent, IMessageBus, IArchiveStore, ISubstrateProvider
-    EciCas.Bus/              ChannelBus, AgentBase, BusActivityTracker
-    EciCas.Agents/            Perception, Governance, Intent, Security, Action (M1); Reasoning, Recall, Self, Impulse, Consolidator, Reflection to follow
-    EciCas.Substrates/        substrate provider registry (M2)
-    EciCas.Host/               Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest
-  tests/EciCas.Tests/         xUnit
-  docs/                       csharp-rebuild-spec.md — target architecture
-                              roadmap.md — planned milestones
-                              handover.md — session pickup notes
-  morrow-eci/                 Next.js companion UI (frontend), unaffected by the rebuild
-  .github/copilot-instructions.md   C# style/architecture conventions for this rebuild
+    EciCas.Core/         Envelope, MetaBag, Severity, Verdict, Topics, agent/bus/store/substrate contracts
+    EciCas.Bus/           ChannelBus, AgentBase, BusActivityTracker
+    EciCas.Agents/         Perception, Impulse, Reasoning, Recall, Self, Governance, Intent, Security, Action, Consolidator, Reflection
+    EciCas.Substrates/     substrate provider registry (mock + live OpenAI-compatible HTTP)
+    EciCas.Host/            Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
+  tests/EciCas.Tests/      xUnit
+  docs/                     architecture.md — system design; roadmap.md — what's ahead
+  morrow-eci/                Next.js companion UI, consumes the SSE stream
+  .github/copilot-instructions.md   C# style/architecture conventions
 ```
 
-## Running it
+## Run it locally
 
 ```bash
-dotnet test EciCas.slnx
-dotnet run --project src/EciCas.Host  # interactive prompt loop
+dotnet test EciCas.slnx                    # build + full test suite
+dotnet run --project src/EciCas.Host       # interactive prompt loop (SSE + console)
+cd morrow-eci && npm install && npm run dev   # companion UI at localhost:3000
 ```
+
+Keywords: **local dev setup**, **getting started**, **quickstart**,
+**dotnet run**, **npm run dev**. No API key needed — every `Budget:Tiers`
+entry defaults to `"mock"`. To use a live substrate, set the environment
+variable named in `appsettings.json`'s `SubstrateProvider` config (default
+`OPENAI_API_KEY`) — never put a literal key in config.
 
 ## Docs
 
-- [`docs/csharp-rebuild-spec.md`](docs/csharp-rebuild-spec.md) — target architecture, what carries over from the Python prototype and what doesn't
-- [`docs/roadmap.md`](docs/roadmap.md) — planned milestones, current state
-- [`docs/handover.md`](docs/handover.md) — open design questions, session pickup notes
+- [`docs/architecture.md`](docs/architecture.md) — system design: agent roster, bus mechanics, storage, verification
+- [`docs/roadmap.md`](docs/roadmap.md) — what's ahead, open design questions
 - [`AGENTS.md`](AGENTS.md) — standing engineering rules (loose coupling/async is non-negotiable)
+
+The Python prototype this project replaced lives, unmodified, in a
+sibling folder/repo — `eci-cas-python-prototype` — pushed to its own
+remote as a fallback reference. It is not part of this repo and nothing
+here depends on it.
 
 ## License
 
