@@ -294,6 +294,66 @@ re-hydrate the same one from a different store? Probably wants its own
 design doc before any code — this is the largest single piece of
 unscoped work in the project.
 
+**Collapse Reasoning's index to category/topic; push subtopic resolution
+and row-count scaling down into Recall.** `ReasoningAgent` currently shows
+its one substrate call the *entire* in-memory index — every distinct
+`(category, topic, subtopic)` triple in the archive, one line each
+(`ReasoningAgent.BuildSelectionPrompt`) — and `MaxSelectedTriples` only caps
+how many it's allowed to pick, not how many it's shown. Fine while the
+triple count is small; at 1000+ distinct triples this becomes an
+unbounded, ever-growing prompt on every turn.
+
+Rejected alternative: shard the index into arbitrary buckets and run
+parallel selector calls per bucket. Discarded because bucketing is lossy —
+it risks separating triples that need to be weighed against each other
+(e.g. `system/identity` vs. `person/identity` disambiguating "system name"
+from "person name" only works if both are visible to the same call), and
+there's no principled way to bucket the index that guarantees related
+triples land together. A hierarchical selector (category+topic, then a
+second LLM stage over subtopics) was also considered — it fixes the
+bucketing-loses-context problem, but adds a whole new agent/selector kind
+just to resolve subtopic.
+
+**Chosen shape instead** — reuse Recall's existing fan-out pattern rather
+than inventing a new stage:
+
+```
+Reasoning (Category + Topic)
+  --> N * Recall (Subtopic + Subject + Key = Value)
+        if candidate rows > MaxPerTopic, split across N+1 parallel
+        Recall workers for that (category, topic) pair
+```
+
+Reasoning is shown only distinct `(category, topic)` pairs (subtopic
+dropped from its index) — a real, lossless dimensionality reduction, not a
+lossy split, since collapsing subtopic still leaves every cross-category
+semantic distinction Reasoning needs to make fully visible in one call.
+Subtopic resolution moves down into Recall, alongside subject/key — the
+same per-triple parallel call `RecallAgent` already makes today, just now
+also picking subtopic instead of receiving it pre-selected. When a
+`(category, topic)` pair's candidate row count exceeds `MaxPerTopic`, add
+another parallel Recall worker for that pair rather than truncating harder.
+
+Splitting rows arbitrarily across N+1 Recall workers carries the same
+"might separate things that needed comparing" risk bucketing had at the
+Reasoning layer, but at much lower stakes: Recall's job is closer to
+independent per-row relevance scoring than Reasoning's cross-category
+disambiguation, so an arbitrary row split rarely costs a comparison that
+actually mattered.
+
+Implementation wrinkle to resolve when this is picked up: today
+`RecallAgent.LookupAsync(triple, maxRows)` is keyed by the full triple
+including subtopic, and `MaxPerTopic` trims within one subtopic's rows.
+Moving subtopic resolution into Recall means lookup and the `MaxPerTopic`
+trim need to operate across every subtopic under a `(category, topic)`
+pair at once — the cap should apply post-fan-out to the combined pool, not
+pre-cap per subtopic. Storage-wise this is fine, since Parquet files are
+already partitioned per-category, not per-topic.
+
+Not a near-term concern — triple count grows only with new topic
+*combinations*, not new facts within existing ones — but worth having a
+settled design for when it comes up.
+
 **Match input to output, not just retrieve.** Self and Recall
 currently answer "what does the archive say that's relevant to this
 event" — a retrieval question. The sharper version is "given this

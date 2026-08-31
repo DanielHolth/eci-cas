@@ -148,7 +148,32 @@ public sealed class ParquetArchiveStore : IArchiveStore
         await ParquetSerializer.SerializeAsync(rows, IndexPath, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<List<ArchiveRecord>> ReadRecordsAsync(string path, CancellationToken cancellationToken)
+    /// <summary>Category file path for a directory, using the same {category}.parquet convention as instance writes.</summary>
+    public static string CategoryPathFor(string directory, string category) => Path.Combine(directory, $"{category}.parquet");
+
+    /// <summary>Rescans every category file in a directory and rewrites index.parquet with the distinct triples found. For maintenance tooling after manual edits.</summary>
+    public static async Task RebuildIndexAsync(string directory, CancellationToken cancellationToken)
+    {
+        var triples = new HashSet<ArchiveTriple>();
+        foreach (var path in Directory.EnumerateFiles(directory, "*.parquet"))
+        {
+            if (string.Equals(Path.GetFileName(path), "index.parquet", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var records = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
+            foreach (var record in records)
+            {
+                triples.Add(record.Triple);
+            }
+        }
+
+        var rows = triples.Select(t => new IndexRow { Category = t.Category, Topic = t.Topic, Subtopic = t.Subtopic });
+        await ParquetSerializer.SerializeAsync(rows, Path.Combine(directory, "index.parquet"), cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async Task<List<ArchiveRecord>> ReadRecordsAsync(string path, CancellationToken cancellationToken)
     {
         if (!File.Exists(path))
         {
@@ -161,7 +186,7 @@ public sealed class ParquetArchiveStore : IArchiveStore
             DateTimeOffset.Parse(r.Timestamp, CultureInfo.InvariantCulture), r.Domain, r.Importance))];
     }
 
-    private static async Task WriteRecordsAsync(string path, List<ArchiveRecord> records, CancellationToken cancellationToken)
+    public static async Task WriteRecordsAsync(string path, List<ArchiveRecord> records, CancellationToken cancellationToken)
     {
         var rows = records.Select(r => new RecordRow
         {

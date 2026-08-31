@@ -109,9 +109,21 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         List<Candidate> candidates;
         try
         {
-            var result = await _substrate.CompleteAsync(entry.Class, BuildBatchPrompt(batch), cancellationToken).ConfigureAwait(false);
+            var batchPrompt = BuildBatchPrompt(batch);
+            var result = await _substrate.CompleteAsync(entry.Class, batchPrompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+
+            // Same guard as ConsolidatorAgent.ExtractFactsAsync: the mock
+            // tier echoes the prompt back verbatim, and its own worked
+            // example ("0.7|hypothesis|...") is a valid score|subtopic|idea
+            // line that ParseCandidates would otherwise harvest as real.
+            if (result.Text.Contains(batchPrompt, StringComparison.Ordinal))
+            {
+                _logger.LogInformation("{Agent} substrate echoed the prompt, nothing extracted", Name);
+                return;
+            }
+
             candidates = ParseCandidates(result.Text);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -142,7 +154,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // candidate.Score stays purely for picking `best` among the batch.
         var internalRecords = candidates
             .Select(candidate => new ArchiveRecord(
-                FixedCategory, FixedTopic, candidate.Subtopic, FixedSubject, FixedKey, candidate.Idea,
+                FixedCategory, FixedTopic, candidate.Subtopic, FixedSubject, FixedKey, PromptCap.Apply(candidate.Idea),
                 now, ArchiveDomain.Internal, candidate == best && shouldPush ? PushedImportance : QuietImportance))
             .ToList();
         await _store.WriteAsync(internalRecords, cancellationToken).ConfigureAwait(false);
@@ -187,9 +199,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             (1-2 word) functional label for the kind of thought it is — pick
             whatever label fits best, e.g. pattern, hypothesis, meta-rule,
             synthesis, question, or another label of your own choosing. Idea
-            is 1-5 content words, no filler — the same terse value style as a
-            Consolidator fact, not a full sentence (e.g.
-            "0.7|hypothesis|trip dates vs deadline"). If nothing stands out,
+            ({ArchiveWriteStyle.TerseValue}), e.g.
+            "0.7|hypothesis|trip dates vs deadline". If nothing stands out,
             respond with nothing.
 
             Interactions:

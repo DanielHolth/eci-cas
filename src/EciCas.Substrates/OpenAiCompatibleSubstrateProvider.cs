@@ -30,12 +30,17 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
     public async Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
     {
         var options = _options.Value;
-        var model = options.Classes.GetValueOrDefault(substrateClass)?.Model ?? substrateClass;
-        var request = new ChatCompletionRequest(model, [new ChatMessage("user", prompt)]);
+        var classEntry = options.Classes.GetValueOrDefault(substrateClass);
+        var model = classEntry?.Model ?? substrateClass;
+        var request = new ChatCompletionRequest(model, [new ChatMessage("user", prompt)], classEntry?.Effort);
 
         var started = Stopwatch.GetTimestamp();
         using var response = await _http.PostAsJsonAsync("chat/completions", request, JsonOptions, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new HttpRequestException($"Substrate call to '{substrateClass}' failed: {(int)response.StatusCode} {response.StatusCode} — {body}");
+        }
 
         var payload = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(JsonOptions, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Substrate returned an empty completion response.");
@@ -43,12 +48,15 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
 
         var text = payload.Choices.Count > 0 ? payload.Choices[0].Message.Content : string.Empty;
         var tokens = payload.Usage?.TotalTokens;
-        var cost = tokens is int t ? t * options.CostPerTokenUsd : (decimal?)null;
+        var cost = tokens is int t ? t * (classEntry?.CostPerTokenUsd ?? 0m) : (decimal?)null;
 
         return new SubstrateResult(text, elapsed, tokens, cost);
     }
 
-    private sealed record ChatCompletionRequest(string Model, ChatMessage[] Messages);
+    private sealed record ChatCompletionRequest(
+        string Model,
+        ChatMessage[] Messages,
+        [property: JsonPropertyName("reasoning_effort"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReasoningEffort = null);
     private sealed record ChatMessage(string Role, string Content);
     private sealed record ChatCompletionResponse(List<ChatChoice> Choices, ChatUsage? Usage);
     private sealed record ChatChoice(ChatMessage Message);

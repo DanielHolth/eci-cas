@@ -38,6 +38,18 @@ public static class ArchiveDomain
 }
 
 /// <summary>
+/// Shared prompt language for how much text belongs in an ArchiveRecord's
+/// Value field — every substrate-driven writer (Consolidator, Reflection)
+/// asks for this same terse style, so a reader scanning archived facts sees
+/// consistent density regardless of which agent wrote them. PromptCap.Apply
+/// backs this up as a hard char-count limit for substrates that ignore it.
+/// </summary>
+public static class ArchiveWriteStyle
+{
+    public const string TerseValue = "1-5 content words, no filler — terse style, not a full sentence";
+}
+
+/// <summary>
 /// Single-key state-blob storage — today's exact shape, unchanged. Used by
 /// SelfAgent's identity, ImpulseAgent's drive vectors, Governance's
 /// frustration log, and Reflection's eagerness read. Deliberately distinct

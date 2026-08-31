@@ -80,16 +80,20 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         // explicitly-stated fact gets archived (see ExtractFactsAsync's
         // prompt) — a turn with nothing worth remembering yields zero
         // records, same as the Python prototype's Consolidator.
-        var newRecords = await ExtractFactsAsync(envelope, text, entry.Class, cancellationToken).ConfigureAwait(false);
+        var (newRecords, diagnostics) = await ExtractFactsAsync(envelope, text, entry.Class, cancellationToken).ConfigureAwait(false);
 
-        // One line every turn regardless of whether anything was flushed —
-        // without this the only visible signal was the substrate-call
+        // One line every turn, same shape as RecallAgent's aggregate line —
+        // without this the only visible signal was a bare substrate-call
         // latency line, which says nothing about whether extraction actually
         // found a fact, so a silent parsing failure (e.g. the model using
         // "key: value" instead of the requested "key=value") looked
         // identical to a turn that legitimately had nothing to remember.
-        _logger.LogInformation("{Agent} extracted {Count}: {Facts}", Name, newRecords.Count,
-            newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}")));
+        if (diagnostics is not null)
+        {
+            var facts = newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}"));
+            _logger.LogInformation("{Agent} {Facts} ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
+                Name, facts, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
+        }
 
         // Flushes every BatchSize turns processed, not every BatchSize facts
         // extracted — most turns state nothing worth remembering, so counting
@@ -129,7 +133,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     /// entirely — errors are logged and swallowed, same posture as
     /// FallbackPosture.Closed on CognitiveAgent&lt;T&gt;.
     /// </summary>
-    private async Task<IReadOnlyList<ArchiveRecord>> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics)> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
     {
         var selected = envelope.Meta.Get<IReadOnlyList<ArchiveTriple>>(ReasoningAgent.SelectedTriplesKey) ?? [];
         var known = selected.Count == 0
@@ -139,9 +143,17 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         var prompt = $"""
             Extract every fact the user explicitly stated about themselves or
             someone/something else in this turn — a name, a place, a
-            relationship, a preference, anything concrete. Do not infer,
-            guess, or embellish beyond what was said. A turn with an obvious
-            stated fact (e.g. "my name is X") must never come back empty.
+            relationship, a preference, anything concrete about a real
+            person/place/thing. Do not infer, guess, or embellish beyond what
+            was said. A turn with an obvious stated fact (e.g. "my name is
+            X") must never come back empty.
+
+            Never extract meta-commentary about the turn or message itself —
+            no facts like "purpose", "topic", or "intent" of what was said,
+            and no facts derived from filler, small talk, or test/placeholder
+            text (e.g. "this is a test", "hello", "ok"). If the turn contains
+            no concrete real-world fact, that is the normal, expected case —
+            respond with nothing rather than inventing something to say.
 
             Respond with one line per fact:
             category=... topic=... subtopic=... subject=... key=... value=...
@@ -153,8 +165,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             a reason to skip the fact. Subject (1-2 words) is usually a
             unique entity, named — for a fact about the user themselves, use
             their own name once stated, or "owner" before it's known. Key
-            (1-3 words) is the attribute. Value (1-5 content words, no
-            filler) is the content itself.
+            (1-3 words) is the attribute. Value ({ArchiveWriteStyle.TerseValue})
+            is the content itself.
 
             Examples:
             category=person topic=family subtopic=owner subject=daniel key=name value=daniel
@@ -169,25 +181,23 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         try
         {
             var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            var facts = ParseFacts(result.Text, envelope.Timestamp);
 
-            // The "extracted 0: nothing" line doesn't say WHY — surface the
-            // raw response so a genuine model refusal is distinguishable
-            // from a parseable-but-unexpected shape ParseFields still
-            // rejects.
-            if (facts.Count == 0)
+            // The mock tier echoes the prompt back verbatim — parsing that
+            // would just re-harvest our own worked examples (each one a
+            // valid "category=..." line) out of the instructions as if
+            // they'd been extracted. A real substrate never reproduces its
+            // entire multi-hundred-char input inside a reply.
+            if (result.Text.Contains(prompt, StringComparison.Ordinal))
             {
-                _logger.LogInformation("{Agent} raw response (0 parsed): {Response}", Name, result.Text);
+                return ([], result);
             }
 
-            return facts;
+            return (ParseFacts(result.Text, envelope.Timestamp), result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "{Agent} fact-extraction substrate call failed, skipping", Name);
-            return [];
+            return ([], null);
         }
     }
 
@@ -218,7 +228,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
 
             var (category, topic, subtopic, subject, key, value) = fields.Value;
             var importance = Importance(key);
-            records.Add(new ArchiveRecord(category, topic, subtopic, subject, key, value, timestamp, ArchiveDomain.External, importance));
+            records.Add(new ArchiveRecord(category, topic, subtopic, subject, key, PromptCap.Apply(value), timestamp, ArchiveDomain.External, importance));
         }
 
         return records;

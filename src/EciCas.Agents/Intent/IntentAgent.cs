@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
@@ -58,7 +59,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
           it describes YOU, the assistant — your own name, traits, or
           preferences — never attribute it to the human or anyone else. Any
           other category describes the human or someone they've told you
-          about.
+          about. If in doubt, assume it's about the human.
         """;
 
     private readonly IMessageBus _bus;
@@ -100,18 +101,15 @@ public sealed class IntentAgent : CognitiveAgent<string>
     }
 
     /// <summary>
-    /// Recall's recalled facts as one section, already sorted by Importance —
-    /// no External/Internal split. RecallAgent's own picking prompt withholds
-    /// Category/Topic/Subtopic as redundant, but that's only true there
-    /// because each of its calls is scoped to one triple; here picks from
-    /// every selected triple land in one flat list, so the full path is the
-    /// only thing left distinguishing two facts that share a Subject/Key
-    /// (e.g. person/family/son vs person/work/colleague). The self/human
-    /// distinction is also baked into each fact's own phrasing rather than
-    /// left to the abstract category==="system" rule in ResponseContract
-    /// above: a small substrate call reliably drops a rule stated once and
-    /// applied many tokens later, especially against a subject as generic as
-    /// "this" (see the seeded system/identity/persona record in Program.cs).
+    /// Recall's recalled facts as one JSON array, already sorted by
+    /// Importance — no English restating of the path convention here, since
+    /// ResponseContract already states it once, statically. RecallAgent's
+    /// own picking prompt withholds Category/Topic/Subtopic as redundant,
+    /// but that's only true there because each of its calls is scoped to
+    /// one triple; here picks from every selected triple land in one flat
+    /// list, so the full path is the only thing left distinguishing two
+    /// facts that share a Subject/Key (e.g. person/family/son vs
+    /// person/work/colleague).
     /// </summary>
     private static void AppendRecalledFacts(StringBuilder prompt, IReadOnlyList<ArchiveRecord>? facts)
     {
@@ -120,16 +118,17 @@ public sealed class IntentAgent : CognitiveAgent<string>
             return;
         }
 
-        var joined = string.Join("; ", facts.Select(FormatFact));
-        prompt.Append(" [Recall: ").Append(PromptCap.Apply(joined)).Append(']');
-    }
+        var array = new JsonArray();
+        foreach (var f in facts)
+        {
+            array.Add(new JsonObject
+            {
+                [$"{f.Category}/{f.Topic}/{f.Subtopic}/{f.Subject}/{f.Key}"] = f.Value,
+                ["Importance"] = f.Importance,
+            });
+        }
 
-    private static string FormatFact(ArchiveRecord f)
-    {
-        var path = $"{f.Category}/{f.Topic}/{f.Subtopic}";
-        return string.Equals(f.Category, "system", StringComparison.OrdinalIgnoreCase)
-            ? $"(about you, the assistant; {path}) your {f.Key} is {f.Value}"
-            : $"(about the human or someone they mentioned; {path}) {f.Subject}'s {f.Key} is {f.Value}";
+        prompt.Append(" [Recall: ").Append(array.ToJsonString()).Append(']');
     }
 
     protected override string ParseResult(SubstrateResult result) => result.Text.Trim();
