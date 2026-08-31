@@ -65,15 +65,18 @@ semantic — no dedup happens across languages. Translating to English before
 write (or before path/keyword extraction) would keep one fact as one entry
 regardless of what language it arrived in.
 
-## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — design finalized
+## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — shipped
 
-Today's `RecallAgent`/`JsonlArchiveStore` do purely deterministic retrieval —
-literal ≥5-letter word extraction from the raw turn text
-(`SignificantWords.Extract`) proposing lookup paths, then exact-string
-matching against `ArchiveRecord.Path`, newest-N-per-path truncation, no
-relevance ranking (see [`gap-analysis.md`](gap-analysis.md) §2.1). This
-diverges from the Python prototype's actual design, which is semantic at
-both stages. Design is now settled; implementation not yet started.
+**Status: implemented.** `ParquetArchiveStore`, the `ArchiveTriple` index,
+Reasoning-as-selector, and Recall's per-triple parallel fan-out are all in
+`src` and covered by tests. The rest of this section is kept as the design
+record for what was built, not as outstanding work.
+
+What this replaced: the old `RecallAgent`/`JsonlArchiveStore` pair did
+purely deterministic retrieval — literal ≥5-letter word extraction from the
+raw turn text proposing lookup paths, exact-string matching against a flat
+`Path`, newest-N-per-path truncation, no relevance ranking. That diverged
+from the Python prototype's design, which is semantic at both stages.
 
 **Record schema.** Replaces the flat `Path`/`Content` shape. One full
 worked example, every field filled:
@@ -101,8 +104,10 @@ category/topic split isn't just "person stuff," it's a real taxonomy.
 - `Value` — 1-5 content words (semantically-loaded terms only — no stop/
   filler words like "is"/"it"/"the", and no full sentences).
 - `Timestamp`.
-- `Domain` (`Internal`/`External`) — now load-bearing: gates which of
-  Intent's two result arrays (see below) a record surfaces in.
+- `Domain` (`Internal`/`External`) — marks whether a row was written by
+  Consolidator (external fact) or Reflection (self-derived inference). Not
+  used to split Recall's results into separate arrays for Intent — see the
+  note at the end of this section.
 - `Importance` (0.0-1.0) — set by the writer at write time. `Consolidator`
   scores it per the rules the user gave (name > birthday/title > address,
   etc. — the writer's own judgment against that ordering, not a fixed
@@ -176,16 +181,6 @@ flag with a deterministic (recency-capped) fallback underneath —
 `FallbackPosture.Open`: a failed or unavailable Recall call just means
 Intent's reply is less well-grounded that turn, not a blocked turn.
 
-**Two arrays into Intent.** `RecallAgent` returns External and Internal
-result sets separately (gated by `Domain`). `IntentAgent.BuildPrompt`
-presents them as two distinctly-instructed sections: External knowledge is
-stated as fact and weighs heavier; Internal (Reflection-derived) knowledge
-is voiced as tentative inference — this lets Intent draw on a detected
-pattern confrontationally ("are you sure you went to the gym today? your
-BMI says otherwise") without treating its own inference as a stated fact.
-This is a second, independent surfacing path alongside `ReflectionAgent`'s
-existing drive-gated proactive push.
-
 **Storage scaling — one Parquet file per category.** Categories are
 discovered, not predefined — created lazily on first write; "what
 categories exist" is a directory listing plus `index.parquet`. Partitioning
@@ -226,11 +221,44 @@ it would either duplicate the record or, worse, mis-tag it `External` as
 today's bug does. This closes the self-referential-pollution root cause
 identified earlier this session.
 
-Design is now complete. `IArchiveStore`'s exact method shapes are an
-implementation-time detail (no product/behavior decision left to make) —
-settled during the implementation plan/coding pass, not here.
+One deliberate divergence from the design above: **Recall does not split
+its results into External and Internal arrays for Intent.** An earlier draft
+had `RecallAgent` returning two `Domain`-gated result sets that
+`IntentAgent.BuildPrompt` would present as fact-vs-tentative-inference
+sections. The shipped logic replaces that — `Category=self` on Reflection's
+own writes already marks a row as internally-derived, and merging both into
+one `Importance`-sorted list means a genuinely important self-derived
+insight can outrank a trivial external fact instead of being quarantined in
+a second-class section. Not outstanding work; cut on purpose.
 
-## Reflection Agent redesign (drive-gated, batched)
+## Reflection colors Impulse (slow-coloring feedback) — high priority
+
+The one real gap left in the drive-vector story. Python's §5.3 slow-coloring
+feedback — drive state drifting gradually with the sentiment/theme of what
+gets archived — has no C# equivalent. Only Impulse's own instant,
+keyword-triggered shifts and Governance's Red-verdict frustration nudge
+exist today.
+
+**This lives on Reflection, not Consolidator.** `ConsolidatorAgent` stays a
+dumb writer: extract facts from the turn, write them, nothing else. It has
+no batch-level view and no business forming an opinion about mood.
+`ReflectionAgent` already does exactly the work this needs — it buffers a
+batch of conclusions, makes one substrate call that reasons across the whole
+batch, and already reads `ImpulseAgent.DrivePath` to gate push-vs-write. The
+slow-coloring nudge is a second output of that same existing call: alongside
+its candidate ideas, it returns a small drive delta for the batch's overall
+tone, published to `system.control` the same way Governance's frustration
+nudge is (never a direct agent call).
+
+Design points still open: how large a delta one batch may move (it must be
+slower than Impulse's instant shifts, or "slow" coloring isn't slow), and
+whether the delta is LLM-scored or derived deterministically from the
+batch's already-computed scores.
+
+## Reflection Agent redesign (drive-gated, batched) — shipped
+
+**Status: implemented.** Batching, ranking, drive-gated push-vs-write, and
+the `Domain` field all exist. Kept below as the design record.
 
 Today's `ReflectionAgent` (see [`gap-analysis.md`](gap-analysis.md) for how
 it diverges from the Python original) fires on every single conclusion and

@@ -12,8 +12,8 @@ agent can never stall another agent's turn.
 |---|---|---|---|
 | Perception | (external input) | `events.perception` | deterministic |
 | Impulse | `events.perception` | `events.advisories`, `events.proposal` (Critical reflex) | deterministic |
-| Reasoning | `events.perception` | `events.advisories`, `events.lookup-paths` | cognitive |
-| Recall | `events.lookup-paths` | `events.advisories` | deterministic |
+| Reasoning | `events.perception` | `events.advisories`, `events.selected-triples` | cognitive |
+| Recall | `events.selected-triples` | `events.advisories` | deterministic |
 | Self | `events.perception` | `events.advisories` | deterministic (archive read) |
 | Governance | `events.advisories`, `events.verdict` | `events.bundle`, `events.action`, `events.conclusion` | deterministic |
 | Intent | `events.bundle` | `events.proposal` | cognitive |
@@ -70,31 +70,47 @@ edit.
 
 ## Storage: a library, not an agent
 
-`IArchiveStore` owns the archive file, schema, and all concurrency —
-including running parallel lookups across N paths internally
-(`LookupAsync(paths, maxPerPath)`). Nothing outside it touches the file
-directly. Recall is a thin bus adapter in front of it: it receives
-proposed lookup paths, applies budget-tier policy (how many, how deep),
-calls the store, and publishes one aggregated advisory. This keeps
-policy in the agent and mechanics in the store, and keeps adding a new
-query shape a matter of "new thin agent + new store method" rather than
-an edit to an existing one.
+`IArchiveStore` owns the archive file, schema, and all concurrency,
+including per-triple lookups (`LookupAsync(triple, maxRows)`). Nothing
+outside it touches the file directly. An in-memory `Index` — a
+`HashSet<ArchiveTriple>` of every distinct `(category, topic, subtopic)`
+ever written — is hydrated once at boot from the archive and updated as
+new records land, so Reasoning can select against it with zero
+live-Archive reads.
 
-Consolidator writes archive records under the same significant-word
-paths (`EciCas.Core.SignificantWords`) that Reasoning proposes when
-querying, plus a fixed `"turn"` anchor — so a later lookup actually
-intersects what got written, and every turn stays recoverable by
-category even when it has no long words in it.
+Records are addressed by a five-part LLM-extracted schema —
+`category/topic/subtopic/subject/key=value` (`ArchiveRecord`,
+`ArchiveTriple`) — not deterministic keyword-derived paths. Both
+Consolidator (turn facts) and Reflection (self-generated ideas) extract
+records in this shape via substrate call, each with its own harness
+prompt (`ArchiveWriteStyle.TerseValue`) instructing terse, noise-free
+output, so a later lookup by triple actually intersects what got
+written.
 
-## Recall's fan-out
+## The Reasoning → Recall knowledge swarm
 
-Reasoning always publishes a lookup-paths message (even an empty list on
-fallback), so Recall always replies exactly once and Governance's bundle
-roster stays static regardless of how many paths a given turn produces.
-Findings go straight to Governance, never back through Reasoning —
-Reasoning and Recall are different sources of truth (parametric model
-knowledge vs. stored record) and neither should become stateful across
-the other's response.
+Reasoning is a **selector**, not a reader: given the current turn's text
+and the full in-memory triple index, it picks up to
+`ReasoningOptions.MaxSelectedTriples` `ArchiveTriple`s it judges
+relevant and publishes them on `events.selected-triples` — even an empty
+list on fallback, so Recall always replies exactly once and Governance's
+bundle roster stays static regardless of how many triples a given turn
+produces. Selection is LLM-driven rather than a deterministic
+keyword/bucket match, because disambiguating something like "name of
+system" vs. "name of person" needs semantic judgment, not string
+matching.
+
+Recall then fans out **one parallel substrate call per selected
+triple**: each call pulls up to `RecallOptions.MaxPerTopic`
+importance-sorted candidate rows for that exact triple from the store,
+and the model picks the handful actually relevant to the turn. Findings
+go straight to Governance, never back through Reasoning — Reasoning and
+Recall are different sources of truth (parametric model knowledge vs.
+stored record) and neither should become stateful across the other's
+response. See [`roadmap.md`](roadmap.md) for the planned next step
+(collapsing what Reasoning is shown to `category/topic` pairs, pushing
+subtopic resolution and row-count scaling down into Recall) once the
+triple index grows past what fits comfortably in one selection prompt.
 
 ## Impulse's Critical reflex
 
@@ -120,7 +136,7 @@ existing one; Reflection refuses to spawn past `ReflectionOptions.MaxIdeaGenerat
 ## Project layout
 
 ```
-src/EciCas.Core/        Envelope, MetaBag, Severity, Verdict, Topics, SignificantWords,
+src/EciCas.Core/        Envelope, MetaBag, Severity, Verdict, Topics, PromptCap,
                          IAgent, IMessageBus, IArchiveStore, ISubstrateProvider
 src/EciCas.Bus/          ChannelBus, AgentBase, BusActivityTracker
 src/EciCas.Agents/       one folder per agent
