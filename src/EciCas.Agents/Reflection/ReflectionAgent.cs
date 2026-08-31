@@ -36,6 +36,17 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     public const string SourceTypeKey = "perception.source_type";
     public const string ReflectedKind = "Reflected";
 
+    /// <summary>
+    /// Slow-coloring feedback (Python current-spec.md §5.3), attached to the
+    /// Reflected control envelope Reflection already publishes. Carries a
+    /// mood LABEL, never a numeric delta: Impulse owns every number that
+    /// lands on the drive vectors, the same discipline CriticalNudge and
+    /// FrustrationNudge follow. Reflection is the right agent for this
+    /// because it already reasons across a whole batch of concluded turns —
+    /// Consolidator stays a dumb per-turn fact writer.
+    /// </summary>
+    public const string MoodKey = "reflection.mood";
+
     private const string FixedCategory = "self";
     private const string FixedTopic = "reflection";
     private const string FixedSubject = "self";
@@ -107,6 +118,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         }
 
         List<Candidate> candidates;
+        string? mood;
         try
         {
             var batchPrompt = BuildBatchPrompt(batch);
@@ -125,6 +137,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             }
 
             candidates = ParseCandidates(result.Text);
+            mood = ParseMood(result.Text);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -138,6 +151,10 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
         if (candidates.Count == 0)
         {
+            // A batch can legitimately surface no idea and still have a
+            // tone worth colouring by, so the control envelope goes out
+            // either way — only a failed or echoed call skips it.
+            PublishReflected(mood);
             return;
         }
 
@@ -168,9 +185,23 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             _bus.Publish(Topics.Perception, idea);
         }
 
-        var reflected = Envelope.Create(Topics.SystemControl, Name, Severity.Neutral,
-            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectedKind));
-        _bus.Publish(Topics.SystemControl, reflected);
+        PublishReflected(mood);
+    }
+
+    /// <summary>
+    /// One control envelope carries both the write-epoch signal and the
+    /// batch's mood label — no new message type, and Impulse is already
+    /// subscribed to system.control for GovernanceAgent.FrustrationKind.
+    /// </summary>
+    private void PublishReflected(string? mood)
+    {
+        var meta = MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectedKind);
+        if (mood is not null)
+        {
+            meta = meta.With(MoodKey, mood);
+        }
+
+        _bus.Publish(Topics.SystemControl, Envelope.Create(Topics.SystemControl, Name, Severity.Neutral, meta));
     }
 
     private async Task<double> GetEagernessAsync(CancellationToken cancellationToken)
@@ -201,11 +232,51 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             synthesis, question, or another label of your own choosing. Idea
             ({ArchiveWriteStyle.TerseValue}), e.g.
             "0.7|hypothesis|trip dates vs deadline". If nothing stands out,
-            respond with nothing.
+            respond with no candidate lines.
+
+            {ArchiveWriteStyle.EnglishFields}
+
+            Then, on its own final line, describe the overall tone of these
+            interactions as "mood|<label>" where label is exactly one of:
+            {MoodLabels}. Always include this line, even when you propose no
+            ideas.
 
             Interactions:
             {turns}
             """;
+    }
+
+    /// <summary>
+    /// The closed vocabulary Reflection may report. Closed on purpose: an
+    /// open-ended label would make ImpulseAgent.SlowColoring's lookup miss
+    /// silently, and a mood no one mapped is indistinguishable from no mood
+    /// at all. Impulse ignores anything not in its own table regardless.
+    /// </summary>
+    private static readonly string[] Moods = ["warm", "tense", "dull", "curious", "neutral"];
+
+    private static string MoodLabels => string.Join(", ", Moods);
+
+    /// <summary>
+    /// The mood line is parsed separately from candidates rather than as a
+    /// fourth candidate field: it describes the batch as a whole, not any one
+    /// idea, and it must survive a batch that produced no candidates at all.
+    /// </summary>
+    private static string? ParseMood(string response)
+    {
+        foreach (var line in response.Split('\n'))
+        {
+            var parts = line.Split('|');
+            if (parts.Length == 2 && parts[0].Trim().Equals("mood", StringComparison.OrdinalIgnoreCase))
+            {
+                var label = parts[1].Trim().ToLowerInvariant();
+                if (Moods.Contains(label))
+                {
+                    return label;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static List<Candidate> ParseCandidates(string response)

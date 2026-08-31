@@ -6,10 +6,11 @@ what exists. This document owns everything else: what's next, what's
 parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
-**Next up, in order:** Reflection colors Impulse (slow-coloring feedback) →
-normalize archive writes to English → collapse Reasoning's index to
-`category`/`topic`. Everything below those three is either parked, further
-out, or a record of what's already built.
+**Next up:** collapse Reasoning's index to `category`/`topic` — the last
+outstanding item against the Python prototype's business logic, and not
+urgent until the triple count grows past what fits comfortably in one
+selection prompt. Everything else below is parked, further out, or a
+record of what's already built.
 
 ## Long-term goals
 
@@ -61,40 +62,54 @@ diary-aware knowledge archiving
 Profiles and auth are Morrow-ECI surface features; diary is a
 Recall-agent feature that can be prototyped independently.
 
-## Reflection colors Impulse (slow-coloring feedback) — high priority
+## Reflection colors Impulse (slow-coloring feedback) — shipped
 
-The one real gap left in the drive-vector story. Python's §5.3 slow-coloring
-feedback — drive state drifting gradually with the sentiment/theme of what
-gets archived — has no C# equivalent. Only Impulse's own instant,
-keyword-triggered shifts and Governance's Red-verdict frustration nudge
-exist today.
+**Status: implemented.** Python's §5.3 slow-coloring feedback — drive state
+drifting with the tone of what's been happening, as opposed to Impulse's
+instant keyword-triggered shifts — now runs on Reflection.
 
-**This lives on Reflection, not Consolidator.** `ConsolidatorAgent` stays a
-dumb writer: extract facts from the turn, write them, nothing else. It has
-no batch-level view and no business forming an opinion about mood.
-`ReflectionAgent` already does exactly the work this needs — it buffers a
-batch of conclusions, makes one substrate call that reasons across the whole
-batch, and already reads `ImpulseAgent.DrivePath` to gate push-vs-write. The
-slow-coloring nudge is a second output of that same existing call: alongside
-its candidate ideas, it returns a small drive delta for the batch's overall
-tone, published to `system.control` the same way Governance's frustration
-nudge is (never a direct agent call).
+It lives on Reflection, not Consolidator: `ConsolidatorAgent` stays a dumb
+per-turn fact writer with no batch-level view and no business forming an
+opinion about mood, while `ReflectionAgent` already buffers a batch, makes
+one substrate call across it, and reads drive state to gate push-vs-write.
 
-Design points still open: how large a delta one batch may move (it must be
-slower than Impulse's instant shifts, or "slow" coloring isn't slow), and
-whether the delta is LLM-scored or derived deterministically from the
-batch's already-computed scores.
+- Reflection's existing batch call now also returns a final `mood|<label>`
+  line from a closed five-label vocabulary (`warm`, `tense`, `dull`,
+  `curious`, `neutral`), parsed separately from candidates so it survives a
+  batch that produced no ideas.
+- The label rides on the `Reflected` control envelope Reflection already
+  published (`ReflectionAgent.MoodKey`) — no new message type, and Impulse
+  was already subscribed to `system.control` for
+  `GovernanceAgent.FrustrationKind`.
+- **Impulse owns every number.** `ImpulseAgent.SlowColoring` maps label →
+  `DriveVectors` delta, the same discipline `FrustrationNudge` follows: an
+  agent may request a shift, but the magnitude that lands is written in
+  Impulse. An unmapped or missing label is a no-op.
+- Deltas are ~0.01-0.03 against instant nudges' 0.05-0.15, and fire once
+  per `ReflectionOptions.BatchSize` turns rather than per turn. That gap is
+  the distinction between slow colouring and the somatic shortcut, and
+  `ImpulseAgentTests` asserts it against the instant nudges themselves
+  rather than a pinned literal, so either side stays tunable.
 
 ## Data quality
 
-**Normalize archive writes to English.** Consolidator and Reflection both
-write `ArchiveRecord`s straight from whatever language the turn (or the
-substrate's own reply) happened to be in. A user (or a persona) switching
-languages mid-conversation currently produces separate archive entries for
-the same fact under different words, since lookup is keyword/path-based, not
-semantic — no dedup happens across languages. Translating to English before
-write (or before path/keyword extraction) would keep one fact as one entry
-regardless of what language it arrived in.
+**Normalize archive writes to English — shipped.** Consolidator and
+Reflection previously wrote `ArchiveRecord`s in whatever language the turn
+(or the substrate's own reply) happened to be in, so a user switching
+languages mid-conversation produced separate entries for the same fact —
+lookup is by triple, and nothing dedups across languages.
+
+Solved as a prompt constraint rather than a translation pass: one shared
+const, `ArchiveWriteStyle.EnglishFields`, interpolated into both writers'
+prompts next to `TerseValue`, so the rule can't drift between them. It
+normalizes `category`/`topic`/`subtopic`/`key` only — **proper nouns are
+carved out explicitly**, since translating a name or a place would corrupt
+the record itself, which is worse than the duplication being prevented.
+
+Costs no extra substrate call. Mock-tier tests can only assert the
+instruction is present; real confirmation is a `Default`-tier smoke test
+stating one fact in Norwegian and again in English and checking both land
+on the same triple.
 
 ## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — shipped
 
@@ -435,6 +450,24 @@ trim need to operate across every subtopic under a `(category, topic)`
 pair at once — the cap should apply post-fan-out to the combined pool, not
 pre-cap per subtopic. Storage-wise this is fine, since Parquet files are
 already partitioned per-category, not per-topic.
+
+Two constraints settled when this was reviewed, both easy to get wrong:
+
+**Every Recall worker starts at once.** Build the complete worker list
+across *all* selected pairs first, then a single `Task.WhenAll` over the
+whole set. The trap is nesting — a per-pair `WhenAll` inside a loop over
+pairs serializes the pairs behind whichever one is slowest, so a pair that
+split into N+1 workers would stall every pair after it. Any I/O contention
+that surfaces from firing them all together gets dealt with when it
+actually shows up; latency stacking is the worse failure.
+
+**The index changes shape too.** Collapsing what Reasoning is shown is not
+only a prompt change — the in-memory `HashSet<ArchiveTriple>`, the
+`IndexRow` Parquet schema, and ArchiveTool's `rebuild-index` all move from
+`(category, topic, subtopic)` to `(category, topic)`. Any existing
+`index.parquet` becomes stale on upgrade and needs a rebuild. Recall then
+discovers subtopics from the category shard's own rows instead of from the
+index, which is what makes the collapse lossless rather than a truncation.
 
 Not a near-term concern — triple count grows only with new topic
 *combinations*, not new facts within existing ones — but worth having a

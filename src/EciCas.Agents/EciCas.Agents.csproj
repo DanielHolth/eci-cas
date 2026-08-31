@@ -6,6 +6,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- ImpulseAgent exposes its nudge tables internally so a test can assert
+         slow-colouring stays smaller than every instant nudge without pinning
+         literals that are meant to be tuned. -->
+    <InternalsVisibleTo Include="EciCas.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
     <PackageReference Include="Parquet.Net" Version="6.1.0" />
   </ItemGroup>

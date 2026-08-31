@@ -142,4 +142,68 @@ public class ReflectionAgentTests
         Assert.False(control.TryRead(out _));
         Assert.Empty(store.Index);
     }
+
+    [Fact]
+    public async Task AtBatchSize_AttachesParsedMoodToTheReflectedControlEnvelope()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
+        var store = new InMemoryArchiveStore();
+        var stateStore = new JsonlAgentStateStore(Path.GetTempFileName());
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
+            "0.4|question|whether the trip dates still work\nmood|tense", TimeSpan.Zero, 10, 0m)));
+        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }));
+
+        await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
+
+        Assert.True(control.TryRead(out var reflected));
+        Assert.Equal("tense", reflected!.Meta.Get<string>(ReflectionAgent.MoodKey));
+    }
+
+    [Fact]
+    public async Task WhenMoodIsNotOneOfTheKnownLabels_NoMoodIsAttached()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
+        var store = new InMemoryArchiveStore();
+        var stateStore = new JsonlAgentStateStore(Path.GetTempFileName());
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
+            "0.4|question|whether the trip dates still work\nmood|ecstatic", TimeSpan.Zero, 10, 0m)));
+        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }));
+
+        await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
+
+        Assert.True(control.TryRead(out var reflected));
+        Assert.Null(reflected!.Meta.Get<string>(ReflectionAgent.MoodKey));
+    }
+
+    /// <summary>
+    /// A batch can have a tone without producing a single idea worth keeping,
+    /// so the mood must not ride on there being candidates to archive.
+    /// </summary>
+    [Fact]
+    public async Task WithNoCandidates_StillPublishesTheMood()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
+        var store = new InMemoryArchiveStore();
+        var stateStore = new JsonlAgentStateStore(Path.GetTempFileName());
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("mood|dull", TimeSpan.Zero, 10, 0m)));
+        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }));
+
+        await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
+
+        Assert.True(control.TryRead(out var reflected));
+        Assert.Equal("dull", reflected!.Meta.Get<string>(ReflectionAgent.MoodKey));
+        Assert.Empty(store.All);
+    }
 }

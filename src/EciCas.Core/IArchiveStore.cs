@@ -47,6 +47,22 @@ public static class ArchiveDomain
 public static class ArchiveWriteStyle
 {
     public const string TerseValue = "1-5 content words, no filler — terse style, not a full sentence";
+
+    /// <summary>
+    /// Lookup is by triple, so the same fact stated in two languages would
+    /// otherwise land on two triples and never dedup. Normalizing the
+    /// structural vocabulary to English at write time keeps one fact as one
+    /// entry whatever language it arrived in. Proper nouns are carved out
+    /// deliberately: translating a name or a place would corrupt the record
+    /// itself, which is worse than the duplication this prevents.
+    /// </summary>
+    public const string EnglishFields = """
+        Always write category, topic, subtopic and key in English, whatever
+        language the turn was in — a fact stated in another language must land
+        under the same English wording it would have had in English. Never
+        translate proper nouns: names of people, places and organisations stay
+        exactly as they were written, in subject and in value alike.
+        """;
 }
 
 /// <summary>

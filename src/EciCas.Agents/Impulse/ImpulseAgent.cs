@@ -3,6 +3,7 @@ using EciCas.Agents.Consolidator;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -66,6 +67,38 @@ public sealed class ImpulseAgent : AgentBase
     /// <summary>Direct disapproval, applied instantly — cooler and a little more fatigued, smaller than a security block.</summary>
     private static readonly DriveVectors NegativeNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0, SocialDrive: -0.05, Temperature: -0.1);
 
+    /// <summary>
+    /// §5.3 slow-coloring feedback: drive state drifting with the tone of
+    /// what's been happening, as opposed to the instant keyword-triggered
+    /// shifts above. Reflection reports a mood LABEL for a whole batch of
+    /// concluded turns and the delta it maps to is written here, in code —
+    /// same discipline as FrustrationNudge, which is also requested
+    /// elsewhere and quantified here.
+    ///
+    /// Every value is deliberately far smaller than any instant nudge, and
+    /// fires once per ReflectionOptions.BatchSize turns rather than per
+    /// turn. That gap IS the distinction between slow colouring and a
+    /// somatic shortcut — raising these to instant-nudge magnitude would
+    /// collapse the two into one mechanism. ImpulseAgentTests guards it.
+    /// </summary>
+    private static readonly Dictionary<string, DriveVectors> SlowColoring = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["warm"] = new(Curiosity: 0.01, Fatigue: -0.01, Urgency: 0, SocialDrive: 0.02, Temperature: 0.02),
+        ["tense"] = new(Curiosity: -0.01, Fatigue: 0.02, Urgency: 0.02, SocialDrive: -0.01, Temperature: -0.02),
+        ["dull"] = new(Curiosity: -0.02, Fatigue: 0.02, Urgency: -0.01, SocialDrive: -0.01, Temperature: -0.01),
+        ["curious"] = new(Curiosity: 0.03, Fatigue: -0.01, Urgency: 0, SocialDrive: 0.01, Temperature: 0.01),
+
+        // Present, and zero, on purpose: "nothing stood out" is a real
+        // answer Reflection can give, and an explicit no-op entry keeps it
+        // distinguishable from a label nobody mapped.
+        ["neutral"] = new(Curiosity: 0, Fatigue: 0, Urgency: 0, SocialDrive: 0, Temperature: 0),
+    };
+
+    /// <summary>Both exposed only so ImpulseAgentTests can assert every slow delta stays under every instant one, rather than pinning literals that are meant to be tuned.</summary>
+    internal static IReadOnlyDictionary<string, DriveVectors> SlowColoringDeltas => SlowColoring;
+
+    internal static IReadOnlyList<DriveVectors> InstantNudges => [CriticalNudge, FrustrationNudge, PositiveNudge, NegativeNudge];
+
     private readonly IMessageBus _bus;
     private readonly IAgentStateStore _store;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
@@ -85,9 +118,16 @@ public sealed class ImpulseAgent : AgentBase
     {
         if (envelope.Topic == Topics.SystemControl)
         {
-            if (envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey) == GovernanceAgent.FrustrationKind)
+            var kind = envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey);
+            if (kind == GovernanceAgent.FrustrationKind)
             {
                 await NudgeAsync(FrustrationNudge, cancellationToken).ConfigureAwait(false);
+            }
+            else if (kind == ReflectionAgent.ReflectedKind
+                && envelope.Meta.Get<string>(ReflectionAgent.MoodKey) is { } mood
+                && SlowColoring.TryGetValue(mood, out var colouring))
+            {
+                await NudgeAsync(colouring, cancellationToken).ConfigureAwait(false);
             }
 
             return;

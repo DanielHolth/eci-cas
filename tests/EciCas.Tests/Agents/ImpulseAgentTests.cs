@@ -4,6 +4,8 @@ using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
+using EciCas.Agents.Reflection;
+using EciCas.Agents.Consolidator;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -116,5 +118,69 @@ public class ImpulseAgentTests
 
         var records = await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None);
         Assert.Empty(records);
+    }
+
+    [Fact]
+    public async Task WhenReflectionReportsMood_ColorsDriveVectorsSlowly()
+    {
+        var (agent, _, _, store) = Create();
+        var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
+            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
+                .With(ReflectionAgent.MoodKey, "curious"));
+
+        await agent.HandleAsync(reflected, CancellationToken.None);
+
+        var records = await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None);
+        Assert.Single(records);
+        var vectors = JsonSerializer.Deserialize<DriveVectors>(records[0].Content)!;
+        var baseline = new DriveVectors();
+        Assert.True(vectors.Curiosity > baseline.Curiosity);
+        Assert.True(vectors.Fatigue < baseline.Fatigue);
+    }
+
+    [Fact]
+    public async Task WhenReflectionReportsUnmappedMood_DoesNotWriteDriveVectors()
+    {
+        var (agent, _, _, store) = Create();
+        var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
+            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
+                .With(ReflectionAgent.MoodKey, "ecstatic"));
+
+        await agent.HandleAsync(reflected, CancellationToken.None);
+
+        Assert.Empty(await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task WhenReflectionReportsNoMood_DoesNotWriteDriveVectors()
+    {
+        var (agent, _, _, store) = Create();
+        var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
+            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectionAgent.ReflectedKind));
+
+        await agent.HandleAsync(reflected, CancellationToken.None);
+
+        Assert.Empty(await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// The one invariant that keeps slow colouring meaningfully distinct from
+    /// the instant somatic shortcut. Asserted against the instant nudges
+    /// themselves rather than a hard-coded ceiling, so tuning either side
+    /// keeps the guarantee instead of silently invalidating the test.
+    /// </summary>
+    [Fact]
+    public void EverySlowColoringDelta_IsSmallerThanEveryInstantNudge()
+    {
+        static double Largest(DriveVectors v) =>
+            Math.Max(Math.Abs(v.Curiosity), Math.Max(Math.Abs(v.Fatigue),
+                Math.Max(Math.Abs(v.Urgency), Math.Max(Math.Abs(v.SocialDrive), Math.Abs(v.Temperature)))));
+
+        var smallestInstant = ImpulseAgent.InstantNudges.Min(Largest);
+        foreach (var (label, delta) in ImpulseAgent.SlowColoringDeltas)
+        {
+            Assert.True(Largest(delta) < smallestInstant,
+                $"slow-colouring delta '{label}' is not smaller than the smallest instant nudge");
+        }
     }
 }

@@ -82,10 +82,13 @@ Records are addressed by a five-part LLM-extracted schema —
 `category/topic/subtopic/subject/key=value` (`ArchiveRecord`,
 `ArchiveTriple`) — not deterministic keyword-derived paths. Both
 Consolidator (turn facts) and Reflection (self-generated ideas) extract
-records in this shape via substrate call, each with its own harness
-prompt (`ArchiveWriteStyle.TerseValue`) instructing terse, noise-free
-output, so a later lookup by triple actually intersects what got
-written.
+records in this shape via substrate call. Rules that must hold for *every*
+write live once, as prompt fragments on `ArchiveWriteStyle`, interpolated
+into both writers' prompts so they can't drift apart: `TerseValue` (terse,
+noise-free values) and `EnglishFields` (structural fields normalized to
+English, proper nouns never translated — lookup is by triple, so the same
+fact in two languages would otherwise never dedup). Both exist so a later
+lookup by triple actually intersects what got written.
 
 ## The Reasoning → Recall knowledge swarm
 
@@ -132,6 +135,33 @@ forever while paying for substrate calls, every envelope carries a
 `Generation` int, incremented whenever an agent spawns a new arc from an
 existing one; Reflection refuses to spawn past `ReflectionOptions.MaxIdeaGeneration`
 (default 1) and skips the substrate call entirely once at the cap.
+
+## Drive vectors: who may move them
+
+`DriveVectors` (curiosity, fatigue, urgency, social drive, temperature) is
+the persona's appraisal state, persisted as JSON at
+`ImpulseAgent.DrivePath` and read by Reflection (eagerness gating) and
+Governance (the `Expression()` face on a blocked reply).
+
+**Impulse owns every number that lands on it.** Other agents may *request*
+a shift, never quantify one: Governance publishes a `Frustration` control
+message on a Red verdict, Reflection attaches a mood label to its
+`Reflected` control message, and Impulse maps each to a delta written in
+its own source. Both arrive over `system.control`, so no agent holds a
+reference to Impulse.
+
+Two speeds, deliberately far apart:
+
+- **Instant** (±0.05-0.15, per turn) — Impulse's own keyword triggers and
+  Governance's block nudge. Python's §5.4 somatic shortcut.
+- **Slow colouring** (±0.01-0.03, once per Reflection batch) — the tone of
+  a whole batch of concluded turns. Python's §5.3. Reflection is the agent
+  for this because it already reasons across a batch; Consolidator stays a
+  dumb per-turn fact writer.
+
+The magnitude gap *is* the distinction between the two mechanisms — a test
+asserts every slow delta stays under every instant one, comparing the
+tables rather than pinned literals so both stay tunable.
 
 ## Prompt growth cap
 

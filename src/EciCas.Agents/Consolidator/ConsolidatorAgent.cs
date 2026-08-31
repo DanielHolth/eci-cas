@@ -168,6 +168,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             (1-3 words) is the attribute. Value ({ArchiveWriteStyle.TerseValue})
             is the content itself.
 
+            {ArchiveWriteStyle.EnglishFields}
+
             Examples:
             category=person topic=family subtopic=owner subject=daniel key=name value=daniel
             category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28

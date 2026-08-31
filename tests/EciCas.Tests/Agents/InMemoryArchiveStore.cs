@@ -10,6 +10,9 @@ public sealed class InMemoryArchiveStore : IArchiveStore
 
     public IReadOnlyList<ArchiveTriple> Index => [.. _index];
 
+    /// <summary>Everything written, in write order — for asserting that a flush wrote nothing at all.</summary>
+    public IReadOnlyList<ArchiveRecord> All => _records;
+
     public Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchiveTriple triple, int maxRows, CancellationToken cancellationToken)
     {
         IReadOnlyList<ArchiveRecord> results = _records
