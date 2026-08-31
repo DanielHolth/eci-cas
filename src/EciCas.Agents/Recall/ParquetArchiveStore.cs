@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text;
 using Parquet.Serialization;
 
 namespace EciCas.Agents.Recall;
@@ -6,22 +8,33 @@ namespace EciCas.Agents.Recall;
 using EciCas.Core;
 
 /// <summary>
-/// Parquet-backed IArchiveStore: one {category}.parquet file per category,
-/// created lazily on first write to a new category. A companion
-/// index.parquet holds every distinct (Category, Topic, Subtopic) triple
-/// seen so far, hydrated once at construction and kept as an in-memory
-/// cache — mirrors SelfAgent's persona-cache pattern, but boot-hydrated
-/// rather than lazy, since Reasoning needs the full triple list on every
-/// selection prompt.
+/// Parquet-backed IArchiveStore: one file per (Category, Topic) pair, named
+/// {esc(category)}~{esc(topic)}.parquet and created lazily on first write.
 ///
-/// Parquet has no in-place append: each write reads the target category
-/// file (if any), appends the new rows in memory, and rewrites the whole
-/// file as a single row group. Fine at this scale — a persona's own
-/// knowledge base, not a data lake. Uses Parquet.Net's high-level
-/// ParquetSerializer (POCO row classes) rather than the raw row-group API.
+/// The file name *is* the index. There is no index.parquet: the set of
+/// pairs is recovered by listing the directory at construction and decoding
+/// the names, so a write never rewrites a companion index file, and the
+/// index can never drift from the data (nothing left to rebuild). One file
+/// per pair also means Recall's parallel workers touch disjoint files, so
+/// the per-file lock below is almost never contended and a Consolidator
+/// write only ever blocks readers of the one pair it touches.
+///
+/// Names are percent-escaped down to [A-Za-z0-9._-] so an LLM-written topic
+/// containing a slash, colon or space can't produce an illegal or ambiguous
+/// path; '~' itself is escaped inside each half, which is what makes the
+/// single-character separator unambiguous. The escaping is reversible, since
+/// decoding it is how the index is read back.
+///
+/// Parquet has no in-place append: each write reads the target pair file (if
+/// any), appends the new rows in memory, and rewrites the whole file as a
+/// single row group. Fine at this scale — a persona's own knowledge base,
+/// not a data lake. Uses Parquet.Net's high-level ParquetSerializer (POCO
+/// row classes) rather than the raw row-group API.
 /// </summary>
 public sealed class ParquetArchiveStore : IArchiveStore
 {
+    private const char Separator = '~';
+
     private sealed class RecordRow
     {
         public string Category { get; set; } = "";
@@ -35,49 +48,55 @@ public sealed class ParquetArchiveStore : IArchiveStore
         public double Importance { get; set; }
     }
 
-    private sealed class IndexRow
+    /// <summary>Pairs are addresses, and addresses are case-insensitive — as are the file names that carry them.</summary>
+    private sealed class PairComparer : IEqualityComparer<ArchivePair>
     {
-        public string Category { get; set; } = "";
-        public string Topic { get; set; } = "";
-        public string Subtopic { get; set; } = "";
+        public static readonly PairComparer Instance = new();
+
+        public bool Equals(ArchivePair? x, ArchivePair? y) =>
+            x is null || y is null
+                ? ReferenceEquals(x, y)
+                : string.Equals(x.Category, y.Category, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(x.Topic, y.Topic, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode(ArchivePair pair) => HashCode.Combine(
+            StringComparer.OrdinalIgnoreCase.GetHashCode(pair.Category),
+            StringComparer.OrdinalIgnoreCase.GetHashCode(pair.Topic));
     }
 
     private readonly string _directory;
-    private readonly SemaphoreSlim _fileLock = new(1, 1);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _indexLock = new();
-    private readonly HashSet<ArchiveTriple> _index;
+    private readonly HashSet<ArchivePair> _index;
 
     public ParquetArchiveStore(string directory)
     {
         _directory = directory;
         Directory.CreateDirectory(_directory);
-        _index = LoadIndexAsync(CancellationToken.None).GetAwaiter().GetResult();
+        _index = new HashSet<ArchivePair>(PairsIn(_directory), PairComparer.Instance);
     }
 
-    public IReadOnlyList<ArchiveTriple> Index
+    public IReadOnlyList<ArchivePair> Index
     {
         get { lock (_indexLock) { return [.. _index]; } }
     }
 
-    public async Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchiveTriple triple, int maxRows, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, CancellationToken cancellationToken)
     {
-        await _fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var path = PairPath(pair);
+        var gate = LockFor(path);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         List<ArchiveRecord> records;
         try
         {
-            records = await ReadRecordsAsync(CategoryPath(triple.Category), cancellationToken).ConfigureAwait(false);
+            records = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            _fileLock.Release();
+            gate.Release();
         }
 
-        return records
-            .Where(r => string.Equals(r.Topic, triple.Topic, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(r.Subtopic, triple.Subtopic, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(r => r.Importance)
-            .Take(maxRows)
-            .ToList();
+        return Ordered(records);
     }
 
     public async Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken)
@@ -87,90 +106,141 @@ public sealed class ParquetArchiveStore : IArchiveStore
             return;
         }
 
-        await _fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        // Grouped by pair and written in parallel: two facts landing in
+        // different pairs have no reason to queue behind each other, and a
+        // reader of a third pair has no reason to wait for either.
+        var writes = records
+            .GroupBy(r => r.Pair, PairComparer.Instance)
+            .Select(group => AppendAsync(group.Key, [.. group], cancellationToken));
+        await Task.WhenAll(writes).ConfigureAwait(false);
+
+        lock (_indexLock)
+        {
+            foreach (var record in records)
+            {
+                _index.Add(record.Pair);
+            }
+        }
+    }
+
+    private async Task AppendAsync(ArchivePair pair, List<ArchiveRecord> newRecords, CancellationToken cancellationToken)
+    {
+        var path = PairPath(pair);
+        var gate = LockFor(path);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            foreach (var group in records.GroupBy(r => r.Category, StringComparer.OrdinalIgnoreCase))
-            {
-                var path = CategoryPath(group.Key);
-                var existing = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
-                existing.AddRange(group);
-                await WriteRecordsAsync(path, existing, cancellationToken).ConfigureAwait(false);
-            }
-
-            var newTriples = new List<ArchiveTriple>();
-            lock (_indexLock)
-            {
-                foreach (var record in records)
-                {
-                    if (_index.Add(record.Triple))
-                    {
-                        newTriples.Add(record.Triple);
-                    }
-                }
-            }
-
-            if (newTriples.Count > 0)
-            {
-                await WriteIndexAsync(cancellationToken).ConfigureAwait(false);
-            }
+            var existing = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
+            existing.AddRange(newRecords);
+            await WriteRecordsAsync(path, existing, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            _fileLock.Release();
+            gate.Release();
         }
     }
 
-    private string CategoryPath(string category) => Path.Combine(_directory, $"{category}.parquet");
+    private SemaphoreSlim LockFor(string path) => _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
 
-    private string IndexPath => Path.Combine(_directory, "index.parquet");
+    private string PairPath(ArchivePair pair) => PairPathFor(_directory, pair);
 
-    private async Task<HashSet<ArchiveTriple>> LoadIndexAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Stable order for a pair's rows: Importance first, then fields that
+    /// break ties deterministically, so the same archive always presents the
+    /// same sequence to the picking model.
+    /// </summary>
+    private static IReadOnlyList<ArchiveRecord> Ordered(IEnumerable<ArchiveRecord> records) =>
+        [.. records
+            .OrderByDescending(r => r.Importance)
+            .ThenByDescending(r => r.Timestamp)
+            .ThenBy(r => r.Subtopic, StringComparer.Ordinal)
+            .ThenBy(r => r.Subject, StringComparer.Ordinal)
+            .ThenBy(r => r.Key, StringComparer.Ordinal)];
+
+    /// <summary>Pair file path for a directory, using the same naming convention as instance writes.</summary>
+    public static string PairPathFor(string directory, ArchivePair pair) =>
+        Path.Combine(directory, $"{Escape(pair.Category)}{Separator}{Escape(pair.Topic)}.parquet");
+
+    /// <summary>Every pair a directory currently holds, decoded from its file names — this is the whole index.</summary>
+    public static IReadOnlyList<ArchivePair> PairsIn(string directory)
     {
-        if (!File.Exists(IndexPath))
-        {
-            return [];
-        }
-
-        var result = await ParquetSerializer.DeserializeAsync<IndexRow>(IndexPath, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return [.. result.Data.Select(r => new ArchiveTriple(r.Category, r.Topic, r.Subtopic))];
-    }
-
-    private async Task WriteIndexAsync(CancellationToken cancellationToken)
-    {
-        List<ArchiveTriple> snapshot;
-        lock (_indexLock)
-        {
-            snapshot = [.. _index];
-        }
-
-        var rows = snapshot.Select(t => new IndexRow { Category = t.Category, Topic = t.Topic, Subtopic = t.Subtopic });
-        await ParquetSerializer.SerializeAsync(rows, IndexPath, cancellationToken: cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Category file path for a directory, using the same {category}.parquet convention as instance writes.</summary>
-    public static string CategoryPathFor(string directory, string category) => Path.Combine(directory, $"{category}.parquet");
-
-    /// <summary>Rescans every category file in a directory and rewrites index.parquet with the distinct triples found. For maintenance tooling after manual edits.</summary>
-    public static async Task RebuildIndexAsync(string directory, CancellationToken cancellationToken)
-    {
-        var triples = new HashSet<ArchiveTriple>();
+        var pairs = new List<ArchivePair>();
         foreach (var path in Directory.EnumerateFiles(directory, "*.parquet"))
         {
-            if (string.Equals(Path.GetFileName(path), "index.parquet", StringComparison.OrdinalIgnoreCase))
+            if (TryDecodeName(Path.GetFileNameWithoutExtension(path), out var pair))
             {
-                continue;
-            }
-
-            var records = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
-            foreach (var record in records)
-            {
-                triples.Add(record.Triple);
+                pairs.Add(pair);
             }
         }
 
-        var rows = triples.Select(t => new IndexRow { Category = t.Category, Topic = t.Topic, Subtopic = t.Subtopic });
-        await ParquetSerializer.SerializeAsync(rows, Path.Combine(directory, "index.parquet"), cancellationToken: cancellationToken).ConfigureAwait(false);
+        return pairs;
+    }
+
+    /// <summary>Splits an escaped file name back into its pair. False for any name that isn't one of ours.</summary>
+    public static bool TryDecodeName(string fileName, out ArchivePair pair)
+    {
+        pair = default!;
+        var separator = fileName.IndexOf(Separator);
+        if (separator < 0)
+        {
+            return false;
+        }
+
+        pair = new ArchivePair(Unescape(fileName[..separator]), Unescape(fileName[(separator + 1)..]));
+        return true;
+    }
+
+    /// <summary>
+    /// Percent-escapes everything outside [A-Za-z0-9._-] over UTF-8 bytes.
+    /// Covers the platform's illegal characters, the separator, and anything
+    /// that would make a name ambiguous or awkward, in one rule rather than a
+    /// per-platform deny-list.
+    /// </summary>
+    public static string Escape(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var b in Encoding.UTF8.GetBytes(value))
+        {
+            var c = (char)b;
+            if (b < 0x80 && (char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-'))
+            {
+                builder.Append(c);
+            }
+            else
+            {
+                builder.Append(CultureInfo.InvariantCulture, $"%{b:X2}");
+            }
+        }
+
+        // A name may not end in '.' on Windows, and '.' is otherwise legal
+        // mid-name, so only a trailing one needs escaping.
+        if (builder.Length > 0 && builder[^1] == '.')
+        {
+            builder.Length -= 1;
+            builder.Append("%2E");
+        }
+
+        return builder.ToString();
+    }
+
+    public static string Unescape(string value)
+    {
+        var bytes = new List<byte>(value.Length);
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (value[i] == '%' && i + 2 < value.Length
+                && byte.TryParse(value.AsSpan(i + 1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var b))
+            {
+                bytes.Add(b);
+                i += 2;
+            }
+            else
+            {
+                bytes.AddRange(Encoding.UTF8.GetBytes(value[i].ToString()));
+            }
+        }
+
+        return Encoding.UTF8.GetString([.. bytes]);
     }
 
     public static async Task<List<ArchiveRecord>> ReadRecordsAsync(string path, CancellationToken cancellationToken)

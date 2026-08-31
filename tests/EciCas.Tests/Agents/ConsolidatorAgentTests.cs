@@ -45,7 +45,7 @@ public class ConsolidatorAgentTests
         Assert.True(control.TryRead(out var written));
         Assert.Equal(ConsolidatorAgent.WrittenKind, written!.Meta.Get<string>(ConsolidatorAgent.ControlKindKey));
 
-        var records = await store.LookupAsync(new ArchiveTriple("person", "family", "son"), maxRows: 10, CancellationToken.None);
+        var records = await store.LookupAsync(new ArchivePair("person", "family"), CancellationToken.None);
         Assert.Equal(2, records.Count);
         Assert.All(records, r => Assert.Equal("2020-08-28", r.Value));
     }
@@ -85,7 +85,7 @@ public class ConsolidatorAgentTests
             MetaBag.Empty.With(PerceptionAgent.TextKey, "our son's birthday was yesterday"));
         await agent.HandleAsync(bundle, CancellationToken.None);
 
-        var records = await store.LookupAsync(new ArchiveTriple("person", "family", "son"), maxRows: 10, CancellationToken.None);
+        var records = await store.LookupAsync(new ArchivePair("person", "family"), CancellationToken.None);
         Assert.Single(records);
         Assert.Equal("marcus holth", records[0].Subject);
         Assert.Equal(0.6, records[0].Importance);

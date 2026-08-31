@@ -111,7 +111,9 @@ var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuratio
 builder.Services.AddSingleton<IAgentStateStore>(new JsonlAgentStateStore(agentStatePath));
 
 var archiveDirectory = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Directory"] ?? "archive");
-var seedNeeded = !File.Exists(Path.Combine(archiveDirectory, "system.parquet"));
+// One record, not a migration: the archive that isn't there yet starts as
+// the persona knowing its own name, and everything else is learned.
+var seedNeeded = !File.Exists(ParquetArchiveStore.PairPathFor(archiveDirectory, new ArchivePair("system", "identity")));
 var archiveStore = new ParquetArchiveStore(archiveDirectory);
 if (seedNeeded)
 {

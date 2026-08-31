@@ -19,17 +19,17 @@ public class ReasoningAgentTests
         Options.Create(new AgentSubstrateManifest { Agents = { ["Reasoning"] = new AgentSubstrateEntry { Class = "fast-medium" } } });
 
     [Fact]
-    public async Task PublishesSelectedTriples_FromSubstrateChoice()
+    public async Task PublishesSelectedPairs_FromSubstrateChoice()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
-        var selections = bus.Subscribe(Topics.SelectedTriples);
+        var selections = bus.Subscribe(Topics.SelectedPairs);
         var store = new InMemoryArchiveStore();
         await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions { MaxSelectedTriples = 3 }));
+            Manifest(), Options.Create(new ReasoningOptions { MaxSelectedPairs = 3 }));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?"));
@@ -37,8 +37,8 @@ public class ReasoningAgentTests
 
         Assert.True(selections.TryRead(out var selection));
         Assert.Equal(perception.CorrelationId, selection!.CorrelationId);
-        var triples = selection.Meta.Get<IReadOnlyList<ArchiveTriple>>(ReasoningAgent.SelectedTriplesKey);
-        Assert.Equal(new ArchiveTriple("person", "family", "son"), Assert.Single(triples!));
+        var pairs = selection.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey);
+        Assert.Equal(new ArchivePair("person", "family"), Assert.Single(pairs!));
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class ReasoningAgentTests
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
-        var selections = bus.Subscribe(Topics.SelectedTriples);
+        var selections = bus.Subscribe(Topics.SelectedPairs);
         var store = new InMemoryArchiveStore();
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
@@ -58,7 +58,7 @@ public class ReasoningAgentTests
         await agent.HandleAsync(perception, CancellationToken.None);
 
         Assert.True(selections.TryRead(out var selection));
-        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchiveTriple>>(ReasoningAgent.SelectedTriplesKey)!);
+        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey)!);
         Assert.False(called);
     }
 
@@ -67,7 +67,7 @@ public class ReasoningAgentTests
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
-        var selections = bus.Subscribe(Topics.SelectedTriples);
+        var selections = bus.Subscribe(Topics.SelectedPairs);
         var store = new InMemoryArchiveStore();
         await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], CancellationToken.None);
 
@@ -80,6 +80,6 @@ public class ReasoningAgentTests
         await agent.HandleAsync(perception, CancellationToken.None);
 
         Assert.True(selections.TryRead(out var selection));
-        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchiveTriple>>(ReasoningAgent.SelectedTriplesKey)!);
+        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey)!);
     }
 }

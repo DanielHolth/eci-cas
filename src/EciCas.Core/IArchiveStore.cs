@@ -2,20 +2,33 @@ namespace EciCas.Core;
 
 /// <summary>
 /// Knowledge-swarm archive: the semantic two-stage store (Reasoning selects
-/// Category/Topic/Subtopic triples, Recall reads rows within a triple).
+/// Category/Topic pairs, Recall reads rows within a pair).
 /// One record per fact, nine fields, all lowercase by convention.
+///
+/// Subtopic is still carried on every record, but it is no longer part of
+/// the address: it is data the picking model reads, not a key anyone looks
+/// up by. That keeps a deeply-discussed subtopic from needing its own index
+/// entry, and lets Recall slice one pair across as many parallel workers as
+/// its row count warrants.
 /// </summary>
 public interface IArchiveStore
 {
-    /// <summary>Distinct (Category, Topic, Subtopic) triples currently indexed, for Reasoning's selection prompt.</summary>
-    IReadOnlyList<ArchiveTriple> Index { get; }
+    /// <summary>Distinct (Category, Topic) pairs currently indexed, for Reasoning's selection prompt.</summary>
+    IReadOnlyList<ArchivePair> Index { get; }
 
-    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchiveTriple triple, int maxRows, CancellationToken cancellationToken);
+    /// <summary>
+    /// Every row under this pair, in a stable Importance-descending order.
+    /// Deliberately uncapped: a subtopic discussed at great length must not
+    /// be truncated away. Recall reads a pair exactly once and chunks the
+    /// result across its workers in memory, so a deep pair costs one file
+    /// read no matter how many substrate calls it fans out into.
+    /// </summary>
+    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, CancellationToken cancellationToken);
 
     Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken);
 }
 
-public sealed record ArchiveTriple(string Category, string Topic, string Subtopic);
+public sealed record ArchivePair(string Category, string Topic);
 
 public sealed record ArchiveRecord(
     string Category,
@@ -28,7 +41,7 @@ public sealed record ArchiveRecord(
     string Domain = ArchiveDomain.External,
     double Importance = 0.5)
 {
-    public ArchiveTriple Triple => new(Category, Topic, Subtopic);
+    public ArchivePair Pair => new(Category, Topic);
 }
 
 public static class ArchiveDomain
@@ -49,8 +62,8 @@ public static class ArchiveWriteStyle
     public const string TerseValue = "1-5 content words, no filler — terse style, not a full sentence";
 
     /// <summary>
-    /// Lookup is by triple, so the same fact stated in two languages would
-    /// otherwise land on two triples and never dedup. Normalizing the
+    /// Lookup is by pair, so the same fact stated in two languages would
+    /// otherwise land on two pairs and never dedup. Normalizing the
     /// structural vocabulary to English at write time keeps one fact as one
     /// entry whatever language it arrived in. Proper nouns are carved out
     /// deliberately: translating a name or a place would corrupt the record

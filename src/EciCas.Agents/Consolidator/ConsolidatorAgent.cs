@@ -119,7 +119,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         }
 
         await _store.WriteAsync(batch, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("{Agent} wrote {Count} records: {Triples}",
+        _logger.LogInformation("{Agent} wrote {Count} records: {Paths}",
             Name, batch.Count, string.Join(", ", batch.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}")));
 
         var epochId = Guid.NewGuid();
@@ -135,10 +135,10 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics)> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
     {
-        var selected = envelope.Meta.Get<IReadOnlyList<ArchiveTriple>>(ReasoningAgent.SelectedTriplesKey) ?? [];
+        var selected = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey) ?? [];
         var known = selected.Count == 0
             ? "none"
-            : string.Join(", ", selected.Select(t => $"{t.Category}/{t.Topic}/{t.Subtopic}"));
+            : string.Join(", ", selected.Select(t => $"{t.Category}/{t.Topic}"));
         text = PromptCap.Apply(text);
         var prompt = $"""
             Extract every fact the user explicitly stated about themselves or
@@ -159,7 +159,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             category=... topic=... subtopic=... subject=... key=... value=...
 
             Category (1 word), Topic (1 word), Subtopic (1-2 words) group the
-            fact — reuse one of these existing triples when it clearly fits:
+            fact — reuse one of these existing category/topic groups when it
+            clearly fits:
             {known}
             Otherwise invent a new one; there being no existing match is not
             a reason to skip the fact. Subject (1-2 words) is usually a

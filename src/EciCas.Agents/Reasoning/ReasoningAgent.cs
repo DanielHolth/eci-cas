@@ -7,10 +7,13 @@ using Microsoft.Extensions.Options;
 namespace EciCas.Agents.Reasoning;
 
 /// <summary>
-/// Selector only: picks which of the archive's known (Category, Topic,
-/// Subtopic) triples might hold background relevant to this turn. No advice
+/// Selector only: picks which of the archive's known (Category, Topic)
+/// pairs might hold background relevant to this turn. Subtopic is
+/// deliberately absent from what it is shown: resolving which subtopic
+/// matters is Recall's job, reading actual rows, and keeping it out here
+/// keeps the selection prompt short as the archive deepens. No advice
 /// text published anymore — Intent owns all advisory framing; Recall (M4) is
-/// the one that actually reads rows once a triple is selected.
+/// the one that actually reads rows once a pair is selected.
 ///
 /// Doesn't use CognitiveAgent&lt;T&gt;'s BuildPrompt template method: the
 /// selection prompt needs the store's cached index read first, which
@@ -19,10 +22,10 @@ namespace EciCas.Agents.Reasoning;
 /// shape inline. BuildPrompt/ParseResult/FallbackResult below exist only to
 /// satisfy CognitiveAgent&lt;T&gt;'s abstract contract and are never invoked.
 /// </summary>
-public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>>
+public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 {
-    /// <summary>Selected triples, carried on the events.selected-triples envelope's Meta.</summary>
-    public const string SelectedTriplesKey = "reasoning.selected_triples";
+    /// <summary>Selected pairs, carried on the events.selected-pairs envelope's Meta.</summary>
+    public const string SelectedPairsKey = "reasoning.selected_pairs";
 
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
@@ -51,11 +54,11 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
     protected override string BuildPrompt(Envelope envelope) =>
         throw new NotSupportedException($"{Name} overrides HandleAsync directly — see class remarks.");
 
-    protected override IReadOnlyList<ArchiveTriple> ParseResult(SubstrateResult result) => [];
+    protected override IReadOnlyList<ArchivePair> ParseResult(SubstrateResult result) => [];
 
-    protected override IReadOnlyList<ArchiveTriple> FallbackResult(Envelope envelope) => [];
+    protected override IReadOnlyList<ArchivePair> FallbackResult(Envelope envelope) => [];
 
-    protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchiveTriple> result, SubstrateResult? diagnostics)
+    protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchivePair> result, SubstrateResult? diagnostics)
     {
         // Always published, even empty on fallback/no-index/no-signal text —
         // Recall's roster slot in Governance's bundle needs a reply every
@@ -68,9 +71,9 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
         // an unrelated "system/.../name" row used to outrank everything for
         // a question about the human's own name.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
-        var meta = MetaBag.Empty.With(SelectedTriplesKey, result).With(PerceptionAgent.TextKey, text);
-        var selection = envelope.Derive(Topics.SelectedTriples, Name, envelope.Severity, meta);
-        _bus.Publish(Topics.SelectedTriples, selection);
+        var meta = MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text);
+        var selection = envelope.Derive(Topics.SelectedPairs, Name, envelope.Severity, meta);
+        _bus.Publish(Topics.SelectedPairs, selection);
     }
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
@@ -95,7 +98,7 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
             var result = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            Publish(envelope, prompt, ParseTriples(result.Text, index), result);
+            Publish(envelope, prompt, ParsePairs(result.Text, index), result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -104,14 +107,14 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
         }
     }
 
-    private string BuildSelectionPrompt(string? text, IReadOnlyList<ArchiveTriple> index)
+    private string BuildSelectionPrompt(string? text, IReadOnlyList<ArchivePair> index)
     {
-        var options = string.Join("\n", index.Select((t, i) => $"{i}. {t.Category}/{t.Topic}/{t.Subtopic}"));
+        var options = string.Join("\n", index.Select((t, i) => $"{i}. {t.Category}/{t.Topic}"));
         return $"""
-            Known knowledge-base topics (index: category/topic/subtopic):
+            Known knowledge-base topics (index: category/topic):
             {options}
 
-            For this turn's text, pick up to {_options.MaxSelectedTriples} of the
+            For this turn's text, pick up to {_options.MaxSelectedPairs} of the
             topics above that could hold relevant background — respond with just
             their index numbers, comma-separated (e.g. "0, 3"). If none are
             relevant, respond with nothing.
@@ -120,9 +123,9 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchiveTriple>
             """;
     }
 
-    private static IReadOnlyList<ArchiveTriple> ParseTriples(string response, IReadOnlyList<ArchiveTriple> index)
+    private static IReadOnlyList<ArchivePair> ParsePairs(string response, IReadOnlyList<ArchivePair> index)
     {
-        var selected = new List<ArchiveTriple>();
+        var selected = new List<ArchivePair>();
         foreach (var token in response.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             if (int.TryParse(token, out var i) && i >= 0 && i < index.Count)

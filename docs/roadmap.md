@@ -6,11 +6,9 @@ what exists. This document owns everything else: what's next, what's
 parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
-**Next up:** collapse Reasoning's index to `category`/`topic` — the last
-outstanding item against the Python prototype's business logic, and not
-urgent until the triple count grows past what fits comfortably in one
-selection prompt. Everything else below is parked, further out, or a
-record of what's already built.
+**Next up:** nothing outstanding against the Python prototype's business
+logic. Everything below is parked, further out, or a record of what's
+already built.
 
 ## Long-term goals
 
@@ -113,10 +111,18 @@ on the same triple.
 
 ## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — shipped
 
-**Status: implemented.** `ParquetArchiveStore`, the `ArchiveTriple` index,
-Reasoning-as-selector, and Recall's per-triple parallel fan-out are all in
-`src` and covered by tests. The rest of this section is kept as the design
-record for what was built, not as outstanding work.
+**Status: implemented.** `ParquetArchiveStore`, the archive index,
+Reasoning-as-selector, and Recall's parallel fan-out are all in `src` and
+covered by tests. The rest of this section is kept as the design record for
+what was built, not as outstanding work.
+
+**Partly superseded** by the pair-addressed archive below, which shipped
+after it: the index is now `(category, topic)` rather than a full triple,
+files are per-pair rather than per-category, `index.parquet` no longer
+exists, and `MaxPerTopic` was replaced by `RowsPerWorker` /
+`MaxConcurrentRecalls`. The paragraphs below are left as written — they
+record the reasoning at the time, not the current shape. Where the two
+disagree, the later section wins.
 
 What this replaced: the old `RecallAgent`/`JsonlArchiveStore` pair did
 purely deterministic retrieval — literal ≥5-letter word extraction from the
@@ -331,6 +337,79 @@ persona state that doesn't exist anywhere in C# today, not just a Reflection
 change — so it needs a real plan (and probably the drive-vector design
 question resolved) before implementation starts.
 
+## Pair-addressed archive (index collapse, per-pair files) — shipped
+
+**Status: implemented.** `ArchiveTriple` is now `ArchivePair`, the store
+keeps one file per pair, `index.parquet` is gone, and Recall does the
+subtopic resolution.
+
+**The problem.** `ReasoningAgent` showed its one substrate call the *entire*
+in-memory index — every distinct `(category, topic, subtopic)` triple, one
+line each — and `MaxSelectedTriples` capped only how many it could pick, not
+how many it was shown. Fine at small scale; at 1000+ triples an unbounded,
+ever-growing prompt on every turn.
+
+**Rejected alternatives.** Sharding the index into buckets with parallel
+selector calls: bucketing is lossy — it risks separating triples that need
+weighing against each other (`system/identity` vs. `person/identity`
+disambiguates "system name" from "person name" only if both are visible to
+the same call), and there's no principled bucketing that guarantees related
+triples land together. A hierarchical selector (a second LLM stage over
+subtopics) fixes that but adds a whole new selector kind just to resolve
+subtopic.
+
+**What shipped instead** — reuse Recall's existing fan-out rather than
+inventing a stage:
+
+```
+Reasoning (Category + Topic)
+  --> N x Recall (Subtopic + Subject + Key = Value)
+        a pair holding more rows than RowsPerWorker splits into
+        that many parallel workers, all in one flat WhenAll
+```
+
+Dropping subtopic from Reasoning's index is a lossless dimensionality
+reduction, not a lossy split: every cross-category distinction Reasoning has
+to make is still fully visible in one call. Subtopic moves down into Recall,
+which now reads it off the rows themselves.
+
+**No per-pair row cap.** The original sketch capped a pair's combined pool
+and split only past the cap. That was dropped — a scientist may discuss one
+subtopic at enormous length, and truncating them is exactly the wrong
+failure. `RowsPerWorker` chunks instead of trimming, and the only ceiling is
+`MaxConcurrentRecalls`, per turn rather than per pair. `RowsPerWorker` is a
+quality knob, not a context one: a candidate row is under 20 tokens, but a
+small non-reasoning model's list-scanning accuracy degrades around 30-50
+items, well before its context window does.
+
+Splitting rows across workers carries the same "might separate things that
+needed comparing" risk bucketing had upstream, but at far lower stakes:
+Recall scores rows near-independently, where Reasoning does cross-category
+disambiguation. The trim to `MaxConcurrentRecalls` is breadth-first so every
+selected pair keeps its most-important chunk.
+
+**Every worker starts at once.** The complete worker list is built across
+all pairs before any substrate call, then a single `Task.WhenAll`. The trap
+avoided is nesting — a per-pair `WhenAll` inside a loop over pairs would
+serialize pairs behind the slowest, so a pair that split into N workers
+would stall every pair after it. Reads are likewise one parallel phase, not
+one-per-worker.
+
+**Storage changed shape with it.** One Parquet file per `(category, topic)`
+pair, named `{esc(category)}~{esc(topic)}.parquet`, so the file name *is*
+the index: `index.parquet` is deleted, the pair set is recovered by listing
+the directory, and a write no longer rewrites a full index file. The index
+can't drift from the data, so ArchiveTool's `rebuild-index` was removed
+rather than reimplemented. `~` was chosen over `|` because `|` is an illegal
+filename character on Windows; both halves are percent-escaped to
+`[A-Za-z0-9._-]`, which also covers `~` itself and makes the single-char
+separator unambiguous. The global store lock became one lock per file, so
+Recall's workers never contend and a Consolidator or Reflection write only
+blocks readers of the one pair it touches.
+
+Existing archives were deleted rather than migrated, per the single-record
+seed below.
+
 ## Parked
 
 Real gaps against the Python prototype's `current-spec.md`, deliberately
@@ -394,84 +473,6 @@ active. Open question: does a swap create a new Intent instance or
 re-hydrate the same one from a different store? Probably wants its own
 design doc before any code — this is the largest single piece of
 unscoped work in the project.
-
-**Collapse Reasoning's index to category/topic; push subtopic resolution
-and row-count scaling down into Recall.** `ReasoningAgent` currently shows
-its one substrate call the *entire* in-memory index — every distinct
-`(category, topic, subtopic)` triple in the archive, one line each
-(`ReasoningAgent.BuildSelectionPrompt`) — and `MaxSelectedTriples` only caps
-how many it's allowed to pick, not how many it's shown. Fine while the
-triple count is small; at 1000+ distinct triples this becomes an
-unbounded, ever-growing prompt on every turn.
-
-Rejected alternative: shard the index into arbitrary buckets and run
-parallel selector calls per bucket. Discarded because bucketing is lossy —
-it risks separating triples that need to be weighed against each other
-(e.g. `system/identity` vs. `person/identity` disambiguating "system name"
-from "person name" only works if both are visible to the same call), and
-there's no principled way to bucket the index that guarantees related
-triples land together. A hierarchical selector (category+topic, then a
-second LLM stage over subtopics) was also considered — it fixes the
-bucketing-loses-context problem, but adds a whole new agent/selector kind
-just to resolve subtopic.
-
-**Chosen shape instead** — reuse Recall's existing fan-out pattern rather
-than inventing a new stage:
-
-```
-Reasoning (Category + Topic)
-  --> N * Recall (Subtopic + Subject + Key = Value)
-        if candidate rows > MaxPerTopic, split across N+1 parallel
-        Recall workers for that (category, topic) pair
-```
-
-Reasoning is shown only distinct `(category, topic)` pairs (subtopic
-dropped from its index) — a real, lossless dimensionality reduction, not a
-lossy split, since collapsing subtopic still leaves every cross-category
-semantic distinction Reasoning needs to make fully visible in one call.
-Subtopic resolution moves down into Recall, alongside subject/key — the
-same per-triple parallel call `RecallAgent` already makes today, just now
-also picking subtopic instead of receiving it pre-selected. When a
-`(category, topic)` pair's candidate row count exceeds `MaxPerTopic`, add
-another parallel Recall worker for that pair rather than truncating harder.
-
-Splitting rows arbitrarily across N+1 Recall workers carries the same
-"might separate things that needed comparing" risk bucketing had at the
-Reasoning layer, but at much lower stakes: Recall's job is closer to
-independent per-row relevance scoring than Reasoning's cross-category
-disambiguation, so an arbitrary row split rarely costs a comparison that
-actually mattered.
-
-Implementation wrinkle to resolve when this is picked up: today
-`RecallAgent.LookupAsync(triple, maxRows)` is keyed by the full triple
-including subtopic, and `MaxPerTopic` trims within one subtopic's rows.
-Moving subtopic resolution into Recall means lookup and the `MaxPerTopic`
-trim need to operate across every subtopic under a `(category, topic)`
-pair at once — the cap should apply post-fan-out to the combined pool, not
-pre-cap per subtopic. Storage-wise this is fine, since Parquet files are
-already partitioned per-category, not per-topic.
-
-Two constraints settled when this was reviewed, both easy to get wrong:
-
-**Every Recall worker starts at once.** Build the complete worker list
-across *all* selected pairs first, then a single `Task.WhenAll` over the
-whole set. The trap is nesting — a per-pair `WhenAll` inside a loop over
-pairs serializes the pairs behind whichever one is slowest, so a pair that
-split into N+1 workers would stall every pair after it. Any I/O contention
-that surfaces from firing them all together gets dealt with when it
-actually shows up; latency stacking is the worse failure.
-
-**The index changes shape too.** Collapsing what Reasoning is shown is not
-only a prompt change — the in-memory `HashSet<ArchiveTriple>`, the
-`IndexRow` Parquet schema, and ArchiveTool's `rebuild-index` all move from
-`(category, topic, subtopic)` to `(category, topic)`. Any existing
-`index.parquet` becomes stale on upgrade and needs a rebuild. Recall then
-discovers subtopics from the category shard's own rows instead of from the
-index, which is what makes the collapse lossless rather than a truncation.
-
-Not a near-term concern — triple count grows only with new topic
-*combinations*, not new facts within existing ones — but worth having a
-settled design for when it comes up.
 
 **Match input to output, not just retrieve.** Self and Recall
 currently answer "what does the archive say that's relevant to this

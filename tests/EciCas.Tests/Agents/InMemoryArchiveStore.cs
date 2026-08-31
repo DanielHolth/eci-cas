@@ -6,19 +6,18 @@ namespace EciCas.Tests.Agents;
 public sealed class InMemoryArchiveStore : IArchiveStore
 {
     private readonly List<ArchiveRecord> _records = [];
-    private readonly HashSet<ArchiveTriple> _index = [];
+    private readonly HashSet<ArchivePair> _index = [];
 
-    public IReadOnlyList<ArchiveTriple> Index => [.. _index];
+    public IReadOnlyList<ArchivePair> Index => [.. _index];
 
     /// <summary>Everything written, in write order — for asserting that a flush wrote nothing at all.</summary>
     public IReadOnlyList<ArchiveRecord> All => _records;
 
-    public Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchiveTriple triple, int maxRows, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, CancellationToken cancellationToken)
     {
         IReadOnlyList<ArchiveRecord> results = _records
-            .Where(r => r.Triple == triple)
+            .Where(r => r.Pair == pair)
             .OrderByDescending(r => r.Importance)
-            .Take(maxRows)
             .ToList();
         return Task.FromResult(results);
     }
@@ -28,7 +27,7 @@ public sealed class InMemoryArchiveStore : IArchiveStore
         _records.AddRange(records);
         foreach (var record in records)
         {
-            _index.Add(record.Triple);
+            _index.Add(record.Pair);
         }
 
         return Task.CompletedTask;

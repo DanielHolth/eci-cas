@@ -12,8 +12,8 @@ agent can never stall another agent's turn.
 |---|---|---|---|
 | Perception | (external input) | `events.perception` | deterministic |
 | Impulse | `events.perception` | `events.advisories`, `events.proposal` (Critical reflex) | deterministic |
-| Reasoning | `events.perception` | `events.advisories`, `events.selected-triples` | cognitive |
-| Recall | `events.selected-triples` | `events.advisories` | deterministic |
+| Reasoning | `events.perception` | `events.advisories`, `events.selected-pairs` | cognitive |
+| Recall | `events.selected-pairs` | `events.advisories` | deterministic |
 | Self | `events.perception` | `events.advisories` | deterministic (archive read) |
 | Governance | `events.advisories`, `events.verdict` | `events.bundle`, `events.action`, `events.conclusion` | deterministic |
 | Intent | `events.bundle` | `events.proposal` | cognitive |
@@ -70,50 +70,87 @@ edit.
 
 ## Storage: a library, not an agent
 
-`IArchiveStore` owns the archive file, schema, and all concurrency,
-including per-triple lookups (`LookupAsync(triple, maxRows)`). Nothing
-outside it touches the file directly. An in-memory `Index` — a
-`HashSet<ArchiveTriple>` of every distinct `(category, topic, subtopic)`
-ever written — is hydrated once at boot from the archive and updated as
-new records land, so Reasoning can select against it with zero
-live-Archive reads.
+`IArchiveStore` owns the archive files, schema, and all concurrency,
+including per-pair lookups (`LookupAsync(pair)`). Nothing outside it touches
+a file directly.
+
+**One file per `(Category, Topic)` pair, and the file name is the index.**
+Files are named `{esc(category)}~{esc(topic)}.parquet`, so the set of known
+pairs is recovered by listing the directory and decoding names — there is no
+`index.parquet`. Two things follow. A write never rewrites a companion index
+file, which takes a full-index Parquet rewrite off every Consolidator and
+Reflection write. And the index cannot drift from the data, so there is
+nothing to rebuild after a manual edit; deleting a pair's last row deletes
+its file, which is also how the pair leaves the index.
+
+Names are percent-escaped down to `[A-Za-z0-9._-]` over UTF-8 bytes. Topics
+are LLM-written free text, so a slash, colon or space is a matter of time;
+escaping `~` inside each half is what makes the single-character separator
+unambiguous. The encoding is reversible because decoding it is how the index
+is read back.
+
+Concurrency is per file: a `SemaphoreSlim` per path, not one global lock.
+Recall's parallel workers touch disjoint pair files and never queue behind
+each other, and a Consolidator or Reflection write only blocks readers of the
+one pair it touches — so the two slow agents can take as long as they need
+without sitting on the next turn's critical path.
 
 Records are addressed by a five-part LLM-extracted schema —
-`category/topic/subtopic/subject/key=value` (`ArchiveRecord`,
-`ArchiveTriple`) — not deterministic keyword-derived paths. Both
-Consolidator (turn facts) and Reflection (self-generated ideas) extract
+`category/topic/subtopic/subject/key=value` (`ArchiveRecord`, `ArchivePair`)
+— not deterministic keyword-derived paths. **Subtopic is data, not an
+address**: every record still carries it and the picking model still reads
+it, but nothing looks up by it. That is what lets one subtopic be discussed
+at great length without earning its own index entry.
+
+Both Consolidator (turn facts) and Reflection (self-generated ideas) extract
 records in this shape via substrate call. Rules that must hold for *every*
 write live once, as prompt fragments on `ArchiveWriteStyle`, interpolated
 into both writers' prompts so they can't drift apart: `TerseValue` (terse,
 noise-free values) and `EnglishFields` (structural fields normalized to
-English, proper nouns never translated — lookup is by triple, so the same
+English, proper nouns never translated — lookup is by pair, so the same
 fact in two languages would otherwise never dedup). Both exist so a later
-lookup by triple actually intersects what got written.
+lookup actually intersects what got written.
 
-## The Reasoning → Recall knowledge swarm
+## The Reasoning to Recall knowledge swarm
 
 Reasoning is a **selector**, not a reader: given the current turn's text
-and the full in-memory triple index, it picks up to
-`ReasoningOptions.MaxSelectedTriples` `ArchiveTriple`s it judges
-relevant and publishes them on `events.selected-triples` — even an empty
-list on fallback, so Recall always replies exactly once and Governance's
-bundle roster stays static regardless of how many triples a given turn
-produces. Selection is LLM-driven rather than a deterministic
-keyword/bucket match, because disambiguating something like "name of
-system" vs. "name of person" needs semantic judgment, not string
-matching.
+and the full in-memory pair index, it picks up to
+`ReasoningOptions.MaxSelectedPairs` `ArchivePair`s it judges relevant and
+publishes them on `events.selected-pairs` — even an empty list on fallback,
+so Recall always replies exactly once and Governance's bundle roster stays
+static regardless of how many pairs a given turn produces. Selection is
+LLM-driven rather than a deterministic keyword/bucket match, because
+disambiguating something like "name of system" vs. "name of person" needs
+semantic judgment, not string matching. It sees pairs rather than full
+triples so the selection prompt stays short as the archive deepens.
 
-Recall then fans out **one parallel substrate call per selected
-triple**: each call pulls up to `RecallOptions.MaxPerTopic`
-importance-sorted candidate rows for that exact triple from the store,
-and the model picks the handful actually relevant to the turn. Findings
-go straight to Governance, never back through Reasoning — Reasoning and
-Recall are different sources of truth (parametric model knowledge vs.
+Recall then does the reading, in two parallel phases inside one
+`HandleAsync`:
+
+1. **Read** every selected pair at once. Distinct pairs are distinct files,
+   so these don't contend.
+2. **Pick** — each pair's rows are split into chunks of
+   `RecallOptions.RowsPerWorker`, and every chunk across every pair becomes
+   one substrate call in a single flat `Task.WhenAll`.
+
+The whole worker list is built before any substrate call starts, so a deep
+pair never produces a *second wave* discovered only after the first returns.
+Turn latency is one file read plus one substrate call, not N of either.
+
+A pair is never truncated — a subtopic someone discusses at length simply
+produces more chunks. `RowsPerWorker` is a *quality* limit, not a
+context-window one: a candidate row costs well under 20 tokens, but a small
+non-reasoning model's ability to spot the relevant entry in a flat list falls
+off well before its context does. The per-turn ceiling is
+`RecallOptions.MaxConcurrentRecalls` instead, and the trim to it is
+breadth-first across pairs — rows are importance-ordered, so each pair's
+first chunk is its most valuable, and one deep pair can't spend the whole
+budget and starve the others.
+
+Findings go straight to Governance, never back through Reasoning — Reasoning
+and Recall are different sources of truth (parametric model knowledge vs.
 stored record) and neither should become stateful across the other's
-response. See [`roadmap.md`](roadmap.md) for the planned next step
-(collapsing what Reasoning is shown to `category/topic` pairs, pushing
-subtopic resolution and row-count scaling down into Recall) once the
-triple index grows past what fits comfortably in one selection prompt.
+response.
 
 ## Impulse's Critical reflex
 
@@ -203,16 +240,19 @@ backslash-prefixed argument (`\D`, `\E`, … read as escape sequences).
 
 | Command | Effect |
 |---|---|
-| `list` | Category names (one per `.parquet` file, minus `index`) |
-| `show <category> [topic] [subtopic]` | `[i] Topic/Subtopic/Subject/Key = Value` — same shape RecallAgent logs for its picked facts |
+| `list` | Known `category/topic` pairs, decoded from file names |
+| `show <category> [topic] [subtopic]` | `[i] Topic/Subtopic/Subject/Key = Value` — same shape RecallAgent logs for its picked facts; spans every matching pair |
 | `showall <category> [topic] [subtopic]` | Full field dump per row, including Importance/Domain/Timestamp |
-| `del <category> <index[,index...]>` | Delete specific rows by the index `show`/`showall` printed |
-| `del <category> <topic> [subtopic]` | Delete every row whose Topic (and Subtopic, if given) contains the text, case-insensitive substring match |
-| `rebuild-index` | Rescans every category file and rewrites `index.parquet` from scratch |
+| `del <category> <topic> <index[,index...]>` | Delete specific rows by the index `show`/`showall` printed |
+| `del <category> <topic> [subtopic]` | Delete every row in the pair whose Subtopic contains the text, case-insensitive substring match |
 | `help` / `exit` | — |
 
-`del`'s second form is picked automatically when its third token isn't a
-comma-separated list of integers — no separate flag needed. Caveats:
+`del` always names one pair, since a row index is only meaningful within one
+file; its second form is picked automatically when the third token isn't a
+comma-separated list of integers — no separate flag needed. Deleting a
+pair's last row deletes the file, which is how that pair leaves the index —
+there is no `rebuild-index`, because the directory listing *is* the index.
+Caveats:
 arguments split on plain whitespace with no quote-awareness (fall back to
 index-based `del` for a value containing a space); filter delete is a
 substring match, not exact; and only one instance should point at a given

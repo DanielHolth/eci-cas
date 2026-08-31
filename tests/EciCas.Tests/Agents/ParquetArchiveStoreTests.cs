@@ -1,0 +1,145 @@
+using EciCas.Agents.Recall;
+using EciCas.Core;
+
+namespace EciCas.Tests.Agents;
+
+/// <summary>
+/// The file name carries the pair, so name encoding is not cosmetic — it is
+/// how the index survives a restart. These cover the round trip, the
+/// characters a filesystem would otherwise reject, and the guarantee that a
+/// deep pair is never silently trimmed on read.
+/// </summary>
+public class ParquetArchiveStoreTests : IDisposable
+{
+    private readonly string _directory = Path.Combine(Path.GetTempPath(), $"eci-archive-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        GC.SuppressFinalize(this);
+        if (Directory.Exists(_directory))
+        {
+            Directory.Delete(_directory, recursive: true);
+        }
+    }
+
+    private static ArchiveRecord Record(string category, string topic, string subtopic, string key, string value, double importance = 0.5) =>
+        new(category, topic, subtopic, "subject", key, value, DateTimeOffset.UtcNow, ArchiveDomain.External, importance);
+
+    [Theory]
+    [InlineData("person")]
+    [InlineData("trip plans")]
+    [InlineData("a/b\\c:d*e?f\"g<h>i|j")]
+    [InlineData("with~tilde")]
+    [InlineData("trailing.")]
+    [InlineData("percent%20already")]
+    [InlineData("blåbær 日本語")]
+    public void EscapeRoundTrips(string value) =>
+        Assert.Equal(value, ParquetArchiveStore.Unescape(ParquetArchiveStore.Escape(value)));
+
+    [Fact]
+    public void EscapedNameContainsNoCharacterAFilesystemWouldReject()
+    {
+        var escaped = ParquetArchiveStore.Escape("a/b\\c:d*e?f\"g<h>i|j and a space");
+        Assert.DoesNotContain(escaped, c => Path.GetInvalidFileNameChars().Contains(c));
+        Assert.DoesNotContain('~', escaped);
+    }
+
+    /// <summary>A tilde inside either half must not read as the separator.</summary>
+    [Fact]
+    public void PairWithTildeInItsFieldsStillDecodesToTheSamePair()
+    {
+        var pair = new ArchivePair("cat~egory", "top~ic");
+        var name = Path.GetFileNameWithoutExtension(ParquetArchiveStore.PairPathFor(_directory, pair));
+
+        Assert.True(ParquetArchiveStore.TryDecodeName(name, out var decoded));
+        Assert.Equal(pair, decoded);
+    }
+
+    [Fact]
+    public async Task IndexIsRecoveredFromFileNames_WithNoIndexFile()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        await store.WriteAsync([
+            Record("person", "family", "son", "birthdate", "2020-08-28"),
+            Record("event", "wedding: oslo", "venue", "location", "drammen kirke"),
+        ], CancellationToken.None);
+
+        Assert.DoesNotContain(Directory.EnumerateFiles(_directory), f => Path.GetFileName(f).StartsWith("index", StringComparison.OrdinalIgnoreCase));
+
+        var reopened = new ParquetArchiveStore(_directory);
+        Assert.Contains(new ArchivePair("person", "family"), reopened.Index);
+        Assert.Contains(new ArchivePair("event", "wedding: oslo"), reopened.Index);
+        Assert.Equal(2, reopened.Index.Count);
+    }
+
+    [Fact]
+    public async Task EachPairGetsItsOwnFile()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        await store.WriteAsync([
+            Record("person", "family", "son", "birthdate", "2020-08-28"),
+            Record("person", "work", "employer", "role", "engineer"),
+        ], CancellationToken.None);
+
+        Assert.Equal(2, Directory.EnumerateFiles(_directory, "*.parquet").Count());
+    }
+
+    /// <summary>
+    /// The point of dropping the per-topic cap: one subtopic discussed at
+    /// length keeps every row, and Recall chunks it rather than the store
+    /// truncating it.
+    /// </summary>
+    [Fact]
+    public async Task LookupReturnsEveryRowUnderAPair_Uncapped()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        await store.WriteAsync(
+            [.. Enumerable.Range(0, 250).Select(i => Record("science", "thermodynamics", "entropy", $"note{i}", $"value {i}"))],
+            CancellationToken.None);
+
+        var rows = await store.LookupAsync(new ArchivePair("science", "thermodynamics"), CancellationToken.None);
+        Assert.Equal(250, rows.Count);
+    }
+
+    [Fact]
+    public async Task LookupOrdersByImportanceDescending()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        await store.WriteAsync([
+            Record("person", "family", "son", "low", "l", importance: 0.1),
+            Record("person", "family", "son", "high", "h", importance: 0.9),
+            Record("person", "family", "daughter", "mid", "m", importance: 0.5),
+        ], CancellationToken.None);
+
+        var rows = await store.LookupAsync(new ArchivePair("person", "family"), CancellationToken.None);
+        Assert.Equal(["high", "mid", "low"], rows.Select(r => r.Key));
+    }
+
+    [Fact]
+    public async Task LookupOfAnUnknownPairIsEmpty_NotAnError()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        Assert.Empty(await store.LookupAsync(new ArchivePair("nothing", "here"), CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Writes to different pairs run in parallel against different files, so
+    /// this is the guard that parallelism didn't cost anyone their rows.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentWritesAcrossPairsAllLand()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(i =>
+            store.WriteAsync([Record("person", $"topic{i % 4}", "sub", $"key{i}", $"value {i}")], CancellationToken.None)));
+
+        var total = 0;
+        foreach (var pair in store.Index)
+        {
+            total += (await store.LookupAsync(pair, CancellationToken.None)).Count;
+        }
+
+        Assert.Equal(20, total);
+        Assert.Equal(4, store.Index.Count);
+    }
+}
