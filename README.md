@@ -27,8 +27,9 @@ eci-cas/
     EciCas.Agents/         Perception, Impulse, Reasoning, Recall, Self, Governance, Intent, Security, Action, Consolidator, Reflection
     EciCas.Substrates/     substrate provider registry (mock + live OpenAI-compatible HTTP)
     EciCas.Host/            Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
+    EciCas.ArchiveTool/      console REPL for inspecting/editing the Parquet archive
   tests/EciCas.Tests/      xUnit
-  docs/                     architecture.md — system design; roadmap.md — what's ahead
+  docs/                     architecture.md — system design; roadmap.md — plans, parked work, design records
   morrow-eci/                Next.js companion UI, consumes the SSE stream
   .github/copilot-instructions.md   C# style/architecture conventions
 ```
@@ -101,9 +102,10 @@ dotnet clean src/EciCas.Host && dotnet build src/EciCas.Host && dotnet run --pro
 
 ## Docs
 
-- [`docs/architecture.md`](docs/architecture.md) — system design: agent roster, bus mechanics, storage, verification
-- [`docs/roadmap.md`](docs/roadmap.md) — what's ahead, open design questions
-- [`docs/gap-analysis.md`](docs/gap-analysis.md) — business-logic parity vs. the Python prototype
+Two docs, deliberately:
+
+- [`docs/architecture.md`](docs/architecture.md) — what exists: agent roster, bus mechanics, storage, the knowledge swarm, archive tool, verification
+- [`docs/roadmap.md`](docs/roadmap.md) — everything else: what's next, what's parked, what's out of scope, and the design records for shipped work
 - [`AGENTS.md`](AGENTS.md) — standing engineering rules (loose coupling/async is non-negotiable)
 
 The Python prototype this project replaced lives, unmodified, in a

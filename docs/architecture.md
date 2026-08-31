@@ -133,6 +133,71 @@ forever while paying for substrate calls, every envelope carries a
 existing one; Reflection refuses to spawn past `ReflectionOptions.MaxIdeaGeneration`
 (default 1) and skips the substrate call entirely once at the cap.
 
+## Prompt growth cap
+
+Every `CognitiveAgent<T>` prompt folds in upstream agents' advisory text,
+and a Reflection→Perception→Intent→Reflection loop would otherwise
+re-embed the full text of every prior hop, growing the prompt generation
+over generation. [`PromptCap`](../src/EciCas.Core/PromptCap.cs) caps each
+piece of upstream text (240 chars, `…`-truncated) at the point it's folded
+in — applied in `IntentAgent.BuildPrompt`/`AppendAdvice`,
+`ReasoningAgent.BuildPrompt`, and `ConsolidatorAgent.ExtractFactsAsync` —
+so the per-hop ceiling is fixed no matter how deep a loop runs, rather
+than trying to track or trim history.
+
+## Console output
+
+`ConsoleSubscriber` subscribes to `Topics.All` but does not print one line
+per envelope. It defaults to six lines per turn — substrate cost, what
+Recall read, what Consolidator/Reflection wrote, what Intent said, and
+what Security blocked — via the `Console:Verbose` option; `--Verbose=true`
+restores the exhaustive per-envelope trace. See `appsettings.json`'s
+`Console` and `Logging:LogLevel` sections.
+
+## Archive tool
+
+`EciCas.ArchiveTool` is a console REPL for inspecting and manually editing
+the Parquet archive directly — for testing and prototyping, when a record
+needs correcting or removing without running the full agent swarm. It
+reuses `ParquetArchiveStore`'s static read/write helpers rather than
+duplicating Parquet I/O, so its notion of a record's shape never drifts
+from `IArchiveStore`'s.
+
+```bash
+dotnet run --project src/EciCas.ArchiveTool -- <archive-directory>
+```
+
+Directory defaults to `archive` (relative to cwd) if omitted. On Windows,
+prefer PowerShell or forward slashes — Git Bash/MSYS mangles a
+backslash-prefixed argument (`\D`, `\E`, … read as escape sequences).
+
+| Command | Effect |
+|---|---|
+| `list` | Category names (one per `.parquet` file, minus `index`) |
+| `show <category> [topic] [subtopic]` | `[i] Topic/Subtopic/Subject/Key = Value` — same shape RecallAgent logs for its picked facts |
+| `showall <category> [topic] [subtopic]` | Full field dump per row, including Importance/Domain/Timestamp |
+| `del <category> <index[,index...]>` | Delete specific rows by the index `show`/`showall` printed |
+| `del <category> <topic> [subtopic]` | Delete every row whose Topic (and Subtopic, if given) contains the text, case-insensitive substring match |
+| `rebuild-index` | Rescans every category file and rewrites `index.parquet` from scratch |
+| `help` / `exit` | — |
+
+`del`'s second form is picked automatically when its third token isn't a
+comma-separated list of integers — no separate flag needed. Caveats:
+arguments split on plain whitespace with no quote-awareness (fall back to
+index-based `del` for a value containing a space); filter delete is a
+substring match, not exact; and only one instance should point at a given
+archive directory at a time, the same single-writer constraint
+`ParquetArchiveStore` has for the live Host.
+
+## Parity with the Python prototype
+
+The C# rebuild ports `eci-cas-python-prototype`'s `current-spec.md` as
+**business logic, not architecture** — messaging-plumbing differences are
+by design, not drift. Every decision-shaped behavior in that spec is
+implemented here except the items [`roadmap.md`](roadmap.md) lists under
+Parked and Out of scope; the roadmap owns that ledger, along with the
+design records for what shipped.
+
 ## Project layout
 
 ```
@@ -142,6 +207,7 @@ src/EciCas.Bus/          ChannelBus, AgentBase, BusActivityTracker
 src/EciCas.Agents/       one folder per agent
 src/EciCas.Substrates/   SubstrateRegistry, MockSubstrateProvider, OpenAiCompatibleSubstrateProvider
 src/EciCas.Host/         Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
+src/EciCas.ArchiveTool/  console REPL for inspecting/editing the Parquet archive
 tests/EciCas.Tests/      xUnit
 morrow-eci/              Next.js companion UI, consumes the SSE stream
 ```

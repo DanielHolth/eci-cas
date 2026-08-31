@@ -2,7 +2,14 @@
 
 The C# backend and its Next.js companion surface (`morrow-eci/`) are both
 built and wired end to end — see [`architecture.md`](architecture.md) for
-what exists. This tracks what's still ahead.
+what exists. This document owns everything else: what's next, what's
+parked, what's deliberately out of scope, and the design records for work
+already shipped.
+
+**Next up, in order:** Reflection colors Impulse (slow-coloring feedback) →
+normalize archive writes to English → collapse Reasoning's index to
+`category`/`topic`. Everything below those three is either parked, further
+out, or a record of what's already built.
 
 ## Long-term goals
 
@@ -53,6 +60,30 @@ diary-aware knowledge archiving
 
 Profiles and auth are Morrow-ECI surface features; diary is a
 Recall-agent feature that can be prototyped independently.
+
+## Reflection colors Impulse (slow-coloring feedback) — high priority
+
+The one real gap left in the drive-vector story. Python's §5.3 slow-coloring
+feedback — drive state drifting gradually with the sentiment/theme of what
+gets archived — has no C# equivalent. Only Impulse's own instant,
+keyword-triggered shifts and Governance's Red-verdict frustration nudge
+exist today.
+
+**This lives on Reflection, not Consolidator.** `ConsolidatorAgent` stays a
+dumb writer: extract facts from the turn, write them, nothing else. It has
+no batch-level view and no business forming an opinion about mood.
+`ReflectionAgent` already does exactly the work this needs — it buffers a
+batch of conclusions, makes one substrate call that reasons across the whole
+batch, and already reads `ImpulseAgent.DrivePath` to gate push-vs-write. The
+slow-coloring nudge is a second output of that same existing call: alongside
+its candidate ideas, it returns a small drive delta for the batch's overall
+tone, published to `system.control` the same way Governance's frustration
+nudge is (never a direct agent call).
+
+Design points still open: how large a delta one batch may move (it must be
+slower than Impulse's instant shifts, or "slow" coloring isn't slow), and
+whether the delta is LLM-scored or derived deterministically from the
+batch's already-computed scores.
 
 ## Data quality
 
@@ -231,37 +262,12 @@ one `Importance`-sorted list means a genuinely important self-derived
 insight can outrank a trivial external fact instead of being quarantined in
 a second-class section. Not outstanding work; cut on purpose.
 
-## Reflection colors Impulse (slow-coloring feedback) — high priority
-
-The one real gap left in the drive-vector story. Python's §5.3 slow-coloring
-feedback — drive state drifting gradually with the sentiment/theme of what
-gets archived — has no C# equivalent. Only Impulse's own instant,
-keyword-triggered shifts and Governance's Red-verdict frustration nudge
-exist today.
-
-**This lives on Reflection, not Consolidator.** `ConsolidatorAgent` stays a
-dumb writer: extract facts from the turn, write them, nothing else. It has
-no batch-level view and no business forming an opinion about mood.
-`ReflectionAgent` already does exactly the work this needs — it buffers a
-batch of conclusions, makes one substrate call that reasons across the whole
-batch, and already reads `ImpulseAgent.DrivePath` to gate push-vs-write. The
-slow-coloring nudge is a second output of that same existing call: alongside
-its candidate ideas, it returns a small drive delta for the batch's overall
-tone, published to `system.control` the same way Governance's frustration
-nudge is (never a direct agent call).
-
-Design points still open: how large a delta one batch may move (it must be
-slower than Impulse's instant shifts, or "slow" coloring isn't slow), and
-whether the delta is LLM-scored or derived deterministically from the
-batch's already-computed scores.
-
 ## Reflection Agent redesign (drive-gated, batched) — shipped
 
 **Status: implemented.** Batching, ranking, drive-gated push-vs-write, and
 the `Domain` field all exist. Kept below as the design record.
 
-Today's `ReflectionAgent` (see [`gap-analysis.md`](gap-analysis.md) for how
-it diverges from the Python original) fires on every single conclusion and
+The `ReflectionAgent` this replaced fired on every single conclusion and
 unconditionally reposts an "idea" back onto `events.perception`, which
 reruns the entire pipeline as a second full turn — doubling substrate cost
 and console output per real message, with no batching and no way to write
@@ -291,11 +297,10 @@ The replacement, sketched in conversation:
   written quietly and stays retrievable (the user can still ask about it
   later via ordinary Recall lookup, it's just not proactively volunteered).
   This is the same "impulse vector" state Python's `current-spec.md` §5.3
-  (slow-coloring feedback) and §5.4 (somatic shortcut) describe and that
-  [`gap-analysis.md`](gap-analysis.md) already flags as entirely absent from
-  the C# port — **this redesign depends on that drive-vector state existing
-  somewhere first**, most likely living on `ImpulseAgent` since that's
-  where Python kept it. Needs its own design pass: how the state is
+  (slow-coloring feedback) and §5.4 (somatic shortcut) describe, absent from
+  the C# port at the time — **this redesign depended on that drive-vector
+  state existing first**, and it now lives on `ImpulseAgent`, where Python
+  kept it. Needs its own design pass: how the state is
   represented and persisted across turns, how Reflection (a different,
   decoupled agent) reads it without C#'s loose-coupling rule turning into a
   direct agent-to-agent reference, and what threshold value counts as
@@ -310,6 +315,59 @@ This is new scope beyond a straight gap-fix — it introduces persistent
 persona state that doesn't exist anywhere in C# today, not just a Reflection
 change — so it needs a real plan (and probably the drive-vector design
 question resolved) before implementation starts.
+
+## Parked
+
+Real gaps against the Python prototype's `current-spec.md`, deliberately
+not being worked. Not cut — revisit when the named condition holds, not
+before.
+
+**§6.1 Watchdog.** Absent — nothing in `src` matches `Watchdog`, liveness,
+or heartbeat. No 5-level escalation ladder, no idle-musing timer. Parked
+until the destination platform is known, or until the running system
+actually proves flaky in practice, whichever comes first. Designing a
+liveness ladder before knowing what it runs on is guesswork.
+
+**§6.2 Recovery bootstrap.** No 7-step IaC-style sequencer, no `BootCheck`
+liveness step. `Program.cs` + `AgentSubstrateManifestValidator` +
+routing-manifest validation already cover config-drift detection (fail
+loud on startup), a partial differently-shaped analog. When revived, it
+should be scoped wider than the Python original: one sequencer that
+doubles as an **installer**, provisioning a missing local LLM and any
+missing agents rather than only restarting dead ones. That makes it
+heavily platform-dependent, so it waits on the same platform decision the
+Watchdog does.
+
+## Out of scope
+
+Not gaps. Listed so they don't get re-raised as oversights without a fresh
+decision.
+
+**Messaging-plumbing differences.** Python's synchronous recursive
+`publish()` vs. C#'s decoupled per-agent queues; Governance-as-orchestrator
+vs. Governance-as-bus-listener; Reasoning calling Knowledge directly vs.
+selecting archive triples for Recall to fan out on. Per
+`csharp-rebuild-spec.md`'s framing, the port targets business logic, not
+architecture — these are by-design divergences, not things to reconcile.
+
+**§7.2 Budget Mode auto-latch.** Only per-event cost logging exists
+(`ISubstrateProvider` results log estimated cost at default log level), not
+the spend-cap/manual/terminal/transient auto-latch to deterministic
+fallbacks. Revisit only if real substrate spend becomes worth automating
+around.
+
+**§4.2 `is_parroting()`.** Never a requirement on this project, and now
+structurally moot. The Python check stops Intent echoing *Analytics'* raw
+recommendation back to the user — a real risk there, since Analytics handed
+Intent advisory prose. In C#, `ReasoningAgent` is a pure selector returning
+`(category, topic, subtopic)` triples and emitting no advisory text at all,
+so there is no analytical sentence to parrot. The related refusal-lead-in
+constraint is moot for the same kind of reason: Governance appends the
+Blocked text deterministically in native code, so Intent never gets the
+chance to soften a block.
+
+**Two arrays into Intent.** See the note at the end of the knowledge-swarm
+section — the merged, `Importance`-sorted result set replaces it on purpose.
 
 ## Open design questions
 
