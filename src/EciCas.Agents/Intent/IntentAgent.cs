@@ -48,7 +48,10 @@ public sealed class IntentAgent : CognitiveAgent<string>
         labels, no preamble, no wrapping.
 
         RULES:
-        - One sentence, two at most. Never longer.
+        - One sentence, two at most — unless the human asked for length: a
+          story, an explanation, a list, "tell me more". Then go up to eight
+          sentences, and no further. Length is something they ask for, never
+          something you volunteer.
         - Answer the question directly. Do not restate it, do not narrate
           your reasoning, do not ask what the human meant.
         - Never start with "You asked", "You mentioned", "I think you're asking",
