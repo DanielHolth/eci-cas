@@ -50,6 +50,7 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
         turns.delete(order.shift()!);
       }
     }
+    turn.input = String(raw.meta["perception.text"] ?? "");
     return;
   }
 
@@ -96,7 +97,11 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
     case "events.action": {
       const reply = String(raw.meta["intent.reply"] ?? "");
       const verdict = String(raw.meta["security.verdict"] ?? "green").toLowerCase();
-      turn.output = { kind: verdict === "red" ? "refuse" : "advise", text: reply };
+      turn.output = {
+        kind: verdict === "red" ? "refuse" : "advise",
+        text: reply,
+        degraded: raw.meta["governance.degraded"] === true,
+      };
       turn.stage = "speaking";
       break;
     }

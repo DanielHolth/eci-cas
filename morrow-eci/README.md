@@ -48,10 +48,11 @@ constraint: read from the bus freely via SSE, write only through
 
 | Backend source | UI element |
 |---|---|
+| Perception's `perception.text` | `Utterance` — the person's own line, echoed opposite the persona so a turn on screen reads as an exchange |
 | Impulse's reflex / drive-vector expression (`src/EciCas.Agents/Impulse`) | `Avatar` — a drawn face, one bucketed pose per expression; the animation is decoration on top, not extra state |
 | Reasoning / Recall / Self advisories (shared keyword format) | `ThoughtBubbles` — three colored bubbles, persist faded after speaking |
 | Security's verdict (`src/EciCas.Agents/Security`) | `SecurityIcon` — only renders on yellow/red; click reveals the matched rule's concern |
-| Intent's advise/refuse output | `SpeechBubble` |
+| Intent's advise/refuse output | `SpeechBubble` — dashed amber when Governance marks the turn `governance.degraded`, i.e. thought with a substrate missing |
 | `EpochWritten` (post-Memory milestone) | `ConsolidationDoodle` — clickable "+", first click reconciles, repeats are view-only |
 
 ## Open questions for Daniel

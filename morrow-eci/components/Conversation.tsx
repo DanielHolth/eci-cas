@@ -5,6 +5,7 @@ import { Avatar } from "@/components/Avatar";
 import { ThoughtBubbles } from "@/components/ThoughtBubbles";
 import { SecurityIcon } from "@/components/SecurityIcon";
 import { SpeechBubble } from "@/components/SpeechBubble";
+import { Utterance } from "@/components/Utterance";
 import { ConsolidationDoodle } from "@/components/ConsolidationDoodle";
 import { ProfileChip } from "@/components/ProfileChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -55,6 +56,8 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
           <ThemeToggle />
         </div>
       </div>
+
+      {turn?.input && <Utterance text={turn.input} />}
 
       <Avatar
         expression={turn?.impulse?.expression ?? "neutral"}

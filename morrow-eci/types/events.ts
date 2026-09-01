@@ -38,6 +38,9 @@ export interface SecurityOutcome {
 export interface IntentOutput {
   kind: "advise" | "refuse";
   text: string;
+  /** Governance flagged this turn as thought with a substrate missing —
+   * the reply already says so in words, this is the visual half. */
+  degraded?: boolean;
 }
 
 /** A consolidation epoch surfaced as the clickable "+" doodle. `acknowledged`
@@ -56,6 +59,9 @@ export interface ConsolidationEpoch {
 export interface TurnEvent {
   turnId: string;
   stage: "thinking" | "verdict" | "speaking";
+  /** What the person actually said — echoed back so a turn on screen is a
+   * exchange, not a reply with no question. */
+  input?: string;
   impulse?: ImpulseState;
   bundle: BundleFinding[];
   security: SecurityOutcome[];
