@@ -123,7 +123,8 @@ Two hazards fall out of it, both to settle in the design pass:
   turn firing another device call is how a house starts flapping. Wants
   an explicit rule — probably that a `triggered_by = "device"` turn may
   speak but may not act, which is stricter than a depth cap and easier to
-  reason about.
+  reason about. **That rule is Governance's**, not the toolbox's: it is a
+  verdict on an action, the same gate Security's matrix already runs.
 - **Consolidator.** It hard-skips `triggered_by = "self"` today, because
   Reflection already wrote that record correctly before pushing. Device
   turns need the same decision made deliberately: most acks are noise
@@ -138,6 +139,16 @@ console the person can't see past. The toolbox counts events per device
 over a window and stops admitting that device past the threshold. Per
 device, never global — one broken sensor must not deafen the persona to
 the rest of the house.
+
+**The count belongs in the toolbox, not Governance.** Governance
+subscribes to Perception/Advisories/Verdict and bundles the fan-out, so
+by the time it sees a turn, Reasoning, Recall, Self and Impulse have
+already made their substrate calls — filtering there pays for every
+flapping event and only then declines to act, which is the exact cost the
+guard exists to prevent. Admission control has to sit at the boundary,
+before publish. Governance also stays decision-only by design, and its
+only state is turn-scoped `_bundles`; a per-device counter over a time
+window is long-lived cross-turn state of a different kind.
 
 **A trip is spoken, not silent.** Suppression the person can't see is
 indistinguishable from a device that simply stopped working, so the block
