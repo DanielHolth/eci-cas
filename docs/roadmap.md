@@ -131,6 +131,32 @@ Two hazards fall out of it, both to settle in the design pass:
   23:10"). Likeliest shape is the same one — skip by default, and let the
   toolbox write the rows that matter itself.
 
+**Flood guard — `DeviceBlockCount`.** A faulty device is the failure mode
+this design invites: a flapping sensor publishing perceptions in a loop
+drives a full agent turn each time, which is real substrate spend and a
+console the person can't see past. The toolbox counts events per device
+over a window and stops admitting that device past the threshold. Per
+device, never global — one broken sensor must not deafen the persona to
+the rest of the house.
+
+**A trip is spoken, not silent.** Suppression the person can't see is
+indistinguishable from a device that simply stopped working, so the block
+enters as one perception of its own and Intent voices it in the persona's
+own words: *the hallway sensor is misbehaving, I've stopped listening to
+it.* Exactly once, on the transition — a message per suppressed event
+would be the flood wearing a different hat.
+
+Two details worth fixing early:
+
+- **The count is what's suppressed, not the drive nudge.** A flood must
+  not colour Impulse per event, or a broken device rewrites the
+  relationship overnight. The trip itself is worth feeling; the thousand
+  events behind it are not.
+- **Recovery has to exist.** A block that only clears on restart turns a
+  momentary glitch into a permanently deaf sensor. Default to decaying
+  after a quiet window, with the persona saying when it starts listening
+  again.
+
 Open questions beyond that: whether the toolbox is one agent with a tool
 registry or one agent per protocol; which integration surface it speaks
 (Matter, Home Assistant, MQTT, vendor APIs); and how a tool call is
