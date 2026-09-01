@@ -128,10 +128,13 @@ document assumptions" instruction:
   not `EventId`) and enum values (`"green"`, not `"Green"`) — idiomatic
   for a TS consumer, configured in `EciCas.Host/Program.cs`'s
   `jsonOptions`.
-- **Expression derivation is entirely client-side and heuristic**
-  (`lib/useEciStream.ts: deriveExpression`) — the backend's Impulse agent
-  has no concept of `Expression` at all, only a severity + free-text
-  advice string. This mapping is a placeholder, not a spec.
+- **Expression is chosen on the backend, never here.** Impulse appraises
+  it from its drive vectors and publishes `impulse.expression`;
+  Governance forwards it on the action as `governance.expression`, which
+  is fresher on a block (the frustration nudge has landed by then).
+  `lib/useEciStream.ts: readExpression` only validates the word against
+  the six this app can draw and falls back to `neutral` — the surface
+  decides how to draw a mood, never which one.
 - **Bundle findings are upserted, not appended**, keyed by agent name —
   `ThoughtBubbles` renders one row per `BundleAgent` via `f.agent` as a
   React key, so a second advisory from the same agent (e.g. a revision

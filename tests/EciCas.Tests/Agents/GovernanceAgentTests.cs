@@ -286,4 +286,31 @@ public class GovernanceAgentTests
         Assert.True(actionReader.TryRead(out var action));
         Assert.DoesNotContain("less grounded", action!.Meta.Get<string>(IntentAgent.ReplyKey)!);
     }
+
+    /// <summary>
+    /// Impulse appraises the face; Governance is only the courier. It has to
+    /// survive the hop, because the verdict envelope never carried it — the
+    /// bundle state is the only place it still exists by the time the action
+    /// is built.
+    /// </summary>
+    [Fact]
+    public async Task ImpulsesExpression_ReachesTheAction()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, ["Impulse"]);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+        await agent.HandleAsync(perception.Derive(Topics.Advisories, "Impulse", Severity.Neutral,
+            MetaBag.Empty.With(ImpulseAgent.ExpressionKey, "warm")), CancellationToken.None);
+
+        var verdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "sure"));
+        await agent.HandleAsync(verdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var action));
+        Assert.Equal("warm", action!.Meta.Get<string>(GovernanceAgent.ExpressionKey));
+    }
 }

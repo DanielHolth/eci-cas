@@ -250,4 +250,23 @@ public class ImpulseAgentTests
                 $"slow-colouring delta '{label}' is not smaller than the smallest instant nudge");
         }
     }
+
+    /// <summary>
+    /// The advisory carries the face, and it carries the face this turn just
+    /// produced — an urgent turn nudges urgency up, and the appraisal that
+    /// reaches the surface has to reflect that, not the state before it.
+    /// </summary>
+    [Fact]
+    public async Task AdvisoryCarriesTheAppraisedExpression()
+    {
+        var (agent, advisories, _, _) = Create();
+
+        await agent.HandleAsync(Perceive("nothing much", null), CancellationToken.None);
+        Assert.True(advisories.TryRead(out var calm));
+        Assert.Equal("neutral", calm!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
+
+        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+        Assert.True(advisories.TryRead(out var urgent));
+        Assert.Equal("alert", urgent!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
+    }
 }

@@ -203,6 +203,14 @@ the persona's appraisal state, persisted as JSON at
 `ImpulseAgent.DrivePath` and read by Reflection (eagerness gating) and
 Governance (the `Expression()` face on a blocked reply).
 
+Impulse also appraises that face itself on every turn — `Expression()`
+on its own state, published as `impulse.expression` once the turn's
+nudges have landed. Governance captures it when the bundle completes and
+forwards it on the Action/Conclusion as `governance.expression`, so a
+surface can draw the persona's mood without owning the vocabulary or
+reading drive state directly. A block overwrites it with the face read
+after the frustration nudge.
+
 **Impulse owns every number that lands on it.** Other agents may *request*
 a shift, never quantify one: Governance publishes a `Frustration` control
 message on a Red verdict, Reflection attaches a mood label to its

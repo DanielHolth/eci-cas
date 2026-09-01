@@ -30,8 +30,17 @@ public sealed class GovernanceAgent : AgentBase
     /// </summary>
     public const string FrustrationKind = "Frustration";
 
-    /// <summary>The face the persona's current drive-vector state implies, attached to a blocked Action/Conclusion so what reaches the human at least matches how it feels.</summary>
+    /// <summary>
+    /// The face the persona's drive state implies, attached to every
+    /// Action/Conclusion so what reaches the human matches how it feels. On
+    /// an ordinary turn it is Impulse's own appraisal, forwarded; on a block
+    /// it is re-read after the frustration nudge, which is the whole point of
+    /// nudging.
+    /// </summary>
     public const string ExpressionKey = "governance.expression";
+
+    /// <summary>Impulse's roster name, as it appears on its advisory's PublishedBy — a string here rather than a type reference, same as every other roster entry.</summary>
+    private const string ImpulseAdvisor = "Impulse";
 
     /// <summary>Set true on a blocked Action/Conclusion so downstream consumers can tell a security block from an ordinary reply without inspecting VerdictKey.</summary>
     public const string SecurityAlertKey = "governance.security_alert";
@@ -159,6 +168,13 @@ public sealed class GovernanceAgent : AgentBase
                 !state.Advisories.TryGetValue(advisor, out var advisory)
                 || advisory.Meta.Get<string>(SubstrateHealth.DegradedKey) is not null)];
             state.Impaired = impaired;
+
+            // Same reason Impaired is captured here: the verdict envelope
+            // never carried the advisories, and by the time the action is
+            // built this is the only place Impulse's face still exists.
+            state.Expression = state.Advisories.TryGetValue(ImpulseAdvisor, out var impulse)
+                ? impulse.Meta.Get<string>(ImpulseAgent.ExpressionKey)
+                : null;
         }
 
         state.TimeoutCts.Cancel();
@@ -230,9 +246,11 @@ public sealed class GovernanceAgent : AgentBase
         // survives the hop.
         var intentDegraded = verdict.Meta.Get<string>(SubstrateHealth.DegradedKey);
         string[] impaired;
+        string? expression;
         lock (state)
         {
             impaired = state.Impaired;
+            expression = state.Expression;
         }
 
         var replyToSpeak = value == Verdict.Red ? BlockedReply(verdict) : reply;
@@ -253,6 +271,11 @@ public sealed class GovernanceAgent : AgentBase
         if (notice is not null && value != Verdict.Red)
         {
             actionMeta = actionMeta.With(DegradedKey, true);
+        }
+
+        if (expression is not null)
+        {
+            actionMeta = actionMeta.With(ExpressionKey, expression);
         }
 
         if (value == Verdict.Red)
@@ -349,6 +372,9 @@ public sealed class GovernanceAgent : AgentBase
     {
         public Envelope? Perception { get; set; }
         public Dictionary<string, Envelope> Advisories { get; } = [];
+
+        /// <summary>Impulse's appraised face for this turn, read off its advisory when the bundle completes — the verdict never carried it.</summary>
+        public string? Expression { get; set; }
 
         /// <summary>Roster advisors that failed or never arrived, decided once when the bundle completes and read again when the verdict comes back — the verdict envelope never carried the advisories.</summary>
         public string[] Impaired { get; set; } = [];

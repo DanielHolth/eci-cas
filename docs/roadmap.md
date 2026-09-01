@@ -632,13 +632,31 @@ connected.
 
 ### Still open on the surface
 
-**Expression is invented client-side.** `useEciStream.ts`'s
-`deriveExpression` builds an expression vocabulary from severity plus
-reflex text, with a comment admitting it is a mock-era placeholder. That
-is the same violation R4 was careful to avoid — the UI taking ownership
-of persona state — in miniature, and R4 shipped without fixing it. The
-fix is Impulse publishing an expression rather than the client guessing
-one. A live inconsistency, not a blocker.
+**Expression is invented client-side — shipped.** Impulse now publishes
+`impulse.expression` on its advisory, appraised from its own drive
+vectors through `DriveVectors.Expression()`; Governance captures it when
+the bundle completes (the verdict envelope never carried the advisories,
+so that is the last place it exists) and forwards it on every
+Action/Conclusion as `governance.expression`. The block path still wins,
+re-reading the face *after* the frustration nudge, which is the whole
+point of nudging. The client only draws the word it is given, and falls
+back to `neutral` on any word it does not recognise rather than blanking
+the avatar.
+
+The advisory had to move to the end of Impulse's handler: it now goes out
+after this turn's nudges land, so the face carried is the one the turn
+produced rather than the one it inherited. The nudges are cache hits and
+a state write, never a substrate call, so nothing that matters waits.
+
+Tuning came with it. The instant nudges were ported verbatim from the
+Python prototype and were an order of magnitude too small for
+`DriveVectors`' bucket edges — a critical event moved alertness to 0.105
+against a low edge of 0.35, so the appraisal never left `neutral` and the
+six drawn faces were unreachable in practice. They are now sized against
+the edges instead: one emergency reaches `alert`, two thank-yous reach
+`warm`, sustained disapproval walks engagement down into `sad`. Slow
+colouring stays an order of magnitude below all of it, which is the
+invariant `ImpulseAgentTests` already guarded.
 
 **The picker does not solve attribution.** `localStorage` keeps the last
 person's identity until someone explicitly switches, so on a shared

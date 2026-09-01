@@ -34,6 +34,15 @@ public sealed class ImpulseAgent : AgentBase
     public const string ReflexKey = "impulse.reflex";
 
     /// <summary>
+    /// The face the drive state implies once this turn's nudges have landed
+    /// — DriveVectors.Expression(), published on the advisory so Governance
+    /// can carry it out to whatever surface is watching. Appraisal is
+    /// Impulse's own data, not a display concern: the surface decides how to
+    /// draw a word it did not choose.
+    /// </summary>
+    public const string ExpressionKey = "impulse.expression";
+
+    /// <summary>
     /// Archive path holding the current DriveVectors, JSON-serialized. Read
     /// directly by ReflectionAgent and GovernanceAgent. This is the
     /// device-wide state — the path used when no profile owns the input.
@@ -66,8 +75,20 @@ public sealed class ImpulseAgent : AgentBase
     private static readonly string[] PositiveTriggers = ["thanks", "thank you", "great job", "well done", "awesome"];
     private static readonly string[] NegativeTriggers = ["that's wrong", "that's not right", "terrible", "bad job"];
 
-    /// <summary>Fixed, named nudge applied on a critical event — same discipline as Python's FRUSTRATION_NUDGE: something may ask for a shift, but the number that lands is written here, in code.</summary>
-    private static readonly DriveVectors CriticalNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0.15, SocialDrive: 0, Temperature: -0.05);
+    /// <summary>
+    /// Fixed, named nudge applied on a critical event — same discipline as
+    /// Python's FRUSTRATION_NUDGE: something may ask for a shift, but the
+    /// number that lands is written here, in code.
+    ///
+    /// Sized against DriveVectors' bucket edges, not against the Python
+    /// prototype's numbers: a nudge called instant that leaves the appraised
+    /// face unchanged is not instant. One emergency crosses into "alert" on
+    /// its own; two thank-yous reach "warm"; sustained disapproval walks
+    /// engagement down into "sad". Slow colouring stays an order of
+    /// magnitude below all of it, which is the invariant ImpulseAgentTests
+    /// guards.
+    /// </summary>
+    private static readonly DriveVectors CriticalNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0.45, SocialDrive: 0, Temperature: -0.05);
 
     /// <summary>
     /// Ported verbatim from Python's FRUSTRATION_NUDGE (agents/impulse/agent.py):
@@ -75,13 +96,13 @@ public sealed class ImpulseAgent : AgentBase
     /// (it cost something), slightly less warmth — applied when Governance
     /// signals a blocked exchange over system.control, never a direct call.
     /// </summary>
-    private static readonly DriveVectors FrustrationNudge = new(Curiosity: 0, Fatigue: 0.05, Urgency: 0.15, SocialDrive: 0, Temperature: -0.05);
+    private static readonly DriveVectors FrustrationNudge = new(Curiosity: 0, Fatigue: 0.05, Urgency: 0.3, SocialDrive: 0, Temperature: -0.1);
 
     /// <summary>Direct approval, applied instantly — warmer and less fatigued, no urgency change.</summary>
-    private static readonly DriveVectors PositiveNudge = new(Curiosity: 0.05, Fatigue: -0.05, Urgency: 0, SocialDrive: 0.1, Temperature: 0.1);
+    private static readonly DriveVectors PositiveNudge = new(Curiosity: 0.05, Fatigue: -0.05, Urgency: 0, SocialDrive: 0.2, Temperature: 0.2);
 
     /// <summary>Direct disapproval, applied instantly — cooler and a little more fatigued, smaller than a security block.</summary>
-    private static readonly DriveVectors NegativeNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0, SocialDrive: -0.05, Temperature: -0.1);
+    private static readonly DriveVectors NegativeNudge = new(Curiosity: -0.1, Fatigue: 0.05, Urgency: 0, SocialDrive: -0.1, Temperature: -0.15);
 
     /// <summary>
     /// §5.3 slow-coloring feedback: drive state drifting with the tone of
@@ -162,9 +183,6 @@ public sealed class ImpulseAgent : AgentBase
         var severity = isCritical ? Severity.Elevated : envelope.Severity;
         var advice = isCritical ? "flagged as urgent" : "no immediate concern";
 
-        var advisory = envelope.Derive(Topics.Advisories, Name, severity, MetaBag.Empty.With(AdviceKey, advice));
-        _bus.Publish(Topics.Advisories, advisory);
-
         if (isCritical)
         {
             var reply = "This sounds urgent — I'm on it right away.";
@@ -183,6 +201,15 @@ public sealed class ImpulseAgent : AgentBase
         {
             await NudgeAsync(NegativeNudge, profileId, cancellationToken).ConfigureAwait(false);
         }
+
+        // Advisory goes out last so the face it carries is the one this turn
+        // just produced, not the one it inherited. The nudges above are cache
+        // hits and a state write, not a substrate call, so the bundle waits
+        // on nothing that matters.
+        var vectors = await GetVectorsAsync(DrivePathFor(profileId), cancellationToken).ConfigureAwait(false);
+        var advisory = envelope.Derive(Topics.Advisories, Name, severity,
+            MetaBag.Empty.With(AdviceKey, advice).With(ExpressionKey, vectors.Expression()));
+        _bus.Publish(Topics.Advisories, advisory);
     }
 
     private async Task NudgeAsync(DriveVectors nudge, string? profileId, CancellationToken cancellationToken)

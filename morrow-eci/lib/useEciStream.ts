@@ -43,17 +43,19 @@ function record(turn: TurnEvent, agent: BundleAgent, text: string): void {
   }
 }
 
+const EXPRESSIONS: readonly Expression[] = ["angry", "scared", "sad", "warm", "alert", "neutral"];
+
 /**
- * Impulse never emits an Expression — that vocabulary was invented for the
- * mock shell. This maps severity + the reflex text onto it as a placeholder
- * until real expression-selection logic exists on the backend (open question
- * carried over from the mock-era README, see M6/M7 "Open questions").
+ * Impulse appraises the face from its own drive vectors and publishes the
+ * word; Governance forwards it. The surface only decides how to draw it — it
+ * never decides which one. Anything unrecognised falls back to neutral rather
+ * than throwing, since a new word on the backend must not blank the avatar.
  */
-function deriveExpression(severity: RawEnvelope["severity"], reflex: string): Expression {
-  if (severity === "critical") return "scared";
-  if (severity === "elevated") return reflex.includes("urgent") ? "alert" : "warm";
-  if (severity === "restful") return "warm";
-  return "neutral";
+function readExpression(meta: Record<string, unknown>, key: string): Expression | undefined {
+  const value = meta[key];
+  return typeof value === "string" && (EXPRESSIONS as readonly string[]).includes(value)
+    ? (value as Expression)
+    : undefined;
 }
 
 function emptyTurn(turnId: string): TurnEvent {
@@ -93,7 +95,7 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
     case "events.advisories": {
       if (raw.publishedBy === "Impulse") {
         const reflex = String(raw.meta["impulse.advice"] ?? "");
-        turn.impulse = { reflex, expression: deriveExpression(raw.severity, reflex) };
+        turn.impulse = { reflex, expression: readExpression(raw.meta, "impulse.expression") ?? "neutral" };
         break;
       }
       const agent = raw.publishedBy.toLowerCase() as BundleAgent;
@@ -129,6 +131,13 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
         text: reply,
         degraded: raw.meta["governance.degraded"] === true,
       };
+
+      // A block nudges Impulse and Governance re-reads the face afterwards,
+      // so the action's expression is fresher than the advisory's.
+      const face = readExpression(raw.meta, "governance.expression");
+      if (face) {
+        turn.impulse = { reflex: turn.impulse?.reflex ?? "", expression: face };
+      }
       turn.stage = "speaking";
       break;
     }
