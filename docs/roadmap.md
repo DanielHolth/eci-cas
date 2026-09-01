@@ -213,13 +213,37 @@ phrase a refusal:
 - It keeps the honesty rule in one place, next to the block text it
   already owns.
 
-What has to change to enable it: `CognitiveAgent` must mark the fallback
-it publishes rather than substituting invisibly — degraded, plus a cause
-(unreachable / timed out / substrate disabled). Governance then counts
-degraded and absent advisories in the bundle and picks between a
-partial-thinking notice and an "I can't think right now" — with a
-`UseSubstrate: false` agent deliberately *not* counting as degraded,
-since a deterministic-by-config agent is working exactly as configured.
+What has to change to enable it: every substrate caller must mark the
+fallback it publishes rather than substituting invisibly — degraded,
+plus a cause (unreachable / timed out / substrate disabled). Governance
+then counts degraded and absent advisories in the bundle and picks
+between a partial-thinking notice and an "I can't think right now" —
+with a `UseSubstrate: false` agent deliberately *not* counting as
+degraded, since a deterministic-by-config agent is working exactly as
+configured.
+
+**This is five edits, not one.** "`CognitiveAgent` marks the fallback"
+would cover Intent alone. Only Intent and Reasoning extend
+`CognitiveAgent<T>`, and `ReasoningAgent` overrides `HandleAsync` and
+reimplements the base try/catch/log/publish nearly line for line — so
+its `Fallback => Open` is read only for the log message. Recall,
+Reflection and Consolidator hold their own try/catch and never touch
+the base path at all. Marking only `CognitiveAgent` would look done
+while three agents kept degrading silently.
+
+So the dedup comes first, and it isn't free: Reasoning duplicates the
+base because it needs the prompt and its parsed pairs in a shape the
+generic `Publish` signature doesn't offer. The likely shape is the base
+class handing subclasses a failure classification, rather than folding
+the subclasses back into it. Note the same split already bites
+elsewhere — `UseSubstrate` is honoured only on the base path, so setting
+it `false` on any of the other four agents validates at startup and is
+then ignored.
+
+Consolidator needs its own answer regardless: its fallback is to skip,
+returning no facts, so an outage stops the persona remembering as well
+as thinking. There is nothing to reuse here — no deterministic keyword
+writer exists, and `UseSubstrate` appears in no `appsettings` file.
 
 **Timeouts are the harder half.** The DNS failure that prompted this
 (`SocketException 11001`, host not resolvable) failed instantly. A real

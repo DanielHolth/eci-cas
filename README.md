@@ -91,26 +91,29 @@ independently:
 }
 ```
 
-Which class each cognitive agent (Intent, Reasoning, Reflection, Consolidator)
-uses comes from `AgentSubstrates:Agents` in `appsettings.json` — an operator
-can retarget a role, or add a class like `fast-local`, without touching C#:
+Which class each cognitive agent (Intent, Reasoning, Recall, Reflection,
+Consolidator) uses comes from `AgentSubstrates:Agents` in `appsettings.json` —
+an operator can retarget a role, or add a class like `fast-local`, without
+touching C#:
 
 ```jsonc
 "AgentSubstrates": {
   "Agents": {
-    "Intent": { "Class": "fast-medium" },
-    "Consolidator": { "Class": "fast-low", "UseSubstrate": false }
+    "Intent": { "Class": "fast-medium", "UseSubstrate": false }
   }
 }
 ```
 
 `UseSubstrate` defaults to `true`; setting it `false` skips the substrate call
-entirely (the agent publishes its fallback result instead) — Consolidator
-ships with it off, since its deterministic keyword write already covers most
-turns without an LLM call. Both this manifest and `Substrates:Classes` are
-validated at startup — including that `Class` names a real substrate class
-even when `UseSubstrate` is `false` — so a typo in either one fails loud
-before the bus starts rather than silently falling back to mock.
+entirely, and the agent publishes its fallback result instead. **It is honoured
+only by agents running `CognitiveAgent`'s own `HandleAsync` — today that is
+Intent alone.** Reasoning overrides `HandleAsync`, and Recall, Reflection and
+Consolidator call the substrate directly, so setting `UseSubstrate: false` on
+any of those four passes startup validation and is then ignored. Both this
+manifest and `Substrates:Classes` are validated at startup — including that
+`Class` names a real substrate class even when `UseSubstrate` is `false` — so
+a typo in either one fails loud before the bus starts rather than silently
+falling back to mock.
 
 To swap a whole bundle of provider/model choices at once, set the `Tier`
 config value (env var or `--Tier=X`) to layer in `appsettings.<Tier>.json`
