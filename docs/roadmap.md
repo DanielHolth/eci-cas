@@ -266,11 +266,38 @@ and a minute of silence followed by an apology is worse than the apology
 alone. The substrate timeout has to be short enough that the notice is
 prompt, which makes it a tier-tunable knob rather than a constant.
 
-Related papercut worth fixing alongside: every substrate caller logs
-`LogWarning(ex, …)` with the full exception, so a single offline turn
-prints four or five complete stack traces and the actual warning text
-scrolls away. The traces are near-identical and say less than one line
-of classification would.
+**Circuit-break per provider, not per agent.** Independent of the notice
+and landable separately. Not justified by the DNS incident — that failed
+instantly — but by the *hang*: a host that resolves and then stalls on
+TLS or a slow provider, where each of five agents waits out a full
+timeout every turn, every turn. A short open circuit (fail fast for N
+seconds after a transport failure, then probe) turns a dead turn into an
+instant one, and even when failure is fast it stops five doomed calls
+per turn during a known outage. Belongs in
+`OpenAiCompatibleSubstrateProvider` — agents should not know about
+network topology.
+
+**Decided against: a startup reachability probe.** Tempting, since
+manifest drift already fails loud at boot. Rejected because it only
+catches "network down at boot", gives false confidence when it passes,
+and makes startup depend on the internet. The circuit breaker covers the
+same ground and handles the transient case too.
+
+Two related papercuts worth fixing alongside:
+
+- Every substrate caller logs `LogWarning(ex, …)` with the full
+  exception, so a single offline turn prints four or five near-identical
+  stack traces and the actual warning text scrolls away. They say less
+  than one line of classification would.
+- Telemetry only logs on success — the latency/token/cost line sits
+  *inside* the `try`, after `CompleteAsync` returns, so a failed call
+  leaves no record of what it attempted or what it cost in wall-clock.
+  Exactly the turns worth measuring are the ones that measure nothing.
+
+And an asymmetry worth naming: manifest drift fails loud before the bus
+starts, but a `Tier` pointing at live providers never verifies anything
+about them. The most strictly validated config is the one that silently
+degrades at runtime.
 
 ## Multi-user profiles, iteration 1 — mostly shipped
 
@@ -334,6 +361,13 @@ per flush, which is a Reflection-side change with a real cost attached and
 is deliberately not in iteration 1. The instant nudges — the ones a person
 actually feels within a turn — are per profile.
 
+Two shapes when it is taken up: **partition the batch by profile** and
+pay per-profile calls, or **scope the mood to whichever profile dominated
+the batch**, which is cheaper and wrong-feeling. Partitioning is probably
+right, because the cheap option contradicts the stated intent that what
+warms the persona toward one child must not pre-colour how it meets the
+parent an hour later.
+
 ### Frontend requirements — shipped
 
 **R1 · Profile registry.** `GET /api/profiles` returns
@@ -368,6 +402,29 @@ connect — browsers hold `onopen` until the first body byte, and a
 profile-scoped client can wait a long time for its first real envelope,
 long enough to sit there reading "Disconnected" while perfectly
 connected.
+
+### Still open on the surface
+
+**Expression is invented client-side.** `useEciStream.ts`'s
+`deriveExpression` builds an expression vocabulary from severity plus
+reflex text, with a comment admitting it is a mock-era placeholder. That
+is the same violation R4 was careful to avoid — the UI taking ownership
+of persona state — in miniature, and R4 shipped without fixing it. The
+fix is Impulse publishing an expression rather than the client guessing
+one. A live inconsistency, not a blocker.
+
+**The picker does not solve attribution.** `localStorage` keeps the last
+person's identity until someone explicitly switches, so on a shared
+device the persona happily attributes one person's turn to another. With
+speaker ID cut, nothing later closes that gap automatically. An explicit
+"not me" affordance is probably worth more than pretending the picker
+handles it.
+
+**No auth means the registry is open.** Profile ids are guessable and
+`GET /api/profiles` is unauthenticated. Fine for a household device,
+not beyond it — stated here rather than left implied, since the
+server-side stream filter is a privacy boundary and boundaries deserve
+naming.
 
 ### Out of scope for iteration 1
 
