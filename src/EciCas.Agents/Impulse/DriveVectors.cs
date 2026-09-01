@@ -57,11 +57,15 @@ public sealed record DriveVectors(
             return "sad";
         }
 
-        if (Warmth >= BucketHigh)
+        // Raised alertness outranks warmth, which is the one place this
+        // departs from the Python order. Both can be high at once — a warm
+        // relationship in the middle of something urgent — and a face that
+        // smiles through an emergency reads as not having heard it.
+        if (Alertness >= BucketLow)
         {
-            return "warm";
+            return "alert";
         }
 
-        return Alertness >= BucketLow ? "alert" : "neutral";
+        return Warmth >= BucketHigh ? "warm" : "neutral";
     }
 }

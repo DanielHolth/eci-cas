@@ -672,7 +672,10 @@ Python prototype and were an order of magnitude too small for
 against a low edge of 0.35, so the appraisal never left `neutral` and the
 six drawn faces were unreachable in practice. They are now sized against
 the edges instead: one emergency reaches `alert`, two thank-yous reach
-`warm`, sustained disapproval walks engagement down into `sad`. Slow
+`warm`, sustained disapproval walks engagement down into `sad`. One
+departure from the Python bucket order came with it: raised alertness now
+outranks warmth, since both can be high at once and a face that smiles
+through an emergency reads as not having heard it. Slow
 colouring stays an order of magnitude below all of it, which is the
 invariant `ImpulseAgentTests` already guarded.
 

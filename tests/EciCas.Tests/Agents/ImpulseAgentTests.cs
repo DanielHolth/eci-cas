@@ -269,4 +269,23 @@ public class ImpulseAgentTests
         Assert.True(advisories.TryRead(out var urgent));
         Assert.Equal("alert", urgent!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
     }
+
+    /// <summary>
+    /// Warmth and alertness can both be raised — a warm relationship in the
+    /// middle of something urgent. The urgent face has to win, or the
+    /// persona smiles through an emergency.
+    /// </summary>
+    [Fact]
+    public async Task UrgencyOutranksWarmth()
+    {
+        var (agent, advisories, _, _) = Create();
+
+        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
+        while (advisories.TryRead(out _)) { }
+
+        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+        Assert.True(advisories.TryRead(out var advisory));
+        Assert.Equal("alert", advisory!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
+    }
 }
