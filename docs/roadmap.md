@@ -26,17 +26,19 @@ Morrow-ECI.
 
 ## Companion & knowledge extensions (not started)
 
-Four capabilities for device-sharing and persistent user identity, none
-built yet:
+Four capabilities for input, device-sharing and persistent knowledge,
+none built yet:
 
 **Multi-user profiles.** Planned in detail below — iteration 1 is
 specified and is the next thing to build. Later increments: a new name in
 conversation offering to create a profile, and profile deletion/merge.
 
-**Voice recognition for user detection.** Speaker ID as the primary
-detector (continuous, harder to spoof than camera alone), camera as a
-fallback for ambiguous cases. Integration point: Perception, before
-Impulse fires. Needs baseline voice samples from the original user.
+**Speech-to-text input.** Dictation only — a push-to-talk button that
+fills the existing composer, so what gets sent stays reviewable text and
+`sendPerceive(text, profileId)` is unchanged. Purely a surface feature:
+no new bus topic, no audio on Perception's meta, no agent contract
+change. Speaker identification is **cut** — see "One instance per
+person" below; the mic answers *what was said*, never *who said it*.
 
 **Biometric + camera authentication.** Device biometrics authenticate
 the original user at unlock; a different person picking up the device
@@ -50,16 +52,64 @@ Query: Recall surfaces diary entries in temporal order, not as
 overwriting facts.
 
 These layer on top of the core system and don't block anything else.
-Voice + biometric + camera compose as one "who is this" pipeline feeding
-profile context, which diary-aware archiving then reads:
+With speaker ID cut, the "who is this" pipeline collapses to biometric
+unlock feeding profile context, which diary-aware archiving then reads:
 
 ```
-biometric unlock → voice/camera check → profile context →
-diary-aware knowledge archiving
+biometric unlock → profile context → diary-aware knowledge archiving
 ```
 
 Profiles and auth are Morrow-ECI surface features; diary is a
 Recall-agent feature that can be prototyped independently.
+
+## One instance per person (symbiosis)
+
+**The intended shape is one Morrow-ECI per person, not one shared
+persona that keeps track of who it's talking to.** The relationship is
+symbiotic: the persona develops against a single person over a long
+time, and that only works if its drive state, its self-derived ideas and
+its personal archive all belong to that one relationship. A family of
+four is four instances, not one instance with four hats.
+
+This is why **speaker identification is cut**. It only ever existed to
+answer "which user is this" on a device with one shared persona — a
+question that doesn't arise when the instance already belongs to
+someone. Voice input stays, as dictation; the identity half of it is
+gone, and with it the baseline-voice-sample capture, the "who is this"
+gate ahead of Impulse, and the camera fallback for ambiguous speakers.
+
+**Accessibility is a primary driver, not a side benefit.** A companion
+that knows one person deeply — their routine, their vocabulary, what
+they can and can't do unaided — is most valuable to someone who needs
+it, and that value comes from depth against one person rather than
+breadth across several. This is also what makes speech input worth
+building on its own merits, independent of identity.
+
+Multi-user profiles keep their place as the **shared-device path**, not
+as the primary design: a phone or tablet passed around a household still
+needs the separation profiles give it, and per-profile Impulse is
+already the right mechanism either way. Nothing shipped in iteration 1
+is invalidated — what changes is that profile-scoped archive storage is
+the shared-device accommodation, while a dedicated instance gets the
+whole archive to itself by construction.
+
+## Toolbox agent — IoT actions (not started)
+
+Action today only produces speech. A symbiotic companion that matters to
+someone with a disability has to be able to *do* things in the home:
+lights, locks, thermostat, blinds, appliances. The sketch is a **toolbox
+agent** owning a registry of callable device capabilities, sitting on the
+action side of Governance so every device call passes the same verdict
+gate a reply does — an IoT action is exactly the class of thing that must
+never fire on a Red verdict.
+
+Open questions, none decided: whether the toolbox is one agent with a
+tool registry or one agent per protocol; which integration surface it
+speaks (Matter, Home Assistant, MQTT, vendor APIs); how a tool call is
+represented on the bus without giving Intent a second output vocabulary;
+and how failures report back, since an unlit light is a state the persona
+should notice rather than a message it can drop. Wants its own design
+pass before code.
 
 ## Multi-user profiles, iteration 1 — mostly shipped
 
