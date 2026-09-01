@@ -48,7 +48,7 @@ constraint: read from the bus freely via SSE, write only through
 
 | Backend source | UI element |
 |---|---|
-| Impulse's reflex / drive-vector expression (`src/EciCas.Agents/Impulse`) | `Avatar` — bucketed expression, not continuous animation |
+| Impulse's reflex / drive-vector expression (`src/EciCas.Agents/Impulse`) | `Avatar` — a drawn face, one bucketed pose per expression; the animation is decoration on top, not extra state |
 | Reasoning / Recall / Self advisories (shared keyword format) | `ThoughtBubbles` — three colored bubbles, persist faded after speaking |
 | Security's verdict (`src/EciCas.Agents/Security`) | `SecurityIcon` — only renders on yellow/red; click reveals the matched rule's concern |
 | Intent's advise/refuse output | `SpeechBubble` |
@@ -59,9 +59,18 @@ constraint: read from the bus freely via SSE, write only through
 These are placeholder decisions made to have something concrete to
 react to — none of them are settled:
 
-- **Expression rendering** — right now `Avatar` is a colored circle +
-  label per expression. Is that the right register, or should this be
-  illustrated/literal facial features?
+- **Expression rendering** — `Avatar` is now a drawn face: hand-written
+  SVG geometry (brow angle, eye openness, mouth path) plus CSS keyframes,
+  no sprite sheet and no animation library. Two motion layers, kept
+  separate on purpose — an idle layer (breathing, blinking, pupil drift)
+  that never stops so the persona is alive between turns, and an
+  expression layer that belongs to the current mood (a tremble for
+  scared, a slow droop for sad, a seething shudder for angry). Poses
+  transition rather than cut, and all motion is suppressed under
+  `prefers-reduced-motion` — the mood stays legible from the static pose,
+  which is why it's encoded in geometry rather than in movement. Adding a
+  seventh mood is a row in `FACE`, not a redraw. Still a guess at the
+  register: is a cartoon face right, or should this be more abstract?
 - **Bundle bubble colors** — Reasoning (blue) and Recall (orange) are
   carried over placeholders from the old console color table (now
   archived with the Python prototype); Self's fuchsia is likewise

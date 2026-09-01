@@ -29,3 +29,147 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* --- Avatar ---------------------------------------------------------------
+
+   The face's motion lives here rather than inline because keyframes can't be
+   expressed as utility classes, and because every rule below has to be
+   switched off in one place under prefers-reduced-motion. The expression
+   layer is driven by a single custom property the component sets
+   (--eci-motion), so adding a mood never touches this file's structure.
+
+   Feature *poses* (brow angle, eye openness, mouth path) transition rather
+   than cut: a mood change should read as the face moving into it. The `d`
+   transition is progressively enhanced — where a browser won't interpolate
+   path data the mouth simply snaps, which is still correct. */
+
+.eci-face,
+.eci-aura,
+.eci-brow,
+.eci-eye,
+.eci-mouth {
+  transition:
+    transform 400ms cubic-bezier(0.34, 1.3, 0.64, 1),
+    d 400ms ease,
+    fill 500ms ease,
+    opacity 500ms ease;
+}
+
+.eci-aura {
+  opacity: 0.18;
+  filter: blur(6px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Idle: never stops, so the persona is alive between turns. */
+  .eci-face {
+    animation:
+      eci-breathe 4.5s ease-in-out infinite,
+      var(--eci-motion, eci-idle) 6s ease-in-out infinite;
+    transform-origin: 60px 70px;
+  }
+
+  .eci-eye {
+    animation: eci-blink 6.2s ease-in-out infinite;
+  }
+
+  /* Offset so the two eyes never blink a frame apart. */
+  .eci-eyes .eci-eye:last-child {
+    animation-delay: 0s;
+  }
+
+  .eci-pupil {
+    animation: eci-glance 9s ease-in-out infinite;
+  }
+
+  .eci-aura {
+    animation: eci-aura-pulse 4.5s ease-in-out infinite;
+  }
+
+  .eci-speaking {
+    animation: eci-talk 320ms ease-in-out infinite;
+    transform-origin: 60px 83px;
+  }
+}
+
+@keyframes eci-breathe {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50%      { transform: scale(1.018) translateY(-1px); }
+}
+
+@keyframes eci-aura-pulse {
+  0%, 100% { opacity: 0.14; transform: scale(1); }
+  50%      { opacity: 0.26; transform: scale(1.06); }
+}
+
+@keyframes eci-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  94%           { transform: scaleY(0.08); }
+  96%           { transform: scaleY(1); }
+}
+
+@keyframes eci-glance {
+  0%, 40%, 100% { transform: translate(0, 0); }
+  50%, 60%      { transform: translate(1.6px, -0.6px); }
+  75%, 82%      { transform: translate(-1.6px, 0.4px); }
+}
+
+@keyframes eci-talk {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(0.45); }
+}
+
+/* --- the expression layer ------------------------------------------------ */
+
+/* Neutral: nothing beyond the breathing already running underneath. */
+@keyframes eci-idle {
+  0%, 100% { transform: rotate(0deg); }
+}
+
+/* Angry: still, then a short seething shudder — a constant shake reads as a
+   broken render rather than an emotion. */
+@keyframes eci-fume {
+  0%, 78%, 100% { transform: translateX(0) rotate(0deg); }
+  82%           { transform: translateX(-1.6px) rotate(-1deg); }
+  86%           { transform: translateX(1.6px) rotate(1deg); }
+  90%           { transform: translateX(-1.2px) rotate(-0.6deg); }
+  94%           { transform: translateX(0.8px) rotate(0.3deg); }
+}
+
+/* Scared: fast and small, and it never lets up. */
+@keyframes eci-tremble {
+  0%, 100% { transform: translate(0.7px, 0); }
+  25%      { transform: translate(-0.7px, 0.4px); }
+  50%      { transform: translate(0.5px, -0.4px); }
+  75%      { transform: translate(-0.5px, 0.2px); }
+}
+
+/* Sad: slow, heavy, sinking. */
+@keyframes eci-droop {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(2.5px) rotate(-1.2deg); }
+}
+
+/* Warm: a slow lean, like leaning toward someone. */
+@keyframes eci-glow {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50%      { transform: rotate(1.5deg); }
+}
+
+/* Alert: mostly still, with an upward snap of attention. */
+@keyframes eci-perk {
+  0%, 60%, 100% { transform: translateY(0) scale(1); }
+  70%           { transform: translateY(-2.5px) scale(1.03); }
+  80%           { transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eci-tremble,
+  .eci-face,
+  .eci-eye,
+  .eci-pupil,
+  .eci-aura,
+  .eci-mouth {
+    animation: none !important;
+  }
+}

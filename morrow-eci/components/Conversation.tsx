@@ -59,6 +59,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
       <Avatar
         expression={turn?.impulse?.expression ?? "neutral"}
         reflex={turn?.impulse?.reflex ?? "At rest."}
+        speaking={turn?.stage === "speaking" && !!turn.output}
         identity={profile.avatar}
       />
 
