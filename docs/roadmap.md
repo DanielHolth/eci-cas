@@ -299,6 +299,260 @@ starts, but a `Tier` pointing at live providers never verifies anything
 about them. The most strictly validated config is the one that silently
 degrades at runtime.
 
+## Memory architecture — vectors, episodes, and the capsule (design, not started)
+
+Everything below came out of one long design conversation and none of it
+is built. It is written down because the decisions interlock: pulling any
+one of them out changes what the others are for.
+
+The question that started it was whether the pair-addressed archive beats
+RAG. The honest answer is that it *is* RAG — same three moves, select,
+rank, splice — with a symbolic index in place of a vector one. It wins on
+everything that matters for a persona's own knowledge (addressable,
+hand-correctable, no reindex when the embedding model changes, facts
+rather than chunks, zero infrastructure) and loses badly on latency: two
+sequential substrate hops per turn where classic RAG has none. The design
+below keeps what the symbolic store is good at and buys back the latency.
+
+### Two-layer vector retrieval
+
+Two vectors, at two granularities — not five, and not one per row
+component:
+
+- **Pair layer.** One vector per `category/topic`. Few of them, loaded at
+  boot from a JSON file, replacing Reasoning's substrate call with an
+  in-memory cosine sweep.
+- **Row layer.** One vector per `ArchiveRecord`, written by Consolidator
+  into the Parquet row alongside the fact.
+
+**The row vector covers `subtopic/subject/key` and excludes both
+`category/topic` and the value.** Category and topic are excluded because
+the pair layer already encodes them and re-encoding is redundant. The
+value is excluded for a sharper reason: a query never contains it. Match
+"what's my name?" against a vector encoding `this/user/name = Daniel` and
+the token *Daniel* pulls the row away from where the query lands, having
+contributed nothing. It gets worse as values lengthen — `birthday =
+2015-03-04` spends the budget on a semantically empty date, and a
+sentence-long preference value drowns the path entirely.
+
+The value stays stored, returned and read by Intent. It simply isn't part
+of what you match against. If value-shaped queries ("what happened in
+March 2015") ever prove they matter, the fix is a **second arm unioned
+in, never a blended score** — a weight between two similarities is a knob
+that interacts with Importance and with itself.
+
+The rule underneath both layers, and the one to keep: **embed what the
+query will look like, not what the data looks like.**
+
+### Aliases
+
+The embedded text and the stored path are not the same string.
+`system/identity` stays exactly that on disk — addressable, and still what
+Intent sees, which matters because ResponseContract's `system/` rule keys
+on it. What gets *embedded* is a separate retrieval-facing gloss written
+as the questions it should answer:
+
+> *"my own name, what I'm called, my traits, my personality, my
+> preferences — facts about me, the assistant, not about the user"*
+
+This fixes the question-versus-label asymmetry on the document side,
+which is far cheaper than fixing it on the query side. And it is why
+always-including `system/*` was rejected: unconditional inclusion makes
+the persona faintly self-absorbed on every turn, because facts in the
+prompt get used. The alias is selective — it matches "what is your name?"
+and not "what's the weather?".
+
+Aliases are few, read once at boot, and live in a plain JSON file. They
+are derived, one-way and disposable: never a second name for the pair,
+never written into a fact path, never shown to Intent. That is what keeps
+them clear of the store's no-drift property — that rule protects the
+source of truth, and a rebuildable cache isn't one. Hand-written for
+`system/*`; LLM-written once per user-space pair at creation, never per
+turn. When Morrow keeps missing a topic, the fix is **editing one line of
+English**, which is the same correctability argument that justified the
+symbolic archive in the first place.
+
+### Union, not replacement — and the gap you can't embed past
+
+Vector selection does not replace the LLM selection arm. Selected pairs
+are the union of `vector top-K` and `LLM selection`.
+
+The reason is a class of question no embedding reaches. *"Am I old enough
+to rent a car?"* needs `person/profile/birthdate`. Nothing makes that
+question look similar to that label, because the link is an inference
+chain — renting, age, date of birth — not a similarity. An LLM selector
+makes that leap; cosine structurally cannot. Aliases narrow the gap,
+since a gloss can name the inferential neighbourhood, but only the
+neighbourhoods someone thought to write down.
+
+So the union buys accuracy, not latency: the LLM arm still gates the
+turn. Latency comes back only from the row layer, which removes Recall's
+picking call.
+
+To spend the LLM arm only where it earns its keep: **escalate on low
+confidence.** If the top cosine scores are high and well-separated, take
+them. If they're flat, call the model. The margin is a config knob.
+
+And below a size threshold, skip retrieval entirely — a new profile has
+a few dozen facts and the correct move is to send all of them. Zero
+calls, zero misses, including every inferential case above. Rows are
+already Importance-ordered, so growth degrades into "send the top slice."
+The same logic applies one level down: once a pair is selected and holds
+five rows, rank nothing and send five.
+
+### The episode corpus — what a second store actually holds
+
+Consolidator writes only explicitly-stated facts, and no deterministic
+fallback exists, so a great deal is discarded every turn: the
+circumstance around a fact, moods, plans, half-formed thoughts, questions
+that went unanswered, themes recurring across weeks. That discarded
+material is what a second store is for.
+
+The split is semantic memory versus episodic memory:
+
+- **The archive** is what Morrow *knows* — curated, structured, precise.
+- **The episode corpus** is what Morrow has *seen*.
+
+Keeping them separate is what lets the corpus be permissive without
+diluting the archive.
+
+An episode is **not a transcript**. The bloat in a raw trace is agent
+chatter, bundles, security passes and diagnostics — none of it wanted.
+What is kept is two things with distinct jobs:
+
+- **summary** — one or two sentences. This is what gets vectorized. It is
+  the retrieval handle.
+- **exchange** — what was said and what Morrow answered, ~150 tokens.
+  This is what gets returned and read.
+
+Embed the short thing, return the real thing, so Reflection reads actual
+language rather than a paraphrase of a paraphrase.
+
+Three rules keep it lean:
+
+1. **No extra substrate call.** Consolidator already makes exactly one
+   per turn (`ExtractFactsAsync`). The summary is one more field in that
+   same response.
+2. **Nothing already a fact.** If it extracts as `Subject/Key = Value` it
+   belongs in the archive and only there.
+3. **Most turns write nothing.** Gate on salience — Impulse's appraisal
+   is already on the bundle. "ok thanks" leaves no trace.
+
+Storage reuses the Parquet store rather than adding a second one: a
+reserved category, `episode/<year-month>/<profile>/<turnId>/…`. That
+inherits per-pair locking, the monthly file as a natural unit, and the
+ArchiveTool REPL for inspection. The cost is that `episode/*` must be
+excluded from Reasoning's index and Recall's live path, or Morrow starts
+reciting its own diary mid-conversation. One store and one toolchain is
+worth that reserved-name check.
+
+### Nothing is ever deleted
+
+Decay was proposed and **withdrawn**. The numbers don't support it: an
+exchange is roughly 600 bytes, so heavy use at a hundred turns a day is
+22 MB a year and sixty years is under 1.5 GB. Storage was never the
+constraint. The only thing that genuinely strains is brute-force cosine
+over millions of vectors, and that is a distant problem with known
+answers.
+
+Corpora are partitioned by year — `2026`, `2027` — so no single index is
+ever large, a year can be reindexed alone when the embedding model
+changes, and searching two years means opening two directories. It is the
+"file name is the index" instinct one level up, and it means the design
+survives the numbers being wrong.
+
+**Digests index upward; they never carry forward.** A distillation of
+2026 does not move into 2027 — that is decay wearing a new hat, and it
+loses the detail it claims to preserve. Instead the digest layer sits
+*above* the years and points down into them. Reflection reads digests to
+learn which month is worth opening, then pulls the real episodes.
+
+The rule that makes this safe: **a digest may summarise, but it must
+cite.** Every digest row carries the addresses of the episodes it came
+from. A summary is then a table of contents, never a replacement, and
+Reflection can always drill from "2026 was a hard year" to the twelve
+exchanges that made it one.
+
+### Reflection is already the cross-event agent
+
+Consolidator subscribes to `events.bundle` with `BatchSize: 1` — one
+turn, no history, structurally blind to "third time this week they've
+mentioned being tired." It cannot learn across events and never will.
+
+Reflection subscribes to `events.conclusion` with `BatchSize: 5`. It is
+already the cross-event learner; it is simply underfed. Raising the batch
+(10 is a cheap first move) widens the window without deepening it — the
+digest pyramid is what buys reach, letting Reflection see a year in a
+prompt smaller than today's batch of five. Large flat inputs are the
+worst option on all three axes: cost, latency, and accuracy, since models
+degrade at spotting a pattern in a long undifferentiated list. The same
+effect `RecallOptions.RowsPerWorker` already documents.
+
+**Reflection deliberately stays on `slow-medium`.** A weaker model fails
+loudly on bad instructions where a strong one quietly compensates and the
+flaw ships. Upgrading it is a tuning decision to make after the prompts
+are good, not before.
+
+### Async deep recall (far future)
+
+The year is 2028 and someone asks *"did you make any reflections on this
+topic in 2026?"*. Morrow answers immediately — *"let me ponder that and
+get back to you"* — dispatches deep retrieval through the toolbox, and
+comes back minutes later, unprompted, with what it found.
+
+Most of this already exists. `ReflectionAgent.TriggeredByKey =
+"perception.triggered_by"` with value `"self"` is the loop-back seam, so
+the deferred answer re-enters as an ordinary perception. The bus is
+fire-and-forget, and Impulse already answers instantly while slow work
+runs. A request/response architecture cannot do this at all; here it is a
+new *trigger* for a path that already runs.
+
+Forced Reflection would work over the current batch, the previous one
+(in case the current window is short), and the relevant year's corpus.
+
+Three things need designing:
+
+- **A promised answer must arrive.** Reflection's `FallbackPosture` is
+  Closed — it *skips* on substrate failure. That is right for a
+  self-generated idea and wrong for an answer someone is waiting on. A
+  promise needs a guaranteed reply or a deterministic apology.
+- **The deferred answer needs a thread back.** It arrives with a fresh
+  `CorrelationId`, so without a meta key carrying the original the person
+  has no idea what it is answering.
+- **Rate limiting.** A forced deep Reflection is the most expensive call
+  in the system. Same instinct as `DeviceBlockCount`.
+
+### The capsule
+
+The archive is meant to outlive the software. That is a design
+constraint, not a sentiment.
+
+**Text is the artifact; everything else is a rebuildable index.** Parquet
+is open and columnar, so DuckDB or pandas will read it in forty years
+without a line of this C#. Vectors will be stranded on a dead embedding
+model eventually, and that is fine precisely because they are derived —
+recompute them from rows that are still there. The same is true of
+aliases and digests.
+
+What a backup cannot add later is **legibility**. A disc of unexplained
+Parquet is still opaque, so a plain-text README belongs *in the archive
+directory itself*, not only in the repo: what the columns mean, what the
+path convention is, what `system/` marks. That costs nothing now and
+cannot be retrofitted onto media already written.
+
+Physical durability — optical media, cloud backup — is deliberately not
+solved here.
+
+**Open question: inheritance.** One instance per person is right for
+symbiosis, but a legacy means a second person eventually opens the
+first's archive — a child querying a parent's decades. Nothing currently
+says whether that is a read-only record they can search, or whether their
+own Morrow may Recall against it. Those are very different things: an
+archive *of* someone, versus a persona speaking *as* them. Worth deciding
+deliberately rather than drifting, and much easier to rule in or out now
+than after twenty years of rows. Profile-scoped storage is the hinge it
+turns on.
+
 ## Multi-user profiles, iteration 1 — mostly shipped
 
 One device, several people — each with their own avatar, their own
@@ -853,3 +1107,15 @@ inference question. Tension: archive-lookup's own design principle is
 "report what the records say, not what you happen to know — never
 invent a record." Pushing toward inference risks turning Recall/Self
 into a second Reasoning. Needs a real design conversation.
+
+**What the SSE stream ships.** `EnvelopeDto.From` serialises the whole
+MetaBag, so `intent.prompt` — the full composed prompt, the largest
+value on the bus — goes down `/api/stream` three times a turn
+(proposal, verdict, action) and is read by nothing: `useEciStream`
+touches six keys and never that one. On the bus itself it is
+load-bearing and free (an in-process object reference, never
+serialised); the waste is purely at the HTTP edge. A deny-list in
+`EnvelopeDto` is the right shape for now — an allow-list would have to
+be edited every time an agent adds a key the UI wants, and the failure
+mode of forgetting is a silently missing feature rather than visible
+bloat. Revisit once the key set settles.
