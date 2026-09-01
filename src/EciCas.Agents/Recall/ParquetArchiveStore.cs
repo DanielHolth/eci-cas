@@ -169,8 +169,7 @@ public sealed class ParquetArchiveStore : IArchiveStore
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var existing = new List<ArchiveRecord>(await CachedAsync(path, cancellationToken).ConfigureAwait(false));
-            existing.AddRange(newRecords);
+            var existing = Merged(await CachedAsync(path, cancellationToken).ConfigureAwait(false), newRecords);
             await WriteRecordsAsync(path, existing, cancellationToken).ConfigureAwait(false);
             _pairs[path] = existing;
         }
@@ -183,6 +182,45 @@ public sealed class ParquetArchiveStore : IArchiveStore
         {
             IndexIn(directory).Add(pair);
         }
+    }
+
+    /// <summary>
+    /// A fact restated is not a second fact. Rows are addressed by
+    /// subtopic/subject/key within a pair, so a new row at an address that
+    /// already exists replaces it outright: the latest statement is the true
+    /// one, and "lives in Oslo" followed by "lives in Bergen" must not leave
+    /// both on file for the picking model to choose between. Without this an
+    /// archive grows with every restatement and the pair prompt fills with
+    /// its own history.
+    ///
+    /// Position is kept, so an updated fact stays where it was rather than
+    /// jumping to the end — reads sort by importance anyway, but a stable
+    /// file makes a diff readable.
+    /// </summary>
+    private static List<ArchiveRecord> Merged(IReadOnlyList<ArchiveRecord> existing, IReadOnlyList<ArchiveRecord> incoming)
+    {
+        var merged = new List<ArchiveRecord>(existing);
+        var positions = new Dictionary<(string, string, string), int>();
+        for (var i = 0; i < merged.Count; i++)
+        {
+            positions[RowKey(merged[i])] = i;
+        }
+
+        foreach (var record in incoming)
+        {
+            var key = RowKey(record);
+            if (positions.TryGetValue(key, out var at))
+            {
+                merged[at] = record;
+            }
+            else
+            {
+                positions[key] = merged.Count;
+                merged.Add(record);
+            }
+        }
+
+        return merged;
     }
 
     private async Task<IReadOnlyList<ArchiveRecord>> ReadPairAsync(string directory, ArchivePair pair, CancellationToken cancellationToken)

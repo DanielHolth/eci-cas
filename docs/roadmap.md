@@ -707,6 +707,20 @@ instruction is present; real confirmation is a `Default`-tier smoke test
 stating one fact in Norwegian and again in English and checking both land
 on the same triple.
 
+**Writes dedup by address — shipped.** Normalizing to English gets a
+restated fact onto the same address, but the store used to append it
+anyway, so an archive grew with every restatement and a pair's prompt
+filled up with its own history. `AppendAsync` now merges: a row at an
+existing subtopic/subject/key replaces it outright, in place. The latest
+statement is the true one — "lives in Oslo" followed by "lives in Bergen"
+must not leave both on file for the picking model to choose between. This
+also collapses duplicates inside a single batch, which the extractor
+produces more often than it should.
+
+Deliberately *not* a merge of fields: no keeping the older importance, no
+concatenating values. One rule, explainable in a sentence, and a wrong
+overwrite is fixed by stating the fact again.
+
 ## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — shipped
 
 **Status: implemented.** `ParquetArchiveStore`, the archive index,

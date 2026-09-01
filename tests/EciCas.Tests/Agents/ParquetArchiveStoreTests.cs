@@ -205,4 +205,35 @@ public class ParquetArchiveStoreTests : IDisposable
         Assert.Contains(new ArchivePair("system", "identity"),
             ParquetArchiveStore.PairsIn(ParquetArchiveStore.ProfileDirectoryFor(_directory, "daniel")));
     }
+
+    [Fact]
+    public async Task RestatingAFactReplacesItRatherThanStackingASecondRow()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var store = new ParquetArchiveStore(directory);
+        var pair = new ArchivePair("person", "daniel");
+
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)], null, CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "Daniel", "City", "bergen", DateTimeOffset.UtcNow)], null, CancellationToken.None);
+
+        var rows = await store.LookupAsync(pair, null, CancellationToken.None);
+        Assert.Equal("bergen", Assert.Single(rows).Value);
+    }
+
+    [Fact]
+    public async Task ADuplicateInsideOneBatchLandsOnce()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var store = new ParquetArchiveStore(directory);
+        var now = DateTimeOffset.UtcNow;
+
+        await store.WriteAsync(
+        [
+            new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now),
+            new ArchiveRecord("person", "daniel", "home", "daniel", "city", "bergen", now),
+        ], null, CancellationToken.None);
+
+        var rows = await store.LookupAsync(new ArchivePair("person", "daniel"), null, CancellationToken.None);
+        Assert.Equal("bergen", Assert.Single(rows).Value);
+    }
 }
