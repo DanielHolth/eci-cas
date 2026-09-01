@@ -42,6 +42,34 @@ dotnet run --project src/EciCas.Host       # interactive prompt loop (SSE + cons
 cd morrow-eci && npm install && npm run dev   # companion UI at localhost:3000
 ```
 
+Two console tools, run separately:
+
+```bash
+dotnet run --project src/EciCas.Host -- --Tier=Default --Verbose=true
+```
+
+```bash
+dotnet run --project src/EciCas.ArchiveTool -- src/EciCas.Host/bin/Debug/net10.0/archive
+```
+
+The host prints six lines per turn by default — substrate cost, what Recall
+read, what Consolidator/Reflection wrote, what Intent said, what Security
+blocked; `--Verbose=true` restores the exhaustive per-envelope trace. The
+archive tool is a REPL over the same Parquet files (`list`, then
+`show <category> <topic>`); it takes the archive directory as its one
+argument, which lives next to the host's binary rather than in the repo
+root. On Windows use PowerShell or forward slashes — Git Bash mangles a
+backslash-prefixed path. Only one process should point at a given archive
+directory at a time.
+
+Any config key can be overridden on the command line, which is the cheap way
+to exercise one agent live against an otherwise mocked swarm, or to force
+Recall's fan-out to split without needing hundreds of rows:
+
+```bash
+dotnet run --project src/EciCas.Host -- --Substrates:Classes:fast-low:Provider=mistral --Recall:RowsPerWorker=5
+```
+
 No API key needed — every substrate class under `Substrates:Classes` in
 `appsettings.json` defaults to `"mock"`. To go live, add a provider under
 `Substrates:Providers` (base URL + the *name* of the env var holding its
