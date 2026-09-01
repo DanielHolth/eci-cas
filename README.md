@@ -119,9 +119,12 @@ Both this manifest and `Substrates:Classes` are validated at startup — includi
 a typo in either one fails loud before the bus starts rather than silently
 falling back to mock.
 
-The `mock` provider echoes the prompt back, except for the two prompts that
-enumerate candidates and expect index numbers — Reasoning picking archive
-pairs and Recall picking rows. Those get the first index, so the whole
+The `mock` provider echoes the prompt's last line back — where every prompt
+here puts the turn itself, so the echo stays diagnostic without pasting a
+wall of rules into the companion's speech bubble. The exception is the two
+prompts that
+enumerate candidates and expect index numbers back — Reasoning picking
+archive pairs and Recall picking rows. Those get the first index, so the whole
 knowledge swarm runs end to end on the free tier instead of silently taking
 its empty path.
 
