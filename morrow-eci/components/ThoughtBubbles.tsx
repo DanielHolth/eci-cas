@@ -27,11 +27,11 @@ export function ThoughtBubbles({
         return (
           <div
             key={f.agent}
-            className="flex w-full items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-sm shadow-sm text-left"
+            className="flex w-full items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-sm shadow-sm text-left dark:border-neutral-700 dark:bg-neutral-900"
           >
             <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
-            <span className="font-medium text-neutral-500">{style.label}:</span>
-            <span className="text-neutral-700">{f.text}</span>
+            <span className="font-medium text-neutral-500 dark:text-neutral-400">{style.label}:</span>
+            <span className="text-neutral-700 dark:text-neutral-200">{f.text}</span>
           </div>
         );
       })}

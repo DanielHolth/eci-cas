@@ -30,7 +30,7 @@ export function SecurityIcon({ outcomes }: { outcomes: SecurityOutcome[] }) {
             Security: {o.verdict} — pass {i + 1}
           </button>
           {open === i && o.detail && (
-            <div className="max-w-sm rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-600">
+            <div className="max-w-sm rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
               {o.detail}
             </div>
           )}

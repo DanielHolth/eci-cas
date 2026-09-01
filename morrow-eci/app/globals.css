@@ -1,8 +1,20 @@
 @import "tailwindcss";
 
-:root {
+/* `dark:` follows the `data-theme` attribute the pre-paint script in
+   layout.tsx stamps on <html>, not `prefers-color-scheme` directly. The OS
+   preference is still honoured — it's what that script picks on a first
+   visit — but once someone hits the toggle, their choice wins. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+[data-theme="light"] {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -10,13 +22,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

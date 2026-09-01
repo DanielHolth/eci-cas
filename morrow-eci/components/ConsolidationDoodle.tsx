@@ -46,10 +46,10 @@ export function ConsolidationDoodle({
         +
       </button>
       {expanded && (
-        <div className="max-w-sm rounded-md border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-900">
+        <div className="max-w-sm rounded-md border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-100">
           {epoch.summary}
           {wasAlreadyAcknowledged && (
-            <span className="block mt-1 text-indigo-400">
+            <span className="block mt-1 text-indigo-400 dark:text-indigo-300">
               (already acknowledged — reopening is view-only, no new event fires)
             </span>
           )}

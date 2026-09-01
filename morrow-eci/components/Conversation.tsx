@@ -7,6 +7,7 @@ import { SecurityIcon } from "@/components/SecurityIcon";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { ConsolidationDoodle } from "@/components/ConsolidationDoodle";
 import { ProfileChip } from "@/components/ProfileChip";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEciStream } from "@/lib/useEciStream";
 import { sendPerceive } from "@/lib/api";
 import type { Profile } from "@/lib/profiles";
@@ -40,16 +41,19 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   }
 
   return (
-    <main className="flex-1 flex flex-col items-center gap-8 p-10 bg-neutral-50 min-h-full">
+    <main className="flex-1 flex flex-col items-center gap-8 p-10 bg-neutral-50 dark:bg-neutral-950 min-h-full">
       <div className="flex w-full max-w-md items-start justify-between gap-4">
         <div className="flex-1 text-center">
-          <h1 className="text-lg font-semibold text-neutral-800">ECI-CAS Avatar</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">ECI-CAS Avatar</h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
             {connected ? "Live" : "Disconnected"} ·{" "}
             {turn ? <span className="font-mono">{turn.stage}</span> : "waiting for a first thought"}
           </p>
         </div>
-        <ProfileChip profile={profile} onSwitch={onSwitch} />
+        <div className="flex items-center gap-2">
+          <ProfileChip profile={profile} onSwitch={onSwitch} />
+          <ThemeToggle />
+        </div>
       </div>
 
       <Avatar
@@ -81,12 +85,12 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={`Say something to ECI-CAS, ${profile.displayName}…`}
-          className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-400"
+          className="flex-1 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-neutral-500"
         />
         <button
           type="submit"
           disabled={sending || !text.trim()}
-          className="rounded-full bg-neutral-800 px-5 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-40"
+          className="rounded-full bg-neutral-800 px-5 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
         >
           Send
         </button>

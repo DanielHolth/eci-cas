@@ -29,7 +29,7 @@ export function Avatar({
     <div className="flex flex-col items-center gap-3">
       <div className="relative">
         <div
-          className={`h-28 w-28 rounded-full ${style.bg} transition-colors duration-500 shadow-inner flex items-center justify-center text-white font-medium ring-4 ring-white`}
+          className={`h-28 w-28 rounded-full ${style.bg} transition-colors duration-500 shadow-inner flex items-center justify-center text-white font-medium ring-4 ring-white dark:ring-neutral-950`}
           aria-label={`Avatar expression: ${style.label}`}
         >
           {style.label}
@@ -37,13 +37,13 @@ export function Avatar({
         {identity && (
           <span
             aria-hidden
-            className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-xl shadow ring-1 ring-neutral-200"
+            className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-xl shadow ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-700"
           >
             {identity}
           </span>
         )}
       </div>
-      <p className="text-sm text-neutral-500 italic max-w-xs text-center">
+      <p className="text-sm text-neutral-500 dark:text-neutral-400 italic max-w-xs text-center">
         {reflex}
       </p>
     </div>
