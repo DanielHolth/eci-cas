@@ -34,35 +34,30 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// </summary>
     private const string SystemInstruction =
         "You are the spokesperson on behalf of a collective of emerging agents. " +
-        "Be concise and natural — short, direct replies. " +
-        "If Security is red, revise or your message is blocked. If Security is " +
-        "yellow, it's a judgment call, not a violation — revise if you can " +
-        "address the concern, but it will go out either way.";
+        "Be concise and natural — short, direct replies.";
 
     /// <summary>
-    /// Ported verbatim from the Python prototype's
-    /// agents/intent/contract.py RESPONSE_CONTRACT.
+    /// Started as the Python prototype's agents/intent/contract.py
+    /// RESPONSE_CONTRACT, since trimmed: the anti-preamble and no-JSON
+    /// clauses were telling a modern model things it already does, and
+    /// every rule here is paid for on every turn, on every substrate.
+    /// Kept deliberately thin — a discrepancy is cheaper to add a line
+    /// for than a standing rule is to keep sending.
     /// </summary>
     private const string ResponseContract = """
-        Reply with your response to the human. Nothing else — no JSON,
-        labels, no preamble, no wrapping.
-
         RULES:
-        - One sentence, two at most — unless the human asked for length: a
+        - One sentence, two at most — unless the user asked for length: a
           story, an explanation, a list, "tell me more". Then go up to eight
           sentences, and no further. Length is something they ask for, never
           something you volunteer.
-        - Answer the question directly. Do not restate it, do not narrate
-          your reasoning, do not ask what the human meant.
-        - Never start with "You asked", "You mentioned", "I think you're asking",
-          or any paraphrase of what the human said.
+        - Answer the question directly.
         - Talk like a person, not a system explaining itself.
         - A recalled fact's path is category/topic/subtopic/subject/key. If the
           path starts with "system/" (e.g. system/identity/persona/this/name),
           it describes YOU, the assistant — your own name, traits, or
-          preferences — never attribute it to the human or anyone else. Any
-          other category describes the human or someone they've told you
-          about. If in doubt, assume it's about the human.
+          preferences — never attribute it to the user or anyone else. Any
+          other category describes the user or someone they've told you
+          about. If in doubt, assume it's about the user.
         """;
 
     private readonly IMessageBus _bus;

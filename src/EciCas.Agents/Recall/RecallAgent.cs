@@ -184,7 +184,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             turn — respond with just their index numbers, comma-separated
             (e.g. "0, 2"). A row is only relevant if it's about the same thing
             being asked about (e.g. a fact about the assistant itself does not
-            answer a question about the human, and vice versa). If none are
+            answer a question about the user, and vice versa). If none are
             relevant, respond with nothing.
 
             Turn: {text}
