@@ -13,6 +13,10 @@ question was settled the second way: `SseBroadcaster` resolves a turn's
 profile by `CorrelationId`, with a bounded map and eviction. Still open:
 §5 (Reflection batches spanning profiles) and Part 2 §1, §4, §5.
 
+Part 2's cost estimates were corrected after review against the call
+sites — §1 is five edits and a refactor, not one; §5 is net-new work,
+not reuse. The conclusions stand; the pricing didn't.
+
 ---
 
 # Part 1 — UX implementation implications
@@ -104,8 +108,9 @@ UI has taken ownership of persona state.
 Related, already shipped: `useEciStream.ts`'s `deriveExpression` invents
 an expression vocabulary client-side from severity + reflex text, with a
 comment admitting it's a mock-era placeholder. Same violation in
-miniature. Fixing it — Impulse publishing an expression rather than the
-client guessing — is arguably a prerequisite for R4, not a follow-up.
+miniature. R4 shipped without fixing it, so this is a live
+inconsistency rather than a blocker — Impulse should publish an
+expression instead of the client guessing one.
 
 ## Sequencing that falls out
 
@@ -154,10 +159,25 @@ fluent, plausible, in-persona reply.
 **1 · Separate "no substrate" from "substrate said something unusable."**
 The root gap. `FallbackPosture.Open` collapses DNS failure, 500, timeout
 and unparseable-completion into one identical fallback envelope.
-Everything below is blocked on this distinction existing. Cheapest
-shape: classify the exception in `CognitiveAgent.HandleAsync` and put
-the outcome on the published envelope's meta — the fallback result is
+Everything below is blocked on this distinction existing. Put the
+outcome on the published envelope's meta — the fallback result is
 unchanged, but downstream can finally tell *why*.
+
+**This is not a one-place fix, and a plan that says "`CognitiveAgent`
+marks the fallback" is wrong.** There are five substrate callers across
+two code paths. Only `Intent` and `Reasoning` extend `CognitiveAgent<T>`,
+and `ReasoningAgent` overrides `HandleAsync` and calls
+`_substrate.CompleteAsync` itself — reimplementing the base
+try/catch/log/publish, so its `Fallback => Open` is read only for the
+log message. The base implementation therefore covers **one agent in
+five**. `Recall`, `Reflection` and `Consolidator` each hold their own
+try/catch. Marking only the base path would look done while three
+agents degraded as silently as before.
+
+Reasoning duplicates the base because it needs the prompt and its parsed
+pairs in a shape the generic `Publish` signature doesn't offer — so the
+dedup isn't free. The likely shape is the base class handing subclasses
+a failure classification, rather than folding subclasses back into it.
 
 **2 · Make degradation visible in the envelope, not just the log.**
 Today the only trace is an ILogger warning that `--Verbose=true` happens
@@ -176,18 +196,26 @@ bundle and the per-event state to see how many advisories came back
 degraded — so this stays in the one agent whose job is decisions.
 
 **4 · Circuit-break per provider, not per agent.**
-Three agents each paid a full timeout in one turn, and every later turn
-repeats it — a transient drop degrades throughput long after it's over.
-A short open circuit (fail fast for N seconds after a transport failure,
-then probe) turns a 30-second dead turn into an instant one. Belongs in
+Not justified by the incident above — `WSAHOST_NOT_FOUND` fails
+instantly, so nothing timed out in that run. The case it earns its keep
+on is the *hang*: a host that resolves but stalls on TLS or a slow
+provider, where each of five agents waits out a full timeout every turn.
+Secondary benefit even when failure is fast: during a known outage,
+stop making five doomed calls per turn. Belongs in
 `OpenAiCompatibleSubstrateProvider`; agents shouldn't know about network
 topology.
 
 **5 · Don't let Consolidator silently drop the turn.**
-It's the only agent whose fallback is "skip", so during an outage the
-persona stops remembering as well as thinking, with no distinct signal.
-`UseSubstrate:false` already ships for it, so the deterministic keyword
-write is a proven fallback path — reuse it on transport failure.
+It's the only agent whose fallback is "skip" — `ExtractFactsAsync`
+catches and returns an empty set — so during an outage the persona stops
+remembering as well as thinking, with no distinct signal.
+
+This is net-new work, not reuse. The README claims Consolidator ships
+with `UseSubstrate:false` and falls back to "its deterministic keyword
+write"; neither is true. `UseSubstrate` appears in no `appsettings`
+file (the property exists in code, defaulting true), and no
+deterministic writer exists to fall back to. **The README needs fixing
+independently of this item.**
 
 **6 · Skip the startup reachability probe.**
 Tempting, since manifest drift already fails loud. But it only catches
