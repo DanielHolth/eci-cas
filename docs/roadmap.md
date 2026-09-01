@@ -1095,14 +1095,13 @@ inference question. Tension: archive-lookup's own design principle is
 invent a record." Pushing toward inference risks turning Recall/Self
 into a second Reasoning. Needs a real design conversation.
 
-**What the SSE stream ships.** `EnvelopeDto.From` serialises the whole
-MetaBag, so `intent.prompt` — the full composed prompt, the largest
-value on the bus — goes down `/api/stream` three times a turn
-(proposal, verdict, action) and is read by nothing: `useEciStream`
-touches six keys and never that one. On the bus itself it is
-load-bearing and free (an in-process object reference, never
-serialised); the waste is purely at the HTTP edge. A deny-list in
-`EnvelopeDto` is the right shape for now — an allow-list would have to
-be edited every time an agent adds a key the UI wants, and the failure
-mode of forgetting is a silently missing feature rather than visible
-bloat. Revisit once the key set settles.
+**What the SSE stream ships — shipped.** `EnvelopeDto.From` serialised
+the whole MetaBag, so `intent.prompt` — the full composed prompt, the
+largest value on the bus — went down `/api/stream` three times a turn
+(proposal, verdict, action) and was read by nothing. On the bus itself it
+is load-bearing and free (an in-process object reference, never
+serialised); the waste was purely at the HTTP edge. Now
+`Sse:ExcludedMetaKeys` denies it there. A deny-list rather than an
+allow-list on purpose: an allow-list would need editing every time an
+agent adds a key the UI wants, and the failure mode of forgetting is a
+silently missing feature rather than visible bloat.

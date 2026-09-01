@@ -213,6 +213,8 @@ app.MapPost("/api/perceive", (PerceiveRequest request, PerceptionAgent perceptio
 // One more bus subscriber (plan §M5) — SseBroadcaster fans every envelope out
 // to connected clients; this endpoint just relays one client's channel onto
 // the HTTP response as text/event-stream. No agent knows this exists.
+var excludedMetaKeys = (builder.Configuration.GetSection("Sse:ExcludedMetaKeys").Get<string[]>() ?? []).ToHashSet(StringComparer.Ordinal);
+
 app.MapGet("/api/stream", async (HttpContext context, SseBroadcaster broadcaster, CancellationToken cancellationToken) =>
 {
     context.Response.Headers.CacheControl = "no-cache";
@@ -232,7 +234,7 @@ app.MapGet("/api/stream", async (HttpContext context, SseBroadcaster broadcaster
     {
         await foreach (var envelope in reader.ReadAllAsync(cancellationToken))
         {
-            var json = JsonSerializer.Serialize(EnvelopeDto.From(envelope), jsonOptions);
+            var json = JsonSerializer.Serialize(EnvelopeDto.From(envelope, excludedMetaKeys), jsonOptions);
             await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
             await context.Response.Body.FlushAsync(cancellationToken);
         }
