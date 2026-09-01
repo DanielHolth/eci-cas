@@ -6,9 +6,9 @@ what exists. This document owns everything else: what's next, what's
 parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
-**Next up:** nothing outstanding against the Python prototype's business
-logic. Everything below is parked, further out, or a record of what's
-already built.
+**Next up:** multi-user profiles, iteration 1 — see below. Nothing else
+is outstanding against the Python prototype's business logic; everything
+else here is parked, further out, or a record of what's already built.
 
 ## Long-term goals
 
@@ -28,9 +28,9 @@ Morrow-ECI.
 Four capabilities for device-sharing and persistent user identity, none
 built yet:
 
-**Multi-user profiles.** Multiple users per device; a new name in
-conversation offers to create a profile. Each profile is a separate
-knowledge graph. Surface: Morrow-ECI profile picker.
+**Multi-user profiles.** Planned in detail below — iteration 1 is
+specified and is the next thing to build. Later increments: a new name in
+conversation offering to create a profile, and profile deletion/merge.
 
 **Voice recognition for user detection.** Speaker ID as the primary
 detector (continuous, harder to spoof than camera alone), camera as a
@@ -59,6 +59,78 @@ diary-aware knowledge archiving
 
 Profiles and auth are Morrow-ECI surface features; diary is a
 Recall-agent feature that can be prototyped independently.
+
+## Multi-user profiles, iteration 1 — planned
+
+One device, several people — each with their own avatar, their own
+personal facts, and their own emotional relationship with the persona.
+Shared world knowledge stays shared. Named users to date: Daniel and his
+son.
+
+### Storage
+
+Personal knowledge is scoped by *directory*, not by filename or a new
+column:
+
+```
+archive/                              shared pairs (world facts, system~identity, …)
+archive/profiles/{id}/                same {esc(cat)}~{esc(topic)}.parquet convention, personal facts only
+archive/profiles/{id}/profile.json    displayName, avatar, createdAt
+```
+
+Reads union shared + active profile, profile winning on key collision.
+Writes go to the profile directory unless the category is on a shared
+allowlist. This keeps `ParquetArchiveStore`'s defining property — the
+file name *is* the index — intact inside each directory, and needs no
+schema change and no rewrite of existing files. Today's flat `archive/`
+becomes the shared tier unchanged; no migration.
+
+### Impulse is per profile
+
+Drive state is per profile, not per device. The persona holds a separate
+emotional relationship with each person: what warms it toward one child
+does not pre-color how it meets the parent an hour later.
+
+Mechanically this is a keying change, not a redesign. `ImpulseAgent`
+already persists `DriveVectors` as a single `IAgentStateStore` record at
+`impulse/drive`; that becomes `impulse/drive/{profileId}`, resolved from
+the profile on Perception's meta. `ReflectionAgent` and `GovernanceAgent`
+read the same path and must be keyed the same way — Reflection's
+slow-coloring pass then drifts each profile's drive state independently,
+from that profile's turns only. Absent a profile, the path falls back to
+today's `impulse/drive`, so single-user runs and existing state keep
+working.
+
+### Frontend requirements
+
+**R1 · Profile registry.** `GET /api/profiles` returns
+`[{ id, displayName, avatar }]`; `POST /api/profiles` creates one.
+Client-side `lib/profiles.ts` wraps both.
+
+**R2 · Picker on cold start.** With no active profile, Morrow-ECI shows a
+full-screen picker: existing profiles plus "New profile". The active
+choice persists in `localStorage`; a compact switcher chip sits in the
+header. Switching resets the turn feed.
+
+**R3 · Profile context on every request.** `sendPerceive(text, profileId)`
+posts `{ text, profileId }`; `PerceiveRequest` gains the field and
+Perception puts it on meta — the "user-context field" the auth work above
+also wants. The stream subscribes as `/api/stream?profileId=…` so one
+person's turns don't render in another's window.
+
+**R4 · Avatar selection.** Each profile picks from a fixed set of preset
+avatars, stored on the profile and rendered as an identity ring *around*
+the Impulse-colored circle. Impulse keeps sole ownership of expression
+colour; avatar choice must not touch that mapping.
+
+**R5 · Creation flow.** Name and avatar, two fields, no auth. Voice and
+camera detection stay out of this iteration — the profile field on meta
+is the seam they plug into later.
+
+### Out of scope for iteration 1
+
+Auth, per-profile theming, cross-profile visibility of personal facts,
+the diary category, and profile deletion or merge.
 
 ## Reflection colors Impulse (slow-coloring feedback) — shipped
 
