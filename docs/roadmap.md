@@ -103,13 +103,39 @@ action side of Governance so every device call passes the same verdict
 gate a reply does — an IoT action is exactly the class of thing that must
 never fire on a Red verdict.
 
-Open questions, none decided: whether the toolbox is one agent with a
-tool registry or one agent per protocol; which integration surface it
-speaks (Matter, Home Assistant, MQTT, vendor APIs); how a tool call is
-represented on the bus without giving Intent a second output vocabulary;
-and how failures report back, since an unlit light is a state the persona
-should notice rather than a message it can drop. Wants its own design
-pass before code.
+**A device response comes back in as perception.** Not a return value, not
+a callback — the toolbox publishes what the device said onto
+`events.perception` and it runs as an ordinary turn. That mechanism
+already exists: `ReflectionAgent` loops its own ideas back the same way,
+tagged `perception.triggered_by = "self"`, so device feedback is the same
+seam with a different tag (`"device"`). No new topic, no new agent
+contract. The payoff is that Impulse colours on it for free — a lock that
+refuses to close is something the persona should *feel*, and a
+return-value design would have made that a special case.
+
+The same seam gives unsolicited state for free: a doorbell or a motion
+sensor is a perception with no preceding action, and nothing has to know
+the difference.
+
+Two hazards fall out of it, both to settle in the design pass:
+
+- **The loop.** Action → perception → action is a cycle, and a device
+  turn firing another device call is how a house starts flapping. Wants
+  an explicit rule — probably that a `triggered_by = "device"` turn may
+  speak but may not act, which is stricter than a depth cap and easier to
+  reason about.
+- **Consolidator.** It hard-skips `triggered_by = "self"` today, because
+  Reflection already wrote that record correctly before pushing. Device
+  turns need the same decision made deliberately: most acks are noise
+  ("light on"), a few are facts worth keeping ("front door locked at
+  23:10"). Likeliest shape is the same one — skip by default, and let the
+  toolbox write the rows that matter itself.
+
+Open questions beyond that: whether the toolbox is one agent with a tool
+registry or one agent per protocol; which integration surface it speaks
+(Matter, Home Assistant, MQTT, vendor APIs); and how a tool call is
+represented on the bus without giving Intent a second output vocabulary.
+Wants its own design pass before code.
 
 ## Multi-user profiles, iteration 1 — mostly shipped
 
