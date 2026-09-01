@@ -82,6 +82,19 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var loaded = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
 
+        // Same rule Reasoning applies to the index, one stage down: when
+        // every loaded row would fit in a single worker's pick budget, the
+        // picking call can only return a subset of what passing them all
+        // gives Intent. Skipping it removes the second of the turn's three
+        // serial substrate calls on a young archive. Order is preserved —
+        // the store already sorted by Importance.
+        var total = loaded.Sum(rows => rows.Count);
+        if (total <= MaxPickedPerWorker)
+        {
+            Publish(envelope, [.. loaded.SelectMany(rows => rows).OrderByDescending(r => r.Importance)], degraded: null);
+            return;
+        }
+
         // Phase two: one flat set of workers over every chunk of every pair.
         var chunks = Chunks(loaded);
         var results = await Task.WhenAll(chunks.Select(c => PickAsync(c, text, entry.Class, cancellationToken))).ConfigureAwait(false);

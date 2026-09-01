@@ -86,9 +86,14 @@ public class RecallAgentTests
         var store = new InMemoryArchiveStore();
         var failing = new ArchivePair("person", "family");
         var working = new ArchivePair("event", "wedding");
+        // Padded past the pick budget on purpose: below it Recall skips the
+        // picking call entirely, which is a different test. The padding sits
+        // at low importance so the rows under assertion stay first.
         await store.WriteAsync([
             new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow),
             new ArchiveRecord("event", "wedding", "family", "maria holth", "location", "drammen kirke", DateTimeOffset.UtcNow),
+            .. Enumerable.Range(0, 3).Select(i => Filler("person", "family", i)),
+            .. Enumerable.Range(0, 3).Select(i => Filler("event", "wedding", i)),
         ], null, CancellationToken.None);
 
         var substrate = new StubSubstrate(prompt => prompt.Contains("drammen", StringComparison.OrdinalIgnoreCase)
@@ -103,6 +108,10 @@ public class RecallAgentTests
         Assert.Single(facts!);
         Assert.Equal("drammen kirke", facts![0].Value);
     }
+
+    /// <summary>Low-importance padding that pushes a pair past the pick budget without displacing the rows a test asserts on.</summary>
+    private static ArchiveRecord Filler(string category, string topic, int i) =>
+        new(category, topic, "filler", "filler", $"pad{i}", $"pad {i}", DateTimeOffset.UtcNow, Importance: 0.01);
 
     private static ArchiveRecord Row(string category, string topic, int i) =>
         new(category, topic, "sub", "subject", $"key{i}", $"value {i}", DateTimeOffset.UtcNow);
@@ -199,7 +208,10 @@ public class RecallAgentTests
         var bus = new ChannelBus(activity);
         bus.Subscribe(Topics.Advisories);
         var store = new InMemoryArchiveStore();
-        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], null, CancellationToken.None);
+        await store.WriteAsync([
+            new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow),
+            .. Enumerable.Range(0, 6).Select(i => Filler("person", "family", i)),
+        ], null, CancellationToken.None);
 
         var seen = string.Empty;
         var substrate = new StubSubstrate(prompt => { seen = prompt; return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m)); });
@@ -208,5 +220,33 @@ public class RecallAgentTests
         await agent.HandleAsync(Selection(new ArchivePair("person", "family")), CancellationToken.None);
 
         Assert.Contains("son", seen, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same rule Reasoning applies to the index, one stage down: rows
+    /// that already fit in a single pick budget can only be narrowed by the
+    /// call, so it is skipped and they all reach Intent.
+    /// </summary>
+    [Fact]
+    public async Task WhenEveryRowFitsThePickBudget_SkipsTheSubstrateCall()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+        var store = new InMemoryArchiveStore();
+        await store.WriteAsync([
+            new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow),
+            new ArchiveRecord("event", "wedding", "family", "maria holth", "location", "drammen kirke", DateTimeOffset.UtcNow),
+        ], null, CancellationToken.None);
+
+        var called = false;
+        var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m)); });
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
+
+        await agent.HandleAsync(Selection(new ArchivePair("person", "family"), new ArchivePair("event", "wedding")), CancellationToken.None);
+
+        Assert.False(called);
+        Assert.True(advisories.TryRead(out var advisory));
+        Assert.Equal(2, advisory!.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey)!.Count);
     }
 }

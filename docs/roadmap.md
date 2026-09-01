@@ -274,6 +274,12 @@ publishes the index whole, which removes a full round-trip from every
 turn on a young archive, i.e. every turn until the archive outgrows the
 cap. No new knob: the rule falls out of the cap that already exists.
 
+Recall now applies the same rule one stage down. When every loaded row
+fits inside a single worker's pick budget, the picking call can only
+narrow what passing them all would give Intent, so it is skipped too. On
+a young archive that leaves the turn at one substrate call — Intent's —
+instead of three.
+
 ## Memory architecture — vectors, episodes, and the capsule (design, not started)
 
 Everything below came out of one long design conversation and none of it
