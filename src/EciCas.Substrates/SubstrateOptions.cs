@@ -20,6 +20,24 @@ public sealed class ProviderEndpoint
 {
     public string BaseUrl { get; set; } = "";
     public string ApiKeyEnvironmentVariable { get; set; } = "";
+
+    /// <summary>
+    /// How long a single call may hang before it counts as timed out. A
+    /// minute of silence followed by an apology is worse than the apology
+    /// alone: agents fall back cleanly, so the ceiling is a latency budget,
+    /// not a correctness one. Tune per tier — a slow reasoning model needs
+    /// more headroom than a fast picking one.
+    /// </summary>
+    public int TimeoutMs { get; set; } = 20_000;
+
+    /// <summary>
+    /// After a transport failure, fail this provider's calls instantly for
+    /// this long instead of making every agent in the fan-out re-discover
+    /// the same dead endpoint at full timeout cost. The next call after the
+    /// window is a live probe: one success closes the circuit again.
+    /// Zero disables the breaker.
+    /// </summary>
+    public int CircuitOpenMs { get; set; } = 5_000;
 }
 
 public sealed class SubstrateClassEntry

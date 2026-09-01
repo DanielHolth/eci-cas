@@ -6,10 +6,9 @@ what exists. This document owns everything else: what's next, what's
 parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
-**Next up:** the degraded-substrate notice — a partial thought currently
-reads as a confident one. Nothing else is outstanding against the Python
-prototype's business logic; everything else here is parked, further out,
-or a record of what's already built.
+**Next up:** nothing is outstanding against the Python prototype's
+business logic. Everything here is parked, further out, or a record of
+what's already built.
 
 ## Long-term goals
 
@@ -182,116 +181,81 @@ registry or one agent per protocol; which integration surface it speaks
 represented on the bus without giving Intent a second output vocabulary.
 Wants its own design pass before code.
 
-## Degraded-substrate notice (planned)
+## Degraded-substrate notice — shipped
 
 **If it can't think, say so.** A dropped connection, a tunnel, a captive
 portal, an expired key — the substrate becomes unreachable and the turn
-still has to conclude honestly.
+still has to conclude honestly. Before this, a failed fan-out produced a
+fluent, confident, entirely ungrounded answer with no signal at all that
+the persona had been thinking with half its faculties missing.
 
-Today it half-does. `CognitiveAgent.HandleAsync` catches the failure,
-logs a warning, and on `FallbackPosture.Open` publishes
-`FallbackResult(envelope)` **marked in no way at all**. When Intent's own
-call is the one that failed, the person sees Intent's fallback sentence
-and the system looks honest by luck. When Reasoning and Recall fail but
-Intent succeeds, the person gets a fluent, confident, entirely
-ungrounded answer and no signal whatsoever that the persona was thinking
-with half its faculties missing. That second case is the dangerous one,
-and it is silent.
+**How it works now.** `SubstrateHealth` (in `ISubstrateProvider.cs`) holds
+the vocabulary: a `substrate.degraded` meta key, three causes
+(`unreachable` / `timed out` / `refused (code)`), `Classify(Exception)` to
+map a failure onto one, and `Mark(meta, cause)` to stamp it. Every
+substrate caller — Intent and Reasoning via `CognitiveAgent`, plus Recall,
+Reflection and Consolidator on their own paths — classifies its failure
+and marks the advisory it publishes. Governance, the only agent that sees
+the whole fan-out by `CorrelationId`, records which roster members came
+back degraded or never came at all, and on the verdict emits
+**deterministic native text**:
 
-**Governance owns the notice**, for the same reason it already appends
-Blocked text deterministically in native code rather than letting Intent
-phrase a refusal:
+- Intent degraded → the notice *replaces* the reply. Intent's fallback
+  sentence is not an answer, and dressing it up as one is the lie.
+- An advisor degraded or absent → the reply stands, with a parenthetical
+  appended naming who was missing. Less grounded, still worth saying.
+- Red verdict → no notice. A blocked turn says one thing and nothing else.
 
-- It is the only agent that *can* know. Governance bundles the fan-out by
-  `CorrelationId`, so it alone sees which advisories arrived, which
-  arrived degraded, and which never came at all. Every other agent knows
-  only its own fate.
-- Deterministic native text survives a dead substrate. An
-  LLM-authored apology cannot be produced by an LLM that isn't
-  answering — this is the whole crux, not a style preference.
-- It keeps the honesty rule in one place, next to the block text it
-  already owns.
+Native text is the crux, not a style preference: an LLM-authored apology
+cannot be produced by the LLM that isn't answering.
 
-What has to change to enable it: every substrate caller must mark the
-fallback it publishes rather than substituting invisibly — degraded,
-plus a cause (unreachable / timed out / substrate disabled). Governance
-then counts degraded and absent advisories in the bundle and picks
-between a partial-thinking notice and an "I can't think right now" —
-with a `UseSubstrate: false` agent deliberately *not* counting as
-degraded, since a deterministic-by-config agent is working exactly as
-configured.
+**`UseSubstrate: false` is deliberately not a degradation.** A
+deterministic-by-config agent is working exactly as configured. It is now
+honoured on all five callers, not just Intent — the early return happens
+before the call and publishes with `degraded: null`.
 
-**This is five edits, not one.** "`CognitiveAgent` marks the fallback"
-would cover Intent alone. Only Intent and Reasoning extend
-`CognitiveAgent<T>`, and `ReasoningAgent` overrides `HandleAsync` and
-reimplements the base try/catch/log/publish nearly line for line — so
-its `Fallback => Open` is read only for the log message. Recall,
-Reflection and Consolidator hold their own try/catch and never touch
-the base path at all. Marking only `CognitiveAgent` would look done
-while three agents kept degrading silently.
+**Reflection retains its batch; Consolidator does not.** Reflection used to
+abandon a whole flush on failure, so an outage cost the persona the turns
+it would have thought about, not just the thinking. It now puts the batch
+back at the head of `_pending`, capped at
+`Reflection:MaxBufferedBatches` × `BatchSize`. Consolidator gets no
+equivalent: the facts were never extracted, so there is no raw material to
+retry from — a retained turn there would just be a second guess at the
+same prompt.
 
-So the dedup comes first, and it isn't free — though not for the reason
-the signatures suggest. `Publish` is not the obstacle: Reasoning calls
-it with exactly the base signature. The two real blockers are that
-`ParseResult(SubstrateResult)` gets no access to the archive `index`
-that `ParsePairs(text, index)` needs, and that Reasoning's empty-index
-early return fires *before* a prompt is built, which the base flow has
-no hook for. So the fix is threading state into parsing plus a pre-call
-short-circuit. The likely shape is still the base class handing
-subclasses a failure classification, rather than folding the subclasses
-back into it.
+**Timeouts and the circuit breaker.** A mid-journey interruption hangs
+until the HTTP timeout expires, and a minute of silence followed by an
+apology is worse than the apology alone — so `Providers:*:TimeoutMs` is a
+per-provider knob (defaults 30s OpenAI, 15s Mistral) applied to the named
+`HttpClient`. `Providers:*:CircuitOpenMs` opens a per-provider circuit for
+N ms after a transport failure or timeout: subsequent calls throw
+instantly instead of five agents each re-discovering the same dead
+endpoint at full timeout cost, and the first call after the window is a
+live probe that closes the circuit on any reply. It lives in
+`OpenAiCompatibleSubstrateProvider` — agents should not know about network
+topology.
 
-Note the same split already bites elsewhere — `UseSubstrate` is read
-only in `CognitiveAgent.HandleAsync`, so setting it `false` on any of
-the other four agents validates at startup and is then ignored. It is
-honoured on Intent alone, where disabling it pins every reply to
-Intent's fixed fallback sentence, so it currently has no useful setting
-at all.
+**Decided against: a startup reachability probe.** It only catches
+"network down at boot", gives false confidence when it passes, and makes
+startup depend on the internet. The circuit breaker covers the same ground
+and handles the transient case too.
 
-**Consolidator and Reflection both need their own answer.** Both
-fall back by skipping: Consolidator returns no facts, Reflection
-abandons the whole flush — "nothing pushed, nothing archived," as its
-own comment puts it, explicitly matching Consolidator. So an outage
-stops the persona remembering *and* stops it keeping its own insights,
-from two independent code paths. There is nothing to reuse for either —
-no deterministic keyword writer exists, and `UseSubstrate` appears in no
-`appsettings` file. Recall skips too, but it writes nothing, so it only
-loses grounding for that turn.
+**Also fixed alongside:** every caller logged `LogWarning(ex, …)` with a
+full stack trace, so one offline turn printed four or five near-identical
+dumps and the actual warning scrolled away — now one classified line each.
+And telemetry only logged on success, so exactly the turns worth measuring
+measured nothing — `CognitiveAgent`, Reasoning and Reflection now time the
+failure path too.
 
-**Timeouts are the harder half.** The DNS failure that prompted this
-(`SocketException 11001`, host not resolvable) failed instantly. A real
-mid-journey interruption instead hangs until the HTTP timeout expires,
-and a minute of silence followed by an apology is worse than the apology
-alone. The substrate timeout has to be short enough that the notice is
-prompt, which makes it a tier-tunable knob rather than a constant.
-
-**Circuit-break per provider, not per agent.** Independent of the notice
-and landable separately. Not justified by the DNS incident — that failed
-instantly — but by the *hang*: a host that resolves and then stalls on
-TLS or a slow provider, where each of five agents waits out a full
-timeout every turn, every turn. A short open circuit (fail fast for N
-seconds after a transport failure, then probe) turns a dead turn into an
-instant one, and even when failure is fast it stops five doomed calls
-per turn during a known outage. Belongs in
-`OpenAiCompatibleSubstrateProvider` — agents should not know about
-network topology.
-
-**Decided against: a startup reachability probe.** Tempting, since
-manifest drift already fails loud at boot. Rejected because it only
-catches "network down at boot", gives false confidence when it passes,
-and makes startup depend on the internet. The circuit breaker covers the
-same ground and handles the transient case too.
-
-Two related papercuts worth fixing alongside:
-
-- Every substrate caller logs `LogWarning(ex, …)` with the full
-  exception, so a single offline turn prints four or five near-identical
-  stack traces and the actual warning text scrolls away. They say less
-  than one line of classification would.
-- Telemetry only logs on success — the latency/token/cost line sits
-  *inside* the `try`, after `CompleteAsync` returns, so a failed call
-  leaves no record of what it attempted or what it cost in wall-clock.
-  Exactly the turns worth measuring are the ones that measure nothing.
+**Still open: the `CognitiveAgent` / Reasoning duplication.**
+`ReasoningAgent` overrides `HandleAsync` and reimplements the base
+try/catch/log/publish nearly line for line, so the marking had to be
+written twice. Folding it back is a bigger change than the marking was:
+`ParseResult(SubstrateResult)` gets no access to the archive `index` that
+`ParsePairs(text, index)` needs, and Reasoning's empty-index early return
+fires *before* a prompt is built, which the base flow has no hook for. The
+likely shape is still the base class handing subclasses a failure
+classification rather than folding the subclasses back into it.
 
 And an asymmetry worth naming: manifest drift fails loud before the bus
 starts, but a `Tier` pointing at live providers never verifies anything

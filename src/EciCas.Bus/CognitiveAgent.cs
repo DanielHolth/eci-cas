@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -70,8 +71,14 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
     /// though no substrate call used it) — Intent forwards it verbatim so
     /// Reflection can later see exactly what it was given, not just what it
     /// said back.
+    ///
+    /// `degraded` is null on every path that worked, including a
+    /// UseSubstrate:false agent — deterministic by configuration is working
+    /// as configured, not failing. Non-null means this result is a fallback,
+    /// and implementations pass it through SubstrateHealth.Mark so Governance
+    /// can see it.
     /// </summary>
-    protected abstract void Publish(Envelope envelope, string prompt, TResult result, SubstrateResult? diagnostics);
+    protected abstract void Publish(Envelope envelope, string prompt, TResult result, SubstrateResult? diagnostics, string? degraded);
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
@@ -84,25 +91,31 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
 
         if (!entry.UseSubstrate)
         {
-            Publish(envelope, prompt, FallbackResult(envelope), diagnostics: null);
+            Publish(envelope, prompt, FallbackResult(envelope), diagnostics: null, degraded: null);
             return;
         }
 
+        // Started before the try so a failure can still report what the
+        // attempt cost in wall-clock. Telemetry that only logs on success
+        // leaves nothing behind for exactly the turns worth measuring.
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var diagnostics = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
 
-            Publish(envelope, prompt, ParseResult(diagnostics), diagnostics);
+            Publish(envelope, prompt, ParseResult(diagnostics), diagnostics, degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "{Agent} substrate call failed, fallback posture {Posture}", Name, Fallback);
+            var cause = SubstrateHealth.Classify(ex);
+            _logger.LogWarning("{Agent} substrate call {Cause} after {LatencyMs}ms, fallback posture {Posture}",
+                Name, cause, Stopwatch.GetElapsedTime(started).TotalMilliseconds, Fallback);
 
             if (Fallback == FallbackPosture.Open)
             {
-                Publish(envelope, prompt, FallbackResult(envelope), diagnostics: null);
+                Publish(envelope, prompt, FallbackResult(envelope), diagnostics: null, cause);
             }
         }
     }

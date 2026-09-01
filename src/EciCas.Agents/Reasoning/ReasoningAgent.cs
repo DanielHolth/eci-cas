@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
@@ -58,7 +59,7 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 
     protected override IReadOnlyList<ArchivePair> FallbackResult(Envelope envelope) => [];
 
-    protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchivePair> result, SubstrateResult? diagnostics)
+    protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchivePair> result, SubstrateResult? diagnostics, string? degraded)
     {
         // Always published, even empty on fallback/no-index/no-signal text —
         // Recall's roster slot in Governance's bundle needs a reply every
@@ -71,7 +72,7 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // an unrelated "system/.../name" row used to outrank everything for
         // a question about the human's own name.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
-        var meta = MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text);
+        var meta = SubstrateHealth.Mark(MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text), degraded);
 
         // The profile rides along for the same reason: it decides which
         // archive tier Recall reads, and Derive would otherwise drop it.
@@ -92,26 +93,32 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         }
 
         var index = _store.IndexFor(envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
-        if (index.Count == 0)
+
+        // An empty archive and a deliberately deterministic agent reach the
+        // same place — nothing to select — and neither is a degradation.
+        if (index.Count == 0 || !entry.UseSubstrate)
         {
-            Publish(envelope, string.Empty, [], diagnostics: null);
+            Publish(envelope, string.Empty, [], diagnostics: null, degraded: null);
             return;
         }
 
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
         var prompt = BuildSelectionPrompt(text, index);
 
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var result = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            Publish(envelope, prompt, ParsePairs(result.Text, index), result);
+            Publish(envelope, prompt, ParsePairs(result.Text, index), result, degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "{Agent} substrate call failed, fallback posture {Posture}", Name, Fallback);
-            Publish(envelope, prompt, [], diagnostics: null);
+            var cause = SubstrateHealth.Classify(ex);
+            _logger.LogWarning("{Agent} substrate call {Cause} after {LatencyMs}ms, fallback posture {Posture}",
+                Name, cause, Stopwatch.GetElapsedTime(started).TotalMilliseconds, Fallback);
+            Publish(envelope, prompt, [], diagnostics: null, cause);
         }
     }
 

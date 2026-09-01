@@ -192,4 +192,98 @@ public class GovernanceAgentTests
 
         Assert.True(actionReader.TryRead(out _));
     }
+
+    /// <summary>
+    /// The notice has to be native text, not a generated apology: the whole
+    /// point is that it fires when the substrate that would generate one is
+    /// the thing that's down.
+    /// </summary>
+    [Fact]
+    public async Task WhenIntentIsDegraded_TheNoticeReplacesTheReplyEntirely()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, []);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var verdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "canned fallback")
+                .With(SubstrateHealth.DegradedKey, SubstrateHealth.TimedOut));
+        await agent.HandleAsync(verdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var action));
+        var spoken = action!.Meta.Get<string>(IntentAgent.ReplyKey)!;
+        Assert.DoesNotContain("canned fallback", spoken);
+        Assert.Contains(SubstrateHealth.TimedOut, spoken);
+        Assert.True(action.Meta.Get<bool>(GovernanceAgent.DegradedKey));
+    }
+
+    [Fact]
+    public async Task WhenAnAdvisorIsDegraded_TheReplyStandsAndTheNoticeIsAppended()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, ["Recall"]);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+        await agent.HandleAsync(perception.Derive(Topics.Advisories, "Recall", Severity.Neutral,
+            MetaBag.Empty.With(SubstrateHealth.DegradedKey, SubstrateHealth.Unreachable)), CancellationToken.None);
+
+        var verdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "a real answer"));
+        await agent.HandleAsync(verdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var action));
+        var spoken = action!.Meta.Get<string>(IntentAgent.ReplyKey)!;
+        Assert.StartsWith("a real answer", spoken);
+        Assert.Contains("Recall", spoken);
+    }
+
+    [Fact]
+    public async Task WhenEveryAdvisorAnswersCleanly_ThereIsNoNotice()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, ["Recall"]);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+        await agent.HandleAsync(perception.Derive(Topics.Advisories, "Recall", Severity.Neutral), CancellationToken.None);
+
+        var verdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "a real answer"));
+        await agent.HandleAsync(verdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var action));
+        Assert.Equal("a real answer", action!.Meta.Get<string>(IntentAgent.ReplyKey));
+        Assert.False(action.Meta.Get<bool>(GovernanceAgent.DegradedKey));
+    }
+
+    /// <summary>A blocked turn says one thing and nothing else — a hedge about groundedness would only muddy it.</summary>
+    [Fact]
+    public async Task RedVerdict_CarriesNoDegradedNotice()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, ["Recall"]);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+        await agent.HandleAsync(perception.Derive(Topics.Advisories, "Recall", Severity.Neutral,
+            MetaBag.Empty.With(SubstrateHealth.DegradedKey, SubstrateHealth.Unreachable)), CancellationToken.None);
+
+        var verdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Red).With(IntentAgent.ReplyKey, "blocked draft"));
+        await agent.HandleAsync(verdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var action));
+        Assert.DoesNotContain("less grounded", action!.Meta.Get<string>(IntentAgent.ReplyKey)!);
+    }
 }

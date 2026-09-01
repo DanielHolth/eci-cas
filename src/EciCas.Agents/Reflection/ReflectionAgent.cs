@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using EciCas.Agents.Consolidator;
 using EciCas.Agents.Impulse;
@@ -117,8 +118,17 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
+        // A deterministic-by-configuration Reflection has no idea to
+        // propose: it drops the batch on purpose, which is not a failure and
+        // so does not get retried.
+        if (!entry.UseSubstrate)
+        {
+            return;
+        }
+
         List<Candidate> candidates;
         string? mood;
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var batchPrompt = BuildBatchPrompt(batch);
@@ -141,11 +151,27 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Closed fallback posture: a broken substrate call skips this
-            // flush entirely — nothing pushed, nothing archived — rather
-            // than guessing at an idea. Matches ConsolidatorAgent's
-            // ExtractFactsAsync swallow-and-log for the same failure mode.
-            _logger.LogWarning(ex, "{Agent} batch-scoring substrate call failed, skipping flush", Name);
+            // Closed fallback posture: a broken substrate call publishes no
+            // idea, rather than guessing at one. But the raw material goes
+            // back in the buffer instead of being thrown away — an outage
+            // should cost the persona a delay in having its own thoughts,
+            // not the turns it would have had them about. Capped at
+            // MaxBufferedBatches so a long outage can't grow the buffer
+            // without limit, or hand the substrate an enormous prompt the
+            // moment it comes back.
+            _logger.LogWarning("{Agent} batch scoring {Cause} after {LatencyMs}ms, retaining {Count} turns for the next flush",
+                Name, SubstrateHealth.Classify(ex), Stopwatch.GetElapsedTime(started).TotalMilliseconds, batch.Count);
+
+            lock (_pendingLock)
+            {
+                _pending.InsertRange(0, batch);
+                var cap = _options.BatchSize * Math.Max(1, _options.MaxBufferedBatches);
+                if (_pending.Count > cap)
+                {
+                    _pending.RemoveRange(0, _pending.Count - cap);
+                }
+            }
+
             return;
         }
 

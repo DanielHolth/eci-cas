@@ -84,10 +84,13 @@ foreach (var providerSection in builder.Configuration.GetSection("Substrates:Pro
     var baseUrl = providerSection["BaseUrl"]
         ?? throw new InvalidOperationException($"Substrate provider '{providerName}' is missing BaseUrl.");
     var apiKeyEnvironmentVariable = providerSection["ApiKeyEnvironmentVariable"];
+    var timeoutMs = int.TryParse(providerSection["TimeoutMs"], out var t) ? t : 20_000;
+    var circuitOpen = TimeSpan.FromMilliseconds(int.TryParse(providerSection["CircuitOpenMs"], out var c) ? c : 5_000);
 
     builder.Services.AddHttpClient(providerName, http =>
     {
         http.BaseAddress = new Uri(baseUrl);
+        http.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
 
         var apiKey = apiKeyEnvironmentVariable is null ? null : Environment.GetEnvironmentVariable(apiKeyEnvironmentVariable);
         if (!string.IsNullOrEmpty(apiKey))
@@ -99,7 +102,8 @@ foreach (var providerSection in builder.Configuration.GetSection("Substrates:Pro
     builder.Services.AddKeyedSingleton<ISubstrateProvider>(providerName, (sp, key) =>
         new OpenAiCompatibleSubstrateProvider(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient((string)key!),
-            sp.GetRequiredService<IOptions<SubstrateOptions>>()));
+            sp.GetRequiredService<IOptions<SubstrateOptions>>(),
+            circuitOpen));
 }
 
 builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();

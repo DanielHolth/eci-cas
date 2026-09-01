@@ -78,6 +78,14 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
+        // A deterministic-by-configuration Consolidator archives nothing:
+        // there is no keyword extractor to fall back to, and inventing one
+        // would put facts on record that nobody judged to be facts.
+        if (!entry.UseSubstrate)
+        {
+            return;
+        }
+
         // No deterministic fallback write: only what the LLM judges to be an
         // explicitly-stated fact gets archived (see ExtractFactsAsync's
         // prompt) — a turn with nothing worth remembering yields zero
@@ -207,7 +215,10 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "{Agent} fact-extraction substrate call failed, skipping", Name);
+            // Nothing to retain: unlike Reflection's buffered turns, the
+            // facts this call would have produced were never extracted, so
+            // there is no raw material a retry could work from.
+            _logger.LogWarning("{Agent} fact extraction {Cause}, skipping", Name, SubstrateHealth.Classify(ex));
             return ([], null);
         }
     }

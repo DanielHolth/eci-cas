@@ -68,6 +68,15 @@ and its timeout come from `IOptions<GovernanceOptions>`, so adding or
 removing an advisory-producing agent is a config change, not a Governance
 edit.
 
+It owns one more thing that follows from bundling: **the honesty notice.**
+Every substrate caller stamps `substrate.degraded` on the advisory it
+publishes when its call failed (see `SubstrateHealth`), and Governance —
+the only agent that sees the whole fan-out by `CorrelationId` — turns
+"who was degraded or absent" into deterministic native text. Native,
+because an LLM-authored apology cannot be produced by the LLM that isn't
+answering. A degraded Intent replaces the reply; a degraded advisor
+appends a parenthetical; a Red verdict gets neither.
+
 ## Storage: a library, not an agent
 
 `IArchiveStore` owns the archive files, schema, and all concurrency,

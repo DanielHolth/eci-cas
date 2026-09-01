@@ -105,19 +105,16 @@ touching C#:
 }
 ```
 
-**`UseSubstrate` has no useful setting today — treat it as unimplemented.**
-It defaults to `true`, and setting it `false` is meant to skip the substrate
-call so the agent publishes its fallback result instead. It is read in exactly
-one place, `CognitiveAgent.HandleAsync`, and Intent is the only agent still
-running that path: Reasoning overrides `HandleAsync`, and Recall, Reflection
-and Consolidator call the substrate directly. So on four of the five agents it
-passes startup validation and is then silently ignored — and on the fifth,
-Intent, it *works*, which is worse: Intent's fallback is the fixed sentence
-*"I'm having trouble thinking that through right now,"* so disabling it there
-makes that the persona's only reply. Wiring it up on the other four (and giving
-them fallbacks worth publishing) is tracked in
-[`roadmap.md`](docs/roadmap.md). Both this
-manifest and `Substrates:Classes` are validated at startup — including that
+`UseSubstrate: false` skips the substrate call and publishes the agent's
+fallback instead. It is honoured on all five substrate-calling agents —
+Intent, Reasoning, Recall, Reflection and Consolidator — and is deliberately
+*not* treated as a degradation: a turn run without a substrate by
+configuration is the persona working as configured, not the persona
+apologising. Note Intent's fallback is the fixed sentence *"I'm having
+trouble thinking that through right now,"* so turning it off there makes that
+the only reply the persona can give.
+
+Both this manifest and `Substrates:Classes` are validated at startup — including that
 `Class` names a real substrate class even when `UseSubstrate` is `false` — so
 a typo in either one fails loud before the bus starts rather than silently
 falling back to mock.

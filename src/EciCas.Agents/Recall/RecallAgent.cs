@@ -62,15 +62,17 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     {
         var pairs = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey) ?? [];
 
-        if (pairs.Count == 0)
-        {
-            Publish(envelope, []);
-            return;
-        }
-
         if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
         {
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+        }
+
+        // Nothing selected and no-substrate-by-configuration land in the same
+        // place — no facts, and neither is a degradation.
+        if (pairs.Count == 0 || !entry.UseSubstrate)
+        {
+            Publish(envelope, [], degraded: null);
+            return;
         }
 
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
@@ -85,6 +87,11 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var results = await Task.WhenAll(chunks.Select(c => PickAsync(c, text, entry.Class, cancellationToken))).ConfigureAwait(false);
         var picked = results.SelectMany(r => r.Facts).OrderByDescending(r => r.Importance).ToList();
 
+        // Any worker failing means some of the archive went unread, so the
+        // turn is grounded in less than it should have been — one failure is
+        // enough to say so, and the first cause is as good as any.
+        var degraded = results.Select(r => r.Degraded).FirstOrDefault(c => c is not null);
+
         // One line for the whole turn, not one per worker: aggregate latency
         // (wall-clock across the parallel calls, not summed) and sum tokens/
         // cost across every worker that actually reached the substrate.
@@ -98,7 +105,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
                 Name, paths, diagnostics.Count, diagnostics.Max(d => d.Latency.TotalMilliseconds), diagnostics.Sum(d => d.TokenCount), diagnostics.Sum(d => d.Cost));
         }
 
-        Publish(envelope, picked);
+        Publish(envelope, picked, degraded);
     }
 
     /// <summary>
@@ -129,9 +136,10 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             : [.. chunks.Take(_options.MaxConcurrentRecalls)];
     }
 
-    private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts)
+    private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string? degraded)
     {
-        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(RecalledFactsKey, facts));
+        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity,
+            SubstrateHealth.Mark(MetaBag.Empty.With(RecalledFactsKey, facts), degraded));
         _bus.Publish(Topics.Advisories, advisory);
     }
 
@@ -142,24 +150,25 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     /// the facts instead of being logged here, so HandleAsync can fold every
     /// worker's numbers into one line per turn.
     /// </summary>
-    private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics)> PickAsync(
+    private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics, string? Degraded)> PickAsync(
         IReadOnlyList<ArchiveRecord> candidates, string text, string substrateClass, CancellationToken cancellationToken)
     {
         if (candidates.Count == 0)
         {
-            return ([], null);
+            return ([], null, null);
         }
 
         try
         {
             var result = await _substrate.CompleteAsync(substrateClass, BuildPrompt(text, candidates), cancellationToken).ConfigureAwait(false);
-            return (ParsePicked(result.Text, candidates), result);
+            return (ParsePicked(result.Text, candidates), result, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var first = candidates[0];
-            _logger.LogWarning(ex, "{Agent} lookup for {Category}/{Topic} failed, skipping", Name, first.Category, first.Topic);
-            return ([], null);
+            var cause = SubstrateHealth.Classify(ex);
+            _logger.LogWarning("{Agent} lookup for {Category}/{Topic} {Cause}, skipping", Name, first.Category, first.Topic, cause);
+            return ([], null, cause);
         }
     }
 

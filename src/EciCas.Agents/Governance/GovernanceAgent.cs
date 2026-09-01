@@ -36,6 +36,9 @@ public sealed class GovernanceAgent : AgentBase
     /// <summary>Set true on a blocked Action/Conclusion so downstream consumers can tell a security block from an ordinary reply without inspecting VerdictKey.</summary>
     public const string SecurityAlertKey = "governance.security_alert";
 
+    /// <summary>Set on an Action/Conclusion whose reply carries a degraded-substrate notice, so the surface can mark it as one rather than parsing the text.</summary>
+    public const string DegradedKey = "governance.degraded";
+
     private const string SecurityAlertPathAnchor = "security_alert";
 
     private readonly IMessageBus _bus;
@@ -126,6 +129,7 @@ public sealed class GovernanceAgent : AgentBase
         Envelope perception;
         List<Envelope> advisorySnapshot;
         List<string> advisoryKeys;
+        string[] impaired;
         lock (state)
         {
             if (state.Completed || state.Perception is null)
@@ -142,6 +146,19 @@ public sealed class GovernanceAgent : AgentBase
             perception = state.Perception;
             advisorySnapshot = [.. state.Advisories.Values];
             advisoryKeys = [.. state.Advisories.Keys];
+
+            // Governance is the only agent that can know this: it bundles the
+            // fan-out by CorrelationId, so it alone sees which advisories
+            // arrived, which arrived degraded, and which never came at all.
+            // Every other agent knows only its own fate.
+            //
+            // Absent counts the same as degraded on purpose — from the
+            // person's side, an advisor that timed out and one that answered
+            // with nothing are the same missing faculty.
+            impaired = [.. _options.BundleRoster.Where(advisor =>
+                !state.Advisories.TryGetValue(advisor, out var advisory)
+                || advisory.Meta.Get<string>(SubstrateHealth.DegradedKey) is not null)];
+            state.Impaired = impaired;
         }
 
         state.TimeoutCts.Cancel();
@@ -208,12 +225,36 @@ public sealed class GovernanceAgent : AgentBase
             }
         }
 
+        // Intent's own failure is read off the verdict — Security merges the
+        // proposal's meta forward rather than replacing it, so the marker
+        // survives the hop.
+        var intentDegraded = verdict.Meta.Get<string>(SubstrateHealth.DegradedKey);
+        string[] impaired;
+        lock (state)
+        {
+            impaired = state.Impaired;
+        }
+
         var replyToSpeak = value == Verdict.Red ? BlockedReply(verdict) : reply;
+        var notice = Notice(intentDegraded, impaired);
+        if (notice is not null && value != Verdict.Red)
+        {
+            // Not on a block: a refusal is already an honest answer about
+            // what the persona will do, and qualifying it with how well it
+            // was thinking would only muddy it.
+            replyToSpeak = intentDegraded is not null ? notice : replyToSpeak + Environment.NewLine + Environment.NewLine + notice;
+        }
+
         var prompt = verdict.Meta.Get<string>(IntentAgent.PromptKey) ?? string.Empty;
         var actionMeta = MetaBag.Empty
             .With(IntentAgent.ReplyKey, replyToSpeak)
             .With(IntentAgent.PromptKey, prompt)
             .With(SecurityAgent.VerdictKey, value);
+        if (notice is not null && value != Verdict.Red)
+        {
+            actionMeta = actionMeta.With(DegradedKey, true);
+        }
+
         if (value == Verdict.Red)
         {
             // The verdict envelope carries no profile — Derive() replaces
@@ -238,6 +279,31 @@ public sealed class GovernanceAgent : AgentBase
         _bus.Publish(Topics.Conclusion, conclusion);
 
         _bundles.TryRemove(verdict.CorrelationId, out _);
+    }
+
+    /// <summary>
+    /// Deterministic native text, for the same reason the block text above is:
+    /// an LLM-authored apology cannot be produced by an LLM that isn't
+    /// answering. This is the crux, not a style preference.
+    ///
+    /// Two cases, and they are genuinely different. If Intent itself failed
+    /// there is no reply — only a fallback sentence that sounds like one — so
+    /// the notice replaces it. If Intent succeeded but its advisors didn't,
+    /// there is a real reply that is simply less grounded than it looks, and
+    /// the notice qualifies it rather than discarding it. That second case is
+    /// the dangerous one this whole mechanism exists for: fluent, confident
+    /// and ungrounded reads exactly like fluent, confident and grounded.
+    /// </summary>
+    private static string? Notice(string? intentDegraded, IReadOnlyList<string> impaired)
+    {
+        if (intentDegraded is not null)
+        {
+            return $"I can't think that through right now — my reasoning substrate is {intentDegraded}.";
+        }
+
+        return impaired.Count == 0
+            ? null
+            : $"(Thinking without {string.Join(" and ", impaired)} just now, so this is less grounded than usual.)";
     }
 
     private static string BlockedReply(Envelope verdict)
@@ -283,6 +349,9 @@ public sealed class GovernanceAgent : AgentBase
     {
         public Envelope? Perception { get; set; }
         public Dictionary<string, Envelope> Advisories { get; } = [];
+
+        /// <summary>Roster advisors that failed or never arrived, decided once when the bundle completes and read again when the verdict comes back — the verdict envelope never carried the advisories.</summary>
+        public string[] Impaired { get; set; } = [];
         public bool Completed { get; set; }
         public int RevisionCount { get; set; }
         public CancellationTokenSource TimeoutCts { get; } = new();

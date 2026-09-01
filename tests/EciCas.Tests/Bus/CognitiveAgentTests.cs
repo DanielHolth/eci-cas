@@ -21,6 +21,7 @@ public class CognitiveAgentTests
     {
         public FallbackPosture FallbackPostureValue { get; set; } = FallbackPosture.Open;
         public string? Published { get; private set; }
+        public string? Degraded { get; private set; }
 
         public override string Name => "Test";
         public override IReadOnlyCollection<string> Subscriptions => [];
@@ -28,7 +29,11 @@ public class CognitiveAgentTests
         protected override string BuildPrompt(Envelope envelope) => "prompt";
         protected override string ParseResult(SubstrateResult result) => result.Text;
         protected override string FallbackResult(Envelope envelope) => "fallback";
-        protected override void Publish(Envelope envelope, string prompt, string result, SubstrateResult? diagnostics) => Published = result;
+        protected override void Publish(Envelope envelope, string prompt, string result, SubstrateResult? diagnostics, string? degraded)
+        {
+            Published = result;
+            Degraded = degraded;
+        }
     }
 
     [Fact]
@@ -55,6 +60,7 @@ public class CognitiveAgentTests
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
         Assert.Equal("fallback", agent.Published);
+        Assert.NotNull(agent.Degraded);
     }
 
     [Fact]

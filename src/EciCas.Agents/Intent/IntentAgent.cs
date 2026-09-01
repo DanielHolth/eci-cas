@@ -133,10 +133,13 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     protected override string FallbackResult(Envelope envelope) => "I'm having trouble thinking that through right now.";
 
-    protected override void Publish(Envelope envelope, string prompt, string result, SubstrateResult? diagnostics)
+    protected override void Publish(Envelope envelope, string prompt, string result, SubstrateResult? diagnostics, string? degraded)
     {
+        // Marked, not just spoken: Intent's fallback sentence sounds honest,
+        // but Governance is the one that decides what the person is told, and
+        // it can only do that if the fallback says it is one.
         var proposal = envelope.Derive(Topics.Proposal, Name, envelope.Severity,
-            MetaBag.Empty.With(ReplyKey, result).With(PromptKey, prompt));
+            SubstrateHealth.Mark(MetaBag.Empty.With(ReplyKey, result).With(PromptKey, prompt), degraded));
         _bus.Publish(Topics.Proposal, proposal);
     }
 }
