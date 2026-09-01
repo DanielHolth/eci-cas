@@ -6,8 +6,9 @@ what exists. This document owns everything else: what's next, what's
 parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
-**Next up:** profile-scoped archive storage, the one piece of multi-user
-profiles iteration 1 still outstanding — see below. Nothing else is
+**Next up:** the degraded-substrate notice (a partial thought currently
+reads as a confident one), and profile-scoped archive storage, the one
+piece of multi-user profiles iteration 1 still outstanding. Nothing else is
 outstanding against the Python prototype's business logic; everything
 else here is parked, further out, or a record of what's already built.
 
@@ -181,6 +182,55 @@ registry or one agent per protocol; which integration surface it speaks
 (Matter, Home Assistant, MQTT, vendor APIs); and how a tool call is
 represented on the bus without giving Intent a second output vocabulary.
 Wants its own design pass before code.
+
+## Degraded-substrate notice (planned)
+
+**If it can't think, say so.** A dropped connection, a tunnel, a captive
+portal, an expired key — the substrate becomes unreachable and the turn
+still has to conclude honestly.
+
+Today it half-does. `CognitiveAgent.HandleAsync` catches the failure,
+logs a warning, and on `FallbackPosture.Open` publishes
+`FallbackResult(envelope)` **marked in no way at all**. When Intent's own
+call is the one that failed, the person sees Intent's fallback sentence
+and the system looks honest by luck. When Reasoning and Recall fail but
+Intent succeeds, the person gets a fluent, confident, entirely
+ungrounded answer and no signal whatsoever that the persona was thinking
+with half its faculties missing. That second case is the dangerous one,
+and it is silent.
+
+**Governance owns the notice**, for the same reason it already appends
+Blocked text deterministically in native code rather than letting Intent
+phrase a refusal:
+
+- It is the only agent that *can* know. Governance bundles the fan-out by
+  `CorrelationId`, so it alone sees which advisories arrived, which
+  arrived degraded, and which never came at all. Every other agent knows
+  only its own fate.
+- Deterministic native text survives a dead substrate. An
+  LLM-authored apology cannot be produced by an LLM that isn't
+  answering — this is the whole crux, not a style preference.
+- It keeps the honesty rule in one place, next to the block text it
+  already owns.
+
+What has to change to enable it: `CognitiveAgent` must mark the fallback
+it publishes rather than substituting invisibly — degraded, plus a cause
+(unreachable / timed out / substrate disabled). Governance then counts
+degraded and absent advisories in the bundle and picks between a
+partial-thinking notice and an "I can't think right now" — with a
+`UseSubstrate: false` agent deliberately *not* counting as degraded,
+since a deterministic-by-config agent is working exactly as configured.
+
+**Timeouts are the harder half.** The DNS failure that prompted this
+(`SocketException 11001`, host not resolvable) failed instantly. A real
+mid-journey interruption instead hangs until the HTTP timeout expires,
+and a minute of silence followed by an apology is worse than the apology
+alone. The substrate timeout has to be short enough that the notice is
+prompt, which makes it a tier-tunable knob rather than a constant.
+
+Related papercut worth fixing alongside: Consolidator logs a tidy
+one-line warning on substrate failure while Reasoning dumps a full stack
+trace, so an offline run floods the console unevenly.
 
 ## Multi-user profiles, iteration 1 — mostly shipped
 
