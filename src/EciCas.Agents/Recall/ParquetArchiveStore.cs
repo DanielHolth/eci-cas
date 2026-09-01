@@ -37,8 +37,12 @@ using EciCas.Core;
 /// Parquet has no in-place append: each write reads the target pair file (if
 /// any), appends the new rows in memory, and rewrites the whole file as a
 /// single row group. Fine at this scale — a persona's own knowledge base,
-/// not a data lake. Uses Parquet.Net's high-level ParquetSerializer (POCO
-/// row classes) rather than the raw row-group API.
+/// not a data lake. Since a write already holds the whole pair in memory it
+/// keeps it, and reads cache what they load, so a hot pair costs one file
+/// read for the process's lifetime rather than one per turn.
+///
+/// Uses Parquet.Net's high-level ParquetSerializer (POCO row classes)
+/// rather than the raw row-group API.
 /// </summary>
 public sealed class ParquetArchiveStore : IArchiveStore
 {
@@ -88,6 +92,16 @@ public sealed class ParquetArchiveStore : IArchiveStore
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _indexLock = new();
     private readonly Dictionary<string, HashSet<ArchivePair>> _indexes = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Last known contents of each pair file, keyed by path. This process is
+    /// the only writer, so a cached pair can only go stale by our own hand —
+    /// and AppendAsync updates it in the same critical section that writes
+    /// the file. Bounded by the archive's own size, which is one persona's
+    /// knowledge, not a data lake. Reads under the per-path gate, so the
+    /// dictionary is only ever touched by one task per path at a time.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, IReadOnlyList<ArchiveRecord>> _pairs = new(StringComparer.OrdinalIgnoreCase);
 
     public ParquetArchiveStore(string directory, IEnumerable<string>? sharedCategories = null)
     {
@@ -155,9 +169,10 @@ public sealed class ParquetArchiveStore : IArchiveStore
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var existing = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
+            var existing = new List<ArchiveRecord>(await CachedAsync(path, cancellationToken).ConfigureAwait(false));
             existing.AddRange(newRecords);
             await WriteRecordsAsync(path, existing, cancellationToken).ConfigureAwait(false);
+            _pairs[path] = existing;
         }
         finally
         {
@@ -170,19 +185,42 @@ public sealed class ParquetArchiveStore : IArchiveStore
         }
     }
 
-    private async Task<List<ArchiveRecord>> ReadPairAsync(string directory, ArchivePair pair, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ArchiveRecord>> ReadPairAsync(string directory, ArchivePair pair, CancellationToken cancellationToken)
     {
         var path = PairPathFor(directory, pair);
+
+        // Fast path: no lock at all on a hot pair. Recall reads the same
+        // handful of pairs every turn, and a stale read is impossible —
+        // only AppendAsync replaces an entry, and it does so having already
+        // written the file.
+        if (_pairs.TryGetValue(path, out var cached))
+        {
+            return cached;
+        }
+
         var gate = LockFor(path);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
+            return await CachedAsync(path, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             gate.Release();
         }
+    }
+
+    /// <summary>Cached contents of one pair file, read through on a miss. Callers hold that path's gate.</summary>
+    private async Task<IReadOnlyList<ArchiveRecord>> CachedAsync(string path, CancellationToken cancellationToken)
+    {
+        if (_pairs.TryGetValue(path, out var cached))
+        {
+            return cached;
+        }
+
+        var records = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
+        _pairs[path] = records;
+        return records;
     }
 
     /// <summary>Where a fact belongs: the profile's own tier, unless its category is shared or there is no profile at all.</summary>
