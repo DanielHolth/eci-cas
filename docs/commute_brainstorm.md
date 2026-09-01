@@ -174,10 +174,13 @@ five**. `Recall`, `Reflection` and `Consolidator` each hold their own
 try/catch. Marking only the base path would look done while three
 agents degraded as silently as before.
 
-Reasoning duplicates the base because it needs the prompt and its parsed
-pairs in a shape the generic `Publish` signature doesn't offer — so the
-dedup isn't free. The likely shape is the base class handing subclasses
-a failure classification, rather than folding subclasses back into it.
+The dedup isn't free, though `Publish` is not why: Reasoning calls it
+with exactly the base signature. The real blockers are that
+`ParseResult(SubstrateResult)` gets no access to the archive `index`
+that `ParsePairs(text, index)` needs, and that the empty-index early
+return fires before a prompt is built, which the base flow has no hook
+for. The likely shape is still the base class handing subclasses a
+failure classification, rather than folding subclasses back into it.
 
 **2 · Make degradation visible in the envelope, not just the log.**
 Today the only trace is an ILogger warning that `--Verbose=true` happens
@@ -205,10 +208,14 @@ stop making five doomed calls per turn. Belongs in
 `OpenAiCompatibleSubstrateProvider`; agents shouldn't know about network
 topology.
 
-**5 · Don't let Consolidator silently drop the turn.**
-It's the only agent whose fallback is "skip" — `ExtractFactsAsync`
-catches and returns an empty set — so during an outage the persona stops
-remembering as well as thinking, with no distinct signal.
+**5 · Don't let Consolidator and Reflection silently drop the turn.**
+Both fall back by skipping, not one: `ExtractFactsAsync` catches and
+returns an empty set, and Reflection abandons the entire flush —
+"nothing pushed, nothing archived," per its own comment, which cites
+Consolidator as the precedent. So an outage stops the persona
+remembering *and* stops it keeping its own insights, from two
+independent paths, with no distinct signal from either. Recall skips as
+well but writes nothing, so it only loses grounding for that turn.
 
 This is net-new work, not reuse. The README claims Consolidator ships
 with `UseSubstrate:false` and falls back to "its deterministic keyword

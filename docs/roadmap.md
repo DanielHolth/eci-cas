@@ -231,19 +231,33 @@ Reflection and Consolidator hold their own try/catch and never touch
 the base path at all. Marking only `CognitiveAgent` would look done
 while three agents kept degrading silently.
 
-So the dedup comes first, and it isn't free: Reasoning duplicates the
-base because it needs the prompt and its parsed pairs in a shape the
-generic `Publish` signature doesn't offer. The likely shape is the base
-class handing subclasses a failure classification, rather than folding
-the subclasses back into it. Note the same split already bites
-elsewhere — `UseSubstrate` is honoured only on the base path, so setting
-it `false` on any of the other four agents validates at startup and is
-then ignored.
+So the dedup comes first, and it isn't free — though not for the reason
+the signatures suggest. `Publish` is not the obstacle: Reasoning calls
+it with exactly the base signature. The two real blockers are that
+`ParseResult(SubstrateResult)` gets no access to the archive `index`
+that `ParsePairs(text, index)` needs, and that Reasoning's empty-index
+early return fires *before* a prompt is built, which the base flow has
+no hook for. So the fix is threading state into parsing plus a pre-call
+short-circuit. The likely shape is still the base class handing
+subclasses a failure classification, rather than folding the subclasses
+back into it.
 
-Consolidator needs its own answer regardless: its fallback is to skip,
-returning no facts, so an outage stops the persona remembering as well
-as thinking. There is nothing to reuse here — no deterministic keyword
-writer exists, and `UseSubstrate` appears in no `appsettings` file.
+Note the same split already bites elsewhere — `UseSubstrate` is read
+only in `CognitiveAgent.HandleAsync`, so setting it `false` on any of
+the other four agents validates at startup and is then ignored. It is
+honoured on Intent alone, where disabling it pins every reply to
+Intent's fixed fallback sentence, so it currently has no useful setting
+at all.
+
+**Consolidator and Reflection both need their own answer.** Both
+fall back by skipping: Consolidator returns no facts, Reflection
+abandons the whole flush — "nothing pushed, nothing archived," as its
+own comment puts it, explicitly matching Consolidator. So an outage
+stops the persona remembering *and* stops it keeping its own insights,
+from two independent code paths. There is nothing to reuse for either —
+no deterministic keyword writer exists, and `UseSubstrate` appears in no
+`appsettings` file. Recall skips too, but it writes nothing, so it only
+loses grounding for that turn.
 
 **Timeouts are the harder half.** The DNS failure that prompted this
 (`SocketException 11001`, host not resolvable) failed instantly. A real
@@ -252,9 +266,11 @@ and a minute of silence followed by an apology is worse than the apology
 alone. The substrate timeout has to be short enough that the notice is
 prompt, which makes it a tier-tunable knob rather than a constant.
 
-Related papercut worth fixing alongside: Consolidator logs a tidy
-one-line warning on substrate failure while Reasoning dumps a full stack
-trace, so an offline run floods the console unevenly.
+Related papercut worth fixing alongside: every substrate caller logs
+`LogWarning(ex, …)` with the full exception, so a single offline turn
+prints four or five complete stack traces and the actual warning text
+scrolls away. The traces are near-identical and say less than one line
+of classification would.
 
 ## Multi-user profiles, iteration 1 — mostly shipped
 

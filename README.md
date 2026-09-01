@@ -99,17 +99,24 @@ touching C#:
 ```jsonc
 "AgentSubstrates": {
   "Agents": {
-    "Intent": { "Class": "fast-medium", "UseSubstrate": false }
+    "Intent":       { "Class": "fast-medium" },
+    "Consolidator": { "Class": "slow-low" }
   }
 }
 ```
 
-`UseSubstrate` defaults to `true`; setting it `false` skips the substrate call
-entirely, and the agent publishes its fallback result instead. **It is honoured
-only by agents running `CognitiveAgent`'s own `HandleAsync` — today that is
-Intent alone.** Reasoning overrides `HandleAsync`, and Recall, Reflection and
-Consolidator call the substrate directly, so setting `UseSubstrate: false` on
-any of those four passes startup validation and is then ignored. Both this
+**`UseSubstrate` has no useful setting today — treat it as unimplemented.**
+It defaults to `true`, and setting it `false` is meant to skip the substrate
+call so the agent publishes its fallback result instead. It is read in exactly
+one place, `CognitiveAgent.HandleAsync`, and Intent is the only agent still
+running that path: Reasoning overrides `HandleAsync`, and Recall, Reflection
+and Consolidator call the substrate directly. So on four of the five agents it
+passes startup validation and is then silently ignored — and on the fifth,
+Intent, it *works*, which is worse: Intent's fallback is the fixed sentence
+*"I'm having trouble thinking that through right now,"* so disabling it there
+makes that the persona's only reply. Wiring it up on the other four (and giving
+them fallbacks worth publishing) is tracked in
+[`roadmap.md`](docs/roadmap.md). Both this
 manifest and `Substrates:Classes` are validated at startup — including that
 `Class` names a real substrate class even when `UseSubstrate` is `false` — so
 a typo in either one fails loud before the bus starts rather than silently
