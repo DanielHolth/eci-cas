@@ -14,11 +14,34 @@ import type {
 
 const MAX_TURNS = 20;
 
-const BUNDLE_ADVICE_KEY: Record<BundleAgent, string> = {
-  reasoning: "reasoning.advice",
-  recall: "recall.results",
-  self: "self.advice",
+/** Each bundle agent thinks in its own shape, so each gets its own reader
+ * off the raw meta. Reasoning's thought is which archive pairs it chose;
+ * Recall's is the rows it picked out of them; Self's is already a line of
+ * text. All three collapse to one terse string for a bubble. */
+const BUNDLE_THOUGHT: Record<BundleAgent, (meta: Record<string, unknown>) => string | undefined> = {
+  reasoning: (meta) => {
+    const pairs = meta["reasoning.selected_pairs"];
+    return Array.isArray(pairs) && pairs.length > 0
+      ? pairs.map((p) => `${p.category}/${p.topic}`).join(", ")
+      : undefined;
+  },
+  recall: (meta) => {
+    const facts = meta["recall.facts"];
+    return Array.isArray(facts) && facts.length > 0
+      ? facts.map((f) => `${f.subject} ${f.key} = ${f.value}`).join("; ")
+      : undefined;
+  },
+  self: (meta) => (typeof meta["self.advice"] === "string" ? meta["self.advice"] : undefined),
 };
+
+function record(turn: TurnEvent, agent: BundleAgent, text: string): void {
+  const existing = turn.bundle.find((f) => f.agent === agent);
+  if (existing) {
+    existing.text = text;
+  } else {
+    turn.bundle.push({ agent, text });
+  }
+}
 
 /**
  * Impulse never emits an Expression — that vocabulary was invented for the
@@ -74,15 +97,19 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
         break;
       }
       const agent = raw.publishedBy.toLowerCase() as BundleAgent;
-      const key = BUNDLE_ADVICE_KEY[agent];
-      if (key && key in raw.meta) {
-        const text = String(raw.meta[key] ?? "");
-        const existing = turn.bundle.find((f) => f.agent === agent);
-        if (existing) {
-          existing.text = text;
-        } else {
-          turn.bundle.push({ agent, text });
-        }
+      const thought = BUNDLE_THOUGHT[agent]?.(raw.meta);
+      if (thought) {
+        record(turn, agent, thought);
+      }
+      break;
+    }
+    // Reasoning's advisory is the pair selection itself, published on its
+    // own topic rather than events.advisories — so it needs its own case,
+    // not an entry in the advisory switch above.
+    case "events.selected-pairs": {
+      const thought = BUNDLE_THOUGHT.reasoning(raw.meta);
+      if (thought) {
+        record(turn, "reasoning", thought);
       }
       break;
     }

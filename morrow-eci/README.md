@@ -50,7 +50,7 @@ constraint: read from the bus freely via SSE, write only through
 |---|---|
 | Perception's `perception.text` | `Utterance` — the person's own line, echoed opposite the persona so a turn on screen reads as an exchange |
 | Impulse's reflex / drive-vector expression (`src/EciCas.Agents/Impulse`) | `Avatar` — a drawn face, one bucketed pose per expression; the animation is decoration on top, not extra state |
-| Reasoning / Recall / Self advisories (shared keyword format) | `ThoughtBubbles` — three colored bubbles, persist faded after speaking |
+| Reasoning's selected pairs, Recall's picked rows, Self's advice | `ThoughtBubbles` — three colored bubbles, persist faded after speaking. Each faculty thinks in its own shape (pairs / rows / a line of text), so each has its own reader in `useEciStream` that collapses it to one terse string |
 | Security's verdict (`src/EciCas.Agents/Security`) | `SecurityIcon` — only renders on yellow/red; click reveals the matched rule's concern |
 | Intent's advise/refuse output | `SpeechBubble` — dashed amber when Governance marks the turn `governance.degraded`, i.e. thought with a substrate missing |
 | `EpochWritten` (post-Memory milestone) | `ConsolidationDoodle` — clickable "+", first click reconciles, repeats are view-only |

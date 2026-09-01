@@ -119,6 +119,12 @@ Both this manifest and `Substrates:Classes` are validated at startup — includi
 a typo in either one fails loud before the bus starts rather than silently
 falling back to mock.
 
+The `mock` provider echoes the prompt back, except for the two prompts that
+enumerate candidates and expect index numbers — Reasoning picking archive
+pairs and Recall picking rows. Those get the first index, so the whole
+knowledge swarm runs end to end on the free tier instead of silently taking
+its empty path.
+
 To swap a whole bundle of provider/model choices at once, set the `Tier`
 config value (env var or `--Tier=X`) to layer in `appsettings.<Tier>.json`
 over the defaults — `Minimal` (all mock, $0), `Budget` (cheap live models),

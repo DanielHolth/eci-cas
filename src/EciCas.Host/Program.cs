@@ -252,6 +252,17 @@ await app.StartAsync();
 var perception = app.Services.GetRequiredService<PerceptionAgent>();
 var activity = app.Services.GetRequiredService<BusActivityTracker>();
 
+// With no console to read from — a service, a container, or anything that
+// redirects stdin — the REPL's first ReadLine returns null and would take
+// the whole surface down with it. The companion UI is the real client
+// there, so run until shutdown instead.
+if (Console.IsInputRedirected)
+{
+    Console.WriteLine($"ECI-CAS surface listening. SSE at {string.Join(", ", app.Urls)}/api/stream. No console input — running until shutdown.");
+    await app.WaitForShutdownAsync();
+    return;
+}
+
 Console.WriteLine($"ECI-CAS surface listening. SSE at {string.Join(", ", app.Urls)}/api/stream. Type a prompt here too (empty line to exit).");
 string? line;
 while (!string.IsNullOrWhiteSpace(line = Console.ReadLine()))
