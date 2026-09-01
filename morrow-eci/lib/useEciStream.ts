@@ -120,17 +120,24 @@ export interface EciStreamState {
   acknowledge: (turnId: string, epochId: string) => void;
 }
 
-/** Subscribes to GET /api/stream and assembles the raw envelope feed into
- * TurnEvent-shaped state, keyed by CorrelationId — the same grouping
- * Governance itself uses to bundle a turn's advisories. */
-export function useEciStream(): EciStreamState {
+/** Subscribes to GET /api/stream, optionally scoped to one profile, and
+ * assembles the raw envelope feed into TurnEvent-shaped state, keyed by
+ * CorrelationId — the same grouping Governance itself uses to bundle a turn's
+ * advisories.
+ *
+ * Switching profiles is a remount, not a reset: Conversation is keyed by
+ * profile id, so the accumulated turns go with the component rather than
+ * being cleared in place. One person's conversation never bleeds into the
+ * next person's window. */
+export function useEciStream(profileId?: string): EciStreamState {
   const [turns, setTurns] = useState<TurnEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const turnsRef = useRef(new Map<string, TurnEvent>());
   const orderRef = useRef<string[]>([]);
 
   useEffect(() => {
-    const source = new EventSource(`${API_BASE}/api/stream`);
+    const query = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
+    const source = new EventSource(`${API_BASE}/api/stream${query}`);
 
     source.onopen = () => setConnected(true);
     source.onerror = () => setConnected(false);
@@ -141,7 +148,7 @@ export function useEciStream(): EciStreamState {
     };
 
     return () => source.close();
-  }, []);
+  }, [profileId]);
 
   function acknowledge(turnId: string, epochId: string) {
     const turn = turnsRef.current.get(turnId);

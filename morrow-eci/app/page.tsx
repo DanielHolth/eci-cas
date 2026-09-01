@@ -1,84 +1,90 @@
 "use client";
 
-import { useState } from "react";
-import { Avatar } from "@/components/Avatar";
-import { ThoughtBubbles } from "@/components/ThoughtBubbles";
-import { SecurityIcon } from "@/components/SecurityIcon";
-import { SpeechBubble } from "@/components/SpeechBubble";
-import { ConsolidationDoodle } from "@/components/ConsolidationDoodle";
-import { useEciStream } from "@/lib/useEciStream";
-import { sendPerceive } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Conversation } from "@/components/Conversation";
+import { ProfilePicker } from "@/components/ProfilePicker";
+import {
+  createProfile,
+  fetchProfiles,
+  readActiveProfileId,
+  writeActiveProfileId,
+  type Profile,
+} from "@/lib/profiles";
 
+/**
+ * Owns who is talking; Conversation owns the talking itself. The picker is
+ * the cold-start screen — with no profile chosen there is nobody to attribute
+ * a turn to, and attributing it to nobody would colour the persona's
+ * device-wide mood on everyone's behalf.
+ */
 export default function Home() {
-  const { turns, connected, acknowledge } = useEciStream();
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
 
-  const turn = turns[turns.length - 1];
+  const active = useMemo(
+    () => profiles.find((profile) => profile.id === activeId) ?? null,
+    [profiles, activeId],
+  );
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!text.trim() || sending) return;
-    setSending(true);
+  const load = useCallback(async () => {
     try {
-      await sendPerceive(text.trim());
-      setText("");
+      const found = await fetchProfiles();
+      setProfiles(found);
+      setError(null);
+
+      // A remembered id whose profile is gone from disk falls back to the
+      // picker rather than silently talking as nobody.
+      const remembered = readActiveProfileId();
+      setActiveId(found.some((profile) => profile.id === remembered) ? remembered : null);
     } catch {
-      // Surface layer is down or unreachable — the connection indicator
-      // already reflects that; nothing else to do client-side here.
+      setError("Can't reach Morrow. Is the host running?");
     } finally {
-      setSending(false);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Subscribing to an external system (the host's profile registry) on
+    // mount. Every setState in `load` happens after an await, so there is no
+    // synchronous cascade — the rule can't see past the call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  function selectProfile(profile: Profile) {
+    writeActiveProfileId(profile.id);
+    setActiveId(profile.id);
+    setSwitching(false);
+  }
+
+  async function handleCreate(displayName: string, avatar: string) {
+    try {
+      const profile = await createProfile(displayName, avatar);
+      setProfiles((current) =>
+        current.some((existing) => existing.id === profile.id) ? current : [...current, profile],
+      );
+      setError(null);
+      selectProfile(profile);
+    } catch {
+      setError("Couldn't create that profile.");
     }
   }
 
-  return (
-    <main className="flex-1 flex flex-col items-center gap-8 p-10 bg-neutral-50 min-h-full">
-      <div className="text-center">
-        <h1 className="text-lg font-semibold text-neutral-800">ECI-CAS Avatar</h1>
-        <p className="text-sm text-neutral-500">
-          {connected ? "Live" : "Disconnected"} ·{" "}
-          {turn ? <span className="font-mono">{turn.stage}</span> : "waiting for a first thought"}
-        </p>
-      </div>
-
-      <Avatar
-        expression={turn?.impulse?.expression ?? "neutral"}
-        reflex={turn?.impulse?.reflex ?? "At rest."}
+  if (!active || switching) {
+    return (
+      <ProfilePicker
+        profiles={profiles}
+        loading={loading}
+        error={error}
+        onSelect={selectProfile}
+        onCreate={handleCreate}
+        onCancel={active ? () => setSwitching(false) : undefined}
       />
+    );
+  }
 
-      {turn && turn.bundle.length > 0 && (
-        <ThoughtBubbles findings={turn.bundle} faded={turn.stage === "speaking"} />
-      )}
-
-      {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
-        <SecurityIcon outcomes={turn.security} />
-      )}
-
-      {turn?.stage === "speaking" && turn.output && <SpeechBubble output={turn.output} />}
-
-      {turn?.stage === "speaking" && turn.epoch && (
-        <ConsolidationDoodle
-          epoch={turn.epoch}
-          onAcknowledge={(epochId) => acknowledge(turn.turnId, epochId)}
-        />
-      )}
-
-      <form onSubmit={handleSubmit} className="mt-4 flex w-full max-w-md gap-2">
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Say something to ECI-CAS…"
-          className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-400"
-        />
-        <button
-          type="submit"
-          disabled={sending || !text.trim()}
-          className="rounded-full bg-neutral-800 px-5 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-40"
-        >
-          Send
-        </button>
-      </form>
-    </main>
-  );
+  return <Conversation key={active.id} profile={active} onSwitch={() => setSwitching(true)} />;
 }

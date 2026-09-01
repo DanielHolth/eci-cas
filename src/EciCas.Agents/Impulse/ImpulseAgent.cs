@@ -33,8 +33,24 @@ public sealed class ImpulseAgent : AgentBase
     /// <summary>Set on the reflex's own proposal. Absent (default false) on Intent's considered proposal.</summary>
     public const string ReflexKey = "impulse.reflex";
 
-    /// <summary>Archive path holding the current DriveVectors, JSON-serialized. Read directly by ReflectionAgent and GovernanceAgent.</summary>
+    /// <summary>
+    /// Archive path holding the current DriveVectors, JSON-serialized. Read
+    /// directly by ReflectionAgent and GovernanceAgent. This is the
+    /// device-wide state — the path used when no profile owns the input.
+    /// </summary>
     public const string DrivePath = "impulse/drive";
+
+    /// <summary>
+    /// Drive state is per profile: the persona holds a separate emotional
+    /// relationship with each person, so what warms it toward one child does
+    /// not pre-colour how it meets the parent an hour later. That is a
+    /// keying change, not a redesign — one state record per profile under
+    /// the same path prefix, and <see cref="DrivePath"/> when the input
+    /// belongs to nobody in particular (the console loop, a self-generated
+    /// idea), which is also what a single-user install keeps using.
+    /// </summary>
+    public static string DrivePathFor(string? profileId) =>
+        string.IsNullOrEmpty(profileId) ? DrivePath : $"{DrivePath}/{profileId}";
 
     private static readonly string[] CriticalTriggers = ["help", "emergency", "urgent"];
 
@@ -102,7 +118,7 @@ public sealed class ImpulseAgent : AgentBase
     private readonly IMessageBus _bus;
     private readonly IAgentStateStore _store;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
-    private DriveVectors? _cached;
+    private readonly Dictionary<string, DriveVectors> _cached = [];
 
     public ImpulseAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ImpulseAgent> logger, IAgentStateStore store)
         : base(bus, activity, logger)
@@ -119,20 +135,26 @@ public sealed class ImpulseAgent : AgentBase
         if (envelope.Topic == Topics.SystemControl)
         {
             var kind = envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey);
+            var signalledProfile = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
             if (kind == GovernanceAgent.FrustrationKind)
             {
-                await NudgeAsync(FrustrationNudge, cancellationToken).ConfigureAwait(false);
+                await NudgeAsync(FrustrationNudge, signalledProfile, cancellationToken).ConfigureAwait(false);
             }
             else if (kind == ReflectionAgent.ReflectedKind
                 && envelope.Meta.Get<string>(ReflectionAgent.MoodKey) is { } mood
                 && SlowColoring.TryGetValue(mood, out var colouring))
             {
-                await NudgeAsync(colouring, cancellationToken).ConfigureAwait(false);
+                // Slow colouring is still device-wide: Reflection scores a
+                // whole batch of concluded turns in one substrate call, and
+                // that batch can span profiles. Splitting it per profile is
+                // a Reflection-side change, tracked in docs/roadmap.md.
+                await NudgeAsync(colouring, signalledProfile, cancellationToken).ConfigureAwait(false);
             }
 
             return;
         }
 
+        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var isCritical = CriticalTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase));
 
@@ -150,56 +172,69 @@ public sealed class ImpulseAgent : AgentBase
                 MetaBag.Empty.With(IntentAgent.ReplyKey, reply).With(ReflexKey, true));
             _bus.Publish(Topics.Proposal, proposal);
 
-            await NudgeAsync(CriticalNudge, cancellationToken).ConfigureAwait(false);
+            await NudgeAsync(CriticalNudge, profileId, cancellationToken).ConfigureAwait(false);
         }
 
         if (PositiveTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
         {
-            await NudgeAsync(PositiveNudge, cancellationToken).ConfigureAwait(false);
+            await NudgeAsync(PositiveNudge, profileId, cancellationToken).ConfigureAwait(false);
         }
         else if (NegativeTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
         {
-            await NudgeAsync(NegativeNudge, cancellationToken).ConfigureAwait(false);
+            await NudgeAsync(NegativeNudge, profileId, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task NudgeAsync(DriveVectors nudge, CancellationToken cancellationToken)
+    private async Task NudgeAsync(DriveVectors nudge, string? profileId, CancellationToken cancellationToken)
     {
-        var current = await GetVectorsAsync(cancellationToken).ConfigureAwait(false);
+        var path = DrivePathFor(profileId);
+        var current = await GetVectorsAsync(path, cancellationToken).ConfigureAwait(false);
         var updated = current.Add(nudge);
 
         await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _cached = updated;
+            _cached[path] = updated;
         }
         finally
         {
             _cacheLock.Release();
         }
 
-        var record = new AgentStateRecord(DrivePath, JsonSerializer.Serialize(updated), DateTimeOffset.UtcNow, ArchiveDomain.Internal);
+        var record = new AgentStateRecord(path, JsonSerializer.Serialize(updated), DateTimeOffset.UtcNow, ArchiveDomain.Internal);
         await _store.WriteAsync([record], cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<DriveVectors> GetVectorsAsync(CancellationToken cancellationToken)
+    private async Task<DriveVectors> GetVectorsAsync(string path, CancellationToken cancellationToken)
     {
-        if (_cached is { } cached)
+        await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return cached;
+            if (_cached.TryGetValue(path, out var cached))
+            {
+                return cached;
+            }
         }
+        finally
+        {
+            _cacheLock.Release();
+        }
+
+        var records = await _store.LookupAsync([path], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
+        var vectors = records.Count > 0 ? JsonSerializer.Deserialize<DriveVectors>(records[0].Content) ?? new DriveVectors() : new DriveVectors();
 
         await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_cached is { } cachedAfterLock)
+            // Another nudge for the same profile may have landed while the
+            // store read was in flight; that value is newer than this one.
+            if (_cached.TryGetValue(path, out var raced))
             {
-                return cachedAfterLock;
+                return raced;
             }
 
-            var records = await _store.LookupAsync([DrivePath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
-            _cached = records.Count > 0 ? JsonSerializer.Deserialize<DriveVectors>(records[0].Content) ?? new DriveVectors() : new DriveVectors();
-            return _cached;
+            _cached[path] = vectors;
+            return vectors;
         }
         finally
         {

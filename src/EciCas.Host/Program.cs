@@ -125,6 +125,10 @@ if (seedNeeded)
 
 builder.Services.AddSingleton<IArchiveStore>(archiveStore);
 
+// Profiles live beside the archive they scope — one directory per person
+// under archive/profiles/. A surface concern, not a bus citizen.
+builder.Services.AddSingleton(new ProfileStore(archiveDirectory));
+
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
 RegisterAgent<ReasoningAgent>(builder.Services);
@@ -158,14 +162,46 @@ var jsonOptions = new JsonSerializerOptions
     Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
 };
 
-app.MapPost("/api/perceive", (PerceiveRequest request, PerceptionAgent perceptionAgent) =>
+app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.List(), jsonOptions));
+
+app.MapPost("/api/profiles", (CreateProfileRequest request, ProfileStore profiles) =>
+{
+    if (string.IsNullOrWhiteSpace(request.DisplayName) || string.IsNullOrWhiteSpace(request.Avatar))
+    {
+        return Results.BadRequest();
+    }
+
+    if (ProfileStore.Slug(request.DisplayName).Length == 0)
+    {
+        return Results.BadRequest();
+    }
+
+    var (profile, created) = profiles.Create(request.DisplayName, request.Avatar);
+
+    // A name already in use comes back as the existing profile rather than a
+    // conflict: in a household picker, "that's already you" is the answer the
+    // client wants, and it can tell the two apart by the status code.
+    return created
+        ? Results.Created($"/api/profiles/{profile.Id}", profile)
+        : Results.Json(profile, jsonOptions);
+});
+
+app.MapPost("/api/perceive", (PerceiveRequest request, PerceptionAgent perceptionAgent, ProfileStore profiles) =>
 {
     if (string.IsNullOrWhiteSpace(request.Text))
     {
         return Results.BadRequest();
     }
 
-    perceptionAgent.Perceive(request.Text);
+    // An unknown profile id is rejected rather than ignored — silently
+    // attributing one person's turn to the device-wide drive state would
+    // colour the persona's mood for everybody.
+    if (!string.IsNullOrEmpty(request.ProfileId) && profiles.Find(request.ProfileId) is null)
+    {
+        return Results.NotFound();
+    }
+
+    perceptionAgent.Perceive(request.Text, request.ProfileId);
     return Results.Accepted();
 });
 
@@ -178,7 +214,15 @@ app.MapGet("/api/stream", async (HttpContext context, SseBroadcaster broadcaster
     context.Response.ContentType = "text/event-stream";
     await context.Response.StartAsync(cancellationToken);
 
-    var reader = broadcaster.Connect(out var clientId);
+    // An SSE comment, flushed immediately: browsers hold `onopen` until the
+    // first byte of the body arrives, and a profile-scoped client may wait
+    // minutes for its first real envelope — long enough to sit there
+    // reading "Disconnected" while perfectly connected.
+    await context.Response.WriteAsync(": connected\n\n", cancellationToken);
+    await context.Response.Body.FlushAsync(cancellationToken);
+
+    var profileId = context.Request.Query["profileId"].ToString();
+    var reader = broadcaster.Connect(string.IsNullOrEmpty(profileId) ? null : profileId, out var clientId);
     try
     {
         await foreach (var envelope in reader.ReadAllAsync(cancellationToken))
@@ -227,4 +271,6 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
     services.AddHostedService(sp => sp.GetRequiredService<TAgent>());
 }
 
-internal sealed record PerceiveRequest(string Text);
+internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
+
+internal sealed record CreateProfileRequest(string DisplayName, string Avatar);

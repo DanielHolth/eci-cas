@@ -6,8 +6,9 @@ what exists. This document owns everything else: what's next, what's
 parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
-**Next up:** multi-user profiles, iteration 1 — see below. Nothing else
-is outstanding against the Python prototype's business logic; everything
+**Next up:** profile-scoped archive storage, the one piece of multi-user
+profiles iteration 1 still outstanding — see below. Nothing else is
+outstanding against the Python prototype's business logic; everything
 else here is parked, further out, or a record of what's already built.
 
 ## Long-term goals
@@ -60,14 +61,21 @@ diary-aware knowledge archiving
 Profiles and auth are Morrow-ECI surface features; diary is a
 Recall-agent feature that can be prototyped independently.
 
-## Multi-user profiles, iteration 1 — planned
+## Multi-user profiles, iteration 1 — mostly shipped
 
 One device, several people — each with their own avatar, their own
 personal facts, and their own emotional relationship with the persona.
 Shared world knowledge stays shared. Named users to date: Daniel and his
 son.
 
-### Storage
+**Status: the surface, the registry and per-profile Impulse are
+implemented; profile-scoped archive storage is not.** What that means in
+practice: several people can use the device, each with their own avatar,
+their own window, and their own emotional relationship with the persona —
+but the facts they teach it still all land in the shared archive. The
+storage section below is the remaining work.
+
+### Storage — not yet built
 
 Personal knowledge is scoped by *directory*, not by filename or a new
 column:
@@ -83,9 +91,12 @@ Writes go to the profile directory unless the category is on a shared
 allowlist. This keeps `ParquetArchiveStore`'s defining property — the
 file name *is* the index — intact inside each directory, and needs no
 schema change and no rewrite of existing files. Today's flat `archive/`
-becomes the shared tier unchanged; no migration.
+becomes the shared tier unchanged; no migration. `ProfileStore` already
+creates and owns `archive/profiles/{id}/`, so the directories the
+personal pairs belong in exist; what's missing is Recall and Consolidator
+reading and writing through a profile-scoped view of `IArchiveStore`.
 
-### Impulse is per profile
+### Impulse is per profile — shipped
 
 Drive state is per profile, not per device. The persona holds a separate
 emotional relationship with each person: what warms it toward one child
@@ -99,9 +110,20 @@ read the same path and must be keyed the same way — Reflection's
 slow-coloring pass then drifts each profile's drive state independently,
 from that profile's turns only. Absent a profile, the path falls back to
 today's `impulse/drive`, so single-user runs and existing state keep
-working.
+working. Governance carries the profile onto its frustration signal for
+the same reason, taking it off the bundled perception, since `Derive()`
+replaces meta rather than inheriting it.
 
-### Frontend requirements
+**One part is still device-wide: Reflection's slow colouring.** Reflection
+scores a whole batch of concluded turns in a single substrate call, and
+that batch can span profiles, so the mood it reports colours whatever
+profile the control envelope names — nobody, today. Splitting it means
+grouping the buffer by profile and paying one substrate call per profile
+per flush, which is a Reflection-side change with a real cost attached and
+is deliberately not in iteration 1. The instant nudges — the ones a person
+actually feels within a turn — are per profile.
+
+### Frontend requirements — shipped
 
 **R1 · Profile registry.** `GET /api/profiles` returns
 `[{ id, displayName, avatar }]`; `POST /api/profiles` creates one.
@@ -126,6 +148,15 @@ colour; avatar choice must not touch that mapping.
 **R5 · Creation flow.** Name and avatar, two fields, no auth. Voice and
 camera detection stay out of this iteration — the profile field on meta
 is the seam they plug into later.
+
+Two things surfaced while building these. Switching profiles is a
+*remount*, not a state reset: `Conversation` is keyed by profile id, so a
+person's accumulated turns go with the component instead of being cleared
+in place. And `/api/stream` now writes an SSE comment immediately on
+connect — browsers hold `onopen` until the first body byte, and a
+profile-scoped client can wait a long time for its first real envelope,
+long enough to sit there reading "Disconnected" while perfectly
+connected.
 
 ### Out of scope for iteration 1
 

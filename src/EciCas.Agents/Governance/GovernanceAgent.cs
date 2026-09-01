@@ -3,6 +3,7 @@ using System.Text.Json;
 using EciCas.Agents.Consolidator;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
+using EciCas.Agents.Perception;
 using EciCas.Agents.Security;
 using EciCas.Bus;
 using EciCas.Core;
@@ -215,7 +216,11 @@ public sealed class GovernanceAgent : AgentBase
             .With(SecurityAgent.VerdictKey, value);
         if (value == Verdict.Red)
         {
-            actionMeta = await AppendFrustrationAsync(verdict, actionMeta, cancellationToken).ConfigureAwait(false);
+            // The verdict envelope carries no profile — Derive() replaces
+            // meta rather than inheriting it — so it comes off the bundled
+            // perception, which is the only envelope that ever held it.
+            var profileId = state.Perception?.Meta.Get<string>(PerceptionAgent.ProfileKey);
+            actionMeta = await AppendFrustrationAsync(verdict, actionMeta, profileId, cancellationToken).ConfigureAwait(false);
         }
 
         var action = verdict.Derive(Topics.Action, Name, verdict.Severity, actionMeta);
@@ -250,16 +255,21 @@ public sealed class GovernanceAgent : AgentBase
     /// resulting expression to the blocked Action/Conclusion, and write a
     /// durable cold-storage record so the alert is queryable later.
     /// </summary>
-    private async Task<MetaBag> AppendFrustrationAsync(Envelope verdict, MetaBag meta, CancellationToken cancellationToken)
+    private async Task<MetaBag> AppendFrustrationAsync(Envelope verdict, MetaBag meta, string? profileId, CancellationToken cancellationToken)
     {
-        var records = await _store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
+        var records = await _store.LookupAsync([ImpulseAgent.DrivePathFor(profileId)], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
         var vectors = records.Count > 0
             ? JsonSerializer.Deserialize<DriveVectors>(records[0].Content) ?? new DriveVectors()
             : new DriveVectors();
         var expression = vectors.Expression();
 
-        var control = Envelope.Create(Topics.SystemControl, Name, Severity.Elevated,
-            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, FrustrationKind));
+        var controlMeta = MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, FrustrationKind);
+        if (!string.IsNullOrEmpty(profileId))
+        {
+            controlMeta = controlMeta.With(PerceptionAgent.ProfileKey, profileId);
+        }
+
+        var control = Envelope.Create(Topics.SystemControl, Name, Severity.Elevated, controlMeta);
         _bus.Publish(Topics.SystemControl, control);
 
         var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey) ?? "blocked";
