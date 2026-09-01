@@ -102,6 +102,17 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             return;
         }
 
+        // A whole index that already fits under the cap makes the selection
+        // call pure overhead: the best it could return is a subset of what
+        // passing everything gives Recall, and Recall filters row by row
+        // anyway. Dropping it removes one of the turn's three serial
+        // substrate calls outright — which is every turn on a young archive.
+        if (index.Count <= _options.MaxSelectedPairs)
+        {
+            Publish(envelope, string.Empty, index, diagnostics: null, degraded: null);
+            return;
+        }
+
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
         var prompt = BuildSelectionPrompt(text, index);
 

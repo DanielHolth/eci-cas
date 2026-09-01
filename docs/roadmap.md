@@ -262,6 +262,18 @@ starts, but a `Tier` pointing at live providers never verifies anything
 about them. The most strictly validated config is the one that silently
 degrades at runtime.
 
+### Skipping the selection call — shipped
+
+A turn costs three serial substrate calls: Reasoning selects pairs,
+Recall picks rows, Intent writes the reply. The first one is pure
+overhead whenever the whole index already fits under
+`ReasoningOptions.MaxSelectedPairs` — the best a selector can do with
+three pairs and a cap of three is return all three, and Recall filters
+row by row afterwards regardless. Reasoning now short-circuits there and
+publishes the index whole, which removes a full round-trip from every
+turn on a young archive, i.e. every turn until the archive outgrows the
+cap. No new knob: the rule falls out of the cap that already exists.
+
 ## Memory architecture — vectors, episodes, and the capsule (design, not started)
 
 Everything below came out of one long design conversation and none of it
