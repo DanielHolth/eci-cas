@@ -152,10 +152,18 @@ Two details worth fixing early:
   not colour Impulse per event, or a broken device rewrites the
   relationship overnight. The trip itself is worth feeling; the thousand
   events behind it are not.
-- **Recovery has to exist.** A block that only clears on restart turns a
-  momentary glitch into a permanently deaf sensor. Default to decaying
-  after a quiet window, with the persona saying when it starts listening
-  again.
+- **Recovery is an open question, not a decided default.** Automatic
+  decay is wrong when the device is genuinely broken: it resumes,
+  re-floods, re-trips, and the cycle hides a fault that needs a person
+  with a screwdriver. Manual-only is wrong for the accessibility case:
+  someone who cannot reach or reset the device loses a sensor
+  permanently to what may have been a thirty-second blip. The shape that
+  escapes both is neither — the persona *raises* it after a quiet
+  window (*the hallway sensor has been quiet a while, want me to listen
+  to it again?*) and stays blocked until a person answers. A real fault
+  can't silently re-flood, and nobody has to remember the block, because
+  the persona carries it. Mechanically that is the drive-gated push
+  Reflection already does, not new machinery.
 
 Open questions beyond that: whether the toolbox is one agent with a tool
 registry or one agent per protocol; which integration surface it speaks
