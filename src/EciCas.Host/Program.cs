@@ -114,13 +114,14 @@ var archiveDirectory = Path.Combine(AppContext.BaseDirectory, builder.Configurat
 // One record, not a migration: the archive that isn't there yet starts as
 // the persona knowing its own name, and everything else is learned.
 var seedNeeded = !File.Exists(ParquetArchiveStore.PairPathFor(archiveDirectory, new ArchivePair("system", "identity")));
-var archiveStore = new ParquetArchiveStore(archiveDirectory);
+var archiveStore = new ParquetArchiveStore(archiveDirectory,
+    builder.Configuration.GetSection("Archive:SharedCategories").Get<string[]>());
 if (seedNeeded)
 {
     var seedRecord = new ArchiveRecord(
         Category: "system", Topic: "identity", Subtopic: "persona", Subject: "this", Key: "name", Value: "morrow",
         Timestamp: DateTimeOffset.UtcNow, Domain: ArchiveDomain.External, Importance: 0.5);
-    await archiveStore.WriteAsync([seedRecord], CancellationToken.None);
+    await archiveStore.WriteAsync([seedRecord], profileId: null, CancellationToken.None);
 }
 
 builder.Services.AddSingleton<IArchiveStore>(archiveStore);

@@ -77,7 +77,8 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
         // Phase one: read every selected pair at once. Distinct pairs are
         // distinct files, so these don't contend with each other.
-        var loaded = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, cancellationToken))).ConfigureAwait(false);
+        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
+        var loaded = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
 
         // Phase two: one flat set of workers over every chunk of every pair.
         var chunks = Chunks(loaded);

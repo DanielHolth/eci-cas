@@ -174,7 +174,9 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 FixedCategory, FixedTopic, candidate.Subtopic, FixedSubject, FixedKey, PromptCap.Apply(candidate.Idea),
                 now, ArchiveDomain.Internal, candidate == best && shouldPush ? PushedImportance : QuietImportance))
             .ToList();
-        await _store.WriteAsync(internalRecords, cancellationToken).ConfigureAwait(false);
+        // profileId null: Reflection's own ideas belong to the persona, not
+        // to whoever happened to be talking when it had them.
+        await _store.WriteAsync(internalRecords, profileId: null, cancellationToken).ConfigureAwait(false);
 
         if (shouldPush)
         {

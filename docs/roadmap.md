@@ -6,11 +6,10 @@ what exists. This document owns everything else: what's next, what's
 parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
-**Next up:** the degraded-substrate notice (a partial thought currently
-reads as a confident one), and profile-scoped archive storage, the one
-piece of multi-user profiles iteration 1 still outstanding. Nothing else is
-outstanding against the Python prototype's business logic; everything
-else here is parked, further out, or a record of what's already built.
+**Next up:** the degraded-substrate notice — a partial thought currently
+reads as a confident one. Nothing else is outstanding against the Python
+prototype's business logic; everything else here is parked, further out,
+or a record of what's already built.
 
 ## Long-term goals
 
@@ -553,21 +552,18 @@ deliberately rather than drifting, and much easier to rule in or out now
 than after twenty years of rows. Profile-scoped storage is the hinge it
 turns on.
 
-## Multi-user profiles, iteration 1 — mostly shipped
+## Multi-user profiles, iteration 1 — shipped
 
 One device, several people — each with their own avatar, their own
 personal facts, and their own emotional relationship with the persona.
 Shared world knowledge stays shared. Named users to date: Daniel and his
 son.
 
-**Status: the surface, the registry and per-profile Impulse are
-implemented; profile-scoped archive storage is not.** What that means in
-practice: several people can use the device, each with their own avatar,
-their own window, and their own emotional relationship with the persona —
-but the facts they teach it still all land in the shared archive. The
-storage section below is the remaining work.
+**Status: shipped.** Several people can use the device, each with their
+own avatar, their own window, their own emotional relationship with the
+persona, and their own personal facts.
 
-### Storage — not yet built
+### Storage — shipped
 
 Personal knowledge is scoped by *directory*, not by filename or a new
 column:
@@ -583,10 +579,23 @@ Writes go to the profile directory unless the category is on a shared
 allowlist. This keeps `ParquetArchiveStore`'s defining property — the
 file name *is* the index — intact inside each directory, and needs no
 schema change and no rewrite of existing files. Today's flat `archive/`
-becomes the shared tier unchanged; no migration. `ProfileStore` already
-creates and owns `archive/profiles/{id}/`, so the directories the
-personal pairs belong in exist; what's missing is Recall and Consolidator
-reading and writing through a profile-scoped view of `IArchiveStore`.
+becomes the shared tier unchanged; no migration.
+
+The profile is a *parameter* on `IArchiveStore` — `IndexFor(profileId)`,
+`LookupAsync(pair, profileId, ct)`, `WriteAsync(records, profileId, ct)` —
+rather than a scoped view or a store factory. One singleton, no new
+abstraction, and the store keeps the one decision that is genuinely its
+own: which tier a given category belongs in. `null` means the shared tier
+alone, which is exactly the pre-profile behaviour, so the console loop and
+Reflection's own ideas need no special case.
+
+The allowlist is `Archive:SharedCategories`, defaulting to `system` and
+`self` — the persona's identity and its own reflections belong to nobody
+on a shared device. Two wiring details the meta flow forced: Reasoning
+carries the profile forward onto `events.selected-pairs` (`Envelope.Derive`
+starts a fresh meta, so Recall would otherwise read the wrong tier), and
+Consolidator keeps the profile per *pending record* rather than per flush,
+since a batch spans turns and speakers.
 
 ### Impulse is per profile — shipped
 

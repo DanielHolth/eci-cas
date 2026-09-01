@@ -71,8 +71,8 @@ edit.
 ## Storage: a library, not an agent
 
 `IArchiveStore` owns the archive files, schema, and all concurrency,
-including per-pair lookups (`LookupAsync(pair)`). Nothing outside it touches
-a file directly.
+including per-pair lookups (`LookupAsync(pair, profileId)`). Nothing outside
+it touches a file directly.
 
 **One file per `(Category, Topic)` pair, and the file name is the index.**
 Files are named `{esc(category)}~{esc(topic)}.parquet`, so the set of known
@@ -94,6 +94,20 @@ Recall's parallel workers touch disjoint pair files and never queue behind
 each other, and a Consolidator or Reflection write only blocks readers of the
 one pair it touches — so the two slow agents can take as long as they need
 without sitting on the next turn's critical path.
+
+**Personal knowledge is scoped by directory.** `archive/` is the shared
+tier and `archive/profiles/{id}/` is one person's own, under exactly the
+same naming convention — so "the name is the index" holds unchanged inside
+each directory, and today's flat archive simply *becomes* the shared tier
+with no schema change and no migration. Every member of `IArchiveStore`
+takes the profile whose turn it is: reads union the two tiers with the
+profile winning on a `subtopic/subject/key` collision, and writes land in
+the profile's directory unless the category is on the operator's
+`Archive:SharedCategories` allowlist (`system` and `self` by default — the
+persona's identity and its own reflections belong to nobody in particular).
+`null` addresses the shared tier alone, which is the pre-profile behaviour
+exactly, so the console loop and Reflection's own writes need no special
+case.
 
 Records are addressed by a five-part LLM-extracted schema —
 `category/topic/subtopic/subject/key=value` (`ArchiveRecord`, `ArchivePair`)

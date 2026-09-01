@@ -45,7 +45,7 @@ public class ConsolidatorAgentTests
         Assert.True(control.TryRead(out var written));
         Assert.Equal(ConsolidatorAgent.WrittenKind, written!.Meta.Get<string>(ConsolidatorAgent.ControlKindKey));
 
-        var records = await store.LookupAsync(new ArchivePair("person", "family"), CancellationToken.None);
+        var records = await store.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None);
         Assert.Equal(2, records.Count);
         Assert.All(records, r => Assert.Equal("2020-08-28", r.Value));
     }
@@ -67,7 +67,7 @@ public class ConsolidatorAgentTests
         await agent.HandleAsync(bundle, CancellationToken.None);
 
         Assert.False(control.TryRead(out _));
-        Assert.Empty(store.Index);
+        Assert.Empty(store.IndexFor(null));
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class ConsolidatorAgentTests
             MetaBag.Empty.With(PerceptionAgent.TextKey, "our son's birthday was yesterday"));
         await agent.HandleAsync(bundle, CancellationToken.None);
 
-        var records = await store.LookupAsync(new ArchivePair("person", "family"), CancellationToken.None);
+        var records = await store.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None);
         Assert.Single(records);
         Assert.Equal("marcus holth", records[0].Subject);
         Assert.Equal(0.6, records[0].Importance);
@@ -108,7 +108,7 @@ public class ConsolidatorAgentTests
         await agent.HandleAsync(bundle, CancellationToken.None);
 
         Assert.False(control.TryRead(out _));
-        Assert.Empty(store.Index);
+        Assert.Empty(store.IndexFor(null));
     }
 
     [Fact]
@@ -131,6 +131,32 @@ public class ConsolidatorAgentTests
 
         Assert.False(control.TryRead(out _));
         Assert.False(called);
-        Assert.Empty(store.Index);
+        Assert.Empty(store.IndexFor(null));
+    }
+
+    /// <summary>
+    /// A batch can span turns and speakers, so the profile has to be kept per
+    /// record rather than read off whichever envelope happens to trigger the
+    /// flush.
+    /// </summary>
+    [Fact]
+    public async Task BatchedFactsKeepTheProfileThatStatedThem()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
+
+        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 2 }));
+
+        foreach (var profileId in new[] { "daniel", "ada" })
+        {
+            await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+                MetaBag.Empty.With(PerceptionAgent.TextKey, "a turn").With(PerceptionAgent.ProfileKey, profileId)),
+                CancellationToken.None);
+        }
+
+        Assert.Equal(["ada", "daniel"], store.Scoped.Select(r => r.ProfileId).Order());
     }
 }

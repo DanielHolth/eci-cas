@@ -75,10 +75,10 @@ public class ReflectionAgentTests
         Assert.True(control.TryRead(out var reflected));
         Assert.Equal(ReflectionAgent.ReflectedKind, reflected!.Meta.Get<string>(EciCas.Agents.Consolidator.ConsolidatorAgent.ControlKindKey));
 
-        var pushed = await store.LookupAsync(new ArchivePair("self", "reflection"), CancellationToken.None);
+        var pushed = await store.LookupAsync(new ArchivePair("self", "reflection"), null, CancellationToken.None);
         Assert.Contains(pushed, r => r.Value == "whether the trip dates still work" && r.Importance == 0.2);
 
-        var quiet = await store.LookupAsync(new ArchivePair("self", "reflection"), CancellationToken.None);
+        var quiet = await store.LookupAsync(new ArchivePair("self", "reflection"), null, CancellationToken.None);
         Assert.Contains(quiet, r => r.Value == "a minor follow-up thought" && r.Domain == ArchiveDomain.Internal && r.Importance == 0.1);
     }
 
@@ -100,7 +100,7 @@ public class ReflectionAgentTests
 
         Assert.False(perceptions.TryRead(out _));
 
-        var records = await store.LookupAsync(new ArchivePair("self", "reflection"), CancellationToken.None);
+        var records = await store.LookupAsync(new ArchivePair("self", "reflection"), null, CancellationToken.None);
         Assert.Contains(records, r => r.Value == "a compelling idea" && r.Domain == ArchiveDomain.Internal && r.Importance == 0.1);
     }
 
@@ -140,7 +140,7 @@ public class ReflectionAgentTests
 
         Assert.False(perceptions.TryRead(out _));
         Assert.False(control.TryRead(out _));
-        Assert.Empty(store.Index);
+        Assert.Empty(store.IndexFor(null));
     }
 
     [Fact]

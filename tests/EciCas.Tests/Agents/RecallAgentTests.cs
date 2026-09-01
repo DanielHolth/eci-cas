@@ -30,7 +30,7 @@ public class RecallAgentTests
         var advisories = bus.Subscribe(Topics.Advisories);
         var store = new InMemoryArchiveStore();
         var pair = new ArchivePair("person", "family");
-        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], null, CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
         var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
@@ -89,7 +89,7 @@ public class RecallAgentTests
         await store.WriteAsync([
             new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow),
             new ArchiveRecord("event", "wedding", "family", "maria holth", "location", "drammen kirke", DateTimeOffset.UtcNow),
-        ], CancellationToken.None);
+        ], null, CancellationToken.None);
 
         var substrate = new StubSubstrate(prompt => prompt.Contains("drammen", StringComparison.OrdinalIgnoreCase)
             ? Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m))
@@ -118,7 +118,7 @@ public class RecallAgentTests
         var bus = new ChannelBus(activity);
         bus.Subscribe(Topics.Advisories);
         var store = new InMemoryArchiveStore();
-        await store.WriteAsync([.. Enumerable.Range(0, 25).Select(i => Row("science", "thermodynamics", i))], CancellationToken.None);
+        await store.WriteAsync([.. Enumerable.Range(0, 25).Select(i => Row("science", "thermodynamics", i))], null, CancellationToken.None);
 
         var prompts = new List<string>();
         var substrate = new StubSubstrate(prompt =>
@@ -145,7 +145,7 @@ public class RecallAgentTests
         var bus = new ChannelBus(activity);
         bus.Subscribe(Topics.Advisories);
         var store = new InMemoryArchiveStore();
-        await store.WriteAsync([.. Enumerable.Range(0, 100).Select(i => Row("science", "thermodynamics", i))], CancellationToken.None);
+        await store.WriteAsync([.. Enumerable.Range(0, 100).Select(i => Row("science", "thermodynamics", i))], null, CancellationToken.None);
 
         var calls = 0;
         var substrate = new StubSubstrate(_ =>
@@ -173,8 +173,8 @@ public class RecallAgentTests
         var bus = new ChannelBus(activity);
         bus.Subscribe(Topics.Advisories);
         var store = new InMemoryArchiveStore();
-        await store.WriteAsync([.. Enumerable.Range(0, 50).Select(i => Row("science", "thermodynamics", i))], CancellationToken.None);
-        await store.WriteAsync([Row("person", "family", 999)], CancellationToken.None);
+        await store.WriteAsync([.. Enumerable.Range(0, 50).Select(i => Row("science", "thermodynamics", i))], null, CancellationToken.None);
+        await store.WriteAsync([Row("person", "family", 999)], null, CancellationToken.None);
 
         var prompts = new List<string>();
         var substrate = new StubSubstrate(prompt =>
@@ -199,7 +199,7 @@ public class RecallAgentTests
         var bus = new ChannelBus(activity);
         bus.Subscribe(Topics.Advisories);
         var store = new InMemoryArchiveStore();
-        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], null, CancellationToken.None);
 
         var seen = string.Empty;
         var substrate = new StubSubstrate(prompt => { seen = prompt; return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m)); });

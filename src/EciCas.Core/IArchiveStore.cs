@@ -10,22 +10,31 @@ namespace EciCas.Core;
 /// up by. That keeps a deeply-discussed subtopic from needing its own index
 /// entry, and lets Recall slice one pair across as many parallel workers as
 /// its row count warrants.
+///
+/// Every member takes the profile whose turn this is — the opaque id
+/// PerceptionAgent.ProfileKey carries — because personal knowledge is
+/// scoped per person while world knowledge is shared. Null means no profile
+/// (the console loop, Reflection's own ideas) and addresses the shared tier
+/// alone, which is exactly the single-user behaviour that predates profiles.
 /// </summary>
 public interface IArchiveStore
 {
-    /// <summary>Distinct (Category, Topic) pairs currently indexed, for Reasoning's selection prompt.</summary>
-    IReadOnlyList<ArchivePair> Index { get; }
+    /// <summary>Distinct (Category, Topic) pairs visible to this profile — shared plus its own — for Reasoning's selection prompt.</summary>
+    IReadOnlyList<ArchivePair> IndexFor(string? profileId);
 
     /// <summary>
-    /// Every row under this pair, in a stable Importance-descending order.
+    /// Every row under this pair, in a stable Importance-descending order,
+    /// unioned across the shared tier and this profile's own — the profile
+    /// winning where both hold the same subtopic/subject/key.
     /// Deliberately uncapped: a subtopic discussed at great length must not
     /// be truncated away. Recall reads a pair exactly once and chunks the
     /// result across its workers in memory, so a deep pair costs one file
     /// read no matter how many substrate calls it fans out into.
     /// </summary>
-    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, string? profileId, CancellationToken cancellationToken);
 
-    Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken);
+    /// <summary>Writes to this profile's own tier, except for categories the store treats as shared.</summary>
+    Task WriteAsync(IReadOnlyList<ArchiveRecord> records, string? profileId, CancellationToken cancellationToken);
 }
 
 public sealed record ArchivePair(string Category, string Topic);

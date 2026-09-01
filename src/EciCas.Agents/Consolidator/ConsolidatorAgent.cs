@@ -40,7 +40,9 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly ConsolidatorOptions _options;
     private readonly ILogger _logger;
-    private readonly List<ArchiveRecord> _pending = [];
+    // Pending facts carry the profile that stated them: a batch can span
+    // turns, and by the time it flushes the speaker is long gone from scope.
+    private readonly List<(string? ProfileId, ArchiveRecord Record)> _pending = [];
     private readonly object _pendingLock = new();
     private int _bundlesSinceFlush;
 
@@ -100,10 +102,11 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         // accumulated facts could leave a single just-stated fact (e.g. a
         // name) sitting invisible in memory for many turns, or lost entirely
         // on restart, waiting for enough *other* facts to come along.
-        List<ArchiveRecord>? batch = null;
+        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
+        List<(string? ProfileId, ArchiveRecord Record)>? batch = null;
         lock (_pendingLock)
         {
-            _pending.AddRange(newRecords);
+            _pending.AddRange(newRecords.Select(r => (profileId, r)));
             _bundlesSinceFlush++;
             if (_bundlesSinceFlush >= _options.BatchSize && _pending.Count > 0)
             {
@@ -118,9 +121,14 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             return;
         }
 
-        await _store.WriteAsync(batch, cancellationToken).ConfigureAwait(false);
+        // One write per profile in the batch — the store decides per record
+        // whether the fact lands in that profile's tier or the shared one.
+        await Task.WhenAll(batch
+            .GroupBy(p => p.ProfileId)
+            .Select(g => _store.WriteAsync([.. g.Select(p => p.Record)], g.Key, cancellationToken)))
+            .ConfigureAwait(false);
         _logger.LogInformation("{Agent} wrote {Count} records: {Paths}",
-            Name, batch.Count, string.Join(", ", batch.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}")));
+            Name, batch.Count, string.Join(", ", batch.Select(p => $"{p.Record.Category}/{p.Record.Topic}/{p.Record.Subtopic}")));
 
         var epochId = Guid.NewGuid();
         var written = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,

@@ -25,7 +25,7 @@ public class ReasoningAgentTests
         var bus = new ChannelBus(activity);
         var selections = bus.Subscribe(Topics.SelectedPairs);
         var store = new InMemoryArchiveStore();
-        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], null, CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
@@ -69,7 +69,7 @@ public class ReasoningAgentTests
         var bus = new ChannelBus(activity);
         var selections = bus.Subscribe(Topics.SelectedPairs);
         var store = new InMemoryArchiveStore();
-        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], null, CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,

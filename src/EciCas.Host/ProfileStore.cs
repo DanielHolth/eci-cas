@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EciCas.Agents.Recall;
 
 namespace EciCas.Host;
 
@@ -22,7 +23,6 @@ public sealed record Profile(string Id, string DisplayName, string Avatar, DateT
 /// </summary>
 public sealed class ProfileStore
 {
-    private const string ProfilesDirectoryName = "profiles";
     private const string ProfileFileName = "profile.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -31,14 +31,20 @@ public sealed class ProfileStore
         WriteIndented = true,
     };
 
+    private readonly string _archiveDirectory;
     private readonly string _root;
     private readonly object _writeLock = new();
 
-    public ProfileStore(string archiveDirectory) =>
-        _root = Path.Combine(archiveDirectory, ProfilesDirectoryName);
+    public ProfileStore(string archiveDirectory)
+    {
+        _archiveDirectory = archiveDirectory;
+        _root = Path.Combine(archiveDirectory, ParquetArchiveStore.ProfilesDirectoryName);
+    }
 
     /// <summary>Directory holding one profile's personal Parquet pairs and its profile.json.</summary>
-    public string DirectoryFor(string profileId) => Path.Combine(_root, profileId);
+    // Delegated, not restated: the archive store owns where a profile's
+    // directory is, and this must land on exactly the same one.
+    public string DirectoryFor(string profileId) => ParquetArchiveStore.ProfileDirectoryFor(_archiveDirectory, profileId);
 
     public IReadOnlyList<Profile> List()
     {

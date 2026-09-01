@@ -12,12 +12,21 @@ using EciCas.Core;
 /// {esc(category)}~{esc(topic)}.parquet and created lazily on first write.
 ///
 /// The file name *is* the index. There is no index.parquet: the set of
-/// pairs is recovered by listing the directory at construction and decoding
-/// the names, so a write never rewrites a companion index file, and the
-/// index can never drift from the data (nothing left to rebuild). One file
-/// per pair also means Recall's parallel workers touch disjoint files, so
-/// the per-file lock below is almost never contended and a Consolidator
-/// write only ever blocks readers of the one pair it touches.
+/// pairs is recovered by listing the directory and decoding the names, so a
+/// write never rewrites a companion index file, and the index can never
+/// drift from the data (nothing left to rebuild). One file per pair also
+/// means Recall's parallel workers touch disjoint files, so the per-file
+/// lock below is almost never contended and a Consolidator write only ever
+/// blocks readers of the one pair it touches.
+///
+/// Personal knowledge is scoped by *directory*, not by a filename or a new
+/// column: the archive root holds shared pairs, and profiles/{id}/ holds one
+/// person's own, under exactly the same naming convention. So "the name is
+/// the index" holds inside each directory unchanged, and today's flat
+/// archive simply becomes the shared tier — no schema change, no migration,
+/// no rewrite of existing files. Reads union the two tiers with the profile
+/// winning; writes land in the profile's directory unless the fact's
+/// category is one the operator declared shared.
 ///
 /// Names are percent-escaped down to [A-Za-z0-9._-] so an LLM-written topic
 /// containing a slash, colon or space can't produce an illegal or ambiguous
@@ -34,6 +43,16 @@ using EciCas.Core;
 public sealed class ParquetArchiveStore : IArchiveStore
 {
     private const char Separator = '~';
+
+    public const string ProfilesDirectoryName = "profiles";
+
+    /// <summary>
+    /// Categories that stay in the shared tier however personal the turn
+    /// was. Defaults to the two the persona itself owns: "system" is its
+    /// identity, "self" is what Reflection thinks — neither belongs to any
+    /// one person on a shared device.
+    /// </summary>
+    public static readonly string[] DefaultSharedCategories = ["system", "self"];
 
     private sealed class RecordRow
     {
@@ -65,67 +84,73 @@ public sealed class ParquetArchiveStore : IArchiveStore
     }
 
     private readonly string _directory;
+    private readonly HashSet<string> _sharedCategories;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _indexLock = new();
-    private readonly HashSet<ArchivePair> _index;
+    private readonly Dictionary<string, HashSet<ArchivePair>> _indexes = new(StringComparer.OrdinalIgnoreCase);
 
-    public ParquetArchiveStore(string directory)
+    public ParquetArchiveStore(string directory, IEnumerable<string>? sharedCategories = null)
     {
         _directory = directory;
+        _sharedCategories = new HashSet<string>(sharedCategories ?? DefaultSharedCategories, StringComparer.OrdinalIgnoreCase);
         Directory.CreateDirectory(_directory);
-        _index = new HashSet<ArchivePair>(PairsIn(_directory), PairComparer.Instance);
     }
 
-    public IReadOnlyList<ArchivePair> Index
+    public IReadOnlyList<ArchivePair> IndexFor(string? profileId)
     {
-        get { lock (_indexLock) { return [.. _index]; } }
-    }
-
-    public async Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, CancellationToken cancellationToken)
-    {
-        var path = PairPath(pair);
-        var gate = LockFor(path);
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        List<ArchiveRecord> records;
-        try
+        lock (_indexLock)
         {
-            records = await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
+            var shared = IndexIn(_directory);
+            return profileId is null
+                ? [.. shared]
+                : [.. shared.Union(IndexIn(ProfileDirectoryFor(_directory, profileId)), PairComparer.Instance)];
         }
-        finally
+    }
+
+    public async Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, string? profileId, CancellationToken cancellationToken)
+    {
+        var shared = await ReadPairAsync(_directory, pair, cancellationToken).ConfigureAwait(false);
+        if (profileId is null)
         {
-            gate.Release();
+            return Ordered(shared);
         }
 
-        return Ordered(records);
+        var personal = await ReadPairAsync(ProfileDirectoryFor(_directory, profileId), pair, cancellationToken).ConfigureAwait(false);
+        if (personal.Count == 0)
+        {
+            return Ordered(shared);
+        }
+
+        // The profile wins on collision: a shared row and a personal one at
+        // the same address are the same question answered twice, and the
+        // answer belonging to the person asking is the right one.
+        var claimed = personal.Select(RowKey).ToHashSet();
+        return Ordered(personal.Concat(shared.Where(r => !claimed.Contains(RowKey(r)))));
     }
 
-    public async Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken)
+    public async Task WriteAsync(IReadOnlyList<ArchiveRecord> records, string? profileId, CancellationToken cancellationToken)
     {
         if (records.Count == 0)
         {
             return;
         }
 
-        // Grouped by pair and written in parallel: two facts landing in
-        // different pairs have no reason to queue behind each other, and a
-        // reader of a third pair has no reason to wait for either.
+        // Grouped by directory, then by pair, and written in parallel: two
+        // facts landing in different pairs have no reason to queue behind
+        // each other, and a reader of a third pair has no reason to wait for
+        // either.
         var writes = records
-            .GroupBy(r => r.Pair, PairComparer.Instance)
-            .Select(group => AppendAsync(group.Key, [.. group], cancellationToken));
+            .GroupBy(r => DirectoryFor(r.Category, profileId), StringComparer.OrdinalIgnoreCase)
+            .SelectMany(byDirectory => byDirectory
+                .GroupBy(r => r.Pair, PairComparer.Instance)
+                .Select(byPair => AppendAsync(byDirectory.Key, byPair.Key, [.. byPair], cancellationToken)));
         await Task.WhenAll(writes).ConfigureAwait(false);
-
-        lock (_indexLock)
-        {
-            foreach (var record in records)
-            {
-                _index.Add(record.Pair);
-            }
-        }
     }
 
-    private async Task AppendAsync(ArchivePair pair, List<ArchiveRecord> newRecords, CancellationToken cancellationToken)
+    private async Task AppendAsync(string directory, ArchivePair pair, List<ArchiveRecord> newRecords, CancellationToken cancellationToken)
     {
-        var path = PairPath(pair);
+        Directory.CreateDirectory(directory);
+        var path = PairPathFor(directory, pair);
         var gate = LockFor(path);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -138,11 +163,51 @@ public sealed class ParquetArchiveStore : IArchiveStore
         {
             gate.Release();
         }
+
+        lock (_indexLock)
+        {
+            IndexIn(directory).Add(pair);
+        }
     }
 
-    private SemaphoreSlim LockFor(string path) => _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+    private async Task<List<ArchiveRecord>> ReadPairAsync(string directory, ArchivePair pair, CancellationToken cancellationToken)
+    {
+        var path = PairPathFor(directory, pair);
+        var gate = LockFor(path);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await ReadRecordsAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
 
-    private string PairPath(ArchivePair pair) => PairPathFor(_directory, pair);
+    /// <summary>Where a fact belongs: the profile's own tier, unless its category is shared or there is no profile at all.</summary>
+    private string DirectoryFor(string category, string? profileId) =>
+        profileId is null || _sharedCategories.Contains(category)
+            ? _directory
+            : ProfileDirectoryFor(_directory, profileId);
+
+    /// <summary>Decoded once per directory and kept: the file listing IS the index, so it only has to be read the first time that directory is touched.</summary>
+    private HashSet<ArchivePair> IndexIn(string directory)
+    {
+        if (!_indexes.TryGetValue(directory, out var index))
+        {
+            index = new HashSet<ArchivePair>(Directory.Exists(directory) ? PairsIn(directory) : [], PairComparer.Instance);
+            _indexes[directory] = index;
+        }
+
+        return index;
+    }
+
+    /// <summary>What makes two rows in one pair the same fact: the rest of the address, everything the pair itself doesn't carry.</summary>
+    private static (string Subtopic, string Subject, string Key) RowKey(ArchiveRecord record) =>
+        (record.Subtopic.ToLowerInvariant(), record.Subject.ToLowerInvariant(), record.Key.ToLowerInvariant());
+
+    private SemaphoreSlim LockFor(string path) => _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
 
     /// <summary>
     /// Stable order for a pair's rows: Importance first, then fields that
@@ -160,6 +225,15 @@ public sealed class ParquetArchiveStore : IArchiveStore
     /// <summary>Pair file path for a directory, using the same naming convention as instance writes.</summary>
     public static string PairPathFor(string directory, ArchivePair pair) =>
         Path.Combine(directory, $"{Escape(pair.Category)}{Separator}{Escape(pair.Topic)}.parquet");
+
+    /// <summary>
+    /// One person's own tier under an archive root. The id is escaped the
+    /// way a pair name is: profile ids are slugs the escaping leaves
+    /// untouched, so this is a no-op for every legitimate id and a
+    /// containment guard for anything else that reaches here.
+    /// </summary>
+    public static string ProfileDirectoryFor(string archiveDirectory, string profileId) =>
+        Path.Combine(archiveDirectory, ProfilesDirectoryName, Escape(profileId));
 
     /// <summary>Every pair a directory currently holds, decoded from its file names — this is the whole index.</summary>
     public static IReadOnlyList<ArchivePair> PairsIn(string directory)

@@ -72,6 +72,14 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // a question about the human's own name.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var meta = MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text);
+
+        // The profile rides along for the same reason: it decides which
+        // archive tier Recall reads, and Derive would otherwise drop it.
+        if (envelope.Meta.Get<string>(PerceptionAgent.ProfileKey) is { Length: > 0 } profileId)
+        {
+            meta = meta.With(PerceptionAgent.ProfileKey, profileId);
+        }
+
         var selection = envelope.Derive(Topics.SelectedPairs, Name, envelope.Severity, meta);
         _bus.Publish(Topics.SelectedPairs, selection);
     }
@@ -83,7 +91,7 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
-        var index = _store.Index;
+        var index = _store.IndexFor(envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
         if (index.Count == 0)
         {
             Publish(envelope, string.Empty, [], diagnostics: null);
