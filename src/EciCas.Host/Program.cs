@@ -142,9 +142,22 @@ switch (embeddingProvider.ToLowerInvariant())
             sp.GetRequiredService<IOptions<EmbeddingOptions>>(),
             sp.GetRequiredService<ILogger<OpenAiCompatibleEmbeddingProvider>>()));
         break;
-    default:
+    // "api" is docs/architecture.md's spelling of the same thing and is
+    // accepted so the two cannot disagree in silence.
+    case "api":
+        goto case "openai";
+    case "none":
         builder.Services.AddSingleton<IEmbeddingProvider, NullEmbeddingProvider>();
         break;
+    default:
+        // Previously this branch was the default, so a typo turned the whole
+        // passage corpus off without a word: no warning, no error, just a
+        // persona that never remembers a thought and no way to tell that
+        // from "the weights aren't downloaded yet". "none" still means none;
+        // anything else is a mistake and says so.
+        throw new InvalidOperationException(
+            $"Embedding:Provider is \"{embeddingProvider}\". Valid values are \"onnx\" (local weights), " +
+            "\"openai\" (an OpenAI-compatible embeddings endpoint, also spelled \"api\"), and \"none\".");
 }
 
 

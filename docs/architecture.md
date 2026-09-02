@@ -335,10 +335,17 @@ Download a model to `models/embedding/` — any BERT-family ONNX export with
 its `vocab.txt` (e.g. `all-MiniLM-L6-v2`) — and it starts working with no
 code change. Embeddings are mean-pooled over `last_hidden_state` and L2
 normalized at write time, which is what lets cosine similarity be a plain
-dot product. Setting `Embedding:Provider = "api"` borrows the substrate
-registry's named `HttpClient` and calls an OpenAI-compatible `embeddings`
-endpoint instead; a failed call returns no vectors rather than throwing,
-which lands in the same "no embedder" path.
+dot product. Setting `Embedding:Provider = "openai"` (or `"api"`, the same thing)
+borrows the substrate registry's named `HttpClient` and calls an
+OpenAI-compatible `embeddings` endpoint instead; a failed call returns no
+vectors rather than throwing, which lands in the same "no embedder" path.
+`"none"` turns the corpus off deliberately. Any other value is a startup
+error rather than a silent fall back to no embedder — a typo there used to
+be indistinguishable from weights that hadn't been downloaded.
+
+Whichever provider is configured, it stamps its identity on every passage
+it writes and the host refuses to start if the stored corpus disagrees;
+see the roadmap's "The corpus had no model identity".
 
 ## Impulse's Critical reflex
 
