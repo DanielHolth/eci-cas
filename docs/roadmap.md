@@ -1194,12 +1194,20 @@ blocks readers of the one pair it touches.
 Existing archives were deleted rather than migrated, per the single-record
 seed below.
 
-## Audit every substrate prompt
+## Audit every substrate instruction
 
-Instruction text has grown in place, agent by agent, and nobody has read it
-all side by side. Every standing rule is paid for on every turn, on every
-substrate — a rule added once to fix one bad reply then bills forever. Four
-observed symptoms, each tracing back to prompt text rather than to code:
+**The unit under audit is the standing rule, not the assembled prompt.**
+Every prompt in the system is instruction text plus this turn's data — the
+turn itself, the candidate rows, the pair index. The data half is sized by
+config and by what the archive holds. The instruction half is constant: it
+goes out identically on every turn, on every substrate, whatever was said.
+That is what has grown in place, agent by agent, and what nobody has read
+side by side.
+
+The failure mode it invites is specific: a rule added once to fix one bad
+reply then bills forever, and nothing ever revisits whether it still earns
+its place — or whether it is now steering behaviour nobody asked it to.
+Four observed symptoms, all of them instruction text rather than code:
 
 **Intent is theatric.** Suspected causes are the `SystemInstruction`
 framing ("spokesperson on behalf of a collective of emerging agents") and
@@ -1288,6 +1296,42 @@ logged at default level, so the before/after is observable without new
 instrumentation.
 
 [1]: commit 407e5f1 — `refactor(prompts): trim Intent's contract`
+
+### Stale references, found while scoping the above
+
+Not instruction text, but the same decay and cheap to fix in the same
+pass. None of it affects behaviour; all of it misleads a reader. All three
+survived the Archivist/Librarian/Identity rename unchanged.
+
+**`plan §X` points at a document that does not exist.** `docs/` holds
+`architecture.md`, `roadmap.md` and `commute_brainstorm.md` — there is no
+`plan`. Nine dangling cross-references: `GovernanceAgent` (§3.3 and §3.5),
+`ImpulseAgent` (§3.5), `JsonlAgentStateStore` (§3.3), `ReflectionAgent`
+(§3.6), `ReflectionOptions` (§3.6), `Topics` (§1), `Program.cs` (§M5) and
+`RoutingManifest` (§3.3). `Topics.cs` is the worst of them — it defers the
+roster/topic table to a document nobody can open, when `architecture.md`
+documents exactly that. Repoint them there.
+
+**Milestone tags describe shipped work as pending.** `ArchiveLogger`
+("Storage grows Parquet in M4" — it has), `LibrarianAgent` ("Recall (M4)"),
+`ISubstrateProvider` ("Implemented in M2"), `IntentAgent` ("the mock-echo
+placeholder from M1 is gone"), `ImpulseAgent` ("(M3)"), and
+`GovernanceOptions`, which says "empty roster (M1)" when the roster ships
+populated. The tags read as roadmap when they are history; drop them.
+
+**`Archive:Path` is misfiled, not dead.** It resolves to `memory.jsonl`
+and feeds `JsonlAgentStateStore` — Identity's record, Impulse's drive,
+Governance's frustration log. That is the *agent state* store; the archive
+is `Archive:Directory`. Because this document has a section titled
+"`memory.jsonl` retirement," the surviving key under the `Archive:` prefix
+reads like leftovers somebody forgot to delete. `AgentState:Path` would
+say what it is — a rename with a config migration attached, so it is a
+deliberate change rather than a comment fix.
+
+And from *Data quality*, because it belongs to the same sweep:
+`ArchivistAgent`'s class comment still claims extraction is "grounded in
+Recall's own lookup results" when the key it reads is Librarian's selected
+pairs.
 
 ## Security rule coverage — low priority
 
