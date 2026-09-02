@@ -1374,6 +1374,59 @@ outlives the instruction that caused it. So cut Intent and Recall to the
 bone; on Archivist terse is still right, but the cheap recovery is a way
 to re-file rows, not a fatter instruction.
 
+**A validator may reject a row, never edit one.** Strictness for writes
+does not mean a longer instruction; it means the rule is checked instead
+of merely requested. But the check has to protect the archive, and
+`ArchivistAgent` line 259 currently does the opposite: it writes
+`PromptCap.Apply(value)`, truncating every archived value at 240
+characters mid-word with an ellipsis appended. `PromptCap` exists to stop
+one hop's text compounding across generations, which is sound on the way
+*in*. On the way *out* into an append-only store it means a too-long
+value is not rejected, it is stored corrupt, and Recall serves that
+ellipsis back forever. `ReflectionAgent` line 219 does the same to
+candidate ideas.
+
+Dropping a malformed row costs a fact the user can state again.
+Truncating one manufactures a false fact that outlives the instruction
+that caused it. So: remove `PromptCap.Apply` from both write paths.
+Rejection stays available for genuinely malformed output — wrong field
+count, a `key` that is meta-commentary — because a row that never lands
+leaves no residue.
+
+Length is not a rejection rule. It is asked for, in the model's own
+terms:
+
+    TerseValue = "1-5 keywords, or one terse sentence with no filler"
+
+against today's "1-5 content words, no filler — terse style, not a full
+sentence". A deliberate loosening: some facts do not fit keywords, and
+the current text forbids the sentence outright. A rule removed rather
+than an enforcement added, which is the direction of this whole section.
+
+**The rest of Archivist becomes a grammar.** 2065 characters today, and
+`PromptCap` is the only part of it that anything checks. Sorted by
+whether the instruction is telling the model a *format* or coaching it on
+*behaviour*: the six-field line, the per-field word counts, the
+known-pairs list and the three worked examples are format and stay. The
+meta-commentary paragraph, "do not infer, guess, or embellish", "a turn
+with an obvious stated fact must never come back empty", "there being no
+existing match is not a reason to skip the fact", and the duplicated
+empty-case line are all coaching, all anti-symptom patches, and all go.
+The examples carry most of the load and are already machine-shaped.
+
+Roughly what survives:
+
+    Facts stated in this turn, one line each:
+    category=<1w> topic=<1w> subtopic=<1-2w> subject=<1-2w> key=<1-3w> value=<1-5 keywords or one terse sentence>
+    Reuse when it fits: {known}
+    Structural fields in English; names verbatim.
+    category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28
+    Nothing stated: reply nothing.
+
+Around 450 characters. If the extraction gets worse, that is the
+cut-first method working as intended — the symptom is visible in the
+archive on the next turn.
+
 ### Stage 3 — Daniel revises
 
 The point of the preceding stages. Terse, and giving the substrate room
