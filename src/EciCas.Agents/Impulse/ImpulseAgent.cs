@@ -1,5 +1,5 @@
 using System.Text.Json;
-using EciCas.Agents.Consolidator;
+using EciCas.Agents.Archivist;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
@@ -155,7 +155,7 @@ public sealed class ImpulseAgent : AgentBase
     {
         if (envelope.Topic == Topics.SystemControl)
         {
-            var kind = envelope.Meta.Get<string>(ConsolidatorAgent.ControlKindKey);
+            var kind = envelope.Meta.Get<string>(ArchivistAgent.ControlKindKey);
             var signalledProfile = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
             if (kind == GovernanceAgent.FrustrationKind)
             {

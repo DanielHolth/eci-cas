@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using EciCas.Agents.Consolidator;
+using EciCas.Agents.Archivist;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
@@ -24,7 +24,7 @@ public sealed class GovernanceAgent : AgentBase
 
     /// <summary>
     /// system.control kind published on a Red verdict — mirrors
-    /// ConsolidatorAgent.WrittenKind/ReflectionAgent.ReflectedKind's
+    /// ArchivistAgent.WrittenKind/ReflectionAgent.ReflectedKind's
     /// convention. ImpulseAgent listens for this to apply FrustrationNudge,
     /// with no direct reference between the two agents.
     /// </summary>
@@ -352,7 +352,7 @@ public sealed class GovernanceAgent : AgentBase
             : new DriveVectors();
         var expression = vectors.Expression();
 
-        var controlMeta = MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, FrustrationKind);
+        var controlMeta = MetaBag.Empty.With(ArchivistAgent.ControlKindKey, FrustrationKind);
         if (!string.IsNullOrEmpty(profileId))
         {
             controlMeta = controlMeta.With(PerceptionAgent.ProfileKey, profileId);

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ConsolidationEpoch } from "@/types/events";
 
 /**
- * M4/M5 landed, but this stays client-side-only by choice: Consolidator has
+ * M4/M5 landed, but this stays client-side-only by choice: Archivist has
  * no `source_type: "ui_click"` ingestion path, and building one wasn't asked
  * for by the plan. Acknowledging a doodle is purely a display concern
  * (see README "Assumptions") — it doesn't need to reach the bus.
@@ -28,7 +28,7 @@ export function ConsolidationDoodle({
   function handleClick() {
     setExpanded((v) => !v);
     // First click on this epoch is the real signal; repeats are dropped
-    // client-side too, mirroring Consolidator's own dedup.
+    // client-side too, mirroring Archivist's own dedup.
     if (!wasAlreadyAcknowledged) {
       sendUiClickStub(epoch);
       onAcknowledge(epoch.epochId);

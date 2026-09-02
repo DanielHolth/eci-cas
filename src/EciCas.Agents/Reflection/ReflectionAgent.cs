@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using EciCas.Agents.Consolidator;
+using EciCas.Agents.Archivist;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Passages;
@@ -13,7 +13,7 @@ using Microsoft.Extensions.Options;
 namespace EciCas.Agents.Reflection;
 
 /// <summary>
-/// Buffers concluded turns (same _pending shape as ConsolidatorAgent) and,
+/// Buffers concluded turns (same _pending shape as ArchivistAgent) and,
 /// once ReflectionOptions.BatchSize accumulates, makes one substrate call
 /// scoring candidate follow-up ideas. The best-ranked candidate is pushed
 /// back onto events.perception — downstream nothing knows the difference
@@ -25,7 +25,7 @@ namespace EciCas.Agents.Reflection;
 ///
 /// Implements ICognitiveAgent directly rather than inheriting
 /// CognitiveAgent&lt;T&gt;: one substrate call per BATCH, not per envelope,
-/// doesn't fit that base class's model — same rationale ConsolidatorAgent's
+/// doesn't fit that base class's model — same rationale ArchivistAgent's
 /// own doc comment gives for its choice.
 ///
 /// Generation still guards against an idea -> arc -> conclusion -> idea loop
@@ -45,7 +45,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// lands on the drive vectors, the same discipline CriticalNudge and
     /// FrustrationNudge follow. Reflection is the right agent for this
     /// because it already reasons across a whole batch of concluded turns —
-    /// Consolidator stays a dumb per-turn fact writer.
+    /// Archivist stays a dumb per-turn fact writer.
     /// </summary>
     public const string MoodKey = "reflection.mood";
 
@@ -145,7 +145,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
 
-            // Same guard as ConsolidatorAgent.ExtractFactsAsync: the mock
+            // Same guard as ArchivistAgent.ExtractFactsAsync: the mock
             // tier echoes the prompt back verbatim, and its own worked
             // example ("0.7|hypothesis|...") is a valid score|subtopic|idea
             // line that ParseCandidates would otherwise harvest as real.
@@ -235,7 +235,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private void PublishReflected(string? mood)
     {
-        var meta = MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectedKind);
+        var meta = MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ReflectedKind);
         if (mood is not null)
         {
             meta = meta.With(MoodKey, mood);

@@ -124,7 +124,7 @@ Two hazards fall out of it, both to settle in the design pass:
   speak but may not act, which is stricter than a depth cap and easier to
   reason about. **That rule is Governance's**, not the toolbox's: it is a
   verdict on an action, the same gate Security's matrix already runs.
-- **Consolidator.** It hard-skips `triggered_by = "self"` today, because
+- **Archivist.** It hard-skips `triggered_by = "self"` today, because
   Reflection already wrote that record correctly before pushing. Device
   turns need the same decision made deliberately: most acks are noise
   ("light on"), a few are facts worth keeping ("front door locked at
@@ -194,7 +194,7 @@ the vocabulary: a `substrate.degraded` meta key, three causes
 (`unreachable` / `timed out` / `refused (code)`), `Classify(Exception)` to
 map a failure onto one, and `Mark(meta, cause)` to stamp it. Every
 substrate caller — Intent and Librarian via `CognitiveAgent`, plus Recall,
-Reflection and Consolidator on their own paths — classifies its failure
+Reflection and Archivist on their own paths — classifies its failure
 and marks the advisory it publishes. Governance, the only agent that sees
 the whole fan-out by `CorrelationId`, records which roster members came
 back degraded or never came at all, and on the verdict emits
@@ -214,11 +214,11 @@ deterministic-by-config agent is working exactly as configured. It is now
 honoured on all five callers, not just Intent — the early return happens
 before the call and publishes with `degraded: null`.
 
-**Reflection retains its batch; Consolidator does not.** Reflection used to
+**Reflection retains its batch; Archivist does not.** Reflection used to
 abandon a whole flush on failure, so an outage cost the persona the turns
 it would have thought about, not just the thinking. It now puts the batch
 back at the head of `_pending`, capped at
-`Reflection:MaxBufferedBatches` × `BatchSize`. Consolidator gets no
+`Reflection:MaxBufferedBatches` × `BatchSize`. Archivist gets no
 equivalent: the facts were never extracted, so there is no raw material to
 retry from — a retained turn there would just be a second guess at the
 same prompt.
@@ -355,7 +355,7 @@ a passenger on the other's envelope. Costs no new per-turn substrate call
 — still an embed plus a cosine sweep.
 
 One constraint to carry into the build: the passages are the persona's own
-prose, so whatever the new agent publishes must stay out of Consolidator's
+prose, so whatever the new agent publishes must stay out of Archivist's
 extraction scope. Its `TriggeredBy == "self"` guard covers reposted ideas
 arriving as perception, not generated text arriving as an advisory.
 
@@ -367,7 +367,7 @@ component:
 - **Pair layer.** One vector per `category/topic`. Few of them, loaded at
   boot from a JSON file, replacing Librarian's substrate call with an
   in-memory cosine sweep.
-- **Row layer.** One vector per `ArchiveRecord`, written by Consolidator
+- **Row layer.** One vector per `ArchiveRecord`, written by Archivist
   into the Parquet row alongside the fact.
 
 **The row vector covers `subtopic/subject/key` and excludes both
@@ -447,7 +447,7 @@ five rows, rank nothing and send five.
 
 ### The episode corpus — what a second store actually holds
 
-Consolidator writes only explicitly-stated facts, and no deterministic
+Archivist writes only explicitly-stated facts, and no deterministic
 fallback exists, so a great deal is discarded every turn: the
 circumstance around a fact, moods, plans, half-formed thoughts, questions
 that went unanswered, themes recurring across weeks. That discarded
@@ -475,7 +475,7 @@ language rather than a paraphrase of a paraphrase.
 
 Three rules keep it lean:
 
-1. **No extra substrate call.** Consolidator already makes exactly one
+1. **No extra substrate call.** Archivist already makes exactly one
    per turn (`ExtractFactsAsync`). The summary is one more field in that
    same response.
 2. **Nothing already a fact.** If it extracts as `Subject/Key = Value` it
@@ -520,7 +520,7 @@ exchanges that made it one.
 
 ### Reflection is already the cross-event agent
 
-Consolidator subscribes to `events.bundle` with `BatchSize: 1` — one
+Archivist subscribes to `events.bundle` with `BatchSize: 1` — one
 turn, no history, structurally blind to "third time this week they've
 mentioned being tired." It cannot learn across events and never will.
 
@@ -640,7 +640,7 @@ The allowlist is `Archive:SharedCategories`, defaulting to `system` and
 on a shared device. Two wiring details the meta flow forced: Librarian
 carries the profile forward onto `events.selected-pairs` (`Envelope.Derive`
 starts a fresh meta, so Recall would otherwise read the wrong tier), and
-Consolidator keeps the profile per *pending record* rather than per flush,
+Archivist keeps the profile per *pending record* rather than per flush,
 since a batch spans turns and speakers.
 
 ### Impulse is per profile — shipped
@@ -767,7 +767,7 @@ the diary category, and profile deletion or merge.
 drifting with the tone of what's been happening, as opposed to Impulse's
 instant keyword-triggered shifts — now runs on Reflection.
 
-It lives on Reflection, not Consolidator: `ConsolidatorAgent` stays a dumb
+It lives on Reflection, not Archivist: `ArchivistAgent` stays a dumb
 per-turn fact writer with no batch-level view and no business forming an
 opinion about mood, while `ReflectionAgent` already buffers a batch, makes
 one substrate call across it, and reads drive state to gate push-vs-write.
@@ -792,7 +792,7 @@ one substrate call across it, and reads drive state to gate push-vs-write.
 
 ## Data quality
 
-**Normalize archive writes to English — shipped.** Consolidator and
+**Normalize archive writes to English — shipped.** Archivist and
 Reflection previously wrote `ArchiveRecord`s in whatever language the turn
 (or the substrate's own reply) happened to be in, so a user switching
 languages mid-conversation produced separate entries for the same fact —
@@ -824,17 +824,17 @@ Deliberately *not* a merge of fields: no keeping the older importance, no
 concatenating values. One rule, explainable in a sentence, and a wrong
 overwrite is fixed by stating the fact again.
 
-**Consolidator's path reuse is load-bearing by omission.** Reusing an
+**Archivist's path reuse is load-bearing by omission.** Reusing an
 existing `category/topic/subtopic` is what keeps a restated fact landing on
-one address, and Consolidator gets there by being shown Librarian's
+one address, and Archivist gets there by being shown Librarian's
 selected pairs as bare path labels. That works because it is shown *only*
 the labels: the bundle also carries `recall.facts` — the actual rows Recall
-read — and Consolidator never reads that key, so recalled values can't be
+read — and Archivist never reads that key, so recalled values can't be
 echoed back as freshly stated ones.
 
 Nothing names that boundary. There is no comment at the read site and no
 test asserting recalled values stay out of the extraction prompt, so
-"give Consolidator more context" is a one-line change that closes the loop.
+"give Archivist more context" is a one-line change that closes the loop.
 The write-time merge would then hide it, since a re-extracted fact
 overwrites itself and the archive looks stable rather than growing.
 
@@ -892,10 +892,10 @@ category/topic split isn't just "person stuff," it's a real taxonomy.
   filler words like "is"/"it"/"the", and no full sentences).
 - `Timestamp`.
 - `Domain` (`Internal`/`External`) — marks whether a row was written by
-  Consolidator (external fact) or Reflection (self-derived inference). Not
+  Archivist (external fact) or Reflection (self-derived inference). Not
   used to split Recall's results into separate arrays for Intent — see the
   note at the end of this section.
-- `Importance` (0.0-1.0) — set by the writer at write time. `Consolidator`
+- `Importance` (0.0-1.0) — set by the writer at write time. `Archivist`
   scores it per the rules the user gave (name > birthday/title > address,
   etc. — the writer's own judgment against that ordering, not a fixed
   lookup table). `Reflection`'s self-generated ideas always get a fixed
@@ -906,14 +906,14 @@ category/topic split isn't just "person stuff," it's a real taxonomy.
   candidate rows deterministically before any knowledge LLM sees them, so a
   topic with 10,000 rows doesn't just get truncated by recency.
 
-Writers (Consolidator and Reflection) share this exact schema and prompt
+Writers (Archivist and Reflection) share this exact schema and prompt
 shape — same params on the Archive write call either way, `Domain`
 distinguishing which agent wrote it. To prevent topic-name drift across
 writers, both are shown the current bundle's existing category/topic
 selections (the same data Intent receives) and instructed to match an
 existing pair before inventing a new one.
 
-**Consolidator gets the strictest writer instructions.** "Strict" doesn't
+**Archivist gets the strictest writer instructions.** "Strict" doesn't
 mean a content blocklist — it means enforced discipline on which fields are
 *structural* vs. *free*: `Category`/`Topic`/`Subtopic` must follow
 consistent, matched-against-the-existing-index conventions (this is what
@@ -921,7 +921,7 @@ keeps the taxonomy from drifting across a model swap — the rule is about
 form, not content), while `Subject`/`Key` have more latitude since they're
 naming a specific real-world entity/attribute pair that can't be
 pre-enumerated. This distinction (rigid structural fields vs. flexible
-content fields) needs to be explicit in Consolidator's prompt, not just
+content fields) needs to be explicit in Archivist's prompt, not just
 implied by field length limits, so a weaker substitute model still holds
 the taxonomy together.
 
@@ -999,11 +999,11 @@ subject=this  key=name  value=morrow  importance=0.5  timestamp=now()
 `IdentityAgent`'s existing identity store/file is separate and explicitly out
 of scope here — untouched by this migration, keeps whatever it does today.
 
-**Consolidator hard-skips self-triggered turns.** A turn whose `meta` shows
+**Archivist hard-skips self-triggered turns.** A turn whose `meta` shows
 `TriggeredByKey="self"` (Reflection's own idea, looped back through
 `events.perception`) is never passed to `ExtractFactsAsync` at all —
 Reflection already wrote that idea correctly (`Domain=Internal`, its own
-fixed `Importance`) before pushing it, so Consolidator re-extracting from
+fixed `Importance`) before pushing it, so Archivist re-extracting from
 it would either duplicate the record or, worse, mis-tag it `External` as
 today's bug does. This closes the self-referential-pollution root cause
 identified earlier this session.
@@ -1032,11 +1032,11 @@ a quiet internal insight instead of a loud one.
 The replacement, sketched in conversation:
 
 - **Buffer, not immediate action.** Accumulate concluded events in-memory
-  (same shape as `ConsolidatorAgent._pending`) instead of reflecting on
+  (same shape as `ArchivistAgent._pending`) instead of reflecting on
   every one. A new `ReflectionOptions.BatchSize` (mirroring
-  `ConsolidatorOptions.BatchSize`) decides when enough has accumulated to
+  `ArchivistOptions.BatchSize`) decides when enough has accumulated to
   look for a pattern — matching Python's `batch_size` (default 5).
-- **`Domain` field on `ArchiveRecord`.** `"external"` for Consolidator's
+- **`Domain` field on `ArchiveRecord`.** `"external"` for Archivist's
   ordinary keyword writes (the default), `"internal"` for Reflection's own
   derived insights, sharing the same path space but distinguishable and
   independently dedup'd — this is currently missing entirely; there is no
@@ -1064,7 +1064,7 @@ The replacement, sketched in conversation:
 - **Scoring mechanism, open.** However ranking/eagerness gets decided, it's
   probably one substrate call per batch that returns candidate ideas plus
   either a confidence/insight-worthiness score or enough text for a
-  deterministic ranking step to compare — same shape as `ConsolidatorAgent`'s
+  deterministic ranking step to compare — same shape as `ArchivistAgent`'s
   existing `ParseFacts`-style line parsing, not a new pattern.
 
 This is new scope beyond a straight gap-fix — it introduces persistent
@@ -1139,7 +1139,7 @@ rather than reimplemented. `~` was chosen over `|` because `|` is an illegal
 filename character on Windows; both halves are percent-escaped to
 `[A-Za-z0-9._-]`, which also covers `~` itself and makes the single-char
 separator unambiguous. The global store lock became one lock per file, so
-Recall's workers never contend and a Consolidator or Reflection write only
+Recall's workers never contend and a Archivist or Reflection write only
 blocks readers of the one pair it touches.
 
 Existing archives were deleted rather than migrated, per the single-record
@@ -1162,7 +1162,7 @@ the user) is load-bearing and stays. Note also that advisories arrive as
 bare `[Impulse: …]` / `[Noted before: …]` brackets with nothing saying how
 to weigh them, so they read as flavour rather than grounding.
 
-**Consolidator needs handholding.** Terse values should get terser than
+**Archivist needs handholding.** Terse values should get terser than
 `ArchiveWriteStyle.TerseValue`'s current "1-5 content words", and the
 category/topic/subtopic it picks needs to be better. Its extraction prompt
 is the longest in the codebase and heavy on negative instruction, which is
@@ -1180,7 +1180,7 @@ text.
 Also worth checking the reverse of cutting: prompts that drifted apart
 where they should share a fragment, as `ArchiveWriteStyle` already does for
 the two writers. Sites to read together — Intent's `SystemInstruction` and
-`ResponseContract`, Consolidator's extraction prompt, Librarian's selection
+`ResponseContract`, Archivist's extraction prompt, Librarian's selection
 prompt, Recall's row-picking prompt, Reflection's batch prompt, and the
 shared `ArchiveWriteStyle` fragments.
 
@@ -1190,7 +1190,7 @@ the same edit made four times in four prompts.
 
 *Stage 1 — read them side by side and extract what is already shared.*
 Before changing any wording, put all seven sites in one buffer: Intent's
-`SystemInstruction` and `ResponseContract`, Consolidator's extraction
+`SystemInstruction` and `ResponseContract`, Archivist's extraction
 prompt, Librarian's selection prompt, Recall's row-picking prompt,
 Reflection's batch prompt, and `ArchiveWriteStyle`. The output of this
 stage is not a reword; it is an inventory — every standing rule, which
@@ -1222,7 +1222,7 @@ is the actual suppressor. Ship this stage with a fixture that asks an
 enumeration question and asserts more than one topic comes back; without
 it there is no way to tell a fix from a coincidence.
 
-*Stage 4 — Consolidator.* Last on purpose. Its extraction prompt is the
+*Stage 4 — Archivist.* Last on purpose. Its extraction prompt is the
 longest in the codebase and the heaviest on negative instruction, so it
 benefits most from the fragments the earlier stages extract, and its
 failures are the slowest to observe — a bad category choice only shows up

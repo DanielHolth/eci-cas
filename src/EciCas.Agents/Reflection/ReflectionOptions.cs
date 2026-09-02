@@ -10,7 +10,7 @@ public sealed class ReflectionOptions
 {
     public int MaxIdeaGeneration { get; set; } = 1;
 
-    /// <summary>How many concluded turns accumulate before Reflection scores a batch — mirrors ConsolidatorOptions.BatchSize / Python's batch_size default.</summary>
+    /// <summary>How many concluded turns accumulate before Reflection scores a batch — mirrors ArchivistOptions.BatchSize / Python's batch_size default.</summary>
     public int BatchSize { get; set; } = 5;
 
     /// <summary>

@@ -12,7 +12,7 @@ namespace EciCas.Host;
 /// knows this exists. By default prints only what a user actually cares
 /// about per turn — what Intent said or Security blocked (both come off the
 /// same events.action envelope) — leaving what Recall read and substrate
-/// cost/Consolidator/Reflection writes to their own ILogger lines (see
+/// cost/Archivist/Reflection writes to their own ILogger lines (see
 /// appsettings.json's Logging:LogLevel and AgentConsoleFormatter). Verbose
 /// restores the old exhaustive one-line-per-envelope trace for debugging.
 /// </summary>

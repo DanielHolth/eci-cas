@@ -8,9 +8,15 @@ using EciCas.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace EciCas.Agents.Consolidator;
+namespace EciCas.Agents.Archivist;
 
 /// <summary>
+/// Was Consolidator, which was accurate — memory consolidation is the
+/// literal term for what it does — but named the process rather than the
+/// role, and stood alone in a roster that now has a Librarian. Archivist
+/// says the same thing and says it in the library's vocabulary: it decides
+/// what is worth keeping and files it where Librarian can later find it.
+///
 /// Parallel publisher on events.bundle alongside Intent — never through the
 /// live reply path (see plan's opening rationale: this is exactly the hop
 /// that broke the Python bus). Batches bundle content into ArchiveRecords and
@@ -25,10 +31,10 @@ namespace EciCas.Agents.Consolidator;
 /// biasing it to reuse paths Recall just showed it instead of minting
 /// near-duplicates. No deterministic fallback write exists: only facts the
 /// LLM judges explicitly stated get archived, matching the Python
-/// prototype's Consolidator, which relies entirely on the same LLM
+/// prototype's Archivist, which relies entirely on the same LLM
 /// discipline and may legitimately write nothing for a turn.
 /// </summary>
-public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
+public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 {
     public const string ControlKindKey = "control.kind";
     public const string EpochIdKey = "control.epoch_id";
@@ -38,7 +44,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
-    private readonly ConsolidatorOptions _options;
+    private readonly ArchivistOptions _options;
     private readonly ILogger _logger;
     // Pending facts carry the profile that stated them: a batch can span
     // turns, and by the time it flushes the speaker is long gone from scope.
@@ -46,8 +52,8 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     private readonly object _pendingLock = new();
     private int _bundlesSinceFlush;
 
-    public ConsolidatorAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ConsolidatorAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ConsolidatorOptions> options)
+    public ArchivistAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ArchivistAgent> logger, IArchiveStore store,
+        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ArchivistOptions> options)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -58,13 +64,13 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         _logger = logger;
     }
 
-    public override string Name => "Consolidator";
+    public override string Name => "Archivist";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Bundle];
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         // Reflection's own reposted ideas arrive back through events.perception
-        // like any other turn — without this skip, Consolidator would archive
+        // like any other turn — without this skip, Archivist would archive
         // the persona's own prior thought as if the user had said it.
         if (envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self")
         {
@@ -78,7 +84,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
-        // A deterministic-by-configuration Consolidator archives nothing:
+        // A deterministic-by-configuration Archivist archives nothing:
         // there is no keyword extractor to fall back to, and inventing one
         // would put facts on record that nobody judged to be facts.
         if (!entry.UseSubstrate)
@@ -89,7 +95,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         // No deterministic fallback write: only what the LLM judges to be an
         // explicitly-stated fact gets archived (see ExtractFactsAsync's
         // prompt) — a turn with nothing worth remembering yields zero
-        // records, same as the Python prototype's Consolidator.
+        // records, same as the Python prototype's Archivist.
         var (newRecords, diagnostics) = await ExtractFactsAsync(envelope, text, entry.Class, cancellationToken).ConfigureAwait(false);
 
         // One line every turn, same shape as RecallAgent's aggregate line —

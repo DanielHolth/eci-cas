@@ -1,4 +1,4 @@
-using EciCas.Agents.Consolidator;
+using EciCas.Agents.Archivist;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Identity;
 using EciCas.Bus;
@@ -40,8 +40,8 @@ public class IdentityAgentTests
         await agent.HandleAsync(first, CancellationToken.None);
         Assert.True(advisories.TryRead(out _));
 
-        var written = Envelope.Create(Topics.SystemControl, "Consolidator", Severity.Neutral,
-            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ConsolidatorAgent.WrittenKind));
+        var written = Envelope.Create(Topics.SystemControl, "Archivist", Severity.Neutral,
+            MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind));
         await agent.HandleAsync(written, CancellationToken.None);
 
         var second = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);

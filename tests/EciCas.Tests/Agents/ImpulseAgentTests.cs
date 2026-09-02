@@ -6,7 +6,7 @@ using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
-using EciCas.Agents.Consolidator;
+using EciCas.Agents.Archivist;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -87,7 +87,7 @@ public class ImpulseAgentTests
         var (agent, _, _, store) = Create();
         var control = Envelope.Create(Topics.SystemControl, "Governance", Severity.Elevated,
             MetaBag.Empty
-                .With(ConsolidatorAgent.ControlKindKey, GovernanceAgent.FrustrationKind)
+                .With(ArchivistAgent.ControlKindKey, GovernanceAgent.FrustrationKind)
                 .With(PerceptionAgent.ProfileKey, "daniel"));
 
         await agent.HandleAsync(control, CancellationToken.None);
@@ -192,7 +192,7 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
         var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
-            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
+            MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
                 .With(ReflectionAgent.MoodKey, "curious"));
 
         await agent.HandleAsync(reflected, CancellationToken.None);
@@ -210,7 +210,7 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
         var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
-            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
+            MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
                 .With(ReflectionAgent.MoodKey, "ecstatic"));
 
         await agent.HandleAsync(reflected, CancellationToken.None);
@@ -223,7 +223,7 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
         var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
-            MetaBag.Empty.With(ConsolidatorAgent.ControlKindKey, ReflectionAgent.ReflectedKind));
+            MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ReflectionAgent.ReflectedKind));
 
         await agent.HandleAsync(reflected, CancellationToken.None);
 

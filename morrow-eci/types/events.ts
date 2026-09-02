@@ -45,7 +45,7 @@ export interface IntentOutput {
 
 /** A consolidation epoch surfaced as the clickable "+" doodle. `acknowledged`
  * tracks the dedup rule client-side for this mock — the real dedup lives in
- * Consolidator (M4, not built yet). */
+ * Archivist (M4, not built yet). */
 export interface ConsolidationEpoch {
   epochId: string;
   summary: string;

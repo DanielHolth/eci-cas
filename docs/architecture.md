@@ -19,7 +19,7 @@ agent can never stall another agent's turn.
 | Intent | `events.bundle` | `events.proposal` | cognitive |
 | Security | `events.proposal` | `events.verdict` | deterministic |
 | Action | `events.action` | — | deterministic |
-| Consolidator | `events.bundle` | `system.control` (`Written`) | cognitive |
+| Archivist | `events.bundle` | `system.control` (`Written`) | cognitive |
 | Reflection | `events.conclusion` | `events.perception` (ideas), `system.control` | cognitive |
 | ArchiveLogger | `Topics.All` | — | deterministic |
 | ConsoleSubscriber | `Topics.All` | — | display |
@@ -45,7 +45,11 @@ so the name would have collided with the agent that does it. Librarian
 narrows correctly — it knows the catalogue, it points at a shelf, and it
 never opens the book. **Identity** was Personality in the Python prototype
 and then Self; the name shrank toward the code, which is a thin cached
-lookup rather than anything deserving the word "self".
+lookup rather than anything deserving the word "self". **Archivist** was
+Consolidator, which passed the test on its own — memory consolidation is
+the literal term — but named a process where its neighbours name roles, and
+the archive now has a Librarian reading from it. Archivist writes what
+Librarian later catalogues, and the pair explains itself.
 
 Two names are known to be imperfect and are deliberately kept.
 **Governance** is a fossil: it was accurate when the design had it present at
@@ -116,7 +120,7 @@ it touches a file directly.
 Files are named `{esc(category)}~{esc(topic)}.parquet`, so the set of known
 pairs is recovered by listing the directory and decoding names — there is no
 `index.parquet`. Two things follow. A write never rewrites a companion index
-file, which takes a full-index Parquet rewrite off every Consolidator and
+file, which takes a full-index Parquet rewrite off every Archivist and
 Reflection write. And the index cannot drift from the data, so there is
 nothing to rebuild after a manual edit; deleting a pair's last row deletes
 its file, which is also how the pair leaves the index.
@@ -129,7 +133,7 @@ is read back.
 
 Concurrency is per file: a `SemaphoreSlim` per path, not one global lock.
 Recall's parallel workers touch disjoint pair files and never queue behind
-each other, and a Consolidator or Reflection write only blocks readers of the
+each other, and a Archivist or Reflection write only blocks readers of the
 one pair it touches — so the two slow agents can take as long as they need
 without sitting on the next turn's critical path.
 
@@ -154,7 +158,7 @@ address**: every record still carries it and the picking model still reads
 it, but nothing looks up by it. That is what lets one subtopic be discussed
 at great length without earning its own index entry.
 
-Both Consolidator (turn facts) and Reflection (self-generated ideas) extract
+Both Archivist (turn facts) and Reflection (self-generated ideas) extract
 records in this shape via substrate call. Rules that must hold for *every*
 write live once, as prompt fragments on `ArchiveWriteStyle`, interpolated
 into both writers' prompts so they can't drift apart: `TerseValue` (terse,
@@ -318,7 +322,7 @@ Two speeds, deliberately far apart:
   Governance's block nudge. Python's §5.4 somatic shortcut.
 - **Slow colouring** (±0.01-0.03, once per Reflection batch) — the tone of
   a whole batch of concluded turns. Python's §5.3. Reflection is the agent
-  for this because it already reasons across a batch; Consolidator stays a
+  for this because it already reasons across a batch; Archivist stays a
   dumb per-turn fact writer.
 
 The magnitude gap *is* the distinction between the two mechanisms — a test
@@ -333,7 +337,7 @@ re-embed the full text of every prior hop, growing the prompt generation
 over generation. [`PromptCap`](../src/EciCas.Core/PromptCap.cs) caps each
 piece of upstream text (240 chars, `…`-truncated) at the point it's folded
 in — applied in `IntentAgent.BuildPrompt`/`AppendAdvice`,
-`LibrarianAgent.BuildPrompt`, and `ConsolidatorAgent.ExtractFactsAsync` —
+`LibrarianAgent.BuildPrompt`, and `ArchivistAgent.ExtractFactsAsync` —
 so the per-hop ceiling is fixed no matter how deep a loop runs, rather
 than trying to track or trim history.
 
@@ -341,7 +345,7 @@ than trying to track or trim history.
 
 `ConsoleSubscriber` subscribes to `Topics.All` but does not print one line
 per envelope. It defaults to six lines per turn — substrate cost, what
-Recall read, what Consolidator/Reflection wrote, what Intent said, and
+Recall read, what Archivist/Reflection wrote, what Intent said, and
 what Security blocked — via the `Console:Verbose` option; `--Verbose=true`
 restores the exhaustive per-envelope trace. See `appsettings.json`'s
 `Console` and `Logging:LogLevel` sections.

@@ -73,7 +73,7 @@ public class ReflectionAgentTests
         Assert.Equal(1, idea.Generation);
 
         Assert.True(control.TryRead(out var reflected));
-        Assert.Equal(ReflectionAgent.ReflectedKind, reflected!.Meta.Get<string>(EciCas.Agents.Consolidator.ConsolidatorAgent.ControlKindKey));
+        Assert.Equal(ReflectionAgent.ReflectedKind, reflected!.Meta.Get<string>(EciCas.Agents.Archivist.ArchivistAgent.ControlKindKey));
 
         var pushed = await store.LookupAsync(new ArchivePair("self", "reflection"), null, CancellationToken.None);
         Assert.Contains(pushed, r => r.Value == "whether the trip dates still work" && r.Importance == 0.2);

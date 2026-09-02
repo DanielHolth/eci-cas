@@ -145,7 +145,7 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
       if (raw.meta["control.kind"] === "Written") {
         const epoch: ConsolidationEpoch = {
           epochId: raw.eventId,
-          summary: "Consolidator wrote this turn to the archive.",
+          summary: "Archivist wrote this turn to the archive.",
           acknowledged: false,
         };
         turn.epoch = epoch;

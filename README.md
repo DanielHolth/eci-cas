@@ -4,7 +4,7 @@
 System (CAS)** — a persistent, multi-substrate AI persona built as a
 faculty-of-a-mind agent ecosystem on a message bus: Perception, Impulse,
 Librarian, Recall, Identity, Governance, Intent, Security, Action,
-Consolidator, Reflection. Personality emerges from the interplay of
+Archivist, Reflection. Personality emerges from the interplay of
 narrowly specialized roles, not from any single agent.
 
 Agents are genuinely decoupled — one queue and one listener per agent,
@@ -24,7 +24,7 @@ eci-cas/
   src/
     EciCas.Core/         Envelope, MetaBag, Severity, Verdict, Topics, agent/bus/store/substrate contracts
     EciCas.Bus/           ChannelBus, AgentBase, BusActivityTracker
-    EciCas.Agents/         Perception, Impulse, Librarian, Recall, Identity, Governance, Intent, Security, Action, Consolidator, Reflection
+    EciCas.Agents/         Perception, Impulse, Librarian, Recall, Identity, Governance, Intent, Security, Action, Archivist, Reflection
     EciCas.Substrates/     substrate provider registry (mock + live OpenAI-compatible HTTP)
     EciCas.Host/            Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
     EciCas.ArchiveTool/      console REPL for inspecting/editing the Parquet archive
@@ -53,7 +53,7 @@ dotnet run --project src/EciCas.ArchiveTool -- src/EciCas.Host/bin/Debug/net10.0
 ```
 
 The host prints six lines per turn by default — substrate cost, what Recall
-read, what Consolidator/Reflection wrote, what Intent said, what Security
+read, what Archivist/Reflection wrote, what Intent said, what Security
 blocked; `--Verbose=true` restores the exhaustive per-envelope trace. The
 archive tool is a REPL over the same Parquet files (`list`, then
 `show <category> <topic>`); it takes the archive directory as its one
@@ -92,7 +92,7 @@ independently:
 ```
 
 Which class each cognitive agent (Intent, Librarian, Recall, Reflection,
-Consolidator) uses comes from `AgentSubstrates:Agents` in `appsettings.json` —
+Archivist) uses comes from `AgentSubstrates:Agents` in `appsettings.json` —
 an operator can retarget a role, or add a class like `fast-local`, without
 touching C#:
 
@@ -100,14 +100,14 @@ touching C#:
 "AgentSubstrates": {
   "Agents": {
     "Intent":       { "Class": "fast-medium" },
-    "Consolidator": { "Class": "slow-low" }
+    "Archivist": { "Class": "slow-low" }
   }
 }
 ```
 
 `UseSubstrate: false` skips the substrate call and publishes the agent's
 fallback instead. It is honoured on all five substrate-calling agents —
-Intent, Librarian, Recall, Reflection and Consolidator — and is deliberately
+Intent, Librarian, Recall, Reflection and Archivist — and is deliberately
 *not* treated as a degradation: a turn run without a substrate by
 configuration is the persona working as configured, not the persona
 apologising. Note Intent's fallback is the fixed sentence *"I'm having

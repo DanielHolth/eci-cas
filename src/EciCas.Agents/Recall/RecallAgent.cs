@@ -27,7 +27,7 @@ namespace EciCas.Agents.Recall;
 ///
 /// Implements ICognitiveAgent directly rather than inheriting
 /// CognitiveAgent&lt;T&gt;: N parallel substrate calls per envelope doesn't
-/// fit that base class's one-call model — same rationale ConsolidatorAgent's
+/// fit that base class's one-call model — same rationale ArchivistAgent's
 /// own doc comment gives for its choice.
 /// </summary>
 public sealed class RecallAgent : AgentBase, ICognitiveAgent

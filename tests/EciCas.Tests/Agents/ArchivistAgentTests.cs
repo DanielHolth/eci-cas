@@ -1,4 +1,4 @@
-using EciCas.Agents.Consolidator;
+using EciCas.Agents.Archivist;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reflection;
 using EciCas.Bus;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace EciCas.Tests.Agents;
 
-public class ConsolidatorAgentTests
+public class ArchivistAgentTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
@@ -17,7 +17,7 @@ public class ConsolidatorAgentTests
     }
 
     private static IOptions<AgentSubstrateManifest> Manifest() =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Consolidator"] = new AgentSubstrateEntry { Class = "fast-low" } } });
+        Options.Create(new AgentSubstrateManifest { Agents = { ["Archivist"] = new AgentSubstrateEntry { Class = "fast-low" } } });
 
     private const string FactLine = "category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28";
 
@@ -30,8 +30,8 @@ public class ConsolidatorAgentTests
         var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
-        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 2 }));
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 2 }));
 
         var first = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "turn one"));
@@ -43,7 +43,7 @@ public class ConsolidatorAgentTests
         await agent.HandleAsync(second, CancellationToken.None);
 
         Assert.True(control.TryRead(out var written));
-        Assert.Equal(ConsolidatorAgent.WrittenKind, written!.Meta.Get<string>(ConsolidatorAgent.ControlKindKey));
+        Assert.Equal(ArchivistAgent.WrittenKind, written!.Meta.Get<string>(ArchivistAgent.ControlKindKey));
 
         var records = await store.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None);
         Assert.Equal(2, records.Count);
@@ -59,8 +59,8 @@ public class ConsolidatorAgentTests
         var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 10, 0m)));
 
-        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "tell me about your system"));
@@ -78,8 +78,8 @@ public class ConsolidatorAgentTests
         var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
-        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "our son's birthday was yesterday"));
@@ -100,8 +100,8 @@ public class ConsolidatorAgentTests
         var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
 
-        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "turn one"));
@@ -120,8 +120,8 @@ public class ConsolidatorAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
             "category=person subtopic=daughter subject=maia key=nickname value=benita", TimeSpan.Zero, 10, 0m)));
 
-        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "maia calls herself benita at school"));
@@ -143,8 +143,8 @@ public class ConsolidatorAgentTests
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)); });
 
-        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "whether the trip dates still work")
@@ -169,8 +169,8 @@ public class ConsolidatorAgentTests
         var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
-        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 2 }));
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 2 }));
 
         foreach (var profileId in new[] { "daniel", "ada" })
         {

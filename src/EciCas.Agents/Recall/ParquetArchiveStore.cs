@@ -16,7 +16,7 @@ using EciCas.Core;
 /// write never rewrites a companion index file, and the index can never
 /// drift from the data (nothing left to rebuild). One file per pair also
 /// means Recall's parallel workers touch disjoint files, so the per-file
-/// lock below is almost never contended and a Consolidator write only ever
+/// lock below is almost never contended and a Archivist write only ever
 /// blocks readers of the one pair it touches.
 ///
 /// Personal knowledge is scoped by *directory*, not by a filename or a new

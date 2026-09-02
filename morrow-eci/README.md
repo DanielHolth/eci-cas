@@ -141,7 +141,7 @@ document assumptions" instruction:
   pass) replaces its row rather than duplicating it.
 - **A consolidation epoch attaches to whichever turn is open on this
   client when `system.control` "Written" arrives** — there's no
-  correlation between Consolidator's batch-write announcement and any
+  correlation between Archivist's batch-write announcement and any
   single triggering turn (it's a batch over N turns), so "the current
   turn" is a simplification pending the "doodle staleness" open question
   above.
