@@ -341,6 +341,24 @@ and **unavailability is a normal state, not a degradation**: with no model
 file present the swarm behaves precisely as it did before vectors existed.
 See [architecture.md](architecture.md#the-passage-corpus-what-it-missed-not-what-it-knows).
 
+### A passage agent of its own (idea)
+
+Vector retrieval currently lives inside `ReasoningAgent`, and its output
+reaches Intent by riding Reasoning's envelope chain into Recall's roster
+slot. Pull it out into its own agent on `events.perception` that publishes
+an advisory and joins `Governance:BundleRoster`.
+
+The point is to make it a fourth independent contributor alongside
+Impulse/Recall/Self, so Intent weighs archive facts and the terse
+reflection notes as two separate bundle slots rather than one arriving as
+a passenger on the other's envelope. Costs no new per-turn substrate call
+— still an embed plus a cosine sweep.
+
+One constraint to carry into the build: the passages are the persona's own
+prose, so whatever the new agent publishes must stay out of Consolidator's
+extraction scope. Its `TriggeredBy == "self"` guard covers reposted ideas
+arriving as perception, not generated text arriving as an advisory.
+
 ### Two-layer vector retrieval
 
 Two vectors, at two granularities — not five, and not one per row
@@ -806,6 +824,26 @@ Deliberately *not* a merge of fields: no keeping the older importance, no
 concatenating values. One rule, explainable in a sentence, and a wrong
 overwrite is fixed by stating the fact again.
 
+**Consolidator's path reuse is load-bearing by omission.** Reusing an
+existing `category/topic/subtopic` is what keeps a restated fact landing on
+one address, and Consolidator gets there by being shown Reasoning's
+selected pairs as bare path labels. That works because it is shown *only*
+the labels: the bundle also carries `recall.facts` — the actual rows Recall
+read — and Consolidator never reads that key, so recalled values can't be
+echoed back as freshly stated ones.
+
+Nothing names that boundary. There is no comment at the read site and no
+test asserting recalled values stay out of the extraction prompt, so
+"give Consolidator more context" is a one-line change that closes the loop.
+The write-time merge would then hide it, since a re-extracted fact
+overwrites itself and the archive looks stable rather than growing.
+
+Compounding it, the class comment says extraction is "grounded in Recall's
+own lookup results" — it is Reasoning's selected pairs; Recall doesn't set
+that key. That wording is the thing most likely to invite wiring the real
+facts in. Fix is cheap and worth doing next time the file is open: correct
+the attribution, and one line stating values are excluded on purpose.
+
 ## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — shipped
 
 **Status: implemented.** `ParquetArchiveStore`, the archive index,
@@ -1106,6 +1144,45 @@ blocks readers of the one pair it touches.
 
 Existing archives were deleted rather than migrated, per the single-record
 seed below.
+
+## Audit every substrate prompt
+
+Instruction text has grown in place, agent by agent, and nobody has read it
+all side by side. Every standing rule is paid for on every turn, on every
+substrate — a rule added once to fix one bad reply then bills forever. Four
+observed symptoms, each tracing back to prompt text rather than to code:
+
+**Intent is theatric.** Suspected causes are the `SystemInstruction`
+framing ("spokesperson on behalf of a collective of emerging agents") and
+the length clamp in `ResponseContract` — one or two sentences unless length
+was asked for, which forces a compressed, quippy delivery. Want it moving
+more freely while still grounded on the turn plus the bundle. The
+path-convention rule (`system/` means the assistant, anything else means
+the user) is load-bearing and stays. Note also that advisories arrive as
+bare `[Impulse: …]` / `[Noted before: …]` brackets with nothing saying how
+to weigh them, so they read as flavour rather than grounding.
+
+**Consolidator needs handholding.** Terse values should get terser than
+`ArchiveWriteStyle.TerseValue`'s current "1-5 content words", and the
+category/topic/subtopic it picks needs to be better. Its extraction prompt
+is the longest in the codebase and heavy on negative instruction, which is
+the first place to look.
+
+**Reasoning and Recall select too narrowly.** A request for the names of
+known people came back empty. Both prompts are tuned for precision on a
+pointed question and have no path for an enumeration one: Reasoning caps at
+`MaxSelectedPairs` (3) pairs, Recall at `MaxPickedPerWorker` (5) rows, and
+Recall's prompt says a row is relevant *only* if it is about the same thing
+being asked about — which actively suppresses breadth when the question is
+"what do you know about X". Caps are config; the relevance rule is prompt
+text.
+
+Also worth checking the reverse of cutting: prompts that drifted apart
+where they should share a fragment, as `ArchiveWriteStyle` already does for
+the two writers. Sites to read together — Intent's `SystemInstruction` and
+`ResponseContract`, Consolidator's extraction prompt, Reasoning's selection
+prompt, Recall's row-picking prompt, Reflection's batch prompt, and the
+shared `ArchiveWriteStyle` fragments.
 
 ## Parked
 

@@ -112,6 +112,28 @@ public class ConsolidatorAgentTests
     }
 
     [Fact]
+    public async Task SubtopicWithoutTopic_ParsesInsteadOfThrowing()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
+            "category=person subtopic=daughter subject=maia key=nickname value=benita", TimeSpan.Zero, 10, 0m)));
+
+        var agent = new ConsolidatorAgent(bus, activity, NullLogger<ConsolidatorAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ConsolidatorOptions { BatchSize = 1 }));
+
+        var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "maia calls herself benita at school"));
+        await agent.HandleAsync(bundle, CancellationToken.None);
+
+        var records = await store.LookupAsync(new ArchivePair("person", "general"), null, CancellationToken.None);
+        var record = Assert.Single(records);
+        Assert.Equal("daughter", record.Subtopic);
+        Assert.Equal("benita", record.Value);
+    }
+
+    [Fact]
     public async Task WhenTriggeredBySelf_HardSkips_NeverCallsSubstrate()
     {
         var activity = new BusActivityTracker();

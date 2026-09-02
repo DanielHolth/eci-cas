@@ -259,6 +259,12 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     private static readonly Regex ColonFieldPattern = new(
         @"\b(category|topic|subtopic|subject|key|value)\s*:\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // \b matters: "subtopic=" contains "topic=", so a plain substring search
+    // for the topic marker lands inside the subtopic one whenever the model
+    // omits a standalone topic.
+    private static readonly Regex FieldMarkerPattern = new(
+        @"\b(category|topic|subtopic|subject|key|value)=", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static (string Category, string Topic, string Subtopic, string Subject, string Key, string Value)? ParseFields(string line)
     {
         // Smaller models don't reliably stick to the requested "key=value"
@@ -268,26 +274,36 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
         line = ColonFieldPattern.Replace(line.TrimStart('-', '*', '•', ' ', '\t'), "$1=");
 
         // Field values may contain spaces (e.g. "subject=marcus holth"), so
-        // split on the fixed key= markers rather than whitespace. Topic/
+        // split on the field markers rather than whitespace. Topic/
         // Subtopic (indices 1/2) are grouping labels the model sometimes
         // drops or duplicates (e.g. "topic=self topic=identity" with no
         // subtopic at all) — those default rather than losing the whole
         // fact; Category/Subject/Key/Value are the fact itself and stay
         // required.
-        var keys = new[] { "category=", "topic=", "subtopic=", "subject=", "key=", "value=" };
-        var indices = keys.Select(k => line.IndexOf(k, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (indices[0] < 0 || indices[3] < 0 || indices[4] < 0 || indices[5] < 0)
+        var names = new[] { "category", "topic", "subtopic", "subject", "key", "value" };
+        var matches = FieldMarkerPattern.Matches(line);
+
+        // First occurrence wins, matching the previous IndexOf behaviour: a
+        // duplicated marker is the model repeating itself, not a new field.
+        var found = new Match?[names.Length];
+        foreach (Match m in matches)
+        {
+            var idx = Array.FindIndex(names, n => string.Equals(n, m.Groups[1].Value, StringComparison.OrdinalIgnoreCase));
+            found[idx] ??= m;
+        }
+
+        if (found[0] is null || found[3] is null || found[4] is null || found[5] is null)
         {
             return null;
         }
 
-        var present = Enumerable.Range(0, keys.Length).Where(i => indices[i] >= 0).OrderBy(i => indices[i]).ToArray();
-        var values = new string?[keys.Length];
+        var present = Enumerable.Range(0, names.Length).Where(i => found[i] is not null).OrderBy(i => found[i]!.Index).ToArray();
+        var values = new string?[names.Length];
         for (var i = 0; i < present.Length; i++)
         {
             var idx = present[i];
-            var start = indices[idx] + keys[idx].Length;
-            var end = i + 1 < present.Length ? indices[present[i + 1]] : line.Length;
+            var start = found[idx]!.Index + found[idx]!.Length;
+            var end = i + 1 < present.Length ? found[present[i + 1]]!.Index : line.Length;
             values[idx] = line[start..end].Trim();
         }
 
