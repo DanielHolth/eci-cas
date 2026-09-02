@@ -141,7 +141,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             return;
         }
 
-        var previous = await _passages.LatestAsync(cancellationToken).ConfigureAwait(false);
+        var previous = await SelectRevisitAsync(batch, cancellationToken).ConfigureAwait(false);
 
         List<Candidate> candidates;
         string? mood;
@@ -278,6 +278,43 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// the trail. Hindsight decides later whether a note is worth
     /// surfacing; the writer does not get a vote.
     /// </summary>
+    /// <summary>
+    /// Which stored thought this batch may sharpen. Similarity, not recency.
+    ///
+    /// Taking the newest note makes the corpus a chain: a thought is open to
+    /// revision for exactly one batch and is then frozen for good, however
+    /// often the persona thinks near it again. Taking the nearest one makes
+    /// it a trail — a note from months ago becomes reachable the day the
+    /// persona circles back to what it was about, which is the whole reason
+    /// these are vectors and not a log.
+    ///
+    /// The query is the batch's own replies, so this costs one embed per
+    /// batch and no substrate call at all. With no embedder, or nothing
+    /// clearing RevisitMinScore, it falls back to the newest note: "the
+    /// weights aren't downloaded" must keep meaning "the pre-vector
+    /// behaviour", never "no revisits at all".
+    /// </summary>
+    private async Task<Passage?> SelectRevisitAsync(List<BufferedConclusion> batch, CancellationToken cancellationToken)
+    {
+        if (_embeddings.Available)
+        {
+            var query = PromptCap.Apply(string.Join(" ", batch.Select(b => b.ReplyText)));
+            var vectors = await _embeddings.EmbedAsync([query], cancellationToken).ConfigureAwait(false);
+            if (vectors.Count > 0)
+            {
+                var hits = await _passages
+                    .SearchAsync(vectors[0], topK: 1, _options.RevisitMinScore, cancellationToken)
+                    .ConfigureAwait(false);
+                if (hits.Count > 0)
+                {
+                    return hits[0].Passage;
+                }
+            }
+        }
+
+        return await _passages.LatestAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous)
     {
         var turns = string.Join("\n\n", batch.Select((b, i) =>

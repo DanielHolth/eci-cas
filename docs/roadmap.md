@@ -324,11 +324,24 @@ parts that were expensive:
   prompt Reflection already sends, once per `BatchSize` (now 10, as the
   cross-event section recommends) — not per turn.
 
-Also shipped, from the surrounding design: **the revisit.** The previous
-note is quoted back into the next Reflection prompt and may be rewritten,
+Also shipped, from the surrounding design: **the revisit.** A stored note
+is quoted back into the next Reflection prompt and may be rewritten,
 replacing its row rather than appending. That is the "digests index upward,
 they never carry forward" instinct at the smallest possible scale — one
 carried thought, sharpened, instead of a growing pile of drafts.
+
+Which note gets quoted was, at first, whichever was newest. That made the
+corpus a chain: a thought was open to revision for exactly one batch and
+then frozen for good, however often the persona thought near it again. It
+now picks the note *nearest* the batch instead, which makes it a trail —
+something written months ago becomes revisable the day the persona circles
+back to what it was about. That is the reason these are vectors and not a
+log, and it costs one embed per batch and no substrate call.
+
+The floor is `Reflection:RevisitMinScore`. Below it, selection falls back to
+the newest note rather than to nothing: a floor that stops a batch dragging
+in an unrelated old thought must not also stop the persona sharpening what
+it just wrote.
 
 Not shipped, and still worth building: aliases, the pair and row vector
 layers, escalate-on-low-confidence, the episode corpus, year partitioning,

@@ -1,4 +1,4 @@
-using EciCas.Agents.Passages;
+﻿using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Librarian;
@@ -155,6 +155,75 @@ public class PassageMemoryTests
         Assert.DoesNotContain(new ArchivePair("person", "deleted"),
             selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!);
 
+    }
+
+    /// <summary>
+    /// The revisit target is the nearest stored thought, not the newest one.
+    /// A chain freezes a note after one batch; a trail lets the persona
+    /// sharpen something it wrote long ago the day it thinks near it again.
+    /// </summary>
+    [Fact]
+    public async Task Reflection_RevisitsTheNearestThought_NotTheNewestOne()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+
+        var passages = new InMemoryPassageStore();
+        await passages.WriteAsync(
+            [new Passage("old-and-near", "the thought this batch is about", [],
+                 DateTimeOffset.UtcNow.AddDays(-200), Unit(0)),
+             new Passage("new-and-far", "an unrelated thought from this morning", [],
+                 DateTimeOffset.UtcNow, Unit(1))],
+            null, CancellationToken.None);
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
+            "mood|curious\nrevisit|person/family|the same thought, sharpened",
+            TimeSpan.Zero, 5, 0m)));
+
+        // Everything the batch embeds lands on axis 0, where the older note
+        // sits; the newest note is orthogonal to it and scores zero.
+        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
+            new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
+            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            passages, new StubEmbeddings(_ => Unit(0)), ShippedInstructions.Store);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
+
+        Assert.Equal("the same thought, sharpened", passages.Passages.Single(p => p.Id == "old-and-near").Text);
+        Assert.Equal("an unrelated thought from this morning", passages.Passages.Single(p => p.Id == "new-and-far").Text);
+    }
+
+    /// <summary>
+    /// When nothing stored is near enough to this batch, the revisit target
+    /// falls back to the newest note rather than to nothing: a floor that
+    /// stops the batch dragging in an unrelated thought must not also stop
+    /// the persona sharpening what it just wrote.
+    /// </summary>
+    [Fact]
+    public async Task Reflection_FallsBackToTheNewestThought_WhenNothingClearsTheFloor()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+
+        var passages = new InMemoryPassageStore();
+        await passages.WriteAsync(
+            [new Passage("older", "an older thought", [], DateTimeOffset.UtcNow.AddDays(-200), Unit(0)),
+             new Passage("newest", "this morning's thought", [], DateTimeOffset.UtcNow, Unit(1))],
+            null, CancellationToken.None);
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
+            "mood|curious\nrevisit|person/family|sharpened",
+            TimeSpan.Zero, 5, 0m)));
+
+        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
+            new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
+            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            passages, new StubEmbeddings(_ => Unit(2)), ShippedInstructions.Store);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
+
+        Assert.Equal("sharpened", passages.Passages.Single(p => p.Id == "newest").Text);
+        Assert.Equal("an older thought", passages.Passages.Single(p => p.Id == "older").Text);
     }
 
     /// <summary>

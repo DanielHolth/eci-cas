@@ -100,11 +100,11 @@ public interface IPassageStore
     Task<IReadOnlyList<PassageHit>> SearchAsync(float[] query, int topK, double minScore, CancellationToken cancellationToken);
 
     /// <summary>
-    /// The most recently written passage — what the next batch revisits.
-    /// Which means a thought is reachable for revision for exactly one
-    /// batch and is then frozen. Selecting the revisit target by similarity
-    /// instead is what would make the corpus a trail rather than a chain;
-    /// see roadmap.md.
+    /// The most recently written passage. No longer how the revisit target
+    /// is chosen — Reflection picks the note nearest the batch, so a thought
+    /// stays reachable however long ago it was written. This is the fallback
+    /// for when there is no embedder or nothing clears the score floor, which
+    /// is the old chain behaviour kept as a floor rather than as the rule.
     /// </summary>
     Task<Passage?> LatestAsync(CancellationToken cancellationToken);
 
