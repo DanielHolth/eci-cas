@@ -85,6 +85,14 @@ public static class VectorMath
     /// </summary>
     public static double Cosine(float[] a, float[] b)
     {
+        // Mismatched widths score zero, so a passage embedded by a different
+        // model than the one asking simply never matches. That is the right
+        // answer per call and a hazard in aggregate: swapping the embedding
+        // model silently retires the entire corpus written before the swap,
+        // and a same-width swap is worse — the old vectors still score, they
+        // just no longer mean anything. Nothing here records which model
+        // wrote a vector. Before any model change, that needs solving, or
+        // months of notes leave without a log line. See roadmap.md.
         if (a.Length != b.Length)
         {
             return 0.0;

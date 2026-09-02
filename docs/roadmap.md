@@ -341,6 +341,22 @@ and **unavailability is a normal state, not a degradation**: with no model
 file present the swarm behaves precisely as it did before vectors existed.
 See [architecture.md](architecture.md#the-passage-corpus-what-it-missed-not-what-it-knows).
 
+### The corpus has no model identity (hazard)
+
+`Passage` stores a raw `float[]` and nothing about which embedding model
+produced it. `VectorMath.Cosine` returns 0.0 on a width mismatch, so
+switching to a model of a different dimension retires every note written
+before the switch — silently, with no log line and no error. A swap at the
+*same* width is worse: the old vectors keep scoring and stop meaning
+anything.
+
+Nothing ages a note out by design — search ranks on cosine alone, there is
+no TTL, no size cap and no recency term, so a note from years ago competes
+on equal footing with this morning's. A model change is the one event that
+would take that away. Before touching `IEmbeddingProvider`'s default model,
+stamp a model id on the passage row and either re-embed on mismatch or
+refuse to start.
+
 ### A passage agent of its own (idea)
 
 Vector retrieval currently lives inside `LibrarianAgent`, and its output

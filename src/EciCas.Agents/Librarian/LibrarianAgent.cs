@@ -257,7 +257,9 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             { TotalHours: < 36 } => "yesterday",
             { TotalDays: < 14 } => $"{(int)span.TotalDays} days ago",
             { TotalDays: < 60 } => $"{(int)(span.TotalDays / 7)} weeks ago",
-            _ => $"{(int)(span.TotalDays / 30)} months ago",
+            { TotalDays: < 365 } => $"{(int)(span.TotalDays / 30)} months ago",
+            { TotalDays: < 730 } => "over a year ago",
+            _ => $"{(int)(span.TotalDays / 365)} years ago",
         };
     }
 
