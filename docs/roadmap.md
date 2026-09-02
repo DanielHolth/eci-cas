@@ -1286,6 +1286,31 @@ revising the other, and hand revision is the point. The mitigation is a
 test asserting both files still state the English-fields rule — not that
 they match, which would rebuild the coupling in the assertion.
 
+**The second coupling, named: the path convention.** `category/topic/
+subtopic/subject/key`, and specifically what `system/` means, is coupled
+across three agents and is not shared by anything. Intent states the
+reading rule (`system/` describes the assistant, everything else the
+user). Recall's relevance rule depends on exactly that distinction — "a
+fact about the assistant itself does not answer a question about the
+user" — without ever naming `system/` as how to tell. Archivist, which
+*mints* the paths, does not contain the word: it is told to use the
+person's name or "owner" for a fact about the user, and given no clause
+at all for a fact about the persona.
+
+`system` is load-bearing — `DefaultSharedCategories`, `SharedCategories`
+in appsettings, and a seeded corpus of `system/identity/...` rows. So the
+writer was never told the convention the reader depends on, and a fact
+the persona learns about itself is filed under some other category, which
+Intent then attributes to the user. That is a defect today, before any
+instruction moves.
+
+Point 3 therefore splits nothing here; the drift already happened. The
+acceptance is the same shape as `ArchiveWriteStyle` but the work is not:
+each of the three files states the part of the convention its own agent
+needs, in its own words, and Archivist gains the clause it is missing.
+Same mitigation shape — a test asserting each file still carries its
+half, not that they match.
+
 ### Stage 3 — Daniel revises
 
 The point of the preceding stages. Terse, and giving the substrate room
