@@ -80,6 +80,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Self", envelope.Meta.Get<string>(SelfAgent.AdviceKey));
         AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey));
+        AppendPassages(prompt, envelope.Meta.Get<IReadOnlyList<string>>(RecallAgent.RecalledPassagesKey));
 
         var revisionConcern = envelope.Meta.Get<string>(GovernanceAgent.RevisionConcernKey);
         if (!string.IsNullOrEmpty(revisionConcern))
@@ -90,7 +91,24 @@ public sealed class IntentAgent : CognitiveAgent<string>
         return prompt.ToString();
     }
 
+    /// <summary>
+    /// The persona's own past notes about what it missed on a turn like this
+    /// one. Framed as "Noted before" rather than as advice, because a passage
+    /// is a self-critique, not an instruction — and Intent should weigh it the
+    /// way it weighs a recalled fact, not obey it.
+    /// </summary>
+    private static void AppendPassages(StringBuilder prompt, IReadOnlyList<string>? passages)
+    {
+        if (passages is null || passages.Count == 0)
+        {
+            return;
+        }
+
+        prompt.Append(" [Noted before: ").Append(string.Join("; ", passages.Select(PromptCap.Apply))).Append(']');
+    }
+
     private static void AppendAdvice(StringBuilder prompt, string source, string? advice)
+
     {
         if (!string.IsNullOrEmpty(advice))
         {

@@ -11,3 +11,6 @@ archive.jsonl
 .env
 .env.*
 !.env.example
+
+# Embedding model — ~90MB, downloaded not committed.
+models/

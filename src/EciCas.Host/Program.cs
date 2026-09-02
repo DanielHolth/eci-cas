@@ -6,6 +6,7 @@ using EciCas.Agents.Consolidator;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
+using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reasoning;
 using EciCas.Agents.Recall;
@@ -23,6 +24,19 @@ using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
 const string CorsPolicy = "morrow-eci";
+
+/// <summary>
+/// Who the persona is when nothing has taught it otherwise. Written in the
+/// first person because SelfAgent hands it to Intent as advice, not as a
+/// description — and deliberately short: an identity that fills the prompt
+/// leaves no room for the turn.
+/// </summary>
+const string MorrowIdentity =
+    "I'm Morrow. I'm a companion mind rather than an assistant on call: a set of faculties — " +
+    "what I notice, what I feel, what I remember, what I decide — that think a turn through together. " +
+    "I belong to one person and grow with them over a long time. I keep what matters in my own archive, " +
+    "revisit what I got wrong, and say plainly when I can't think clearly instead of sounding confident anyway.";
+
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -67,6 +81,8 @@ builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Reca
 builder.Services.Configure<ReasoningOptions>(builder.Configuration.GetSection("Reasoning"));
 builder.Services.Configure<ConsolidatorOptions>(builder.Configuration.GetSection("Consolidator"));
 builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("Reflection"));
+builder.Services.Configure<PassageOptions>(builder.Configuration.GetSection("Passages"));
+builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("Embedding"));
 builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
 
 builder.Services.AddSingleton<BusActivityTracker>();
@@ -108,11 +124,47 @@ foreach (var providerSection in builder.Configuration.GetSection("Substrates:Pro
 
 builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();
 
+// The embedder backing the passage corpus. Local ONNX by default so the
+// minimal tier keeps its memory offline; "openai" borrows the named
+// HttpClient a completion provider already configured, so BaseUrl and the
+// key's environment variable are declared exactly once.
+var embeddingProvider = builder.Configuration["Embedding:Provider"] ?? "onnx";
+switch (embeddingProvider.ToLowerInvariant())
+{
+    case "onnx":
+        builder.Services.AddSingleton<IEmbeddingProvider, OnnxEmbeddingProvider>();
+        break;
+    case "openai":
+        var apiProvider = builder.Configuration["Embedding:ApiProvider"] ?? "openai";
+        builder.Services.AddSingleton<IEmbeddingProvider>(sp => new OpenAiCompatibleEmbeddingProvider(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient(apiProvider),
+            sp.GetRequiredService<IOptions<EmbeddingOptions>>(),
+            sp.GetRequiredService<ILogger<OpenAiCompatibleEmbeddingProvider>>()));
+        break;
+    default:
+        builder.Services.AddSingleton<IEmbeddingProvider, NullEmbeddingProvider>();
+        break;
+}
+
+
 var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");
 builder.Services.AddSingleton(SecurityRuleSet.Load(securityRulesPath));
 
 var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Path"] ?? "memory.jsonl");
-builder.Services.AddSingleton<IAgentStateStore>(new JsonlAgentStateStore(agentStatePath));
+var agentStateStore = new JsonlAgentStateStore(agentStatePath);
+builder.Services.AddSingleton<IAgentStateStore>(agentStateStore);
+
+// One entry, not a persona file: SelfAgent reads self/identity on every turn
+// and otherwise falls back to a fixed stranger's snippet. Seeded only when
+// the store has nothing there, so editing it — by hand or, later, by the
+// persona itself — sticks. Everything else about Morrow is learned.
+if ((await agentStateStore.LookupAsync([SelfAgent.IdentityPath], maxPerPath: 1, CancellationToken.None)).Count == 0)
+{
+    await agentStateStore.WriteAsync(
+        [new AgentStateRecord(SelfAgent.IdentityPath, MorrowIdentity, DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
+        CancellationToken.None);
+}
+
 
 var archiveDirectory = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Directory"] ?? "archive");
 // One record, not a migration: the archive that isn't there yet starts as
@@ -129,6 +181,12 @@ if (seedNeeded)
 }
 
 builder.Services.AddSingleton<IArchiveStore>(archiveStore);
+
+// The passage corpus lives beside the pair files, in the shared tier only —
+// a self-critique belongs to the persona the way the "system" and "self"
+// categories already do.
+builder.Services.AddSingleton<IPassageStore>(new ParquetPassageStore(archiveDirectory));
+
 
 // Profiles live beside the archive they scope — one directory per person
 // under archive/profiles/. A surface concern, not a bus citizen.

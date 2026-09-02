@@ -1,3 +1,4 @@
+using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reasoning;
 using EciCas.Bus;
@@ -35,7 +36,8 @@ public class ReasoningAgentTests
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions { MaxSelectedPairs = 3 }));
+            Manifest(), Options.Create(new ReasoningOptions { MaxSelectedPairs = 3 }),
+            new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?"));
@@ -57,7 +59,8 @@ public class ReasoningAgentTests
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions()));
+            Manifest(), Options.Create(new ReasoningOptions()),
+            new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "anything on file?"));
@@ -83,7 +86,8 @@ public class ReasoningAgentTests
 
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions()));
+            Manifest(), Options.Create(new ReasoningOptions()),
+            new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?"));
@@ -113,7 +117,8 @@ public class ReasoningAgentTests
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
         var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions()));
+            Manifest(), Options.Create(new ReasoningOptions()),
+            new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?")), CancellationToken.None);

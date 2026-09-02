@@ -24,7 +24,8 @@ agent can never stall another agent's turn.
 | ArchiveLogger | `Topics.All` | — | deterministic |
 | ConsoleSubscriber | `Topics.All` | — | display |
 
-`IArchiveStore` is a **library**, not a bus citizen — see below.
+`IArchiveStore` and `IPassageStore` are **libraries**, not bus citizens —
+see below.
 
 Topics are named by purpose, never by recipient, so no agent ever names
 another agent.
@@ -175,6 +176,71 @@ and Recall are different sources of truth (parametric model knowledge vs.
 stored record) and neither should become stateful across the other's
 response.
 
+## The passage corpus: what it missed, not what it knows
+
+The archive answers *what is true*. The passage corpus answers a different
+question — *what should I have looked up* — and it is the only thing in the
+system that carries vectors.
+
+Nothing in `archive/` is ever embedded. Reflection already reads a whole
+batch of concluded turns; at the same time it extracts ideas, it writes a
+5-15 word note on the context that batch missed, in the register of a code
+review of its own retrieval ("should have read the family record before
+answering"). That note, and only that note, gets an embedding. Facts stay
+in exactly one place, and the vectors index the persona's judgement about
+retrieval rather than a second lossy copy of the knowledge itself.
+
+A note names the `category/topic` pairs it wishes had been read, stored as
+row metadata. That is what makes a vector hit actionable: Reasoning embeds
+the incoming turn, cosine-matches the corpus, and merges the matched notes'
+pairs into the selection alongside whatever its own selection call picked.
+Pointers are resolved against the *live* index, so a pair whose last row
+was deleted contributes nothing rather than sending Recall to read a file
+that no longer exists. The vectors narrow; Recall's row-picking call still
+does the picking — the retrieval shape is unchanged, it just starts from a
+better set of leads.
+
+The note's text also rides the envelope chain (`reasoning.passages` →
+`recall.passages`) into Intent's prompt as `[Noted before: …]`, capped by
+`PromptCap` like every other folded-in text. Both halves — the leads and
+the prose — come from one corpus read per turn, and no new agent or bundle
+roster slot: the passage store is a library, like `IArchiveStore`.
+
+**The revisit.** The previous batch's note is quoted back at the top of the
+next Reflection prompt, which may rewrite it in light of what happened
+since. The rewrite *replaces* the row, keeping its id and its original
+timestamp — so the corpus stays roughly one row per batch instead of
+accumulating drafts, and "latest" still means the newest event-series
+rather than the newest edit. Writes are once per `ReflectionOptions.BatchSize`
+concluded turns (10), never per turn.
+
+Storage is a single `passages.parquet` in the archive root. One file, not
+one-per-pair, because unlike the fact archive there is no address to shard
+on — every query is a cosine sweep over the whole corpus, and at a row per
+ten turns brute force over the in-memory cache needs no ANN index. Shared
+tier only: what the persona failed to retrieve is about the persona, not
+about a profile.
+
+### The embedder
+
+`IEmbeddingProvider` has a `bool Available`, because **not having an
+embedder is a normal state, not a failure.** The default is a local ONNX
+sentence-transformer (`Embedding:Provider = "onnx"`), whose ~90MB model
+file is deliberately not committed. If it isn't there, the provider logs
+one warning at construction, reports `Available == false`, and the swarm
+runs exactly as it did before vectors existed — Reflection writes no
+passages, Reasoning matches none. It never marks `substrate.degraded` and
+never breaks a turn, because nothing is actually degraded.
+
+Download a model to `models/embedding/` — any BERT-family ONNX export with
+its `vocab.txt` (e.g. `all-MiniLM-L6-v2`) — and it starts working with no
+code change. Embeddings are mean-pooled over `last_hidden_state` and L2
+normalized at write time, which is what lets cosine similarity be a plain
+dot product. Setting `Embedding:Provider = "api"` borrows the substrate
+registry's named `HttpClient` and calls an OpenAI-compatible `embeddings`
+endpoint instead; a failed call returns no vectors rather than throwing,
+which lands in the same "no embedder" path.
+
 ## Impulse's Critical reflex
 
 Impulse and Intent are two independent publishers on `events.proposal`;
@@ -303,10 +369,12 @@ design records for what shipped.
 
 ```
 src/EciCas.Core/        Envelope, MetaBag, Severity, Verdict, Topics, PromptCap,
-                         IAgent, IMessageBus, IArchiveStore, ISubstrateProvider
+                         IAgent, IMessageBus, IArchiveStore, IPassageStore,
+                         ISubstrateProvider
 src/EciCas.Bus/          ChannelBus, AgentBase, BusActivityTracker
 src/EciCas.Agents/       one folder per agent
 src/EciCas.Substrates/   SubstrateRegistry, MockSubstrateProvider, OpenAiCompatibleSubstrateProvider
+                         OnnxEmbeddingProvider, NullEmbeddingProvider
 src/EciCas.Host/         Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
 src/EciCas.ArchiveTool/  console REPL for inspecting/editing the Parquet archive
 tests/EciCas.Tests/      xUnit

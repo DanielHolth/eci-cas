@@ -19,7 +19,7 @@ public sealed class SelfAgent : AgentBase
 {
     public const string AdviceKey = "self.advice";
 
-    private const string IdentityPath = "self/identity";
+    public const string IdentityPath = "self/identity";
     private const string DefaultIdentitySnippet = "I'm ECI, here to help.";
 
     private readonly IMessageBus _bus;

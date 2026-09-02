@@ -3,6 +3,7 @@ using System.Text.Json;
 using EciCas.Agents.Consolidator;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
+using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
@@ -57,6 +58,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
+    private readonly IPassageStore _passages;
+    private readonly IEmbeddingProvider _embeddings;
     private readonly IAgentStateStore _stateStore;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
@@ -66,11 +69,14 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private readonly object _pendingLock = new();
 
     public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, IArchiveStore store, IAgentStateStore stateStore,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options)
+        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options,
+        IPassageStore passages, IEmbeddingProvider embeddings)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
+        _passages = passages;
+        _embeddings = embeddings;
         _stateStore = stateStore;
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
@@ -126,12 +132,15 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             return;
         }
 
+        var previous = await _passages.LatestAsync(cancellationToken).ConfigureAwait(false);
+
         List<Candidate> candidates;
         string? mood;
+        List<Note> notes;
         var started = Stopwatch.GetTimestamp();
         try
         {
-            var batchPrompt = BuildBatchPrompt(batch);
+            var batchPrompt = BuildBatchPrompt(batch, previous);
             var result = await _substrate.CompleteAsync(entry.Class, batchPrompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
@@ -148,6 +157,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
             candidates = ParseCandidates(result.Text);
             mood = ParseMood(result.Text);
+            notes = ParseNotes(result.Text);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -174,6 +184,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
             return;
         }
+
+        await WritePassagesAsync(notes, previous, cancellationToken).ConfigureAwait(false);
 
         if (candidates.Count == 0)
         {
@@ -245,10 +257,27 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         return Math.Clamp(vectors.Curiosity - 0.4 * vectors.Fatigue, 0.0, 1.0);
     }
 
-    private static string BuildBatchPrompt(List<BufferedConclusion> batch)
+    private static string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous)
     {
         var turns = string.Join("\n\n", batch.Select((b, i) =>
             $"{i + 1}. Given: {PromptCap.Apply(b.Prompt)}\n   Replied: {PromptCap.Apply(b.ReplyText)}"));
+
+        // The previous batch's note goes back in so its rewrite is a second
+        // reading of the same event-series with hindsight, not a fresh guess
+        // at what it meant. Absent on the very first batch, and its line is
+        // simply not asked for then.
+        var revisit = previous is null
+            ? string.Empty
+            : $"""
+
+            You wrote this note after the previous batch:
+            "{PromptCap.Apply(previous.Text)}" (topics: {string.Join(", ", previous.Pairs.Select(p => $"{p.Category}/{p.Topic}"))})
+            Now that you have seen what followed, rewrite it as one
+            "revisit|<category/topic, ...>|<note>" line in the same 5-15 word
+            form. Keep it if it still holds; sharpen or correct it if it does
+            not. This replaces the old note rather than adding to it.
+            """;
+
         return $"""
             From these recent interactions — what Intent was given (the turn,
             any advice, and recalled facts) and how it replied — propose
@@ -262,12 +291,20 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             "0.7|hypothesis|trip dates vs deadline". If nothing stands out,
             respond with no candidate lines.
 
-            {ArchiveWriteStyle.EnglishFields}
+            On its own line, describe the overall tone of these interactions
+            as "mood|<label>" where label is exactly one of: {MoodLabels}.
+            Always include this line, even when you propose no ideas.
 
-            Then, on its own final line, describe the overall tone of these
-            interactions as "mood|<label>" where label is exactly one of:
-            {MoodLabels}. Always include this line, even when you propose no
-            ideas.
+            Then review your own retrieval. Write one line
+            "missed|<category/topic, ...>|<note>" where the note is 5-15 words
+            naming the context you wish you had had for these turns, and the
+            topics are the knowledge-base pairs you should have read to get
+            it. A critique of what you were given, never a restatement of an
+            answer. Use only category/topic pairs that appear in the
+            interactions above; write no line at all if nothing was missing.
+            {revisit}
+
+            {ArchiveWriteStyle.EnglishFields}
 
             Interactions:
             {turns}
@@ -330,6 +367,104 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         return candidates;
     }
 
+    /// <summary>
+    /// Embeds the batch's notes and lands them in the passage corpus: the
+    /// current-batch note as a new row, the revisit under the previous row's
+    /// id and timestamp so it replaces that note rather than accumulating
+    /// beside it. Keeping the old timestamp is what keeps "latest" meaning
+    /// the most recent event-series rather than the most recent edit.
+    ///
+    /// Both texts go through one EmbedAsync call. Failure here loses the
+    /// notes and nothing else — the batch's ideas, mood and archive writes
+    /// have already happened, and a corpus that missed one entry is a weaker
+    /// shortcut, not a broken turn.
+    /// </summary>
+    private async Task WritePassagesAsync(List<Note> notes, Passage? previous, CancellationToken cancellationToken)
+    {
+        if (notes.Count == 0 || !_embeddings.Available)
+        {
+            return;
+        }
+
+        // A revisit with nothing to revise is the model answering a question
+        // it wasn't asked; without a previous row there is no id to write it
+        // under.
+        var revisit = previous is null ? null : notes.FirstOrDefault(n => n.IsRevisit);
+        var current = notes.FirstOrDefault(n => !n.IsRevisit);
+        var writing = new[] { revisit, current }.OfType<Note>().ToList();
+        if (writing.Count == 0)
+        {
+            return;
+        }
+
+        var vectors = await _embeddings.EmbedAsync([.. writing.Select(n => n.Text)], cancellationToken).ConfigureAwait(false);
+        if (vectors.Count != writing.Count)
+        {
+            _logger.LogWarning("{Agent} could not embed its retrieval notes, passage corpus unchanged", Name);
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var added = writing
+            .Select((n, i) => n.IsRevisit
+                ? new Passage(previous!.Id, n.Text, n.Pairs, previous.Timestamp, vectors[i])
+                : new Passage(Guid.NewGuid().ToString("n"), n.Text, n.Pairs, now, vectors[i]))
+            .ToList();
+
+        await _passages.WriteAsync(added, revisit is null ? null : previous!.Id, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("{Agent} wrote {Count} passage(s): {Texts}", Name, added.Count, string.Join(" | ", added.Select(p => p.Text)));
+    }
+
+    /// <summary>
+    /// "missed|pairs|note" and "revisit|pairs|note". Parsed apart from the
+    /// candidate lines rather than as a fourth candidate field: a note
+    /// describes what retrieval missed across the whole batch, and it has to
+    /// survive a batch that proposed no ideas at all.
+    /// </summary>
+    private static List<Note> ParseNotes(string response)
+    {
+        var notes = new List<Note>();
+        foreach (var line in response.Split('\n'))
+        {
+            var parts = line.Split('|');
+            if (parts.Length != 3)
+            {
+                continue;
+            }
+
+            var kind = parts[0].Trim().ToLowerInvariant();
+            if (kind is not ("missed" or "revisit"))
+            {
+                continue;
+            }
+
+            var text = parts[2].Trim();
+            if (text.Length == 0)
+            {
+                continue;
+            }
+
+            notes.Add(new Note(kind == "revisit", PromptCap.Apply(text), ParsePairs(parts[1])));
+        }
+
+        return notes;
+    }
+
+    /// <summary>
+    /// Pairs are stored lowercase because the archive treats an address as
+    /// case-insensitive; Reasoning resolves them against the live index
+    /// anyway, so anything malformed here costs a dropped pointer, never a
+    /// bad read.
+    /// </summary>
+    private static IReadOnlyList<ArchivePair> ParsePairs(string field) =>
+        [.. field.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.Split('/', 2))
+            .Where(p => p.Length == 2 && p[0].Trim().Length > 0 && p[1].Trim().Length > 0)
+            .Select(p => new ArchivePair(p[0].Trim().ToLowerInvariant(), p[1].Trim().ToLowerInvariant()))
+            .Distinct()];
+
     private sealed record BufferedConclusion(string Prompt, string ReplyText, int Generation);
+
     private sealed record Candidate(double Score, string Subtopic, string Idea);
+    private sealed record Note(bool IsRevisit, string Text, IReadOnlyList<ArchivePair> Pairs);
 }

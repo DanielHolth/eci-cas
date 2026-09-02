@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
@@ -28,15 +29,22 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// <summary>Selected pairs, carried on the events.selected-pairs envelope's Meta.</summary>
     public const string SelectedPairsKey = "reasoning.selected_pairs";
 
+    /// <summary>Text of the passages this turn matched by vector, alongside the pairs they pointed at.</summary>
+    public const string PassagesKey = "reasoning.passages";
+
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly ReasoningOptions _options;
+    private readonly IEmbeddingProvider _embeddings;
+    private readonly IPassageStore _passages;
+    private readonly PassageOptions _passageOptions;
     private readonly ILogger _logger;
 
     public ReasoningAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReasoningAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReasoningOptions> options)
+        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReasoningOptions> options,
+        IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> passageOptions)
         : base(bus, activity, logger, substrate, agentSubstrates)
     {
         _bus = bus;
@@ -44,6 +52,9 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
+        _embeddings = embeddings;
+        _passages = passages;
+        _passageOptions = passageOptions.Value;
         _logger = logger;
     }
 
@@ -59,7 +70,16 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 
     protected override IReadOnlyList<ArchivePair> FallbackResult(Envelope envelope) => [];
 
-    protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchivePair> result, SubstrateResult? diagnostics, string? degraded)
+    /// <summary>
+    /// Never reached: HandleAsync is overridden, so nothing in the base class
+    /// ever calls this. Kept to satisfy CognitiveAgent<T>, and delegating
+    /// rather than throwing so a future base-class path degrades to "no
+    /// passages" instead of an exception.
+    /// </summary>
+    protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchivePair> result, SubstrateResult? diagnostics, string? degraded) =>
+        Publish(envelope, result, [], degraded);
+
+    private void Publish(Envelope envelope, IReadOnlyList<ArchivePair> result, IReadOnlyList<string> passages, string? degraded)
     {
         // Always published, even empty on fallback/no-index/no-signal text —
         // Recall's roster slot in Governance's bundle needs a reply every
@@ -73,6 +93,15 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // a question about the human's own name.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var meta = SubstrateHealth.Mark(MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text), degraded);
+
+        // Matched passages ride along rather than becoming their own
+        // advisory: Recall is already Governance's roster slot for "what the
+        // archive had", and a second slot would mean a bundle-roster change
+        // for what is one more kind of remembered context.
+        if (passages.Count > 0)
+        {
+            meta = meta.With(PassagesKey, passages);
+        }
 
         // The profile rides along for the same reason: it decides which
         // archive tier Recall reads, and Derive would otherwise drop it.
@@ -93,12 +122,22 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         }
 
         var index = _store.IndexFor(envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
+        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+
+        // The vector half, and it runs first because it is the cheap one: a
+        // local embedding and a cosine sweep, no substrate call and no tier.
+        // Whatever it finds is merged into the selection below rather than
+        // replacing it — a passage says "last time this came up I should have
+        // read X", which is a lead, not a verdict on everything else.
+        var (passages, remembered) = await SearchPassagesAsync(text, index, cancellationToken).ConfigureAwait(false);
 
         // An empty archive and a deliberately deterministic agent reach the
-        // same place — nothing to select — and neither is a degradation.
+        // same place — nothing to select — and neither is a degradation. The
+        // passages still go out: matching one costs no substrate call, so
+        // there is no reason a deterministic Reasoning should lose them.
         if (index.Count == 0 || !entry.UseSubstrate)
         {
-            Publish(envelope, string.Empty, [], diagnostics: null, degraded: null);
+            Publish(envelope, remembered, passages, degraded: null);
             return;
         }
 
@@ -109,11 +148,10 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // substrate calls outright — which is every turn on a young archive.
         if (index.Count <= _options.MaxSelectedPairs)
         {
-            Publish(envelope, string.Empty, index, diagnostics: null, degraded: null);
+            Publish(envelope, index, passages, degraded: null);
             return;
         }
 
-        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
         var prompt = BuildSelectionPrompt(text, index);
 
         var started = Stopwatch.GetTimestamp();
@@ -122,16 +160,78 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             var result = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            Publish(envelope, prompt, ParsePairs(result.Text, index), result, degraded: null);
+            Publish(envelope, Merge(ParsePairs(result.Text, index), remembered), passages, degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var cause = SubstrateHealth.Classify(ex);
             _logger.LogWarning("{Agent} substrate call {Cause} after {LatencyMs}ms, fallback posture {Posture}",
                 Name, cause, Stopwatch.GetElapsedTime(started).TotalMilliseconds, Fallback);
-            Publish(envelope, prompt, [], diagnostics: null, cause);
+
+            // Open posture, and the passages are exactly what makes it worth
+            // something: a selection call that failed still leaves the turn
+            // with whatever the persona previously learned to look up here.
+            Publish(envelope, remembered, passages, cause);
         }
     }
+
+    /// <summary>
+    /// Cosine top-K over the passage corpus, returning both the passage text
+    /// (context for Intent) and the archive pairs those passages named
+    /// (leads for Recall) — the "both" wiring in one call rather than two
+    /// retrieval paths that could disagree.
+    ///
+    /// Unavailable embeddings are a normal state, not a failure: no model
+    /// downloaded, provider set to "none", or an embedding endpoint that just
+    /// refused. All of them return nothing here and the turn proceeds on the
+    /// pre-vector path, which is why this is not marked substrate.degraded —
+    /// the persona is not thinking with a faculty missing, it is thinking
+    /// without a shortcut it may never have had.
+    /// </summary>
+    private async Task<(IReadOnlyList<string> Passages, IReadOnlyList<ArchivePair> Pairs)> SearchPassagesAsync(
+        string? text, IReadOnlyList<ArchivePair> index, CancellationToken cancellationToken)
+    {
+        if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || _passageOptions.TopK <= 0)
+        {
+            return ([], []);
+        }
+
+        var query = await _embeddings.EmbedAsync([text], cancellationToken).ConfigureAwait(false);
+        if (query.Count == 0)
+        {
+            return ([], []);
+        }
+
+        var hits = await _passages.SearchAsync(query[0], _passageOptions.TopK, _passageOptions.MinScore, cancellationToken).ConfigureAwait(false);
+        if (hits.Count == 0)
+        {
+            return ([], []);
+        }
+
+        // A passage names the pairs that existed when it was written, and the
+        // index is the only authority on what exists now — deleting a pair's
+        // last row deletes its file, which is how a pair leaves the index. So
+        // pointers are resolved against the live index rather than trusted,
+        // and a stale one drops silently instead of sending Recall to read
+        // nothing.
+        var known = index.ToDictionary(p => $"{p.Category}/{p.Topic}", StringComparer.OrdinalIgnoreCase);
+        var pairs = hits
+            .SelectMany(h => h.Passage.Pairs)
+            .Select(p => known.GetValueOrDefault($"{p.Category}/{p.Topic}"))
+            .OfType<ArchivePair>()
+            .Distinct()
+            .Take(_passageOptions.MaxPairsFromPassages)
+            .ToList();
+
+        _logger.LogInformation("{Agent} matched {Count} passage(s), {Pairs} pair(s): {Texts}",
+            Name, hits.Count, pairs.Count, string.Join(" | ", hits.Select(h => h.Passage.Text)));
+
+        return ([.. hits.Select(h => h.Passage.Text)], pairs);
+    }
+
+    /// <summary>Selection first, passage leads after, no duplicates — the LLM saw the whole index, a passage saw one past turn.</summary>
+    private static IReadOnlyList<ArchivePair> Merge(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> remembered) =>
+        [.. selected, .. remembered.Where(p => !selected.Contains(p))];
 
     private string BuildSelectionPrompt(string? text, IReadOnlyList<ArchivePair> index)
     {

@@ -144,6 +144,34 @@ manifest changed since the last compile. Clean and rebuild:
 dotnet clean src/EciCas.Host && dotnet build src/EciCas.Host && dotnet run --project src/EciCas.Host
 ```
 
+### Optional: the embedding model
+
+Vector memory (the passage corpus — see
+[architecture.md](docs/architecture.md#the-passage-corpus-what-it-missed-not-what-it-knows))
+is off until you supply an embedding model, and **that is a supported way to
+run**, not a broken one: with no model present the host logs one warning at
+startup and the swarm behaves exactly as it did before vectors existed.
+
+To turn it on, drop any BERT-family ONNX sentence-transformer export and its
+`vocab.txt` — `all-MiniLM-L6-v2` is a good default at ~90MB — into
+`models/embedding/` next to the host's binary, the same place `archive/`
+lives:
+
+```
+src/EciCas.Host/bin/Debug/net10.0/models/embedding/model.onnx
+src/EciCas.Host/bin/Debug/net10.0/models/embedding/vocab.txt
+```
+
+The model is not committed; `models/` is gitignored. Paths come from the
+`Embedding` config block, so an absolute path outside the build output works
+too. Setting `Embedding:Provider=api` calls an OpenAI-compatible
+`embeddings` endpoint instead, reusing a provider already configured under
+`Substrates:Providers` for its base URL and key:
+
+```bash
+dotnet run --project src/EciCas.Host -- --Embedding:Provider=api --Embedding:ApiProvider=openai
+```
+
 ## Docs
 
 Two docs, deliberately:

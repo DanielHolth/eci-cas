@@ -280,10 +280,10 @@ narrow what passing them all would give Intent, so it is skipped too. On
 a young archive that leaves the turn at one substrate call — Intent's —
 instead of three.
 
-## Memory architecture — vectors, episodes, and the capsule (design, not started)
+## Memory architecture — vectors, episodes, and the capsule (first layer shipped)
 
-Everything below came out of one long design conversation and none of it
-is built. It is written down because the decisions interlock: pulling any
+Everything below came out of one long design conversation. The first
+vector layer is now built — see *What shipped* — and the rest is not. It is written down because the decisions interlock: pulling any
 one of them out changes what the others are for.
 
 The question that started it was whether the pair-addressed archive beats
@@ -294,6 +294,52 @@ hand-correctable, no reindex when the embedding model changes, facts
 rather than chunks, zero infrastructure) and loses badly on latency: two
 sequential substrate hops per turn where classic RAG has none. The design
 below keeps what the symbolic store is good at and buys back the latency.
+
+### What shipped: the passage corpus
+
+The first vector layer is built, and it is deliberately **not** either of
+the two layers designed below. Neither pairs nor rows are embedded; the
+archive holds no vectors at all.
+
+What is embedded is a third thing that fell out of the design conversation:
+a 5-15 word note Reflection writes about **what the last batch of turns
+failed to retrieve** — a code review of its own recall, not a copy of what
+it knows. The reasoning is the "embed what the query will look like"
+rule pushed one step further. A miss is already phrased in the shape of the
+question that caused it, and a note that says *"should have read the family
+record"* carries a pointer to `person/family` as row metadata, so a cosine
+hit becomes a **lead** rather than an answer. Reasoning merges those pairs
+into its selection; Recall's picking call still picks.
+
+That keeps three properties the design section argues for, without the
+parts that were expensive:
+
+- **Union, not replacement.** The LLM selection arm still runs and still
+  gates the turn. Vectors add leads; they never remove one.
+- **No second copy of a fact.** Facts live in exactly one place. Deleting a
+  row cannot leave a stale embedding behind, because pointers are resolved
+  against the live index and a pair that no longer exists contributes
+  nothing.
+- **No new per-turn substrate call.** The note is extra lines in the batch
+  prompt Reflection already sends, once per `BatchSize` (now 10, as the
+  cross-event section recommends) — not per turn.
+
+Also shipped, from the surrounding design: **the revisit.** The previous
+note is quoted back into the next Reflection prompt and may be rewritten,
+replacing its row rather than appending. That is the "digests index upward,
+they never carry forward" instinct at the smallest possible scale — one
+carried thought, sharpened, instead of a growing pile of drafts.
+
+Not shipped, and still worth building: aliases, the pair and row vector
+layers, escalate-on-low-confidence, the episode corpus, year partitioning,
+and the digest pyramid. Nothing here forecloses any of them — a second
+corpus is another `IPassageStore`, and pair or row vectors would union in
+alongside, exactly as designed.
+
+The embedder is local ONNX by default with an OpenAI-compatible API option,
+and **unavailability is a normal state, not a degradation**: with no model
+file present the swarm behaves precisely as it did before vectors existed.
+See [architecture.md](architecture.md#the-passage-corpus-what-it-missed-not-what-it-knows).
 
 ### Two-layer vector retrieval
 
