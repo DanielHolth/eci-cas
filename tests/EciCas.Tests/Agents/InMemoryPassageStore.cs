@@ -1,4 +1,4 @@
-using EciCas.Core;
+﻿using EciCas.Core;
 
 namespace EciCas.Tests.Agents;
 
@@ -17,6 +17,9 @@ internal sealed class InMemoryPassageStore : IPassageStore
     public Task<Passage?> LatestAsync(CancellationToken cancellationToken) =>
         Task.FromResult(Passages.Count == 0 ? null : Passages.MaxBy(p => p.Timestamp));
 
+    public Task<IReadOnlyCollection<string>> StampedModelsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyCollection<string>>([.. Passages.Select(p => p.ModelId).Where(m => m.Length > 0).Distinct()]);
+
     public Task WriteAsync(IReadOnlyList<Passage> added, string? replacedId, CancellationToken cancellationToken)
     {
         if (replacedId is not null)
@@ -34,9 +37,11 @@ internal sealed class InMemoryPassageStore : IPassageStore
 /// match or not match without a model. Unavailable by default — most agent
 /// tests predate vectors and must keep exercising the pre-vector path.
 /// </summary>
-internal sealed class StubEmbeddings(Func<string, float[]>? embed = null) : IEmbeddingProvider
+internal sealed class StubEmbeddings(Func<string, float[]>? embed = null, string modelId = "stub") : IEmbeddingProvider
 {
     public bool Available => embed is not null;
+
+    public string ModelId => Available ? modelId : string.Empty;
 
     public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<float[]>>(embed is null ? [] : [.. texts.Select(embed)]);

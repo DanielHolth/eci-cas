@@ -341,7 +341,7 @@ and **unavailability is a normal state, not a degradation**: with no model
 file present the swarm behaves precisely as it did before vectors existed.
 See [architecture.md](architecture.md#the-passage-corpus-what-it-missed-not-what-it-knows).
 
-### The corpus has no model identity (hazard)
+### The corpus had no model identity (closed)
 
 `Passage` stores a raw `float[]` and nothing about which embedding model
 produced it. `VectorMath.Cosine` returns 0.0 on a width mismatch, so
@@ -352,10 +352,30 @@ anything.
 
 Nothing ages a note out by design — search ranks on cosine alone, there is
 no TTL, no size cap and no recency term, so a note from years ago competes
-on equal footing with this morning's. A model change is the one event that
-would take that away. Before touching `IEmbeddingProvider`'s default model,
-stamp a model id on the passage row and either re-embed on mismatch or
-refuse to start.
+on equal footing with this morning's. A model change was the one event that
+would take that away.
+
+Closed by stamping a model id on every passage row. `IEmbeddingProvider`
+now names itself — `onnx:<weights path>` (the path, not a friendly name:
+two operators pointing at different downloads are running different models
+whatever either file is called) or `openai:<api model>` — and the host
+refuses to start when the corpus carries an id the configured embedder does
+not share.
+
+Refusing was chosen over re-embedding, and it is the conservative option
+rather than the cautious-sounding one. Re-embedding rewrites the whole
+corpus on a config change an operator may have made by accident, and a
+change made by accident is exactly the one that should not rewrite
+anything. Refusing costs a failed boot and a message naming both models;
+the operator then restores the old embedder or re-embeds deliberately.
+
+Two things deliberately do not fail. An empty `ModelId` — no embedder
+configured, or the ONNX weights not downloaded — skips the check entirely,
+because nothing will search and so nothing can be mis-scored; the corpus
+being unreachable is already a normal announced state. And rows written
+before the stamp existed read back with no id and are excluded rather than
+counted as disagreeing: an unrecorded model is not a conflicting one, and
+this must not brick a host over a corpus that predates the field.
 
 ### Hindsight — what it is for
 

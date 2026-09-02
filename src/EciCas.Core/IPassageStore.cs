@@ -1,4 +1,4 @@
-namespace EciCas.Core;
+﻿namespace EciCas.Core;
 
 /// <summary>
 /// Turns text into a dense vector. Deliberately separate from
@@ -15,6 +15,18 @@ namespace EciCas.Core;
 public interface IEmbeddingProvider
 {
     bool Available { get; }
+
+    /// <summary>
+    /// Which model produced these vectors, stamped onto every passage row.
+    /// Cosine returns 0.0 across a width mismatch, so swapping to a model of
+    /// a different dimension silently retires the whole corpus; swapping at
+    /// the same width is worse, because the old vectors keep scoring and
+    /// stop meaning anything. Nothing else in the corpus ages a note out —
+    /// no TTL, no size cap, no recency term — so a model change is the only
+    /// event that can take a years-old note away, and it must not do it
+    /// quietly. An empty string means "no embedder", which stamps nothing.
+    /// </summary>
+    string ModelId { get; }
 
     Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken);
 }
@@ -70,7 +82,8 @@ public sealed record Passage(
     float[] Embedding,
     IReadOnlyList<string>? ParentIds = null,
     int EchoDepth = 0,
-    int Generation = 0)
+    int Generation = 0,
+    string ModelId = "")
 {
     public IReadOnlyList<string> ParentIds { get; init; } = ParentIds ?? [];
 }
@@ -102,6 +115,57 @@ public interface IPassageStore
     /// one passage per event-series.
     /// </summary>
     Task WriteAsync(IReadOnlyList<Passage> added, string? replacedId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every distinct model id stamped on a stored passage, excluding rows
+    /// written before the stamp existed. Read once at startup to decide
+    /// whether the configured embedder agrees with the corpus it is about
+    /// to search — see <see cref="IEmbeddingProvider.ModelId"/>.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> StampedModelsAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// The startup check that a corpus and its embedder are the same pairing
+/// they were when the corpus was written.
+/// </summary>
+public static class PassageCorpus
+{
+    /// <summary>
+    /// Throws when the stored passages carry a model id the configured
+    /// embedder does not share. Refusing to start is the conservative
+    /// option, not the cautious-sounding one: the alternative is a host
+    /// that runs happily while every note written before the swap either
+    /// scores 0.0 forever (different width) or scores plausibly and means
+    /// nothing (same width). Neither leaves a log line worth finding, and
+    /// nothing else in the corpus ever removes a note, so a silent swap is
+    /// the only way years of thought quietly stop being reachable.
+    ///
+    /// Rows written before the stamp existed are excluded by the caller and
+    /// so pass: an unrecorded model is not a disagreeing one, and this must
+    /// not brick a host over a corpus that predates the field.
+    /// </summary>
+    public static void EnsureModelAgreement(IReadOnlyCollection<string> stamped, string current)
+    {
+        // No embedder configured: nothing will search, so nothing can be
+        // silently mis-scored. Unavailability is a normal state here.
+        if (current.Length == 0)
+        {
+            return;
+        }
+
+        var foreign = stamped.Where(m => m != current).ToList();
+        if (foreign.Count == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Passage corpus was written by {string.Join(", ", foreign)} but the configured embedder is " +
+            $"{current}. Those vectors cannot be compared, and starting anyway would retire every note " +
+            "written before the change without saying so. Either restore the previous embedder, or " +
+            "re-embed the corpus under the new one.");
+    }
 }
 
 public sealed record PassageHit(Passage Passage, double Score);

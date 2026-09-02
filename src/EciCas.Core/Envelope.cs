@@ -1,4 +1,4 @@
-namespace EciCas.Core;
+﻿namespace EciCas.Core;
 
 public sealed record Envelope
 {
@@ -18,9 +18,12 @@ public sealed record Envelope
     public MetaBag Meta { get; init; } = MetaBag.Empty;
 
     /// <summary>
-    /// Incremented whenever an agent spawns a new event from an existing arc
-    /// (e.g. Reflection's ideas). Not the same as EventId chaining — this is
-    /// the loop guard, checked by Reflection against MaxIdeaGeneration.
+    /// How many times this arc has fed itself. Derive() carries it across a
+    /// turn unchanged; Reflection is the only agent that increments it, when
+    /// it pushes one of its own ideas back onto events.perception as if it
+    /// were external input. Not EventId chaining — this is the loop guard
+    /// for exactly that push, checked against MaxIdeaGeneration. Any future
+    /// agent that feeds its own output back in owes the same increment.
     /// </summary>
     public int Generation { get; init; }
 

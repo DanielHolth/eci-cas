@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -52,6 +52,11 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
     }
 
     public bool Available => _session is not null && _tokenizer is not null;
+
+    /// <summary>The weights file's own path: two operators pointing at
+    /// different downloads are running different models, whatever either
+    /// file happens to be called.</summary>
+    public string ModelId => Available ? $"onnx:{_options.ModelPath}" : string.Empty;
 
     public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
     {

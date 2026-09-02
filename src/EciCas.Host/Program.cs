@@ -231,6 +231,13 @@ var agentSubstrates = app.Services.GetRequiredService<IOptions<AgentSubstrateMan
 var substrateOptions = app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value;
 AgentSubstrateManifestValidator.Validate(agentSubstrates, substrateOptions, app.Services.GetServices<IAgent>());
 
+// A model swap is the one event that can take a note away, and it does it
+// without a log line — so it is checked here, before anything searches.
+var embedder = app.Services.GetRequiredService<IEmbeddingProvider>();
+PassageCorpus.EnsureModelAgreement(
+    await app.Services.GetRequiredService<IPassageStore>().StampedModelsAsync(CancellationToken.None),
+    embedder.ModelId);
+
 app.UseCors(CorsPolicy);
 
 var jsonOptions = new JsonSerializerOptions

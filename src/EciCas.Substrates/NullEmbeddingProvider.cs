@@ -1,4 +1,4 @@
-namespace EciCas.Substrates;
+﻿namespace EciCas.Substrates;
 
 using EciCas.Core;
 
@@ -11,6 +11,8 @@ using EciCas.Core;
 public sealed class NullEmbeddingProvider : IEmbeddingProvider
 {
     public bool Available => false;
+
+    public string ModelId => string.Empty;
 
     public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<float[]>>([]);

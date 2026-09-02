@@ -410,8 +410,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 // A revisit is the same thought sharpened, so it keeps its
                 // own ancestry along with its id and timestamp. Revising a
                 // thought does not make it a descendant of itself.
-                ? previous! with { Text = n.Text, Pairs = n.Pairs, Embedding = vectors[i] }
-                : new Passage(Guid.NewGuid().ToString("n"), n.Text, n.Pairs, now, vectors[i], parents, depth, generation))
+                ? previous! with { Text = n.Text, Pairs = n.Pairs, Embedding = vectors[i], ModelId = _embeddings.ModelId }
+                : new Passage(Guid.NewGuid().ToString("n"), n.Text, n.Pairs, now, vectors[i], parents, depth, generation, _embeddings.ModelId))
             .ToList();
 
         await _passages.WriteAsync(added, revisit is null ? null : previous!.Id, cancellationToken).ConfigureAwait(false);

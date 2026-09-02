@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Parquet.Serialization;
 
 namespace EciCas.Agents.Passages;
@@ -45,6 +45,11 @@ public sealed class ParquetPassageStore : IPassageStore
         public string? ParentIds { get; set; }
         public int? EchoDepth { get; set; }
         public int? Generation { get; set; }
+
+        // Same nullability, different meaning: null here is "written before
+        // the stamp existed", which the mismatch check must not read as a
+        // model that disagrees with the current one.
+        public string? ModelId { get; set; }
     }
 
     private readonly string _path;
@@ -72,6 +77,12 @@ public sealed class ParquetPassageStore : IPassageStore
     {
         var all = await LoadAsync(cancellationToken).ConfigureAwait(false);
         return all.Count == 0 ? null : all.MaxBy(p => p.Timestamp);
+    }
+
+    public async Task<IReadOnlyCollection<string>> StampedModelsAsync(CancellationToken cancellationToken)
+    {
+        var all = await LoadAsync(cancellationToken).ConfigureAwait(false);
+        return [.. all.Select(p => p.ModelId).Where(m => m.Length > 0).Distinct()];
     }
 
     public async Task WriteAsync(IReadOnlyList<Passage> added, string? replacedId, CancellationToken cancellationToken)
@@ -147,6 +158,7 @@ public sealed class ParquetPassageStore : IPassageStore
         ParentIds = JsonSerializer.Serialize(p.ParentIds),
         EchoDepth = p.EchoDepth,
         Generation = p.Generation,
+        ModelId = p.ModelId,
     };
 
     private static Passage FromRow(PassageRow r) => new(
@@ -157,7 +169,8 @@ public sealed class ParquetPassageStore : IPassageStore
         DecodeFloats(Convert.FromBase64String(r.Embedding)),
         r.ParentIds is null ? [] : JsonSerializer.Deserialize<List<string>>(r.ParentIds) ?? [],
         r.EchoDepth ?? 0,
-        r.Generation ?? 0);
+        r.Generation ?? 0,
+        r.ModelId ?? "");
 
     private static byte[] EncodeFloats(float[] v)
     {

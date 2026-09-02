@@ -1,4 +1,4 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -32,6 +32,8 @@ public sealed class OpenAiCompatibleEmbeddingProvider : IEmbeddingProvider
     }
 
     public bool Available => true;
+
+    public string ModelId => $"openai:{_options.ApiModel}";
 
     public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
     {
