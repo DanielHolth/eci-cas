@@ -15,6 +15,7 @@ agent can never stall another agent's turn.
 | Librarian | `events.perception` | `events.advisories`, `events.selected-pairs` | cognitive |
 | Recall | `events.selected-pairs` | `events.advisories` | deterministic |
 | Identity | `events.perception` | `events.advisories` | deterministic (archive read) |
+| Hindsight | `events.perception` | `events.advisories` | deterministic (embed + cosine) |
 | Governance | `events.advisories`, `events.verdict` | `events.bundle`, `events.action`, `events.conclusion` | deterministic |
 | Intent | `events.bundle` | `events.proposal` | cognitive |
 | Security | `events.proposal` | `events.verdict` | deterministic |
@@ -232,11 +233,21 @@ that no longer exists. The vectors narrow; Recall's row-picking call still
 does the picking — the retrieval shape is unchanged, it just starts from a
 better set of leads.
 
-The note's text also rides the envelope chain (`reasoning.passages` →
-`recall.passages`) into Intent's prompt as `[Noted before: …]`, capped by
-`PromptCap` like every other folded-in text. Both halves — the leads and
-the prose — come from one corpus read per turn, and no new agent or bundle
-roster slot: the passage store is a library, like `IArchiveStore`.
+The note's *text* takes a different path. `HindsightAgent` is its own
+bundle-roster slot: it subscribes to `events.perception`, sweeps the same
+corpus, and publishes `hindsight.notes` as an advisory that Intent reads
+directly as `[Noted before: …]`, capped by `PromptCap` like every other
+folded-in text. Each note arrives with its age on the front — "3 months
+ago", "earlier today" — because a thought the persona has been carrying
+and an echo of the last turn should not read the same.
+
+The split is the point. Prose and facts are different substances, and
+having the prose ride Librarian's envelope into Recall's slot laundered
+one through the other. Intent now weighs "what the archive held" and "what
+I once thought about this" as two contributions and can disagree with
+either. The cost is one extra embed per turn — a local ONNX call — since
+Librarian and Hindsight sweep the same corpus for different halves of it;
+sharing a per-turn embedding is a listed optimisation.
 
 **The revisit.** The previous batch's note is quoted back at the top of the
 next Reflection prompt, which may rewrite it in light of what happened

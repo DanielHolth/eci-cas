@@ -17,7 +17,8 @@ const MAX_TURNS = 20;
 /** Each bundle agent thinks in its own shape, so each gets its own reader
  * off the raw meta. Librarian's thought is which archive pairs it chose;
  * Recall's is the rows it picked out of them; Identity's is already a line of
- * text. All three collapse to one terse string for a bubble. */
+ * text; Hindsight's is prose the persona wrote about itself, age and all.
+ * All four collapse to one terse string for a bubble. */
 const BUNDLE_THOUGHT: Record<BundleAgent, (meta: Record<string, unknown>) => string | undefined> = {
   librarian: (meta) => {
     const pairs = meta["librarian.selected_pairs"];
@@ -32,6 +33,10 @@ const BUNDLE_THOUGHT: Record<BundleAgent, (meta: Record<string, unknown>) => str
       : undefined;
   },
   identity: (meta) => (typeof meta["identity.advice"] === "string" ? meta["identity.advice"] : undefined),
+  hindsight: (meta) => {
+    const notes = meta["hindsight.notes"];
+    return Array.isArray(notes) && notes.length > 0 ? notes.join("; ") : undefined;
+  },
 };
 
 function record(turn: TurnEvent, agent: BundleAgent, text: string): void {

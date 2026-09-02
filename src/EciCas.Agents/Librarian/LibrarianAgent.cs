@@ -36,9 +36,6 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// <summary>Selected pairs, carried on the events.selected-pairs envelope's Meta.</summary>
     public const string SelectedPairsKey = "librarian.selected_pairs";
 
-    /// <summary>Text of the passages this turn matched by vector, alongside the pairs they pointed at.</summary>
-    public const string PassagesKey = "librarian.passages";
-
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
@@ -84,9 +81,9 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// passages" instead of an exception.
     /// </summary>
     protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchivePair> result, SubstrateResult? diagnostics, string? degraded) =>
-        Publish(envelope, result, [], degraded);
+        Publish(envelope, result, degraded);
 
-    private void Publish(Envelope envelope, IReadOnlyList<ArchivePair> result, IReadOnlyList<string> passages, string? degraded)
+    private void Publish(Envelope envelope, IReadOnlyList<ArchivePair> result, string? degraded)
     {
         // Always published, even empty on fallback/no-index/no-signal text —
         // Recall's roster slot in Governance's bundle needs a reply every
@@ -100,15 +97,6 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // a question about the human's own name.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var meta = SubstrateHealth.Mark(MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text), degraded);
-
-        // Matched passages ride along rather than becoming their own
-        // advisory: Recall is already Governance's roster slot for "what the
-        // archive had", and a second slot would mean a bundle-roster change
-        // for what is one more kind of remembered context.
-        if (passages.Count > 0)
-        {
-            meta = meta.With(PassagesKey, passages);
-        }
 
         // The profile rides along for the same reason: it decides which
         // archive tier Recall reads, and Derive would otherwise drop it.
@@ -136,7 +124,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // Whatever it finds is merged into the selection below rather than
         // replacing it — a passage says "last time this came up I should have
         // read X", which is a lead, not a verdict on everything else.
-        var (passages, remembered) = await SearchPassagesAsync(text, index, cancellationToken).ConfigureAwait(false);
+        var remembered = await SearchPassageLeadsAsync(text, index, cancellationToken).ConfigureAwait(false);
 
         // An empty archive and a deliberately deterministic agent reach the
         // same place — nothing to select — and neither is a degradation. The
@@ -144,7 +132,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // there is no reason a deterministic Librarian should lose them.
         if (index.Count == 0 || !entry.UseSubstrate)
         {
-            Publish(envelope, remembered, passages, degraded: null);
+            Publish(envelope, remembered, degraded: null);
             return;
         }
 
@@ -155,7 +143,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // substrate calls outright — which is every turn on a young archive.
         if (index.Count <= _options.MaxSelectedPairs)
         {
-            Publish(envelope, index, passages, degraded: null);
+            Publish(envelope, index, degraded: null);
             return;
         }
 
@@ -167,7 +155,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             var result = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            Publish(envelope, Merge(ParsePairs(result.Text, index), remembered), passages, degraded: null);
+            Publish(envelope, Merge(ParsePairs(result.Text, index), remembered), degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -178,15 +166,22 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             // Open posture, and the passages are exactly what makes it worth
             // something: a selection call that failed still leaves the turn
             // with whatever the persona previously learned to look up here.
-            Publish(envelope, remembered, passages, cause);
+            Publish(envelope, remembered, cause);
         }
     }
 
     /// <summary>
-    /// Cosine top-K over the passage corpus, returning both the passage text
-    /// (context for Intent) and the archive pairs those passages named
-    /// (leads for Recall) — the "both" wiring in one call rather than two
-    /// retrieval paths that could disagree.
+    /// Cosine top-K over the passage corpus, keeping only the archive pairs
+    /// those notes named. The note TEXT is not read here — that is
+    /// HindsightAgent's, and it reaches Intent as its own bundle slot. What
+    /// stays behind is the lead: "when something like this came up, I wished
+    /// I had read person/family", which is a statement about where the facts
+    /// are and therefore Librarian's business.
+    ///
+    /// The cost of the split is one extra embed per turn, since Hindsight
+    /// embeds the same text for its own sweep. A local ONNX call, and worth
+    /// it rather than having one agent's envelope carry the other's payload;
+    /// sharing a per-turn embedding is a later optimisation (roadmap.md).
     ///
     /// Unavailable embeddings are a normal state, not a failure: no model
     /// downloaded, provider set to "none", or an embedding endpoint that just
@@ -195,24 +190,24 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// the persona is not thinking with a faculty missing, it is thinking
     /// without a shortcut it may never have had.
     /// </summary>
-    private async Task<(IReadOnlyList<string> Passages, IReadOnlyList<ArchivePair> Pairs)> SearchPassagesAsync(
+    private async Task<IReadOnlyList<ArchivePair>> SearchPassageLeadsAsync(
         string? text, IReadOnlyList<ArchivePair> index, CancellationToken cancellationToken)
     {
         if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || _passageOptions.TopK <= 0)
         {
-            return ([], []);
+            return [];
         }
 
         var query = await _embeddings.EmbedAsync([text], cancellationToken).ConfigureAwait(false);
         if (query.Count == 0)
         {
-            return ([], []);
+            return [];
         }
 
         var hits = await _passages.SearchAsync(query[0], _passageOptions.TopK, _passageOptions.MinScore, cancellationToken).ConfigureAwait(false);
         if (hits.Count == 0)
         {
-            return ([], []);
+            return [];
         }
 
         // A passage names the pairs that existed when it was written, and the
@@ -220,7 +215,8 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // last row deletes its file, which is how a pair leaves the index. So
         // pointers are resolved against the live index rather than trusted,
         // and a stale one drops silently instead of sending Recall to read
-        // nothing.
+        // nothing. A note may also name no pair at all, which costs nothing:
+        // its text still reaches Intent through Hindsight.
         var known = index.ToDictionary(p => $"{p.Category}/{p.Topic}", StringComparer.OrdinalIgnoreCase);
         var pairs = hits
             .SelectMany(h => h.Passage.Pairs)
@@ -230,38 +226,11 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             .Take(_passageOptions.MaxPairsFromPassages)
             .ToList();
 
-        _logger.LogInformation("{Agent} matched {Count} passage(s), {Pairs} pair(s): {Texts}",
-            Name, hits.Count, pairs.Count, string.Join(" | ", hits.Select(h => h.Passage.Text)));
+        _logger.LogInformation("{Agent} matched {Count} note(s) for {Pairs} lead(s)", Name, hits.Count, pairs.Count);
 
-        return ([.. hits.Select(h => $"{Age(h.Passage.Timestamp)}: {h.Passage.Text}")], pairs);
+        return pairs;
     }
 
-    /// <summary>
-    /// A note reaches Intent with its age on the front. Without it a thought
-    /// from months ago and one from this morning read identically, and the
-    /// difference between a recollection and an echo of the last turn is
-    /// exactly the thing worth knowing about a passage. Coarse and
-    /// qualitative on purpose — the score stays out, because a number invites
-    /// the model to trust a close match more than a sideways one, and the
-    /// sideways ones are why the floor is low.
-    ///
-    /// Reads the passage timestamp, which a revisit deliberately preserves:
-    /// a sharpened thought keeps the age of the thought it sharpens.
-    /// </summary>
-    private static string Age(DateTimeOffset written)
-    {
-        var span = DateTimeOffset.UtcNow - written;
-        return span switch
-        {
-            { TotalHours: < 12 } => "earlier today",
-            { TotalHours: < 36 } => "yesterday",
-            { TotalDays: < 14 } => $"{(int)span.TotalDays} days ago",
-            { TotalDays: < 60 } => $"{(int)(span.TotalDays / 7)} weeks ago",
-            { TotalDays: < 365 } => $"{(int)(span.TotalDays / 30)} months ago",
-            { TotalDays: < 730 } => "over a year ago",
-            _ => $"{(int)(span.TotalDays / 365)} years ago",
-        };
-    }
 
     /// <summary>Selection first, passage leads after, no duplicates — the LLM saw the whole index, a passage saw one past turn.</summary>
     private static IReadOnlyList<ArchivePair> Merge(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> remembered) =>

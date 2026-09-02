@@ -8,6 +8,7 @@ const AGENT_STYLE: Record<BundleAgent, { dot: string; label: string }> = {
   librarian: { dot: "bg-blue-500", label: "Librarian" },
   recall: { dot: "bg-orange-500", label: "Recall" },
   identity: { dot: "bg-fuchsia-500", label: "Identity" },
+  hindsight: { dot: "bg-violet-500", label: "Hindsight" },
 };
 
 export function ThoughtBubbles({

@@ -4,6 +4,7 @@ using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
+using EciCas.Agents.Hindsight;
 using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
@@ -80,7 +81,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Identity", envelope.Meta.Get<string>(IdentityAgent.AdviceKey));
         AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey));
-        AppendPassages(prompt, envelope.Meta.Get<IReadOnlyList<string>>(RecallAgent.RecalledPassagesKey));
+        AppendNotes(prompt, envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey));
 
         var revisionConcern = envelope.Meta.Get<string>(GovernanceAgent.RevisionConcernKey);
         if (!string.IsNullOrEmpty(revisionConcern))
@@ -92,19 +93,24 @@ public sealed class IntentAgent : CognitiveAgent<string>
     }
 
     /// <summary>
-    /// The persona's own past notes about what it missed on a turn like this
-    /// one. Framed as "Noted before" rather than as advice, because a passage
-    /// is a self-critique, not an instruction — and Intent should weigh it the
-    /// way it weighs a recalled fact, not obey it.
+    /// Thoughts the persona had after past turns, woken by Hindsight because
+    /// this one brushed against them. Framed as "Noted before" rather than as
+    /// advice, because a note is the persona's own opinion, not an
+    /// instruction — Intent weighs it the way it weighs a recalled fact, and
+    /// is free to disagree with something it once thought.
+    ///
+    /// Each note arrives with its age on the front, which is most of what
+    /// makes it usable: "3 months ago" and "earlier today" ask to be weighed
+    /// differently, and the second one is closer to an echo than a memory.
     /// </summary>
-    private static void AppendPassages(StringBuilder prompt, IReadOnlyList<string>? passages)
+    private static void AppendNotes(StringBuilder prompt, IReadOnlyList<string>? notes)
     {
-        if (passages is null || passages.Count == 0)
+        if (notes is null || notes.Count == 0)
         {
             return;
         }
 
-        prompt.Append(" [Noted before: ").Append(string.Join("; ", passages.Select(PromptCap.Apply))).Append(']');
+        prompt.Append(" [Noted before: ").Append(string.Join("; ", notes.Select(PromptCap.Apply))).Append(']');
     }
 
     private static void AppendAdvice(StringBuilder prompt, string source, string? advice)

@@ -34,9 +34,6 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 {
     public const string RecalledFactsKey = "recall.facts";
 
-    /// <summary>Passage text Librarian matched by vector, forwarded unchanged so it reaches Intent through Recall's existing roster slot.</summary>
-    public const string RecalledPassagesKey = "recall.passages";
-
     private const int MaxPickedPerWorker = 5;
 
     private readonly IMessageBus _bus;
@@ -155,15 +152,6 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string? degraded)
     {
         var meta = MetaBag.Empty.With(RecalledFactsKey, facts);
-
-        // Librarian matched these, but Intent reads them, and Recall is the
-        // roster slot between the two. Forwarding rather than re-deriving
-        // keeps the vector search at one per turn and keeps Governance's
-        // bundle roster unchanged.
-        if (envelope.Meta.Get<IReadOnlyList<string>>(LibrarianAgent.PassagesKey) is { Count: > 0 } passages)
-        {
-            meta = meta.With(RecalledPassagesKey, passages);
-        }
 
         var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, SubstrateHealth.Mark(meta, degraded));
         _bus.Publish(Topics.Advisories, advisory);
