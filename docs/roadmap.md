@@ -1194,113 +1194,142 @@ blocks readers of the one pair it touches.
 Existing archives were deleted rather than migrated, per the single-record
 seed below.
 
-## Audit every substrate instruction
+## Lean bus, instructions in config — the four-point plan
 
-**The unit under audit is the standing rule, not the assembled prompt.**
-Every prompt in the system is instruction text plus this turn's data — the
-turn itself, the candidate rows, the pair index. The data half is sized by
-config and by what the archive holds. The instruction half is constant: it
-goes out identically on every turn, on every substrate, whatever was said.
-That is what has grown in place, agent by agent, and what nobody has read
-side by side.
+Daniel's, stated as four points and reproduced as constraints rather than
+suggestions. Everything below serves them; where a point costs something,
+the cost is named rather than argued away.
 
-The failure mode it invites is specific: a rule added once to fix one bad
-reply then bills forever, and nothing ever revisits whether it still earns
-its place — or whether it is now steering behaviour nobody asked it to.
-Four observed symptoms, all of them instruction text rather than code:
+1. **The bus carries as little as possible.** Every posted message holds
+   the minimum its subscribers need. Definitely no instruction text.
+2. **Every substrate agent's instructions live in config**, not in C#.
+3. **One block per substrate agent.** Not spread across several constants,
+   not shared between agents. Two blocks may be similar; neither owns the
+   other.
+4. **Daniel revises all of them by hand once they land.** That is the
+   deliverable this plan exists to enable — every earlier stage is
+   preparation for it.
 
-**Intent is theatric.** Suspected causes are the `SystemInstruction`
-framing ("spokesperson on behalf of a collective of emerging agents") and
-the length clamp in `ResponseContract` — one or two sentences unless length
-was asked for, which forces a compressed, quippy delivery. Want it moving
-more freely while still grounded on the turn plus the bundle. The
-path-convention rule (`system/` means the assistant, anything else means
-the user) is load-bearing and stays. Note also that advisories arrive as
-bare `[Impulse: …]` / `[Noted before: …]` brackets with nothing saying how
-to weigh them, so they read as flavour rather than grounding.
+Five agents call a substrate and therefore have instructions: Intent,
+Archivist, Librarian, Recall, Reflection. Security, Impulse and Identity
+are deterministic and have none.
 
-**Archivist needs handholding.** Terse values should get terser than
-`ArchiveWriteStyle.TerseValue`'s current "1-5 content words", and the
-category/topic/subtopic it picks needs to be better. Its extraction prompt
-is the longest in the codebase and heavy on negative instruction, which is
-the first place to look.
+### Stage 0 — `intent.prompt` is a confirmed bug, fix it first
 
-**Librarian and Recall select too narrowly.** A request for the names of
-known people came back empty. Both prompts are tuned for precision on a
-pointed question and have no path for an enumeration one: Librarian caps at
-`MaxSelectedPairs` (3) pairs, Recall at `MaxPickedPerWorker` (5) rows, and
-Recall's prompt says a row is relevant *only* if it is about the same thing
-being asked about — which actively suppresses breadth when the question is
-"what do you know about X". Caps are config; the relevance rule is prompt
-text.
+`IntentAgent.BuildPrompt` returns `SystemInstruction + ResponseContract +
+this turn's content`, and the whole string is published as
+`IntentAgent.PromptKey`. It rides the proposal to Governance, onto the
+conclusion, into Reflection, which renders it as `"Given: …"` through
+`PromptCap.Apply` — a **240 character** cap.
 
-Also worth checking the reverse of cutting: prompts that drifted apart
-where they should share a fragment, as `ArchiveWriteStyle` already does for
-the two writers. Sites to read together — Intent's `SystemInstruction` and
-`ResponseContract`, Archivist's extraction prompt, Librarian's selection
-prompt, Recall's row-picking prompt, Reflection's batch prompt, and the
-shared `ArchiveWriteStyle` fragments.
+The standing instruction alone is **840 characters** before `"Reply to: "`
+appears.
 
-**The plan, in four stages.** The ordering is deliberate: build the shared
-vocabulary first, so each later fix is a change to one fragment rather than
-the same edit made four times in four prompts.
+So Reflection has never seen a turn. Not the person's message, not the
+advisories, not the recalled facts, not the woken notes — 240 characters
+of boilerplate, byte-identical every turn, ten times per batch, then the
+reply. Its own prompt tells it to read "what Intent was given, and how it
+chose to reply"; half of that has never been available, and "a tension
+between what was asked and what was answered" is unanswerable when the
+question was truncated away. Every thought note in the corpus was written
+from replies alone.
 
-*Stage 1 — read them side by side and extract what is already shared.*
-Before changing any wording, put all seven sites in one buffer: Intent's
-`SystemInstruction` and `ResponseContract`, Archivist's extraction
-prompt, Librarian's selection prompt, Recall's row-picking prompt,
-Reflection's batch prompt, and `ArchiveWriteStyle`. The output of this
-stage is not a reword; it is an inventory — every standing rule, which
-agent pays for it, and whether a second agent states the same rule in
-different words. `ArchiveWriteStyle` is the precedent: two writers, one
-fragment. Expect at least two more fragments to fall out (how to weigh an
-advisory, what "relevant" means for a lookup) and put them in
-`EciCas.Core` beside `ArchiveWriteStyle` rather than in either caller.
+The key's doc comment claims it is "Reflection's window into what Intent
+actually had to work with". The comment describes the intent; the code
+sends boilerplate. Read the value, not the comment.
 
-*Stage 2 — Intent's voice.* Two suspected causes and they should be
-changed one at a time, because the symptom is subjective and a combined
-edit tells us nothing about which half did the work. First the
-`ResponseContract` length clamp, since [that already moved once][1] and is
-the cheaper revert; only then the "spokesperson on behalf of a collective
-of emerging agents" framing. The path-convention rule stays untouched —
-it is load-bearing and it is not what makes the persona theatric. Fold in
-the advisory framing from Stage 1 in the same pass: `[Impulse: …]` and
-`[Noted before: …]` arrive as bare brackets with nothing saying how to
-weigh them, which is why they read as flavour.
+Fix: Intent publishes the assembled *context* — the turn plus advisories,
+facts and woken notes — and never the standing rules, which are not
+something Intent "had to work with" in any sense Reflection needs. This is
+point 1 and point 2 arriving as a correctness fix rather than as tidiness,
+and it is the reason it goes first: until it lands, no instruction rewrite
+can be evaluated, because the batch prompt cannot show the difference.
 
-*Stage 3 — the retrieval pair.* Librarian and Recall are one problem
-wearing two prompts, and the enumeration failure ("name the people you
-know about") needs both to change or neither will help. The caps
-(`MaxSelectedPairs`, `MaxPickedPerWorker`) are config and should become
-question-shaped rather than fixed — an enumeration question legitimately
-wants breadth where a pointed one wants precision. Recall's "relevant
-only if it is about the same thing being asked about" is prompt text and
-is the actual suppressor. Ship this stage with a fixture that asks an
-enumeration question and asserts more than one topic comes back; without
-it there is no way to tell a fix from a coincidence.
+### Stage 1 — audit the bus
 
-*Stage 4 — Archivist.* Last on purpose. Its extraction prompt is the
-longest in the codebase and the heaviest on negative instruction, so it
-benefits most from the fragments the earlier stages extract, and its
-failures are the slowest to observe — a bad category choice only shows up
-turns later when a lookup misses. Tighten `ArchiveWriteStyle.TerseValue`
-below its current "1-5 content words" here rather than in Stage 1, so the
-change lands with the agent whose output it is meant to fix. Reflection
-shares the fragment and must be re-read after, not before.
+Twenty-five meta keys. For each one: which agent publishes it, which
+agents read it, and what breaks if it is not there. A key nobody reads is
+deleted; a key read by one agent for display belongs in the display layer,
+not on the bus.
 
-**What this is measured against.** Every stage removes more instruction
-text than it adds, or it explains why not. A standing rule is a per-turn
-bill on every substrate, and the whole reason this section exists is that
-nobody has audited what is being paid for. Cost per turn is already
-logged at default level, so the before/after is observable without new
-instrumentation.
+Two shapes to look for beyond dead keys:
 
-[1]: commit 407e5f1 — `refactor(prompts): trim Intent's contract`
+- **Payloads larger than their purpose.** `intent.prompt` is the extreme
+  case and Stage 0 handles it, but it is unlikely to be the only one.
+- **The same content twice.** `hindsight.notes` and `hindsight.note_ids`
+  are the honest version of this — the same wake, once as prose for Intent
+  and once as ids for lineage — and both are needed. Others may not be.
 
-### Stale references, found while scoping the above
+The output is a table in `architecture.md`, and it is worth having on its
+own: the bus is the seam the whole design turns on and nothing currently
+documents what actually crosses it.
 
-Not instruction text, but the same decay and cheap to fix in the same
-pass. None of it affects behaviour; all of it misleads a reader. All three
+### Stage 2 — instructions to config, one block per agent
+
+**Plain text files, not JSON strings.** Point 4 is hand revision, and
+multi-paragraph prose inside a JSON string means escaped newlines, no
+wrapping and a syntax error one stray quote away. One file per agent —
+`instructions/intent.txt` and so on — with config naming the directory.
+Missing file is a startup failure, not a silent empty instruction.
+
+Assembly stays in C#. The instruction is the constant half; the prompt
+builder still splices this turn's data into it. What moves is only the
+text that is identical on every call.
+
+**The cost of point 3, named.** `ArchiveWriteStyle` is today one fragment
+shared by Archivist and Reflection — `TerseValue` and `EnglishFields` —
+and the reason it is shared is real: both write facts to the same archive,
+and a rule that drifts between them puts one fact under two spellings.
+Point 3 splits it, so that drift becomes possible. Accepted deliberately:
+a shared fragment cannot be revised by hand for one agent without silently
+revising the other, and hand revision is the point. The mitigation is a
+test asserting both files still state the English-fields rule — not that
+they match, which would rebuild the coupling in the assertion.
+
+### Stage 3 — Daniel revises
+
+The point of the preceding stages. Terse, and giving the substrate room
+rather than steering it — less is more. Two things worth knowing while
+revising, both from the current text:
+
+`ResponseContract` already carries the note that "every rule here is paid
+for on every turn, on every substrate", and it has been trimmed once
+(407e5f1) for that reason. The rule is right and the text still grew back.
+
+The four observed symptoms, unchanged, as candidate targets:
+
+- **Intent is theatric.** Suspected: the "spokesperson on behalf of a
+  collective of emerging agents" framing, and the one-or-two-sentence
+  clamp, which forces a compressed quippy delivery. The path-convention
+  rule (`system/` means the assistant) is load-bearing and stays.
+- **Advisories arrive unweighted.** `[Impulse: …]` and `[Noted before: …]`
+  are bare brackets with nothing saying how to weigh them, so they read as
+  flavour. This matters more since Hindsight shipped: a woken note is the
+  persona's own opinion arriving in a bracket Intent was never told how to
+  read.
+- **Librarian and Recall select too narrowly.** "Name the people you know
+  about" comes back empty. Recall's prompt says a row is relevant *only*
+  if it is about the same thing being asked about, which suppresses
+  breadth on an enumeration question. The caps (`MaxSelectedPairs` 3,
+  `MaxPickedPerWorker` 5) are config; the relevance rule is instruction
+  text. Ship with a fixture that asks an enumeration question and asserts
+  more than one topic returns.
+- **Archivist needs handholding.** The longest instruction in the codebase
+  and the heaviest on negative instruction. Its category/topic choices are
+  the grounding Hindsight's `pairs` field is checked against, so its
+  failures are not local.
+
+### How this is measured
+
+Bus: fewer keys, and no payload carrying text its subscribers do not read.
+Instructions: fewer characters after Stage 3 than before it, or a written
+reason why not. Cost per turn is already logged at default level, so the
+before-and-after is observable without new instrumentation.
+
+## Stale references and milestone tags
+
+Not instruction text, but the same decay, and cheap to sweep alongside
+the plan above. None of it affects behaviour; all of it misleads a reader. All three
 survived the Archivist/Librarian/Identity rename unchanged.
 
 **`plan §X` points at a document that does not exist.** `docs/` holds
