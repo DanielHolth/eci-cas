@@ -31,7 +31,7 @@ public class ArchivistAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
         var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 2 }));
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 2 }), ShippedInstructions.Store);
 
         var first = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "turn one"));
@@ -60,7 +60,7 @@ public class ArchivistAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 10, 0m)));
 
         var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "tell me about your system"));
@@ -79,7 +79,7 @@ public class ArchivistAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
         var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "our son's birthday was yesterday"));
@@ -101,7 +101,7 @@ public class ArchivistAgentTests
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
 
         var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "turn one"));
@@ -121,7 +121,7 @@ public class ArchivistAgentTests
             "category=person subtopic=daughter subject=maia key=nickname value=benita", TimeSpan.Zero, 10, 0m)));
 
         var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "maia calls herself benita at school"));
@@ -144,7 +144,7 @@ public class ArchivistAgentTests
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)); });
 
         var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }));
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "whether the trip dates still work")
@@ -170,7 +170,7 @@ public class ArchivistAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
 
         var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
-            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 2 }));
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 2 }), ShippedInstructions.Store);
 
         foreach (var profileId in new[] { "daniel", "ada" })
         {

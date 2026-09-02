@@ -37,6 +37,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     private const int MaxPickedPerWorker = 5;
 
     private readonly IMessageBus _bus;
+    private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
@@ -44,11 +45,13 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     private readonly ILogger _logger;
 
     public RecallAgent(IMessageBus bus, BusActivityTracker activity, ILogger<RecallAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<RecallOptions> options)
+        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<RecallOptions> options,
+        IInstructionStore instructions)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
+        _instructions = instructions;
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
@@ -186,7 +189,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         }
     }
 
-    private static string BuildPrompt(string text, IReadOnlyList<ArchiveRecord> candidates)
+    private string BuildPrompt(string text, IReadOnlyList<ArchiveRecord> candidates)
     {
         // Category/Topic withheld — redundant with scope. Subtopic is shown,
         // because it is no longer part of the address: it's now the main
@@ -201,16 +204,10 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // ranked one over the other. What the categories mean is left to the
         // model: the path segments say it in words it already knows.
         var rows = string.Join("\n", candidates.Select((r, i) => $"{i}. {r.Subtopic} / {r.Subject} {r.Key} = {r.Value}"));
-        return $"""
-            Candidate facts (index: subtopic / subject key = value), most important first:
-            {rows}
-
-            Pick up to {MaxPickedPerWorker} rows that actually help answer this
-            turn — respond with just their index numbers, comma-separated
-            (e.g. "0, 2"). If none are relevant, respond with nothing.
-
-            Turn: {text}
-            """;
+        return InstructionFile.Fill(_instructions.For(Name),
+            ("rows", rows),
+            ("max", MaxPickedPerWorker.ToString()),
+            ("text", text));
     }
 
     private static IReadOnlyList<ArchiveRecord> ParsePicked(string response, IReadOnlyList<ArchiveRecord> candidates)

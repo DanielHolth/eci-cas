@@ -37,6 +37,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     public const string SelectedPairsKey = "librarian.selected_pairs";
 
     private readonly IMessageBus _bus;
+    private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
@@ -48,11 +49,13 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 
     public LibrarianAgent(IMessageBus bus, BusActivityTracker activity, ILogger<LibrarianAgent> logger, IArchiveStore store,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<LibrarianOptions> options,
-        IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> passageOptions)
+        IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> passageOptions,
+        IInstructionStore instructions)
         : base(bus, activity, logger, substrate, agentSubstrates)
     {
         _bus = bus;
         _store = store;
+        _instructions = instructions;
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
@@ -239,17 +242,10 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     private string BuildSelectionPrompt(string? text, IReadOnlyList<ArchivePair> index)
     {
         var options = string.Join("\n", index.Select((t, i) => $"{i}. {t.Category}/{t.Topic}"));
-        return $"""
-            Known knowledge-base topics (index: category/topic):
-            {options}
-
-            For this turn's text, pick up to {_options.MaxSelectedPairs} of the
-            topics above that could hold relevant background — respond with just
-            their index numbers, comma-separated (e.g. "0, 3"). If none are
-            relevant, respond with nothing.
-
-            Turn: {text}
-            """;
+        return InstructionFile.Fill(_instructions.For(Name),
+            ("options", options),
+            ("max", _options.MaxSelectedPairs.ToString()),
+            ("text", text ?? string.Empty));
     }
 
     private static IReadOnlyList<ArchivePair> ParsePairs(string response, IReadOnlyList<ArchivePair> index)

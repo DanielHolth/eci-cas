@@ -58,6 +58,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private const double PushedImportance = 0.2;
 
     private readonly IMessageBus _bus;
+    private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
     private readonly IPassageStore _passages;
     private readonly IEmbeddingProvider _embeddings;
@@ -71,11 +72,12 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, IArchiveStore store, IAgentStateStore stateStore,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options,
-        IPassageStore passages, IEmbeddingProvider embeddings)
+        IPassageStore passages, IEmbeddingProvider embeddings, IInstructionStore instructions)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
+        _instructions = instructions;
         _passages = passages;
         _embeddings = embeddings;
         _stateStore = stateStore;
@@ -277,7 +279,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// the trail. Hindsight decides later whether a note is worth
     /// surfacing; the writer does not get a vote.
     /// </summary>
-    private static string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous)
+    private string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous)
     {
         var turns = string.Join("\n\n", batch.Select((b, i) =>
             $"{i + 1}. Given: {PromptCap.Apply(b.Context)}\n   Replied: {PromptCap.Apply(b.ReplyText)}"));
@@ -288,58 +290,16 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // simply not asked for then.
         var revisit = previous is null
             ? string.Empty
-            : $"""
+            : Environment.NewLine + InstructionFile.Fill(_instructions.For(Name, "revisit"),
+                ("previous", PromptCap.Apply(previous.Text)),
+                ("topics", string.Join(", ", previous.Pairs.Select(p => $"{p.Category}/{p.Topic}"))));
 
-            You wrote this note after the previous batch:
-            "{PromptCap.Apply(previous.Text)}" (topics: {string.Join(", ", previous.Pairs.Select(p => $"{p.Category}/{p.Topic}"))})
-            Now that you have seen what followed, carry it forward as one
-            "revisit|<category/topic, ...>|<note>" line in the same form.
-            Keep it if it still holds, sharpen it if it has grown clearer,
-            change it if these turns argue against it — and if it has been
-            overtaken, say the newer thing rather than defending the old one.
-            Revise it; do not restate it. Writing this line replaces the old
-            note.
-            """;
-
-        return $"""
-            From these recent interactions — what Intent was given (the turn,
-            any advice, and recalled facts) and how it replied — propose
-            follow-up thoughts or questions worth exploring later. Respond
-            with zero or more lines, each formatted as "score|subtopic|idea"
-            where score is 0.0-1.0 insight-worthiness and subtopic is a short
-            (1-2 word) functional label for the kind of thought it is — pick
-            whatever label fits best, e.g. pattern, hypothesis, meta-rule,
-            synthesis, question, or another label of your own choosing. Idea
-            ({ArchiveWriteStyle.TerseValue}), e.g.
-            "0.7|hypothesis|trip dates vs deadline". If nothing stands out,
-            respond with no candidate lines.
-
-            On its own line, describe the overall tone of these interactions
-            as "mood|<label>" where label is exactly one of: {MoodLabels}.
-            Always include this line, even when you propose no ideas.
-
-            Then write one line "thought|<category/topic, ...>|<note>" — not
-            about what these turns said, but about what they made you notice.
-            10-25 words. Read both halves: what Intent was given, and how it
-            chose to reply. A habit in its phrasing, a tension between what
-            was asked and what was answered, a connection the facts alone do
-            not carry — places to look, not a list to fill. This note is
-            yours and nobody wrote it for you, so let it be particular
-            rather than agreeable — an opinion you would still hold if it
-            were unwelcome. Write it for no one. It joins the ones you wrote
-            before it, so follow where your own thinking has been going
-            rather than starting over each time. The topics are the pairs
-            the thought touches, so it can be checked against what actually
-            exists: use only pairs appearing in the interactions above, and
-            leave the field empty if it touches none.
-            Write no line at all if nothing struck you.
-            {revisit}
-
-            {ArchiveWriteStyle.EnglishFields}
-
-            Interactions:
-            {turns}
-            """;
+        return InstructionFile.Fill(_instructions.For(Name),
+            ("terse", ArchiveWriteStyle.TerseValue),
+            ("english", ArchiveWriteStyle.EnglishFields),
+            ("moods", MoodLabels),
+            ("revisit", revisit),
+            ("turns", turns));
     }
 
     /// <summary>

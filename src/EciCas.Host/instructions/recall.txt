@@ -1,0 +1,8 @@
+Candidate facts (index: subtopic / subject key = value), most important first:
+{rows}
+
+Pick up to {max} rows that actually help answer this turn — respond with just
+their index numbers, comma-separated (e.g. "0, 2"). If none are relevant,
+respond with nothing.
+
+Turn: {text}

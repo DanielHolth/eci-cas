@@ -33,7 +33,7 @@ public class RecallAgentTests
         await store.WriteAsync([new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow)], null, CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
-        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(pair), CancellationToken.None);
 
@@ -52,7 +52,7 @@ public class RecallAgentTests
         var store = new InMemoryArchiveStore();
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
-        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(), CancellationToken.None);
 
@@ -69,7 +69,7 @@ public class RecallAgentTests
         var advisories = bus.Subscribe(Topics.Advisories);
         var store = new InMemoryArchiveStore();
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
-        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(new ArchivePair("person", "family")), CancellationToken.None);
 
@@ -99,7 +99,7 @@ public class RecallAgentTests
         var substrate = new StubSubstrate(prompt => prompt.Contains("drammen", StringComparison.OrdinalIgnoreCase)
             ? Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m))
             : throw new InvalidOperationException("down"));
-        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(failing, working), CancellationToken.None);
 
@@ -136,7 +136,7 @@ public class RecallAgentTests
             return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m));
         });
         var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
-            Options.Create(new RecallOptions { RowsPerWorker = 10, MaxConcurrentRecalls = 10 }));
+            Options.Create(new RecallOptions { RowsPerWorker = 10, MaxConcurrentRecalls = 10 }), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics")), CancellationToken.None);
 
@@ -163,7 +163,7 @@ public class RecallAgentTests
             return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m));
         });
         var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
-            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 4 }));
+            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 4 }), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics")), CancellationToken.None);
 
@@ -192,7 +192,7 @@ public class RecallAgentTests
             return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m));
         });
         var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
-            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 3 }));
+            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 3 }), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics"), new ArchivePair("person", "family")), CancellationToken.None);
 
@@ -215,7 +215,7 @@ public class RecallAgentTests
 
         var seen = string.Empty;
         var substrate = new StubSubstrate(prompt => { seen = prompt; return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m)); });
-        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(new ArchivePair("person", "family")), CancellationToken.None);
 
@@ -241,7 +241,7 @@ public class RecallAgentTests
 
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m)); });
-        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()));
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Selection(new ArchivePair("person", "family"), new ArchivePair("event", "wedding")), CancellationToken.None);
 

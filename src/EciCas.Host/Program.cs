@@ -183,6 +183,15 @@ if (seedNeeded)
 
 builder.Services.AddSingleton<IArchiveStore>(archiveStore);
 
+// Standing instructions, one plain-text file per substrate-calling agent.
+// Plain text rather than JSON because revising them is the point: multi-
+// paragraph prose inside a JSON string means escaped newlines, no wrapping
+// and a syntax error one stray quote away. Loaded eagerly so a missing file
+// or a mistyped placeholder stops the host here, where it is one message,
+// rather than degrading a single agent quietly at turn time.
+builder.Services.AddSingleton<IInstructionStore>(new FileInstructionStore(
+    Path.Combine(AppContext.BaseDirectory, builder.Configuration["Instructions:Directory"] ?? "instructions")));
+
 // The passage corpus lives beside the pair files, in the shared tier only —
 // a self-critique belongs to the persona the way the "assistant" and
 // "self" categories already do.

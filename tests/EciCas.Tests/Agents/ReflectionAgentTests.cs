@@ -39,7 +39,7 @@ public class ReflectionAgentTests
         var store = new InMemoryArchiveStore();
         var stateStore = new JsonlAgentStateStore(Path.GetTempFileName());
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, new MockSubstrateProvider(),
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 3 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 3 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
         await agent.HandleAsync(Conclusion("maybe pizza instead"), CancellationToken.None);
@@ -62,7 +62,7 @@ public class ReflectionAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
             "0.9|hypothesis|whether the trip dates still work\n0.3|question|a minor follow-up thought", TimeSpan.Zero, 10, 0m)));
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 2, MaxIdeaGeneration = 1, EagernessThreshold = 0.6 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 2, MaxIdeaGeneration = 1, EagernessThreshold = 0.6 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
         await agent.HandleAsync(Conclusion("maybe pizza instead"), CancellationToken.None);
@@ -94,7 +94,7 @@ public class ReflectionAgentTests
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0.9|pattern|a compelling idea", TimeSpan.Zero, 10, 0m)));
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1, MaxIdeaGeneration = 1, EagernessThreshold = 0.6 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1, MaxIdeaGeneration = 1, EagernessThreshold = 0.6 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
 
@@ -116,7 +116,7 @@ public class ReflectionAgentTests
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0.9|pattern|a great idea", TimeSpan.Zero, 10, 0m)));
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1, MaxIdeaGeneration = 1, EagernessThreshold = 0.6 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1, MaxIdeaGeneration = 1, EagernessThreshold = 0.6 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good", generation: 1), CancellationToken.None);
 
@@ -134,7 +134,7 @@ public class ReflectionAgentTests
         var stateStore = new JsonlAgentStateStore(Path.GetTempFileName());
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
 
@@ -155,7 +155,7 @@ public class ReflectionAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
             "0.4|question|whether the trip dates still work\nmood|tense", TimeSpan.Zero, 10, 0m)));
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
 
@@ -175,7 +175,7 @@ public class ReflectionAgentTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
             "0.4|question|whether the trip dates still work\nmood|ecstatic", TimeSpan.Zero, 10, 0m)));
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
 
@@ -198,7 +198,7 @@ public class ReflectionAgentTests
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("mood|dull", TimeSpan.Zero, 10, 0m)));
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings());
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
 

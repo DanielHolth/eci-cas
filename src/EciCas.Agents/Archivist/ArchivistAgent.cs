@@ -41,6 +41,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     public const string WrittenKind = "Written";
 
     private readonly IMessageBus _bus;
+    private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
@@ -53,11 +54,13 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     private int _bundlesSinceFlush;
 
     public ArchivistAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ArchivistAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ArchivistOptions> options)
+        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ArchivistOptions> options,
+        IInstructionStore instructions)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
+        _instructions = instructions;
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
@@ -162,24 +165,11 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             ? "none"
             : string.Join(", ", selected.Select(t => $"{t.Category}/{t.Topic}"));
         text = PromptCap.Apply(text);
-        var prompt = $"""
-            Facts stated in this turn, one line per fact:
-            category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<{ArchiveWriteStyle.TerseValue}>
-
-            Reuse one of these category/topic groups when it fits, otherwise
-            invent one: {known}
-
-            {ArchiveWriteStyle.EnglishFields}
-
-            category=person topic=family subtopic=owner subject=daniel key=name value=daniel
-            category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28
-            category=event topic=wedding subtopic=family subject=maria holth key=location value=drammen kirke
-            category=assistant topic=identity subtopic=persona subject=this key=name value=morrow
-
-            Nothing stated: reply nothing.
-
-            Turn: {text}
-            """;
+        var prompt = InstructionFile.Fill(_instructions.For(Name),
+            ("known", known),
+            ("terse", ArchiveWriteStyle.TerseValue),
+            ("english", ArchiveWriteStyle.EnglishFields),
+            ("text", text));
 
         try
         {

@@ -111,7 +111,7 @@ public class PassageMemoryTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("1", TimeSpan.Zero, 5, 0m)));
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
             Manifest("Librarian", "fast-medium"), Options.Create(new LibrarianOptions { MaxSelectedPairs = 1 }),
-            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
+            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?")), CancellationToken.None);
@@ -146,7 +146,7 @@ public class PassageMemoryTests
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store,
             new StubSubstrate(_ => throw new InvalidOperationException("index fits under the cap, so this is never called")),
             Manifest("Librarian", "fast-medium"), Options.Create(new LibrarianOptions()),
-            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
+            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "anything on file?")), CancellationToken.None);
@@ -230,7 +230,7 @@ public class PassageMemoryTests
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings(_ => Unit(1)));
+            passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
 
@@ -262,7 +262,7 @@ public class PassageMemoryTests
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings(_ => Unit(1)));
+            passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store);
 
         var conclusion = Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral,
             MetaBag.Empty
@@ -292,7 +292,7 @@ public class PassageMemoryTests
             new JsonlAgentStateStore(Path.GetTempFileName()),
             new StubSubstrate(_ => Task.FromResult(new SubstrateResult("mood|dull\nthought|person/family|note", TimeSpan.Zero, 5, 0m))),
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings());
+            passages, new StubEmbeddings(), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
 

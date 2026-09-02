@@ -1,0 +1,8 @@
+Known knowledge-base topics (index: category/topic):
+{options}
+
+For this turn's text, pick up to {max} of the topics above that could hold
+relevant background — respond with just their index numbers, comma-separated
+(e.g. "0, 3"). If none are relevant, respond with nothing.
+
+Turn: {text}

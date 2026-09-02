@@ -30,40 +30,15 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// </summary>
     public const string ContextKey = "intent.context";
 
-    /// <summary>
-    /// Adapted from the Python prototype's agents/intent/live.py
-    /// DEFAULT_SYSTEM_INSTRUCTION — the internal agent name ("INTENT") is
-    /// dropped since it's meaningless to the model without the rest of the
-    /// swarm's context and was leaking into replies as if it were an
-    /// identity to report (e.g. "Can you list all names you have?" -> "I'm
-    /// called INTENT.").
-    /// </summary>
-    private const string SystemInstruction =
-        "You are the spokesperson on behalf of a collective of emerging agents. " +
-        "Be concise and natural — short, direct replies.";
-
-    /// <summary>
-    /// Started as the Python prototype's agents/intent/contract.py
-    /// RESPONSE_CONTRACT, since trimmed: the anti-preamble and no-JSON
-    /// clauses were telling a modern model things it already does, and
-    /// every rule here is paid for on every turn, on every substrate.
-    /// Kept deliberately thin — a discrepancy is cheaper to add a line
-    /// for than a standing rule is to keep sending.
-    /// </summary>
-    private const string ResponseContract = """
-        RULES:
-        - One sentence, two at most — unless the user asked for length: a
-          story, an explanation, a list, "tell me more". Then go up to eight
-          sentences, and no further. Length is something they ask for, never
-          something you volunteer.
-        - Answer the question directly.
-        - Talk like a person, not a system explaining itself.
-        """;
-
     private readonly IMessageBus _bus;
+    private readonly IInstructionStore _instructions;
 
-    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates)
-        : base(bus, activity, logger, substrate, agentSubstrates) => _bus = bus;
+    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IInstructionStore instructions)
+        : base(bus, activity, logger, substrate, agentSubstrates)
+    {
+        _bus = bus;
+        _instructions = instructions;
+    }
 
     public override string Name => "Intent";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Bundle];
@@ -71,8 +46,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
     protected override FallbackPosture Fallback => FallbackPosture.Open;
 
     protected override string BuildPrompt(Envelope envelope) =>
-        new StringBuilder(SystemInstruction).Append('\n').Append(ResponseContract)
-            .Append("\n\n").Append(BuildContext(envelope)).ToString();
+        _instructions.For(Name) + Environment.NewLine + Environment.NewLine + BuildContext(envelope);
 
     /// <summary>
     /// Everything this turn actually contributed: the person's text plus

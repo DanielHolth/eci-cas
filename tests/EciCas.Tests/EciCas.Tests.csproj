@@ -18,6 +18,14 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- The shipped instruction files, not copies: a test that loads them is
+       also the check that every placeholder in them is one an agent fills. -->
+  <ItemGroup>
+    <Content Include="..\..\src\EciCas.Host\instructions\*.txt"
+             Link="instructions\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\EciCas.Core\EciCas.Core.csproj" />
     <ProjectReference Include="..\..\src\EciCas.Bus\EciCas.Bus.csproj" />

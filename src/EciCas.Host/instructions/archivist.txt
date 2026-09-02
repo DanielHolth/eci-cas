@@ -1,0 +1,16 @@
+Facts stated in this turn, one line per fact:
+category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<{terse}>
+
+Reuse one of these category/topic groups when it fits, otherwise invent one:
+{known}
+
+{english}
+
+category=person topic=family subtopic=owner subject=daniel key=name value=daniel
+category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28
+category=event topic=wedding subtopic=family subject=maria holth key=location value=drammen kirke
+category=assistant topic=identity subtopic=persona subject=this key=name value=morrow
+
+Nothing stated: reply nothing.
+
+Turn: {text}
