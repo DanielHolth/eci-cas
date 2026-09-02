@@ -20,17 +20,23 @@ public interface IEmbeddingProvider
 }
 
 /// <summary>
-/// One retrievable prose chunk: the persona's own 5-15 word critique of an
-/// event-series — what context it wishes it had had — plus the archive pairs
-/// it wished it had read.
+/// One retrievable prose chunk: a thought the persona had about a stretch of
+/// turns — what those turns made it notice, written for no one — plus the
+/// archive pairs that thought touches.
 ///
 /// This is the *only* vector corpus. ArchiveRecords are never embedded and
 /// never stored twice: a fact lives in exactly one pair file, and a passage
-/// points at pairs rather than copying their rows. So the vectors index the
-/// persona's judgement about retrieval, not the knowledge itself — which is
-/// what makes a hit a learned shortcut ("last time this came up I should
-/// have read person/identity") instead of a second, drifting copy of the
-/// archive.
+/// points at pairs rather than copying their rows. So the vectors index what
+/// the persona made of the knowledge, not the knowledge itself — the two
+/// substances stay apart, and a hit is a lead rather than an answer.
+///
+/// Pairs may be empty. A thought that touches no pair still surfaces its
+/// text; it simply has nothing reality can check it against, which is the
+/// asymmetry to remember when notes start agreeing with each other.
+///
+/// Timestamp is load-bearing, not bookkeeping: it reaches Intent as the age
+/// on the front of the note, and a revisit preserves it so a sharpened
+/// thought keeps the age of the thought it sharpens.
 /// </summary>
 public sealed record Passage(
     string Id,
@@ -50,7 +56,13 @@ public interface IPassageStore
     /// <summary>Cosine top-K over every stored passage, best first, filtered by <paramref name="minScore"/>.</summary>
     Task<IReadOnlyList<PassageHit>> SearchAsync(float[] query, int topK, double minScore, CancellationToken cancellationToken);
 
-    /// <summary>The most recently written passage — what the next batch revisits.</summary>
+    /// <summary>
+    /// The most recently written passage — what the next batch revisits.
+    /// Which means a thought is reachable for revision for exactly one
+    /// batch and is then frozen. Selecting the revisit target by similarity
+    /// instead is what would make the corpus a trail rather than a chain;
+    /// see roadmap.md.
+    /// </summary>
     Task<Passage?> LatestAsync(CancellationToken cancellationToken);
 
     /// <summary>

@@ -118,7 +118,7 @@ public class PassageMemoryTests
         Assert.True(selections.TryRead(out var selection));
         var pairs = selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!;
         Assert.Contains(new ArchivePair("person", "family"), pairs);
-        Assert.Equal("should have read the family record",
+        Assert.EndsWith(": should have read the family record",
             Assert.Single(selection.Meta.Get<IReadOnlyList<string>>(LibrarianAgent.PassagesKey)!));
     }
 
@@ -154,7 +154,7 @@ public class PassageMemoryTests
         Assert.True(selections.TryRead(out var selection));
         Assert.DoesNotContain(new ArchivePair("person", "deleted"),
             selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!);
-        Assert.Equal("stale lead", Assert.Single(selection.Meta.Get<IReadOnlyList<string>>(LibrarianAgent.PassagesKey)!));
+        Assert.EndsWith(": stale lead", Assert.Single(selection.Meta.Get<IReadOnlyList<string>>(LibrarianAgent.PassagesKey)!));
     }
 
     /// <summary>Recall is the roster slot between the match and Intent, so the text has to survive the hop.</summary>

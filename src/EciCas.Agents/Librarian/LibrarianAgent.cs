@@ -233,7 +233,32 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         _logger.LogInformation("{Agent} matched {Count} passage(s), {Pairs} pair(s): {Texts}",
             Name, hits.Count, pairs.Count, string.Join(" | ", hits.Select(h => h.Passage.Text)));
 
-        return ([.. hits.Select(h => h.Passage.Text)], pairs);
+        return ([.. hits.Select(h => $"{Age(h.Passage.Timestamp)}: {h.Passage.Text}")], pairs);
+    }
+
+    /// <summary>
+    /// A note reaches Intent with its age on the front. Without it a thought
+    /// from months ago and one from this morning read identically, and the
+    /// difference between a recollection and an echo of the last turn is
+    /// exactly the thing worth knowing about a passage. Coarse and
+    /// qualitative on purpose — the score stays out, because a number invites
+    /// the model to trust a close match more than a sideways one, and the
+    /// sideways ones are why the floor is low.
+    ///
+    /// Reads the passage timestamp, which a revisit deliberately preserves:
+    /// a sharpened thought keeps the age of the thought it sharpens.
+    /// </summary>
+    private static string Age(DateTimeOffset written)
+    {
+        var span = DateTimeOffset.UtcNow - written;
+        return span switch
+        {
+            { TotalHours: < 12 } => "earlier today",
+            { TotalHours: < 36 } => "yesterday",
+            { TotalDays: < 14 } => $"{(int)span.TotalDays} days ago",
+            { TotalDays: < 60 } => $"{(int)(span.TotalDays / 7)} weeks ago",
+            _ => $"{(int)(span.TotalDays / 30)} months ago",
+        };
     }
 
     /// <summary>Selection first, passage leads after, no duplicates — the LLM saw the whole index, a passage saw one past turn.</summary>
