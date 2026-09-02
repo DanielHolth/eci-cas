@@ -264,15 +264,15 @@ public sealed class GovernanceAgent : AgentBase
             replyToSpeak = intentDegraded is not null ? notice : replyToSpeak + Environment.NewLine + Environment.NewLine + notice;
         }
 
-        var prompt = verdict.Meta.Get<string>(IntentAgent.PromptKey) ?? string.Empty;
+        var context = verdict.Meta.Get<string>(IntentAgent.ContextKey) ?? string.Empty;
         var actionMeta = MetaBag.Empty
             .With(IntentAgent.ReplyKey, replyToSpeak)
-            .With(IntentAgent.PromptKey, prompt)
+            .With(IntentAgent.ContextKey, context)
             .With(SecurityAgent.VerdictKey, value);
 
         // Second and last hop for the note lineage: Reflection reads it off
         // the conclusion, and this bag is built fresh rather than inherited.
-        // Same forwarding PromptKey needs, for the same reason.
+        // Same forwarding ContextKey needs, for the same reason.
         if (verdict.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NoteIdsKey) is { Count: > 0 } noteIds)
         {
             actionMeta = actionMeta

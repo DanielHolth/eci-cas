@@ -22,8 +22,13 @@ public sealed class IntentAgent : CognitiveAgent<string>
 {
     public const string ReplyKey = "intent.reply";
 
-    /// <summary>The exact prompt this call sent the substrate — Reflection's window into what Intent actually had to work with, not just what it said.</summary>
-    public const string PromptKey = "intent.prompt";
+    /// <summary>
+    /// What this turn gave Intent to work with: the person's text, the
+    /// advisories, the recalled facts and the woken notes. Never the
+    /// standing rules, which are identical every turn and are not something
+    /// Intent "had to work with" in any sense Reflection needs.
+    /// </summary>
+    public const string ContextKey = "intent.context";
 
     /// <summary>
     /// Adapted from the Python prototype's agents/intent/live.py
@@ -71,12 +76,24 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     protected override FallbackPosture Fallback => FallbackPosture.Open;
 
-    protected override string BuildPrompt(Envelope envelope)
+    protected override string BuildPrompt(Envelope envelope) =>
+        new StringBuilder(SystemInstruction).Append('\n').Append(ResponseContract)
+            .Append("\n\n").Append(BuildContext(envelope)).ToString();
+
+    /// <summary>
+    /// Everything this turn actually contributed: the person's text plus
+    /// whatever the bundle carried, with the standing rules left out. This
+    /// is what Reflection needs. The rules are identical on every turn and
+    /// say nothing about what Intent was working with, while costing it the
+    /// whole of its own <see cref="PromptCap"/> budget to render.
+    /// Recomputed rather than stashed, so it stays a pure function of the
+    /// envelope and no per-turn state has to live on the agent.
+    /// </summary>
+    private static string BuildContext(Envelope envelope)
     {
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
 
-        var prompt = new StringBuilder(SystemInstruction).Append('\n').Append(ResponseContract)
-            .Append("\n\nReply to: ").Append(text);
+        var prompt = new StringBuilder("Reply to: ").Append(text);
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Identity", envelope.Meta.Get<string>(IdentityAgent.AdviceKey));
@@ -162,10 +179,10 @@ public sealed class IntentAgent : CognitiveAgent<string>
         // Marked, not just spoken: Intent's fallback sentence sounds honest,
         // but Governance is the one that decides what the person is told, and
         // it can only do that if the fallback says it is one.
-        var meta = MetaBag.Empty.With(ReplyKey, result).With(PromptKey, prompt);
+        var meta = MetaBag.Empty.With(ReplyKey, result).With(ContextKey, BuildContext(envelope));
 
         // Which notes Hindsight woke for this turn, carried forward the same
-        // way PromptKey is: Derive starts a fresh bag rather than inheriting
+        // way ContextKey is: Derive starts a fresh bag rather than inheriting
         // the bundle's, so without this the lineage dies here and Reflection
         // cannot record what its new note descends from. Diagnostic payload
         // only — Intent has already read the notes themselves as prose.

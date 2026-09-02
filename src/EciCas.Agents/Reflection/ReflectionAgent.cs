@@ -90,13 +90,14 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        // Same prompt Intent itself was given (reply-to text, Impulse/Identity
-        // advice, Recall's picked facts with their full category/topic/
-        // subtopic path) plus what it sent out — Governance forwards both
-        // unchanged from Intent's own Proposal through Verdict/Action/
-        // Conclusion (see IntentAgent.PromptKey) so Reflection can weigh a
-        // reply against exactly what it had access to, not just the text.
-        var prompt = envelope.Meta.Get<string>(IntentAgent.PromptKey) ?? string.Empty;
+        // What this turn gave Intent to work with: the reply-to text,
+        // Impulse/Identity advice, Recall's picked facts with their full
+        // path, and Hindsight's woken notes. Not the standing rules, which
+        // are the same every turn and would otherwise fill this whole
+        // budget. Governance forwards it unchanged from Intent's Proposal
+        // through Verdict/Action/Conclusion (see IntentAgent.ContextKey) so
+        // Reflection can weigh a reply against what it actually had.
+        var context = envelope.Meta.Get<string>(IntentAgent.ContextKey) ?? string.Empty;
         var reply = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
 
         // Lineage, forwarded by Intent and Governance across the two hops
@@ -108,7 +109,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         List<BufferedConclusion>? batch = null;
         lock (_pendingLock)
         {
-            _pending.Add(new BufferedConclusion(prompt, reply, envelope.Generation, wokenIds, wokenDepth));
+            _pending.Add(new BufferedConclusion(context, reply, envelope.Generation, wokenIds, wokenDepth));
             if (_pending.Count >= _options.BatchSize)
             {
                 batch = [.. _pending];
@@ -279,7 +280,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private static string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous)
     {
         var turns = string.Join("\n\n", batch.Select((b, i) =>
-            $"{i + 1}. Given: {PromptCap.Apply(b.Prompt)}\n   Replied: {PromptCap.Apply(b.ReplyText)}"));
+            $"{i + 1}. Given: {PromptCap.Apply(b.Context)}\n   Replied: {PromptCap.Apply(b.ReplyText)}"));
 
         // The previous batch's note goes back in so its rewrite is a second
         // reading of the same event-series with hindsight, not a fresh guess
@@ -515,7 +516,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             .Distinct()];
 
     private sealed record BufferedConclusion(
-        string Prompt, string ReplyText, int Generation, IReadOnlyList<string> WokenNoteIds, int WokenEchoDepth);
+        string Context, string ReplyText, int Generation, IReadOnlyList<string> WokenNoteIds, int WokenEchoDepth);
 
     private sealed record Candidate(double Score, string Subtopic, string Idea);
     private sealed record Note(bool IsRevisit, string Text, IReadOnlyList<ArchivePair> Pairs);
