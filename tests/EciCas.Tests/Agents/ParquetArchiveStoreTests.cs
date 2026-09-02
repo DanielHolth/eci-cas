@@ -151,14 +151,14 @@ public class ParquetArchiveStoreTests : IDisposable
         var store = new ParquetArchiveStore(_directory);
         await store.WriteAsync([
             Record("person", "family", "son", "birthdate", "2020-08-28"),
-            Record("system", "identity", "persona", "name", "morrow"),
+            Record("assistant", "identity", "persona", "name", "morrow"),
         ], "daniel", CancellationToken.None);
 
         var profileDirectory = ParquetArchiveStore.ProfileDirectoryFor(_directory, "daniel");
         Assert.Single(Directory.EnumerateFiles(profileDirectory, "*.parquet"));
         Assert.Single(Directory.EnumerateFiles(_directory, "*.parquet"));
         Assert.Contains(new ArchivePair("person", "family"), ParquetArchiveStore.PairsIn(profileDirectory));
-        Assert.Contains(new ArchivePair("system", "identity"), ParquetArchiveStore.PairsIn(_directory));
+        Assert.Contains(new ArchivePair("assistant", "identity"), ParquetArchiveStore.PairsIn(_directory));
     }
 
     [Fact]
@@ -198,11 +198,11 @@ public class ParquetArchiveStoreTests : IDisposable
         var store = new ParquetArchiveStore(_directory, ["world"]);
         await store.WriteAsync([
             Record("world", "geography", "norway", "capital", "oslo"),
-            Record("system", "identity", "persona", "name", "morrow"),
+            Record("assistant", "identity", "persona", "name", "morrow"),
         ], "daniel", CancellationToken.None);
 
         Assert.Contains(new ArchivePair("world", "geography"), ParquetArchiveStore.PairsIn(_directory));
-        Assert.Contains(new ArchivePair("system", "identity"),
+        Assert.Contains(new ArchivePair("assistant", "identity"),
             ParquetArchiveStore.PairsIn(ParquetArchiveStore.ProfileDirectoryFor(_directory, "daniel")));
     }
 

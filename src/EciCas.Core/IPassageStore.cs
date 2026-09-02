@@ -77,7 +77,7 @@ public sealed record Passage(
 
 /// <summary>
 /// Shared-tier only, by construction: a self-critique belongs to the persona
-/// the way the "self" and "system" categories already do, not to whoever
+/// the way the "assistant" and "self" categories already do, not to whoever
 /// happened to be talking. So no profile parameter anywhere, and no
 /// union-read.
 /// </summary>

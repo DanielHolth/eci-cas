@@ -93,7 +93,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // fresh Meta rather than merging the parent's, so without this
         // Recall's picking prompt would have no idea what was actually asked
         // and could only rank candidates by generic importance — which is how
-        // an unrelated "system/.../name" row used to outrank everything for
+        // an unrelated "assistant/.../name" row used to outrank everything for
         // a question about the human's own name.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var meta = SubstrateHealth.Mark(MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text), degraded);

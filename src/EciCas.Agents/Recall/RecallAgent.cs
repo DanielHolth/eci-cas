@@ -195,10 +195,11 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // already pre-sorted by Importance by the store, not re-sorted here.
         //
         // The turn's own text is included so picking is relevance-to-THIS-
-        // question, not just "important in general" — without it a category
-        // like "system" (the assistant's own name/traits) would look just as
-        // pickable for a question about the HUMAN's name as an actual
-        // person-category row, since nothing here ranked one over the other.
+        // question, not just "important in general" — without it an
+        // "assistant" row would look just as pickable for a question about
+        // the human's name as a person-category row, since nothing here
+        // ranked one over the other. What the categories mean is left to the
+        // model: the path segments say it in words it already knows.
         var rows = string.Join("\n", candidates.Select((r, i) => $"{i}. {r.Subtopic} / {r.Subject} {r.Key} = {r.Value}"));
         return $"""
             Candidate facts (index: subtopic / subject key = value), most important first:
@@ -206,10 +207,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
             Pick up to {MaxPickedPerWorker} rows that actually help answer this
             turn — respond with just their index numbers, comma-separated
-            (e.g. "0, 2"). A row is only relevant if it's about the same thing
-            being asked about (e.g. a fact about the assistant itself does not
-            answer a question about the user, and vice versa). If none are
-            relevant, respond with nothing.
+            (e.g. "0, 2"). If none are relevant, respond with nothing.
 
             Turn: {text}
             """;

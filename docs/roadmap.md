@@ -1337,9 +1337,11 @@ bus/...`. Three reasons, in order of weight:
 - No reader needs the distinction. Recall only asks whether a row is
   about the assistant or the user, and both topics answer yes.
 
-`SharedCategories` collapses to `["assistant"]`. `self` retires with it —
-declared, zero rows, reserved for a Reflection that now writes thought
-notes to the passage corpus rather than archive rows.
+`SharedCategories` becomes `["assistant", "self"]`. `self` stays: an
+earlier draft of this section claimed it was declared and never written,
+which was wrong — `ReflectionAgent.FixedCategory` files pushed ideas
+under `self/reflection`, and dropping it from the shared tier would send
+the persona's own ideas into whichever profile happened to be speaking.
 
 The cost, named: `assistant` is the role token, so every recalled row
 renders it into Intent's prompt carrying the helpful-assistant prior,

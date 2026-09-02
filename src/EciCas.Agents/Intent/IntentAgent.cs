@@ -58,12 +58,6 @@ public sealed class IntentAgent : CognitiveAgent<string>
           something you volunteer.
         - Answer the question directly.
         - Talk like a person, not a system explaining itself.
-        - A recalled fact's path is category/topic/subtopic/subject/key. If the
-          path starts with "system/" (e.g. system/identity/persona/this/name),
-          it describes YOU, the assistant — your own name, traits, or
-          preferences — never attribute it to the user or anyone else. Any
-          other category describes the user or someone they've told you
-          about. If in doubt, assume it's about the user.
         """;
 
     private readonly IMessageBus _bus;

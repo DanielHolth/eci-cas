@@ -170,13 +170,13 @@ if ((await agentStateStore.LookupAsync([IdentityAgent.IdentityPath], maxPerPath:
 var archiveDirectory = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Directory"] ?? "archive");
 // One record, not a migration: the archive that isn't there yet starts as
 // the persona knowing its own name, and everything else is learned.
-var seedNeeded = !File.Exists(ParquetArchiveStore.PairPathFor(archiveDirectory, new ArchivePair("system", "identity")));
+var seedNeeded = !File.Exists(ParquetArchiveStore.PairPathFor(archiveDirectory, new ArchivePair("assistant", "identity")));
 var archiveStore = new ParquetArchiveStore(archiveDirectory,
     builder.Configuration.GetSection("Archive:SharedCategories").Get<string[]>());
 if (seedNeeded)
 {
     var seedRecord = new ArchiveRecord(
-        Category: "system", Topic: "identity", Subtopic: "persona", Subject: "this", Key: "name", Value: "morrow",
+        Category: "assistant", Topic: "identity", Subtopic: "persona", Subject: "this", Key: "name", Value: "morrow",
         Timestamp: DateTimeOffset.UtcNow, Domain: ArchiveDomain.External, Importance: 0.5);
     await archiveStore.WriteAsync([seedRecord], profileId: null, CancellationToken.None);
 }
@@ -184,8 +184,8 @@ if (seedNeeded)
 builder.Services.AddSingleton<IArchiveStore>(archiveStore);
 
 // The passage corpus lives beside the pair files, in the shared tier only —
-// a self-critique belongs to the persona the way the "system" and "self"
-// categories already do.
+// a self-critique belongs to the persona the way the "assistant" and
+// "self" categories already do.
 builder.Services.AddSingleton<IPassageStore>(new ParquetPassageStore(archiveDirectory));
 
 
