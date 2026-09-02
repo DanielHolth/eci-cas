@@ -1311,6 +1311,48 @@ needs, in its own words, and Archivist gains the clause it is missing.
 Same mitigation shape — a test asserting each file still carries its
 half, not that they match.
 
+**The category itself is wrong, and renaming it is the repair.** `system`
+holds two things that are not alike in the reader's eyes: 60 rows of CAS
+architecture (`system/agent ecosystem/`, `system/architecture/`) and 12
+of persona identity (`system/identity/`). Intent's rule — `system/`
+"describes YOU, the assistant — your own name, traits, or preferences" —
+is true of the 12 and false of the 60. The corpus also already carries a
+`systems/agent architecture/` drift variant, which is what free minting
+does to a word that does not obviously fit.
+
+Rename the category to **`assistant`**, keeping both topics under it:
+`assistant/identity/persona/this/name`, `assistant/architecture/message
+bus/...`. Three reasons, in order of weight:
+
+- Both instruction texts that reason about this already say "the
+  assistant" in prose and then translate: Intent to `system/`, Recall to
+  nothing at all. The category name stops being a translation step, and
+  Archivist can mint it with no instruction, since it is the token every
+  chat template has drilled in.
+- The architecture rows *are* self-description. "I run on a pub-sub bus,
+  eleven agents" is the persona describing itself, and the split does not
+  hold anyway: `system/identity/personality/.../emergence = interplay of
+  narrowly specialized roles` is an architecture fact already filed under
+  identity, because it is both. Keeping one category removes a boundary
+  judgment Archivist would have to make on every write and would drift
+  on; topic does the separating, which is what topic is for.
+- No reader needs the distinction. Recall only asks whether a row is
+  about the assistant or the user, and both topics answer yes.
+
+`SharedCategories` collapses to `["assistant"]`. `self` retires with it —
+declared, zero rows, reserved for a Reflection that now writes thought
+notes to the passage corpus rather than archive rows.
+
+The cost, named: `assistant` is the role token, so every recalled row
+renders it into Intent's prompt carrying the helpful-assistant prior,
+which pulls against the ECI framing. Judged weak next to Identity's
+persona instruction, which is where the persona is actually set, and
+visible in Stage 3's symptom list if Intent flattens after the change.
+
+Migration is small — nothing tracked carries `system/` except the two
+instruction files and one comment in `LibrarianAgent`. The seeded rows
+live in an untracked runtime `memory.jsonl`.
+
 ### Stage 3 — Daniel revises
 
 The point of the preceding stages. Terse, and giving the substrate room
