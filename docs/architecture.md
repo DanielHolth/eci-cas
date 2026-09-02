@@ -331,9 +331,14 @@ runs exactly as it did before vectors existed — Reflection writes no
 passages, Librarian matches none. It never marks `substrate.degraded` and
 never breaks a turn, because nothing is actually degraded.
 
-Download a model to `models/embedding/` — any BERT-family ONNX export with
-its `vocab.txt` (e.g. `all-MiniLM-L6-v2`) — and it starts working with no
-code change. Embeddings are mean-pooled over `last_hidden_state` and L2
+Download a model — any BERT-family ONNX export with its `vocab.txt`, e.g.
+`all-MiniLM-L6-v2` — and it starts working with no code change.
+`scripts/get-embedding-model.ps1` fetches one into `<repo>/models/embedding`
+and prints the two absolute paths to paste into `appsettings.json`. It puts
+them outside `bin/` on purpose: `Embedding:ModelPath` resolves a *relative*
+path against the build output, where `dotnet clean` would delete 90MB of
+weights and each configuration would need its own copy. An absolute path is
+used as given. Embeddings are mean-pooled over `last_hidden_state` and L2
 normalized at write time, which is what lets cosine similarity be a plain
 dot product. Setting `Embedding:Provider = "openai"` (or `"api"`, the same thing)
 borrows the substrate registry's named `HttpClient` and calls an
