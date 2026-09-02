@@ -91,6 +91,62 @@ with), not interleaving, except where an ordering is a genuine invariant
 (e.g. Action never fires before Security clears it), which gets its own
 explicit test.
 
+### What travels on the bus
+
+Every meta key in the system, who publishes it and who reads it. Envelopes
+carry a `MetaBag`; `Derive()` starts a fresh bag rather than inheriting, so
+anything a downstream agent needs is forwarded deliberately by whoever
+publishes the next envelope. That makes this table the whole contract.
+
+| Key | Published by | Read by |
+| --- | --- | --- |
+| `perception.text` | Perception, Librarian (re-published), Reflection (an idea) | Impulse, Librarian, Recall, Intent, Archivist, Hindsight |
+| `perception.profile` | Perception, Librarian, Governance (on control) | Librarian, Recall, Archivist, Impulse, Governance, SseBroadcaster |
+| `perception.triggered_by` | Reflection | Archivist |
+| `impulse.advice` | Impulse | Intent |
+| `impulse.expression` | Impulse | Governance |
+| `impulse.reflex` | Impulse | Governance |
+| `identity.advice` | Identity | Intent |
+| `librarian.selected_pairs` | Librarian | Recall, Archivist |
+| `recall.facts` | Recall | Intent |
+| `hindsight.notes` | Hindsight | Intent |
+| `hindsight.note_ids` | Hindsight, Intent, Governance (both forward) | Reflection |
+| `hindsight.echo_depth` | Hindsight, Intent, Governance (both forward) | Reflection |
+| `intent.reply` | Intent, Impulse (reflex), Security, Governance (forwards) | Governance, Security, Reflection, ConsoleSubscriber |
+| `intent.context` | Intent, Governance (forwards) | Reflection |
+| `security.verdict` | Security, Governance (forwards) | Governance, ConsoleSubscriber |
+| `security.concern` | Security | Governance |
+| `substrate.degraded` | any cognitive agent, via `SubstrateHealth.Mark` | Governance |
+| `governance.revision_concern` | Governance | Intent |
+| `governance.expression` | Governance | SSE clients |
+| `governance.security_alert` | Governance | SSE clients |
+| `governance.degraded` | Governance | SSE clients |
+| `control.kind` | Archivist, Governance, Reflection | Identity, Impulse |
+| `reflection.mood` | Reflection | Impulse |
+
+Three of these are read by nobody in this process. That is not a defect:
+`SseBroadcaster` fans whole envelopes to connected clients, so the
+`governance.*` trio on the Action envelope is the display layer's contract
+and belongs to it. They are listed as read by SSE clients rather than left
+looking dead.
+
+Two keys were genuinely dead and are gone. `control.epoch_id` carried a
+fresh Guid alongside every `control.kind` announcement; Identity invalidates
+its persona cache on the kind alone and never compared an epoch to anything.
+`perception.source_type` was set to `"idea"` on the same line that set
+`perception.triggered_by` to `"self"` — one fact, published twice, with only
+the second read. A key nobody reads cannot be wrong in a way anyone notices,
+which is exactly why it survives audits; both come back the day something
+reads them.
+
+Note what the table shows about forwarding. Four keys — `intent.context`,
+`hindsight.note_ids`, `hindsight.echo_depth`, `intent.reply` — appear under
+"published by" for agents that did not originate them. `Derive()`'s fresh bag
+means a key crossing more than one hop must be re-published at each one, and
+Governance carries several purely so Reflection can see them after the turn
+concludes. That is the cost of the fresh-bag rule, paid visibly rather than
+by an inherited bag that quietly accumulates everything forever.
+
 ## Governance: decision-only
 
 Governance has exactly three jobs, all genuine decisions over held state:

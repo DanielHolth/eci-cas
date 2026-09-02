@@ -36,7 +36,6 @@ namespace EciCas.Agents.Reflection;
 public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 {
     public const string TriggeredByKey = "perception.triggered_by";
-    public const string SourceTypeKey = "perception.source_type";
     public const string ReflectedKind = "Reflected";
 
     /// <summary>
@@ -230,7 +229,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         {
             _logger.LogInformation("{Agent} pushed idea: {Idea}", Name, best.Idea);
             var idea = Envelope.Create(Topics.Perception, Name, Severity.Restful,
-                MetaBag.Empty.With(PerceptionAgent.TextKey, best.Idea).With(TriggeredByKey, "self").With(SourceTypeKey, "idea"),
+                MetaBag.Empty.With(PerceptionAgent.TextKey, best.Idea).With(TriggeredByKey, "self"),
                 generation: maxGeneration + 1);
             _bus.Publish(Topics.Perception, idea);
         }

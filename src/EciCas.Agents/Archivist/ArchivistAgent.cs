@@ -37,7 +37,6 @@ namespace EciCas.Agents.Archivist;
 public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 {
     public const string ControlKindKey = "control.kind";
-    public const string EpochIdKey = "control.epoch_id";
     public const string WrittenKind = "Written";
 
     private readonly IMessageBus _bus;
@@ -147,9 +146,8 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         _logger.LogInformation("{Agent} wrote {Count} records: {Paths}",
             Name, batch.Count, string.Join(", ", batch.Select(p => $"{p.Record.Category}/{p.Record.Topic}/{p.Record.Subtopic}")));
 
-        var epochId = Guid.NewGuid();
         var written = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
-            MetaBag.Empty.With(ControlKindKey, WrittenKind).With(EpochIdKey, epochId));
+            MetaBag.Empty.With(ControlKindKey, WrittenKind));
         _bus.Publish(Topics.SystemControl, written);
     }
 
