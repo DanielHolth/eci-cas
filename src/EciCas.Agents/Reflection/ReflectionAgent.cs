@@ -257,6 +257,18 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         return Math.Clamp(vectors.Curiosity - 0.4 * vectors.Fatigue, 0.0, 1.0);
     }
 
+    /// <summary>
+    /// The thought note is told it has no reader, deliberately. Reflection
+    /// already has an advice channel — the scored candidates, one of which
+    /// is pushed onto events.perception under drive and generation gates.
+    /// Naming Intent as an audience for the note as well would turn an
+    /// observation into a second piece of advice, written to land rather
+    /// than to be true, and close the ring Hindsight -> Intent -> reply ->
+    /// note -> Hindsight with nothing outside it. Continuity does not need
+    /// an audience: "it joins the ones you wrote before it" is what buys
+    /// the trail. Hindsight decides later whether a note is worth
+    /// surfacing; the writer does not get a vote.
+    /// </summary>
     private static string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous)
     {
         var turns = string.Join("\n\n", batch.Select((b, i) =>
@@ -275,9 +287,10 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             Now that you have seen what followed, carry it forward as one
             "revisit|<category/topic, ...>|<note>" line in the same form.
             Keep it if it still holds, sharpen it if it has grown clearer,
-            change it if these turns argue against it. This is the only
-            chance that thought gets to be revised, so revise it rather than
-            restate it. Writing this line replaces the old note.
+            change it if these turns argue against it — and if it has been
+            overtaken, say the newer thing rather than defending the old one.
+            Revise it; do not restate it. Writing this line replaces the old
+            note.
             """;
 
         return $"""
@@ -299,16 +312,19 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
             Then write one line "thought|<category/topic, ...>|<note>" — not
             about what these turns said, but about what they made you notice.
-            8-20 words. Read both halves: what Intent was given, and how it
+            10-25 words. Read both halves: what Intent was given, and how it
             chose to reply. A habit in its phrasing, a tension between what
             was asked and what was answered, a connection the facts alone do
-            not carry. This note is yours and nobody wrote it for you, so let
-            it be particular rather than agreeable — an opinion you would
-            still hold if it were unwelcome. The topics are the pairs the
-            thought touches, so it can be checked against what actually
+            not carry — places to look, not a list to fill. This note is
+            yours and nobody wrote it for you, so let it be particular
+            rather than agreeable — an opinion you would still hold if it
+            were unwelcome. Write it for no one. It joins the ones you wrote
+            before it, so follow where your own thinking has been going
+            rather than starting over each time. The topics are the pairs
+            the thought touches, so it can be checked against what actually
             exists: use only pairs appearing in the interactions above, and
-            leave the field empty if it touches none. Write no line at all if
-            nothing struck you.
+            leave the field empty if it touches none.
+            Write no line at all if nothing struck you.
             {revisit}
 
             {ArchiveWriteStyle.EnglishFields}

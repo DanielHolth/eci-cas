@@ -42,7 +42,7 @@ public class PassageMemoryTests
         try
         {
             var store = new ParquetPassageStore(directory);
-            var first = new Passage("a", "missed the family record", [new ArchivePair("person", "family")],
+            var first = new Passage("a", "it answers about people more warmly than about dates", [new ArchivePair("person", "family")],
                 DateTimeOffset.UtcNow.AddMinutes(-1), Unit(0));
             await store.WriteAsync([first], null, CancellationToken.None);
 
@@ -50,20 +50,20 @@ public class PassageMemoryTests
             // the pairs survived the file, not just the in-memory cache.
             var reopened = new ParquetPassageStore(directory);
             var hit = Assert.Single(await reopened.SearchAsync(Unit(0), 5, 0.5, CancellationToken.None));
-            Assert.Equal("missed the family record", hit.Passage.Text);
+            Assert.Equal("it answers about people more warmly than about dates", hit.Passage.Text);
             Assert.Equal(new ArchivePair("person", "family"), Assert.Single(hit.Passage.Pairs));
             Assert.Equal(1.0, hit.Score, 5);
 
             // The revisit keeps the id and the timestamp, so it replaces the
             // note rather than accumulating beside it — and "latest" still
             // means the newest event-series, not the newest edit.
-            var revised = first with { Text = "should have read person/family first" };
-            var current = new Passage("b", "missed the deadline context", [], DateTimeOffset.UtcNow, Unit(1));
+            var revised = first with { Text = "the warmth is for anything with a name, not only people" };
+            var current = new Passage("b", "it hedges hardest when a question carries a deadline", [], DateTimeOffset.UtcNow, Unit(1));
             await reopened.WriteAsync([revised, current], "a", CancellationToken.None);
 
             var all = await new ParquetPassageStore(directory).SearchAsync(Unit(0), 5, -1.0, CancellationToken.None);
             Assert.Equal(2, all.Count);
-            Assert.Equal("should have read person/family first", all.Single(h => h.Passage.Id == "a").Passage.Text);
+            Assert.Equal("the warmth is for anything with a name, not only people", all.Single(h => h.Passage.Id == "a").Passage.Text);
             Assert.Equal("b", (await new ParquetPassageStore(directory).LatestAsync(CancellationToken.None))!.Id);
         }
         finally
