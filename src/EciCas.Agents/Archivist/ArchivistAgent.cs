@@ -163,42 +163,20 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             : string.Join(", ", selected.Select(t => $"{t.Category}/{t.Topic}"));
         text = PromptCap.Apply(text);
         var prompt = $"""
-            Extract every fact the user explicitly stated about themselves or
-            someone/something else in this turn — a name, a place, a
-            relationship, a preference, anything concrete about a real
-            person/place/thing. Do not infer, guess, or embellish beyond what
-            was said. A turn with an obvious stated fact (e.g. "my name is
-            X") must never come back empty.
+            Facts stated in this turn, one line per fact:
+            category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<{ArchiveWriteStyle.TerseValue}>
 
-            Never extract meta-commentary about the turn or message itself —
-            no facts like "purpose", "topic", or "intent" of what was said,
-            and no facts derived from filler, small talk, or test/placeholder
-            text (e.g. "this is a test", "hello", "ok"). If the turn contains
-            no concrete real-world fact, that is the normal, expected case —
-            respond with nothing rather than inventing something to say.
-
-            Respond with one line per fact:
-            category=... topic=... subtopic=... subject=... key=... value=...
-
-            Category (1 word), Topic (1 word), Subtopic (1-2 words) group the
-            fact — reuse one of these existing category/topic groups when it
-            clearly fits:
-            {known}
-            Otherwise invent a new one; there being no existing match is not
-            a reason to skip the fact. Subject (1-2 words) is usually a
-            unique entity, named — for a fact about the user themselves, use
-            their own name once stated, or "owner" before it's known. Key
-            (1-3 words) is the attribute. Value ({ArchiveWriteStyle.TerseValue})
-            is the content itself.
+            Reuse one of these category/topic groups when it fits, otherwise
+            invent one: {known}
 
             {ArchiveWriteStyle.EnglishFields}
 
-            Examples:
             category=person topic=family subtopic=owner subject=daniel key=name value=daniel
             category=person topic=family subtopic=son subject=marcus holth key=birthdate value=2020-08-28
             category=event topic=wedding subtopic=family subject=maria holth key=location value=drammen kirke
+            category=assistant topic=identity subtopic=persona subject=this key=name value=morrow
 
-            Only if truly nothing was stated, respond with nothing.
+            Nothing stated: reply nothing.
 
             Turn: {text}
             """;
@@ -256,7 +234,11 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 
             var (category, topic, subtopic, subject, key, value) = fields.Value;
             var importance = Importance(key);
-            records.Add(new ArchiveRecord(category, topic, subtopic, subject, key, PromptCap.Apply(value), timestamp, ArchiveDomain.External, importance));
+            // Written as the substrate wrote it. A validator may reject a row;
+            // it may never edit one. Truncating a value here would not stop a
+            // bad fact landing, it would store a corrupt one in an
+            // append-only archive and serve the ellipsis back forever.
+            records.Add(new ArchiveRecord(category, topic, subtopic, subject, key, value, timestamp, ArchiveDomain.External, importance));
         }
 
         return records;

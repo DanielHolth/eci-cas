@@ -217,7 +217,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // candidate.Score stays purely for picking `best` among the batch.
         var internalRecords = candidates
             .Select(candidate => new ArchiveRecord(
-                FixedCategory, FixedTopic, candidate.Subtopic, FixedSubject, FixedKey, PromptCap.Apply(candidate.Idea),
+                FixedCategory, FixedTopic, candidate.Subtopic, FixedSubject, FixedKey, candidate.Idea,
                 now, ArchiveDomain.Internal, candidate == best && shouldPush ? PushedImportance : QuietImportance))
             .ToList();
         // profileId null: Reflection's own ideas belong to the persona, not
@@ -496,7 +496,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 continue;
             }
 
-            notes.Add(new Note(kind == "revisit", PromptCap.Apply(text), ParsePairs(parts[1])));
+            notes.Add(new Note(kind == "revisit", text, ParsePairs(parts[1])));
         }
 
         return notes;

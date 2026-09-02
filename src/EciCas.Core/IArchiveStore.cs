@@ -63,12 +63,14 @@ public static class ArchiveDomain
 /// Shared prompt language for how much text belongs in an ArchiveRecord's
 /// Value field — every substrate-driven writer (Archivist, Reflection)
 /// asks for this same terse style, so a reader scanning archived facts sees
-/// consistent density regardless of which agent wrote them. PromptCap.Apply
-/// backs this up as a hard char-count limit for substrates that ignore it.
+/// consistent density regardless of which agent wrote them. Asked, not
+/// enforced: PromptCap used to truncate the value on the way in, which did
+/// not prevent a long fact, it stored a mangled one. A validator may reject
+/// a row; it may never edit one.
 /// </summary>
 public static class ArchiveWriteStyle
 {
-    public const string TerseValue = "1-5 content words, no filler — terse style, not a full sentence";
+    public const string TerseValue = "1-5 keywords, or one terse sentence with no filler";
 
     /// <summary>
     /// Lookup is by pair, so the same fact stated in two languages would
@@ -78,13 +80,9 @@ public static class ArchiveWriteStyle
     /// deliberately: translating a name or a place would corrupt the record
     /// itself, which is worse than the duplication this prevents.
     /// </summary>
-    public const string EnglishFields = """
-        Always write category, topic, subtopic and key in English, whatever
-        language the turn was in — a fact stated in another language must land
-        under the same English wording it would have had in English. Never
-        translate proper nouns: names of people, places and organisations stay
-        exactly as they were written, in subject and in value alike.
-        """;
+    public const string EnglishFields =
+        "category, topic, subtopic and key in English whatever language the " +
+        "turn was in. Never translate a name, place or organisation.";
 }
 
 /// <summary>
