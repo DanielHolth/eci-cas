@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
@@ -21,7 +21,7 @@ namespace EciCas.Agents.Librarian;
 /// deliberately absent from what it is shown: resolving which subtopic
 /// matters is Recall's job, reading actual rows, and keeping it out here
 /// keeps the selection prompt short as the archive deepens. No advice
-/// text published anymore — Intent owns all advisory framing; Recall (M4) is
+/// text published anymore — Intent owns all advisory framing; Recall is
 /// the one that actually reads rows once a pair is selected.
 ///
 /// Doesn't use CognitiveAgent&lt;T&gt;'s BuildPrompt template method: the

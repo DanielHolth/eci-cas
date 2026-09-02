@@ -1,7 +1,7 @@
-namespace EciCas.Agents.Reflection;
+﻿namespace EciCas.Agents.Reflection;
 
 /// <summary>
-/// Local loop guard — see plan §3.6. Idea -> arc -> conclusion -> idea would
+/// Local loop guard. Idea -> arc -> conclusion -> idea would
 /// otherwise loop forever while spending on LLM calls, and hop_count can't
 /// catch it since each idea is a legitimately new event. Enforced entirely
 /// inside Reflection so Governance never grows a fourth job.

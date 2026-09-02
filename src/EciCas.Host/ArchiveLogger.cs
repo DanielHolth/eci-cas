@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -8,7 +8,7 @@ namespace EciCas.Host;
 /// <summary>
 /// Wildcard subscriber (Topics.All) that appends every envelope to a JSONL
 /// file. The complete audit trail, bought with zero coupling and zero relay
-/// hops — no agent knows this exists. Storage grows Parquet in M4; this stays
+/// hops — no agent knows this exists. Storage grows Parquet later; this stays
 /// the append-only log either way.
 /// </summary>
 public sealed class ArchiveLogger : AgentBase

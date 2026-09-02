@@ -1,10 +1,10 @@
-using EciCas.Core;
+﻿using EciCas.Core;
 
 namespace EciCas.Host;
 
 /// <summary>
 /// One file to read the whole topology. Validated at startup against what
-/// agents actually declare so it cannot drift — see plan §3.3 and test
+/// agents actually declare so it cannot drift — see test
 /// RoutingManifest_WhenAgentDeclarationsDrift_FailsAtStartup.
 /// </summary>
 public sealed class RoutingManifest

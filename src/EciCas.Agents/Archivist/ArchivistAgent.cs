@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
@@ -18,21 +18,21 @@ namespace EciCas.Agents.Archivist;
 /// what is worth keeping and files it where Librarian can later find it.
 ///
 /// Parallel publisher on events.bundle alongside Intent — never through the
-/// live reply path (see plan's opening rationale: this is exactly the hop
-/// that broke the Python bus). Batches bundle content into ArchiveRecords and
+/// live reply path — this is exactly the hop that broke the Python bus.
+/// Batches bundle content into ArchiveRecords and
 /// flushes to the store every BatchSize bundles, then announces the epoch on
 /// system.control so Identity can invalidate its persona cache.
 ///
 /// Implements ICognitiveAgent directly rather than inheriting
 /// CognitiveAgent&lt;T&gt;: results batch rather than publish one-shot, which
 /// doesn't fit that base class's model. Every turn goes through one substrate
-/// call (ExtractFactsAsync) grounded in Recall's own lookup results — already
-/// present on this same Bundle envelope via GovernanceAgent.BuildBundleMeta —
-/// biasing it to reuse paths Recall just showed it instead of minting
-/// near-duplicates. No deterministic fallback write exists: only facts the
-/// LLM judges explicitly stated get archived, matching the Python
-/// prototype's Archivist, which relies entirely on the same LLM
-/// discipline and may legitimately write nothing for a turn.
+/// call (ExtractFactsAsync) grounded in the pairs Librarian selected —
+/// already present on this same Bundle envelope via
+/// GovernanceAgent.BuildBundleMeta — biasing it to reuse existing paths
+/// instead of minting near-duplicates. No deterministic fallback write
+/// exists: only facts the LLM judges explicitly stated get archived,
+/// matching the Python prototype's Archivist, which relies entirely on
+/// the same LLM discipline and may legitimately write nothing for a turn.
 /// </summary>
 public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 {

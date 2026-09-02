@@ -1,8 +1,8 @@
-namespace EciCas.Agents.Governance;
+﻿namespace EciCas.Agents.Governance;
 
 /// <summary>
 /// Adding an advisor is a config line here plus the advisor's own class+DI
-/// registration — never an edit to GovernanceAgent. Empty roster (M1: no
+/// registration — never an edit to GovernanceAgent. Empty roster (no
 /// advisory agents exist yet) means a bundle completes as soon as the
 /// originating perception event arrives.
 /// </summary>

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.Json;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Impulse;
@@ -15,7 +15,7 @@ namespace EciCas.Agents.Governance;
 
 /// <summary>
 /// Decision-only: bundles the advisory fan-out, gates Action on Security's
-/// verdict (green/yellow/red per plan §3.3's matrix), and produces the
+/// verdict (green/yellow/red per Security's matrix), and produces the
 /// conclusion. Nothing else.
 /// </summary>
 public sealed class GovernanceAgent : AgentBase
@@ -305,7 +305,7 @@ public sealed class GovernanceAgent : AgentBase
         {
             // The reflex reaction reached the human, but the event is not
             // over: Intent's considered reply still follows behind it, and
-            // THAT is what concludes the event — see plan §3.5.
+            // THAT is what concludes the event.
             return;
         }
 

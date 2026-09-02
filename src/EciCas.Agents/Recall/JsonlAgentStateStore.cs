@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace EciCas.Agents.Recall;
 
@@ -6,7 +6,7 @@ using EciCas.Core;
 
 /// <summary>
 /// JSONL-backed IAgentStateStore: append-only writes, full-scan lookup. A
-/// library, not a bus citizen — see plan §3.3.
+/// library, not a bus citizen.
 /// </summary>
 public sealed class JsonlAgentStateStore : IAgentStateStore
 {

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Hindsight;
@@ -18,7 +18,7 @@ namespace EciCas.Agents.Reflection;
 /// once ReflectionOptions.BatchSize accumulates, makes one substrate call
 /// scoring candidate follow-up ideas. The best-ranked candidate is pushed
 /// back onto events.perception — downstream nothing knows the difference
-/// from external input (plan §3.6) — only when persona drive-vector state
+/// from external input — only when persona drive-vector state
 /// (read from IArchiveStore at ImpulseAgent.DrivePath, never a direct
 /// reference to ImpulseAgent) reads eager enough; otherwise it's archived
 /// quietly like every other candidate. See roadmap.md's "Reflection Agent

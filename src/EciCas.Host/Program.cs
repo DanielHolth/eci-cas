@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EciCas.Agents.Action;
@@ -151,7 +151,10 @@ switch (embeddingProvider.ToLowerInvariant())
 var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");
 builder.Services.AddSingleton(SecurityRuleSet.Load(securityRulesPath));
 
-var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Path"] ?? "memory.jsonl");
+// Agent state, not the archive: a JSONL side-store the Identity persona
+// entry lives in. It sat under "Archive:" for long enough that an
+// existing local override may still say so — that key is still read.
+var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["AgentState:Path"] ?? builder.Configuration["Archive:Path"] ?? "memory.jsonl");
 var agentStateStore = new JsonlAgentStateStore(agentStatePath);
 builder.Services.AddSingleton<IAgentStateStore>(agentStateStore);
 
@@ -279,7 +282,7 @@ app.MapPost("/api/perceive", (PerceiveRequest request, PerceptionAgent perceptio
     return Results.Accepted();
 });
 
-// One more bus subscriber (plan §M5) — SseBroadcaster fans every envelope out
+// One more bus subscriber — SseBroadcaster fans every envelope out
 // to connected clients; this endpoint just relays one client's channel onto
 // the HTTP response as text/event-stream. No agent knows this exists.
 var excludedMetaKeys = (builder.Configuration.GetSection("Sse:ExcludedMetaKeys").Get<string[]>() ?? []).ToHashSet(StringComparer.Ordinal);

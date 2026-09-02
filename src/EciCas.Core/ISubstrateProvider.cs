@@ -1,9 +1,9 @@
-namespace EciCas.Core;
+﻿namespace EciCas.Core;
 
 /// <summary>
 /// Logical substrate class (fast-low/fast-medium/fast-high, slow-low/slow-medium/slow-high)
 /// resolved to a concrete completion. The tier is a manifest/DI choice — a mock
-/// is a substrate, not a separate agent class. Implemented in M2.
+/// is a substrate, not a separate agent class.
 /// </summary>
 public interface ISubstrateProvider
 {

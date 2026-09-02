@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Intent;
@@ -13,9 +13,9 @@ namespace EciCas.Agents.Impulse;
 /// <summary>
 /// Fast deterministic appraisal, plus the Critical reflex: a second publisher
 /// on events.proposal alongside Intent, so Security's gate needs no
-/// reflex-specific branch — see plan §3.5. The reflex proposal carries
+/// reflex-specific branch. The reflex proposal carries
 /// <see cref="ReflexKey"/> so Governance can tell it apart from Intent's
-/// considered proposal and avoid double-concluding the event (M3).
+/// considered proposal and avoid double-concluding the event.
 ///
 /// Also owns the persona drive-vector state (see DriveVectors) that
 /// ReflectionAgent's push-vs-write gate reads — ported from the Python

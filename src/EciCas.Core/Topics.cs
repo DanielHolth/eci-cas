@@ -1,8 +1,8 @@
-namespace EciCas.Core;
+﻿namespace EciCas.Core;
 
 /// <summary>
 /// Topics are named by purpose, never by recipient — no agent names another
-/// agent. See plan §1 for the full roster/topic table.
+/// agent. See docs/architecture.md for the full roster/topic table.
 /// </summary>
 public static class Topics
 {

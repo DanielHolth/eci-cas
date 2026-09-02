@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Nodes;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
@@ -16,7 +16,7 @@ namespace EciCas.Agents.Intent;
 /// <summary>
 /// Composes the considered reply: a substrate call over the perceived text
 /// plus whatever Impulse/Librarian/Identity contributed to the bundle. Cognitive
-/// tier — the mock-echo placeholder from M1 is gone.
+/// tier — the mock-echo placeholder it started as is gone.
 /// </summary>
 public sealed class IntentAgent : CognitiveAgent<string>
 {
