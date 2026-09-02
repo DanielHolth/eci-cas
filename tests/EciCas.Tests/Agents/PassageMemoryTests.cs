@@ -192,7 +192,7 @@ public class PassageMemoryTests
             null, CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
-            "mood|curious\nmissed|person/family|needed the birthdate to answer\nrevisit|person/family|first thought, sharpened",
+            "mood|curious\nthought|person/family|it answers about people more warmly than about dates\nrevisit|person/family|first thought, sharpened",
             TimeSpan.Zero, 5, 0m)));
 
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
@@ -206,7 +206,7 @@ public class PassageMemoryTests
         Assert.Equal("first thought, sharpened", passages.Passages.Single(p => p.Id == "old").Text);
 
         var current = passages.Passages.Single(p => p.Id != "old");
-        Assert.Equal("needed the birthdate to answer", current.Text);
+        Assert.Equal("it answers about people more warmly than about dates", current.Text);
         Assert.Equal(new ArchivePair("person", "family"), Assert.Single(current.Pairs));
     }
 
@@ -223,7 +223,7 @@ public class PassageMemoryTests
 
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()),
-            new StubSubstrate(_ => Task.FromResult(new SubstrateResult("mood|dull\nmissed|person/family|note", TimeSpan.Zero, 5, 0m))),
+            new StubSubstrate(_ => Task.FromResult(new SubstrateResult("mood|dull\nthought|person/family|note", TimeSpan.Zero, 5, 0m))),
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
             passages, new StubEmbeddings());
 

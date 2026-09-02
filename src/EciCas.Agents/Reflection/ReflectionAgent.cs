@@ -272,10 +272,12 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
             You wrote this note after the previous batch:
             "{PromptCap.Apply(previous.Text)}" (topics: {string.Join(", ", previous.Pairs.Select(p => $"{p.Category}/{p.Topic}"))})
-            Now that you have seen what followed, rewrite it as one
-            "revisit|<category/topic, ...>|<note>" line in the same 5-15 word
-            form. Keep it if it still holds; sharpen or correct it if it does
-            not. This replaces the old note rather than adding to it.
+            Now that you have seen what followed, carry it forward as one
+            "revisit|<category/topic, ...>|<note>" line in the same form.
+            Keep it if it still holds, sharpen it if it has grown clearer,
+            change it if these turns argue against it. This is the only
+            chance that thought gets to be revised, so revise it rather than
+            restate it. Writing this line replaces the old note.
             """;
 
         return $"""
@@ -295,13 +297,18 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             as "mood|<label>" where label is exactly one of: {MoodLabels}.
             Always include this line, even when you propose no ideas.
 
-            Then review your own retrieval. Write one line
-            "missed|<category/topic, ...>|<note>" where the note is 5-15 words
-            naming the context you wish you had had for these turns, and the
-            topics are the knowledge-base pairs you should have read to get
-            it. A critique of what you were given, never a restatement of an
-            answer. Use only category/topic pairs that appear in the
-            interactions above; write no line at all if nothing was missing.
+            Then write one line "thought|<category/topic, ...>|<note>" — not
+            about what these turns said, but about what they made you notice.
+            8-20 words. Read both halves: what Intent was given, and how it
+            chose to reply. A habit in its phrasing, a tension between what
+            was asked and what was answered, a connection the facts alone do
+            not carry. This note is yours and nobody wrote it for you, so let
+            it be particular rather than agreeable — an opinion you would
+            still hold if it were unwelcome. The topics are the pairs the
+            thought touches, so it can be checked against what actually
+            exists: use only pairs appearing in the interactions above, and
+            leave the field empty if it touches none. Write no line at all if
+            nothing struck you.
             {revisit}
 
             {ArchiveWriteStyle.EnglishFields}
@@ -400,7 +407,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         var vectors = await _embeddings.EmbedAsync([.. writing.Select(n => n.Text)], cancellationToken).ConfigureAwait(false);
         if (vectors.Count != writing.Count)
         {
-            _logger.LogWarning("{Agent} could not embed its retrieval notes, passage corpus unchanged", Name);
+            _logger.LogWarning("{Agent} could not embed its notes, passage corpus unchanged", Name);
             return;
         }
 
@@ -416,10 +423,18 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     }
 
     /// <summary>
-    /// "missed|pairs|note" and "revisit|pairs|note". Parsed apart from the
+    /// "thought|pairs|note" and "revisit|pairs|note". Parsed apart from the
     /// candidate lines rather than as a fourth candidate field: a note
-    /// describes what retrieval missed across the whole batch, and it has to
-    /// survive a batch that proposed no ideas at all.
+    /// describes the whole batch, not any one idea, and it has to survive a
+    /// batch that proposed no ideas at all.
+    ///
+    /// Was "missed|..." — a critique of what retrieval failed to fetch.
+    /// That made the corpus a retrieval-tuning log; the pairs it named were
+    /// its only content. The note is now the persona's own reading of a
+    /// stretch of turns, which is what Hindsight is meant to surface later.
+    /// The pairs field survives the change on purpose: it is the one thing
+    /// about a note that reality can contradict, and a note that cannot be
+    /// wrong is a note that compounds unchecked.
     /// </summary>
     private static List<Note> ParseNotes(string response)
     {
@@ -433,7 +448,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             }
 
             var kind = parts[0].Trim().ToLowerInvariant();
-            if (kind is not ("missed" or "revisit"))
+            if (kind is not ("thought" or "revisit"))
             {
                 continue;
             }
