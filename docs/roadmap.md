@@ -357,6 +357,39 @@ would take that away. Before touching `IEmbeddingProvider`'s default model,
 stamp a model id on the passage row and either re-embed on mismatch or
 refuse to start.
 
+### Hindsight — what it is for
+
+Recall reads facts. Hindsight reads what the persona made of them.
+
+The passage corpus is not a retrieval-tuning log and Hindsight is not a
+second Recall. A thought note is written after a batch of turns, for no
+one, about what those turns made the persona notice — a habit in its own
+phrasing, a tension between what was asked and what was answered, a
+connection the facts alone do not carry. Hindsight's job is to wake one of
+those when a prompt brushes against it, months later if that is when it
+fits, and hand it to Intent as its own voice rather than as a fact.
+
+What we are after is something the key:value archive structurally cannot
+produce: a direction the persona chose, and a flavour nobody wrote for it.
+Trails of thought rather than stored answers. It may turn out to have a
+personality, and that personality may not be a flattering one — that is
+the experiment working, not failing.
+
+Three consequences that constrain the build:
+
+- **A hit is a lead, not an answer.** The cosine floor is deliberately low
+  (0.25). Notes that restate the prompt tell the persona what it already
+  knew; the sideways ones are the point, and unrelated material is also
+  what breaks a resonance.
+- **Prose and facts stay separate substances.** Two bundle slots, two
+  paths into Intent. A note must never be re-ingested as a fact.
+- **The ring has no external grounding.** Hindsight → Intent's bundle →
+  Intent's output → Reflection → new note closes on itself. The pairs
+  field is the only part of a note reality can contradict, and notes may
+  leave it empty. A persona settling into a groove and a persona
+  developing a personality are the same observation from inside; if it
+  starts agreeing with itself, look here first.
+
 ### A passage agent of its own (idea)
 
 Vector retrieval currently lives inside `LibrarianAgent`, and its output
