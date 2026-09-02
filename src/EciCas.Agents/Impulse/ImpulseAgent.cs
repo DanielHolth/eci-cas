@@ -22,7 +22,7 @@ namespace EciCas.Agents.Impulse;
 /// prototype's Impulse, minimally: nudged only from the isCritical signal
 /// already computed here, not the full drift/appraisal-axis machinery (see
 /// gap-analysis.md, that stays a separate follow-up). Persisted through
-/// IArchiveStore under DrivePath, same pattern SelfAgent uses for identity —
+/// IArchiveStore under DrivePath, same pattern IdentityAgent uses for identity —
 /// no direct reference from Reflection to this agent, preserving loose
 /// coupling.
 /// </summary>
@@ -179,7 +179,7 @@ public sealed class ImpulseAgent : AgentBase
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var isCritical = CriticalTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase));
 
-        // Reflex severity is capped at Elevated — only Perception/Reasoning may tag Critical.
+        // Reflex severity is capped at Elevated — only Perception/Librarian may tag Critical.
         var severity = isCritical ? Severity.Elevated : envelope.Severity;
         var advice = isCritical ? "flagged as urgent" : "no immediate concern";
 

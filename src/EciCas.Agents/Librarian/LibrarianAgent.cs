@@ -6,9 +6,16 @@ using EciCas.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace EciCas.Agents.Reasoning;
+namespace EciCas.Agents.Librarian;
 
 /// <summary>
+/// Was Reasoning until the name was audited against the job: this agent
+/// reasons about nothing and reads no fact. It interprets the turn and
+/// points Recall at a shelf — the catalogue half of a librarian, never the
+/// fetching half, which is Recall's. "Reasoning" also overclaimed into
+/// Intent's territory, and "Retrieval" would have collided with Recall,
+/// which is the agent that actually retrieves.
+///
 /// Selector only: picks which of the archive's known (Category, Topic)
 /// pairs might hold background relevant to this turn. Subtopic is
 /// deliberately absent from what it is shown: resolving which subtopic
@@ -24,26 +31,26 @@ namespace EciCas.Agents.Reasoning;
 /// shape inline. BuildPrompt/ParseResult/FallbackResult below exist only to
 /// satisfy CognitiveAgent&lt;T&gt;'s abstract contract and are never invoked.
 /// </summary>
-public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
+public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 {
     /// <summary>Selected pairs, carried on the events.selected-pairs envelope's Meta.</summary>
-    public const string SelectedPairsKey = "reasoning.selected_pairs";
+    public const string SelectedPairsKey = "librarian.selected_pairs";
 
     /// <summary>Text of the passages this turn matched by vector, alongside the pairs they pointed at.</summary>
-    public const string PassagesKey = "reasoning.passages";
+    public const string PassagesKey = "librarian.passages";
 
     private readonly IMessageBus _bus;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
-    private readonly ReasoningOptions _options;
+    private readonly LibrarianOptions _options;
     private readonly IEmbeddingProvider _embeddings;
     private readonly IPassageStore _passages;
     private readonly PassageOptions _passageOptions;
     private readonly ILogger _logger;
 
-    public ReasoningAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReasoningAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReasoningOptions> options,
+    public LibrarianAgent(IMessageBus bus, BusActivityTracker activity, ILogger<LibrarianAgent> logger, IArchiveStore store,
+        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<LibrarianOptions> options,
         IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> passageOptions)
         : base(bus, activity, logger, substrate, agentSubstrates)
     {
@@ -58,7 +65,7 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         _logger = logger;
     }
 
-    public override string Name => "Reasoning";
+    public override string Name => "Librarian";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception];
 
     protected override FallbackPosture Fallback => FallbackPosture.Open;
@@ -134,7 +141,7 @@ public sealed class ReasoningAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // An empty archive and a deliberately deterministic agent reach the
         // same place — nothing to select — and neither is a degradation. The
         // passages still go out: matching one costs no substrate call, so
-        // there is no reason a deterministic Reasoning should lose them.
+        // there is no reason a deterministic Librarian should lose them.
         if (index.Count == 0 || !entry.UseSubstrate)
         {
             Publish(envelope, remembered, passages, degraded: null);

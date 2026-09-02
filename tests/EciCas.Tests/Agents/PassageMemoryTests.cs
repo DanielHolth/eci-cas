@@ -1,6 +1,6 @@
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Reasoning;
+using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Bus;
@@ -12,7 +12,7 @@ using Microsoft.Extensions.Options;
 namespace EciCas.Tests.Agents;
 
 /// <summary>
-/// The vector half of memory: Reflection writes passages, Reasoning matches
+/// The vector half of memory: Reflection writes passages, Librarian matches
 /// them and turns them into leads. Asserts outcome — what got written, what
 /// got selected — never the order agents ran in.
 /// </summary>
@@ -108,18 +108,18 @@ public class PassageMemoryTests
         // The selection call picks index 1 (world/topic0); the passage
         // contributes person/family, which it did not pick.
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("1", TimeSpan.Zero, 5, 0m)));
-        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest("Reasoning", "fast-medium"), Options.Create(new ReasoningOptions { MaxSelectedPairs = 1 }),
+        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
+            Manifest("Librarian", "fast-medium"), Options.Create(new LibrarianOptions { MaxSelectedPairs = 1 }),
             new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?")), CancellationToken.None);
 
         Assert.True(selections.TryRead(out var selection));
-        var pairs = selection!.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey)!;
+        var pairs = selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!;
         Assert.Contains(new ArchivePair("person", "family"), pairs);
         Assert.Equal("should have read the family record",
-            Assert.Single(selection.Meta.Get<IReadOnlyList<string>>(ReasoningAgent.PassagesKey)!));
+            Assert.Single(selection.Meta.Get<IReadOnlyList<string>>(LibrarianAgent.PassagesKey)!));
     }
 
     /// <summary>
@@ -143,9 +143,9 @@ public class PassageMemoryTests
             [new Passage("a", "stale lead", [new ArchivePair("person", "deleted")], DateTimeOffset.UtcNow, Unit(0))],
             null, CancellationToken.None);
 
-        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store,
+        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store,
             new StubSubstrate(_ => throw new InvalidOperationException("index fits under the cap, so this is never called")),
-            Manifest("Reasoning", "fast-medium"), Options.Create(new ReasoningOptions()),
+            Manifest("Librarian", "fast-medium"), Options.Create(new LibrarianOptions()),
             new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -153,8 +153,8 @@ public class PassageMemoryTests
 
         Assert.True(selections.TryRead(out var selection));
         Assert.DoesNotContain(new ArchivePair("person", "deleted"),
-            selection!.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey)!);
-        Assert.Equal("stale lead", Assert.Single(selection.Meta.Get<IReadOnlyList<string>>(ReasoningAgent.PassagesKey)!));
+            selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!);
+        Assert.Equal("stale lead", Assert.Single(selection.Meta.Get<IReadOnlyList<string>>(LibrarianAgent.PassagesKey)!));
     }
 
     /// <summary>Recall is the roster slot between the match and Intent, so the text has to survive the hop.</summary>
@@ -169,10 +169,10 @@ public class PassageMemoryTests
             new StubSubstrate(_ => throw new InvalidOperationException("no pairs selected, so this is never called")),
             Manifest("Recall", "fast-low"), Options.Create(new RecallOptions()));
 
-        var selection = Envelope.Create(Topics.SelectedPairs, "Reasoning", Severity.Neutral,
+        var selection = Envelope.Create(Topics.SelectedPairs, "Librarian", Severity.Neutral,
             MetaBag.Empty
-                .With(ReasoningAgent.SelectedPairsKey, (IReadOnlyList<ArchivePair>)[])
-                .With(ReasoningAgent.PassagesKey, (IReadOnlyList<string>)["should have read the family record"]));
+                .With(LibrarianAgent.SelectedPairsKey, (IReadOnlyList<ArchivePair>)[])
+                .With(LibrarianAgent.PassagesKey, (IReadOnlyList<string>)["should have read the family record"]));
         await agent.HandleAsync(selection, CancellationToken.None);
 
         Assert.True(advisories.TryRead(out var advisory));

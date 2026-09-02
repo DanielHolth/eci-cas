@@ -8,11 +8,11 @@ using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Reasoning;
+using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Security;
-using EciCas.Agents.Self;
+using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Host;
@@ -27,7 +27,7 @@ const string CorsPolicy = "morrow-eci";
 
 /// <summary>
 /// Who the persona is when nothing has taught it otherwise. Written in the
-/// first person because SelfAgent hands it to Intent as advice, not as a
+/// first person because IdentityAgent hands it to Intent as advice, not as a
 /// description — and deliberately short: an identity that fills the prompt
 /// leaves no room for the turn.
 /// </summary>
@@ -78,7 +78,7 @@ builder.Services.Configure<RoutingManifest>(builder.Configuration.GetSection("Ro
 builder.Services.Configure<SubstrateOptions>(builder.Configuration.GetSection("Substrates"));
 builder.Services.Configure<AgentSubstrateManifest>(builder.Configuration.GetSection("AgentSubstrates"));
 builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Recall"));
-builder.Services.Configure<ReasoningOptions>(builder.Configuration.GetSection("Reasoning"));
+builder.Services.Configure<LibrarianOptions>(builder.Configuration.GetSection("Librarian"));
 builder.Services.Configure<ConsolidatorOptions>(builder.Configuration.GetSection("Consolidator"));
 builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("Reflection"));
 builder.Services.Configure<PassageOptions>(builder.Configuration.GetSection("Passages"));
@@ -154,14 +154,14 @@ var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuratio
 var agentStateStore = new JsonlAgentStateStore(agentStatePath);
 builder.Services.AddSingleton<IAgentStateStore>(agentStateStore);
 
-// One entry, not a persona file: SelfAgent reads self/identity on every turn
+// One entry, not a persona file: IdentityAgent reads self/identity on every turn
 // and otherwise falls back to a fixed stranger's snippet. Seeded only when
 // the store has nothing there, so editing it — by hand or, later, by the
 // persona itself — sticks. Everything else about Morrow is learned.
-if ((await agentStateStore.LookupAsync([SelfAgent.IdentityPath], maxPerPath: 1, CancellationToken.None)).Count == 0)
+if ((await agentStateStore.LookupAsync([IdentityAgent.IdentityPath], maxPerPath: 1, CancellationToken.None)).Count == 0)
 {
     await agentStateStore.WriteAsync(
-        [new AgentStateRecord(SelfAgent.IdentityPath, MorrowIdentity, DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
+        [new AgentStateRecord(IdentityAgent.IdentityPath, MorrowIdentity, DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
         CancellationToken.None);
 }
 
@@ -194,9 +194,9 @@ builder.Services.AddSingleton(new ProfileStore(archiveDirectory));
 
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
-RegisterAgent<ReasoningAgent>(builder.Services);
+RegisterAgent<LibrarianAgent>(builder.Services);
 RegisterAgent<RecallAgent>(builder.Services);
-RegisterAgent<SelfAgent>(builder.Services);
+RegisterAgent<IdentityAgent>(builder.Services);
 RegisterAgent<GovernanceAgent>(builder.Services);
 RegisterAgent<IntentAgent>(builder.Services);
 RegisterAgent<SecurityAgent>(builder.Services);

@@ -1,16 +1,16 @@
 using EciCas.Agents.Consolidator;
 using EciCas.Agents.Recall;
-using EciCas.Agents.Self;
+using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EciCas.Tests.Agents;
 
-public class SelfAgentTests
+public class IdentityAgentTests
 {
-    private static SelfAgent CreateAgent(IMessageBus bus, BusActivityTracker activity, string? tempFile = null) =>
-        new(bus, activity, NullLogger<SelfAgent>.Instance, new JsonlAgentStateStore(tempFile ?? Path.GetTempFileName()));
+    private static IdentityAgent CreateAgent(IMessageBus bus, BusActivityTracker activity, string? tempFile = null) =>
+        new(bus, activity, NullLogger<IdentityAgent>.Instance, new JsonlAgentStateStore(tempFile ?? Path.GetTempFileName()));
 
     [Fact]
     public async Task PublishesIdentityAdvisory()
@@ -24,7 +24,7 @@ public class SelfAgentTests
         await agent.HandleAsync(perception, CancellationToken.None);
 
         Assert.True(advisories.TryRead(out var advisory));
-        Assert.False(string.IsNullOrEmpty(advisory!.Meta.Get<string>(SelfAgent.AdviceKey)));
+        Assert.False(string.IsNullOrEmpty(advisory!.Meta.Get<string>(IdentityAgent.AdviceKey)));
     }
 
     [Fact]

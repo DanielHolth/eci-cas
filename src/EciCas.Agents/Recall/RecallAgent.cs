@@ -1,5 +1,5 @@
 using EciCas.Agents.Perception;
-using EciCas.Agents.Reasoning;
+using EciCas.Agents.Librarian;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -9,11 +9,11 @@ namespace EciCas.Agents.Recall;
 
 /// <summary>
 /// Second stage of the knowledge swarm: for each (Category, Topic) pair
-/// Reasoning selected, reads that pair's rows once, splits them into chunks
+/// Librarian selected, reads that pair's rows once, splits them into chunks
 /// of RecallOptions.RowsPerWorker, and fires one substrate call per chunk
 /// asking which rows are actually relevant. Subtopic resolution happens
 /// here, in the picking model's reading of the rows, rather than upstream in
-/// Reasoning's index.
+/// Librarian's index.
 ///
 /// A pair is never truncated: a subtopic discussed at great length simply
 /// produces more chunks. That trades a per-pair row cap for a per-turn call
@@ -34,7 +34,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 {
     public const string RecalledFactsKey = "recall.facts";
 
-    /// <summary>Passage text Reasoning matched by vector, forwarded unchanged so it reaches Intent through Recall's existing roster slot.</summary>
+    /// <summary>Passage text Librarian matched by vector, forwarded unchanged so it reaches Intent through Recall's existing roster slot.</summary>
     public const string RecalledPassagesKey = "recall.passages";
 
     private const int MaxPickedPerWorker = 5;
@@ -63,7 +63,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        var pairs = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey) ?? [];
+        var pairs = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey) ?? [];
 
         if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
         {
@@ -85,7 +85,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var loaded = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
 
-        // Same rule Reasoning applies to the index, one stage down: when
+        // Same rule Librarian applies to the index, one stage down: when
         // every loaded row would fit in a single worker's pick budget, the
         // picking call can only return a subset of what passing them all
         // gives Intent. Skipping it removes the second of the turn's three
@@ -156,11 +156,11 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     {
         var meta = MetaBag.Empty.With(RecalledFactsKey, facts);
 
-        // Reasoning matched these, but Intent reads them, and Recall is the
+        // Librarian matched these, but Intent reads them, and Recall is the
         // roster slot between the two. Forwarding rather than re-deriving
         // keeps the vector search at one per turn and keeps Governance's
         // bundle roster unchanged.
-        if (envelope.Meta.Get<IReadOnlyList<string>>(ReasoningAgent.PassagesKey) is { Count: > 0 } passages)
+        if (envelope.Meta.Get<IReadOnlyList<string>>(LibrarianAgent.PassagesKey) is { Count: > 0 } passages)
         {
             meta = meta.With(RecalledPassagesKey, passages);
         }

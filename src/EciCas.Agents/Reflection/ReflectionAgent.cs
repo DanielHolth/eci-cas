@@ -89,7 +89,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        // Same prompt Intent itself was given (reply-to text, Impulse/Self
+        // Same prompt Intent itself was given (reply-to text, Impulse/Identity
         // advice, Recall's picked facts with their full category/topic/
         // subtopic path) plus what it sent out — Governance forwards both
         // unchanged from Intent's own Proposal through Verdict/Action/
@@ -452,7 +452,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     /// <summary>
     /// Pairs are stored lowercase because the archive treats an address as
-    /// case-insensitive; Reasoning resolves them against the live index
+    /// case-insensitive; Librarian resolves them against the live index
     /// anyway, so anything malformed here costs a dropped pointer, never a
     /// bad read.
     /// </summary>

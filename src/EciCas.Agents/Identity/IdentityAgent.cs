@@ -3,9 +3,16 @@ using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
 
-namespace EciCas.Agents.Self;
+namespace EciCas.Agents.Identity;
 
 /// <summary>
+/// Was Personality in the Python prototype, then Self, now Identity. The
+/// name kept shrinking toward what the code does: this is thin — a cached
+/// snippet with a fallback, no substrate call — and "Self" promised
+/// selfhood it does not deliver. Identity is also the name the persona and
+/// avatar picker will want when persona editing lands, at which point the
+/// agent gets thicker and the name still fits.
+///
 /// Identity lookup: a persona snippet read from IArchiveStore and cached,
 /// re-hydrated whenever Consolidator announces a new epoch on
 /// system.control (a write could have touched the persona record). Falls
@@ -15,10 +22,17 @@ namespace EciCas.Agents.Self;
 /// for whenever persona editing lands. Deterministic tier either way — no
 /// substrate call, so no CognitiveAgent&lt;T&gt; base.
 /// </summary>
-public sealed class SelfAgent : AgentBase
+public sealed class IdentityAgent : AgentBase
 {
-    public const string AdviceKey = "self.advice";
+    public const string AdviceKey = "identity.advice";
 
+    /// <summary>
+    /// Stays "self/identity" though the agent is now Identity: this is a
+    /// persisted archive path, not a name. Renaming it would orphan every
+    /// persona record already written, and "self" is a shared archive
+    /// category (see ParquetArchiveStore.DefaultSharedCategories) rather
+    /// than a reference to the agent.
+    /// </summary>
     public const string IdentityPath = "self/identity";
     private const string DefaultIdentitySnippet = "I'm ECI, here to help.";
 
@@ -27,14 +41,14 @@ public sealed class SelfAgent : AgentBase
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private string? _cachedIdentity;
 
-    public SelfAgent(IMessageBus bus, BusActivityTracker activity, ILogger<SelfAgent> logger, IAgentStateStore store)
+    public IdentityAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IdentityAgent> logger, IAgentStateStore store)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
     }
 
-    public override string Name => "Self";
+    public override string Name => "Identity";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.SystemControl];
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)

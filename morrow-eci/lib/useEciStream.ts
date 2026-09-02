@@ -15,12 +15,12 @@ import type {
 const MAX_TURNS = 20;
 
 /** Each bundle agent thinks in its own shape, so each gets its own reader
- * off the raw meta. Reasoning's thought is which archive pairs it chose;
- * Recall's is the rows it picked out of them; Self's is already a line of
+ * off the raw meta. Librarian's thought is which archive pairs it chose;
+ * Recall's is the rows it picked out of them; Identity's is already a line of
  * text. All three collapse to one terse string for a bubble. */
 const BUNDLE_THOUGHT: Record<BundleAgent, (meta: Record<string, unknown>) => string | undefined> = {
-  reasoning: (meta) => {
-    const pairs = meta["reasoning.selected_pairs"];
+  librarian: (meta) => {
+    const pairs = meta["librarian.selected_pairs"];
     return Array.isArray(pairs) && pairs.length > 0
       ? pairs.map((p) => `${p.category}/${p.topic}`).join(", ")
       : undefined;
@@ -31,7 +31,7 @@ const BUNDLE_THOUGHT: Record<BundleAgent, (meta: Record<string, unknown>) => str
       ? facts.map((f) => `${f.subject} ${f.key} = ${f.value}`).join("; ")
       : undefined;
   },
-  self: (meta) => (typeof meta["self.advice"] === "string" ? meta["self.advice"] : undefined),
+  identity: (meta) => (typeof meta["identity.advice"] === "string" ? meta["identity.advice"] : undefined),
 };
 
 function record(turn: TurnEvent, agent: BundleAgent, text: string): void {
@@ -105,13 +105,13 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
       }
       break;
     }
-    // Reasoning's advisory is the pair selection itself, published on its
+    // Librarian's advisory is the pair selection itself, published on its
     // own topic rather than events.advisories — so it needs its own case,
     // not an entry in the advisory switch above.
     case "events.selected-pairs": {
-      const thought = BUNDLE_THOUGHT.reasoning(raw.meta);
+      const thought = BUNDLE_THOUGHT.librarian(raw.meta);
       if (thought) {
-        record(turn, "reasoning", thought);
+        record(turn, "librarian", thought);
       }
       break;
     }

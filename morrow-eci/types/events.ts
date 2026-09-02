@@ -10,7 +10,7 @@ export type Expression = "angry" | "scared" | "sad" | "warm" | "alert" | "neutra
 
 /** The three advisory agents whose findings feed Governance's bundle
  * (Impulse's own advisory isn't shown here — it drives Avatar directly). */
-export type BundleAgent = "reasoning" | "recall" | "self";
+export type BundleAgent = "librarian" | "recall" | "identity";
 
 /** Security's verdict vocabulary (src/EciCas.Agents/Security). */
 export type Verdict = "green" | "yellow" | "red";

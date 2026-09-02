@@ -3,7 +3,7 @@ namespace EciCas.Core;
 /// <summary>
 /// OR-upscale-only: severity on a bundle is the max of every advisory's severity,
 /// never a downgrade. Impulse's reflex path is capped at Elevated — only
-/// Perception/Reasoning may tag Critical.
+/// Perception/Librarian may tag Critical.
 /// </summary>
 public enum Severity
 {

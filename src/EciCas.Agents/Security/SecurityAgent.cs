@@ -8,7 +8,7 @@ namespace EciCas.Agents.Security;
 /// <summary>
 /// The real gate: a deterministic, declarative rule engine (SecurityRuleSet),
 /// no model. Security sees only the proposed reply text and nothing else —
-/// not Reasoning's or Self's advice, not Intent's diagnostics. A rule engine
+/// not Librarian's or Identity's advice, not Intent's diagnostics. A rule engine
 /// that could see the argument FOR a reply would be evaluating the argument,
 /// which is Intent's job, not the rules'.
 /// </summary>

@@ -1,6 +1,6 @@
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Reasoning;
+using EciCas.Agents.Librarian;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace EciCas.Tests.Agents;
 
-public class ReasoningAgentTests
+public class LibrarianAgentTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
@@ -17,7 +17,7 @@ public class ReasoningAgentTests
     }
 
     private static IOptions<AgentSubstrateManifest> Manifest() =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Reasoning"] = new AgentSubstrateEntry { Class = "fast-medium" } } });
+        Options.Create(new AgentSubstrateManifest { Agents = { ["Librarian"] = new AgentSubstrateEntry { Class = "fast-medium" } } });
 
     [Fact]
     public async Task PublishesSelectedPairs_FromSubstrateChoice()
@@ -26,7 +26,7 @@ public class ReasoningAgentTests
         var bus = new ChannelBus(activity);
         var selections = bus.Subscribe(Topics.SelectedPairs);
         var store = new InMemoryArchiveStore();
-        // Index deliberately wider than the cap: at or below it, Reasoning
+        // Index deliberately wider than the cap: at or below it, Librarian
         // skips the call and passes everything, which is a different test.
         await store.WriteAsync([
             new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow),
@@ -35,8 +35,8 @@ public class ReasoningAgentTests
             null, CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
-        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions { MaxSelectedPairs = 3 }),
+        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
+            Manifest(), Options.Create(new LibrarianOptions { MaxSelectedPairs = 3 }),
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -45,7 +45,7 @@ public class ReasoningAgentTests
 
         Assert.True(selections.TryRead(out var selection));
         Assert.Equal(perception.CorrelationId, selection!.CorrelationId);
-        var pairs = selection.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey);
+        var pairs = selection.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey);
         Assert.Equal(new ArchivePair("person", "family"), Assert.Single(pairs!));
     }
 
@@ -58,8 +58,8 @@ public class ReasoningAgentTests
         var store = new InMemoryArchiveStore();
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
-        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions()),
+        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
+            Manifest(), Options.Create(new LibrarianOptions()),
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -67,7 +67,7 @@ public class ReasoningAgentTests
         await agent.HandleAsync(perception, CancellationToken.None);
 
         Assert.True(selections.TryRead(out var selection));
-        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey)!);
+        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!);
         Assert.False(called);
     }
 
@@ -85,8 +85,8 @@ public class ReasoningAgentTests
             null, CancellationToken.None);
 
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
-        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions()),
+        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
+            Manifest(), Options.Create(new LibrarianOptions()),
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -94,7 +94,7 @@ public class ReasoningAgentTests
         await agent.HandleAsync(perception, CancellationToken.None);
 
         Assert.True(selections.TryRead(out var selection));
-        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey)!);
+        Assert.Empty(selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!);
     }
 
     /// <summary>
@@ -116,8 +116,8 @@ public class ReasoningAgentTests
 
         var called = false;
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
-        var agent = new ReasoningAgent(bus, activity, NullLogger<ReasoningAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new ReasoningOptions()),
+        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
+            Manifest(), Options.Create(new LibrarianOptions()),
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -125,6 +125,6 @@ public class ReasoningAgentTests
 
         Assert.False(called);
         Assert.True(selections.TryRead(out var selection));
-        Assert.Equal(3, selection!.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey)!.Count);
+        Assert.Equal(3, selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!.Count);
     }
 }

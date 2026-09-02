@@ -18,7 +18,7 @@ public sealed class PassageOptions
     public double MinScore { get; set; } = 0.45;
 
     /// <summary>
-    /// Ceiling on pairs contributed by passages, on top of whatever Reasoning
+    /// Ceiling on pairs contributed by passages, on top of whatever Librarian
     /// selected. Bounds the extra Recall workers a hit can buy — the same
     /// reason RecallOptions.MaxConcurrentRecalls exists one stage down.
     /// </summary>

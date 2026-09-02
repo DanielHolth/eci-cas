@@ -12,9 +12,9 @@ agent can never stall another agent's turn.
 |---|---|---|---|
 | Perception | (external input) | `events.perception` | deterministic |
 | Impulse | `events.perception` | `events.advisories`, `events.proposal` (Critical reflex) | deterministic |
-| Reasoning | `events.perception` | `events.advisories`, `events.selected-pairs` | cognitive |
+| Librarian | `events.perception` | `events.advisories`, `events.selected-pairs` | cognitive |
 | Recall | `events.selected-pairs` | `events.advisories` | deterministic |
-| Self | `events.perception` | `events.advisories` | deterministic (archive read) |
+| Identity | `events.perception` | `events.advisories` | deterministic (archive read) |
 | Governance | `events.advisories`, `events.verdict` | `events.bundle`, `events.action`, `events.conclusion` | deterministic |
 | Intent | `events.bundle` | `events.proposal` | cognitive |
 | Security | `events.proposal` | `events.verdict` | deterministic |
@@ -29,6 +29,34 @@ see below.
 
 Topics are named by purpose, never by recipient, so no agent ever names
 another agent.
+
+### On the roster's names
+
+Each agent is named for the job it actually does, and the test is narrow: a
+name may not claim work that belongs to a different agent, and it may not be
+broader than what the agent is allowed to do. Names that fail the test invite
+work to accrete under them.
+
+Two were renamed after an audit against that test. **Librarian** was
+Reasoning, which both overclaimed (it reasons about nothing) and misdirected
+(a reader expects conclusions to be formed there, but that is Intent).
+Retrieval was rejected for the opposite reason: retrieving is Recall's job,
+so the name would have collided with the agent that does it. Librarian
+narrows correctly — it knows the catalogue, it points at a shelf, and it
+never opens the book. **Identity** was Personality in the Python prototype
+and then Self; the name shrank toward the code, which is a thin cached
+lookup rather than anything deserving the word "self".
+
+Two names are known to be imperfect and are deliberately kept.
+**Governance** is a fossil: it was accurate when the design had it present at
+every handshake between agents, and that pattern was dropped. It now decides
+and it bundles, and renaming toward the smaller job would bet that it stays
+small. **Intent** names the role being aimed at rather than what is
+demonstrably achieved, which is a reasonable thing for a name to do.
+
+The persisted `self/identity` archive path and the shared `self` category
+did not move with the Identity rename. Those are data, not names — see
+`IdentityAgent.IdentityPath`.
 
 ## Bus mechanics
 
@@ -135,11 +163,11 @@ English, proper nouns never translated — lookup is by pair, so the same
 fact in two languages would otherwise never dedup). Both exist so a later
 lookup actually intersects what got written.
 
-## The Reasoning to Recall knowledge swarm
+## The Librarian to Recall knowledge swarm
 
-Reasoning is a **selector**, not a reader: given the current turn's text
+Librarian is a **selector**, not a reader: given the current turn's text
 and the full in-memory pair index, it picks up to
-`ReasoningOptions.MaxSelectedPairs` `ArchivePair`s it judges relevant and
+`LibrarianOptions.MaxSelectedPairs` `ArchivePair`s it judges relevant and
 publishes them on `events.selected-pairs` — even an empty list on fallback,
 so Recall always replies exactly once and Governance's bundle roster stays
 static regardless of how many pairs a given turn produces. Selection is
@@ -171,7 +199,7 @@ breadth-first across pairs — rows are importance-ordered, so each pair's
 first chunk is its most valuable, and one deep pair can't spend the whole
 budget and starve the others.
 
-Findings go straight to Governance, never back through Reasoning — Reasoning
+Findings go straight to Governance, never back through Librarian — Librarian
 and Recall are different sources of truth (parametric model knowledge vs.
 stored record) and neither should become stateful across the other's
 response.
@@ -191,7 +219,7 @@ in exactly one place, and the vectors index the persona's judgement about
 retrieval rather than a second lossy copy of the knowledge itself.
 
 A note names the `category/topic` pairs it wishes had been read, stored as
-row metadata. That is what makes a vector hit actionable: Reasoning embeds
+row metadata. That is what makes a vector hit actionable: Librarian embeds
 the incoming turn, cosine-matches the corpus, and merges the matched notes'
 pairs into the selection alongside whatever its own selection call picked.
 Pointers are resolved against the *live* index, so a pair whose last row
@@ -229,7 +257,7 @@ sentence-transformer (`Embedding:Provider = "onnx"`), whose ~90MB model
 file is deliberately not committed. If it isn't there, the provider logs
 one warning at construction, reports `Available == false`, and the swarm
 runs exactly as it did before vectors existed — Reflection writes no
-passages, Reasoning matches none. It never marks `substrate.degraded` and
+passages, Librarian matches none. It never marks `substrate.degraded` and
 never breaks a turn, because nothing is actually degraded.
 
 Download a model to `models/embedding/` — any BERT-family ONNX export with
@@ -305,7 +333,7 @@ re-embed the full text of every prior hop, growing the prompt generation
 over generation. [`PromptCap`](../src/EciCas.Core/PromptCap.cs) caps each
 piece of upstream text (240 chars, `…`-truncated) at the point it's folded
 in — applied in `IntentAgent.BuildPrompt`/`AppendAdvice`,
-`ReasoningAgent.BuildPrompt`, and `ConsolidatorAgent.ExtractFactsAsync` —
+`LibrarianAgent.BuildPrompt`, and `ConsolidatorAgent.ExtractFactsAsync` —
 so the per-hop ceiling is fixed no matter how deep a loop runs, rather
 than trying to track or trim history.
 

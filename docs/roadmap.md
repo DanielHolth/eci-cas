@@ -141,7 +141,7 @@ the rest of the house.
 
 **The count belongs in the toolbox, not Governance.** Governance
 subscribes to Perception/Advisories/Verdict and bundles the fan-out, so
-by the time it sees a turn, Reasoning, Recall, Self and Impulse have
+by the time it sees a turn, Librarian, Recall, Identity and Impulse have
 already made their substrate calls — filtering there pays for every
 flapping event and only then declines to act, which is the exact cost the
 guard exists to prevent. Admission control has to sit at the boundary,
@@ -193,7 +193,7 @@ the persona had been thinking with half its faculties missing.
 the vocabulary: a `substrate.degraded` meta key, three causes
 (`unreachable` / `timed out` / `refused (code)`), `Classify(Exception)` to
 map a failure onto one, and `Mark(meta, cause)` to stamp it. Every
-substrate caller — Intent and Reasoning via `CognitiveAgent`, plus Recall,
+substrate caller — Intent and Librarian via `CognitiveAgent`, plus Recall,
 Reflection and Consolidator on their own paths — classifies its failure
 and marks the advisory it publishes. Governance, the only agent that sees
 the whole fan-out by `CorrelationId`, records which roster members came
@@ -244,15 +244,15 @@ and handles the transient case too.
 full stack trace, so one offline turn printed four or five near-identical
 dumps and the actual warning scrolled away — now one classified line each.
 And telemetry only logged on success, so exactly the turns worth measuring
-measured nothing — `CognitiveAgent`, Reasoning and Reflection now time the
+measured nothing — `CognitiveAgent`, Librarian and Reflection now time the
 failure path too.
 
-**Still open: the `CognitiveAgent` / Reasoning duplication.**
-`ReasoningAgent` overrides `HandleAsync` and reimplements the base
+**Still open: the `CognitiveAgent` / Librarian duplication.**
+`LibrarianAgent` overrides `HandleAsync` and reimplements the base
 try/catch/log/publish nearly line for line, so the marking had to be
 written twice. Folding it back is a bigger change than the marking was:
 `ParseResult(SubstrateResult)` gets no access to the archive `index` that
-`ParsePairs(text, index)` needs, and Reasoning's empty-index early return
+`ParsePairs(text, index)` needs, and Librarian's empty-index early return
 fires *before* a prompt is built, which the base flow has no hook for. The
 likely shape is still the base class handing subclasses a failure
 classification rather than folding the subclasses back into it.
@@ -264,12 +264,12 @@ degrades at runtime.
 
 ### Skipping the selection call — shipped
 
-A turn costs three serial substrate calls: Reasoning selects pairs,
+A turn costs three serial substrate calls: Librarian selects pairs,
 Recall picks rows, Intent writes the reply. The first one is pure
 overhead whenever the whole index already fits under
-`ReasoningOptions.MaxSelectedPairs` — the best a selector can do with
+`LibrarianOptions.MaxSelectedPairs` — the best a selector can do with
 three pairs and a cap of three is return all three, and Recall filters
-row by row afterwards regardless. Reasoning now short-circuits there and
+row by row afterwards regardless. Librarian now short-circuits there and
 publishes the index whole, which removes a full round-trip from every
 turn on a young archive, i.e. every turn until the archive outgrows the
 cap. No new knob: the rule falls out of the cap that already exists.
@@ -308,7 +308,7 @@ it knows. The reasoning is the "embed what the query will look like"
 rule pushed one step further. A miss is already phrased in the shape of the
 question that caused it, and a note that says *"should have read the family
 record"* carries a pointer to `person/family` as row metadata, so a cosine
-hit becomes a **lead** rather than an answer. Reasoning merges those pairs
+hit becomes a **lead** rather than an answer. Librarian merges those pairs
 into its selection; Recall's picking call still picks.
 
 That keeps three properties the design section argues for, without the
@@ -343,13 +343,13 @@ See [architecture.md](architecture.md#the-passage-corpus-what-it-missed-not-what
 
 ### A passage agent of its own (idea)
 
-Vector retrieval currently lives inside `ReasoningAgent`, and its output
-reaches Intent by riding Reasoning's envelope chain into Recall's roster
+Vector retrieval currently lives inside `LibrarianAgent`, and its output
+reaches Intent by riding Librarian's envelope chain into Recall's roster
 slot. Pull it out into its own agent on `events.perception` that publishes
 an advisory and joins `Governance:BundleRoster`.
 
 The point is to make it a fourth independent contributor alongside
-Impulse/Recall/Self, so Intent weighs archive facts and the terse
+Impulse/Recall/Identity, so Intent weighs archive facts and the terse
 reflection notes as two separate bundle slots rather than one arriving as
 a passenger on the other's envelope. Costs no new per-turn substrate call
 — still an embed plus a cosine sweep.
@@ -365,7 +365,7 @@ Two vectors, at two granularities — not five, and not one per row
 component:
 
 - **Pair layer.** One vector per `category/topic`. Few of them, loaded at
-  boot from a JSON file, replacing Reasoning's substrate call with an
+  boot from a JSON file, replacing Librarian's substrate call with an
   in-memory cosine sweep.
 - **Row layer.** One vector per `ArchiveRecord`, written by Consolidator
   into the Parquet row alongside the fact.
@@ -487,7 +487,7 @@ Storage reuses the Parquet store rather than adding a second one: a
 reserved category, `episode/<year-month>/<profile>/<turnId>/…`. That
 inherits per-pair locking, the monthly file as a natural unit, and the
 ArchiveTool REPL for inspection. The cost is that `episode/*` must be
-excluded from Reasoning's index and Recall's live path, or Morrow starts
+excluded from Librarian's index and Recall's live path, or Morrow starts
 reciting its own diary mid-conversation. One store and one toolchain is
 worth that reserved-name check.
 
@@ -637,7 +637,7 @@ Reflection's own ideas need no special case.
 
 The allowlist is `Archive:SharedCategories`, defaulting to `system` and
 `self` — the persona's identity and its own reflections belong to nobody
-on a shared device. Two wiring details the meta flow forced: Reasoning
+on a shared device. Two wiring details the meta flow forced: Librarian
 carries the profile forward onto `events.selected-pairs` (`Envelope.Derive`
 starts a fresh meta, so Recall would otherwise read the wrong tier), and
 Consolidator keeps the profile per *pending record* rather than per flush,
@@ -826,7 +826,7 @@ overwrite is fixed by stating the fact again.
 
 **Consolidator's path reuse is load-bearing by omission.** Reusing an
 existing `category/topic/subtopic` is what keeps a restated fact landing on
-one address, and Consolidator gets there by being shown Reasoning's
+one address, and Consolidator gets there by being shown Librarian's
 selected pairs as bare path labels. That works because it is shown *only*
 the labels: the bundle also carries `recall.facts` — the actual rows Recall
 read — and Consolidator never reads that key, so recalled values can't be
@@ -839,7 +839,7 @@ The write-time merge would then hide it, since a re-extracted fact
 overwrites itself and the archive looks stable rather than growing.
 
 Compounding it, the class comment says extraction is "grounded in Recall's
-own lookup results" — it is Reasoning's selected pairs; Recall doesn't set
+own lookup results" — it is Librarian's selected pairs; Recall doesn't set
 that key. That wording is the thing most likely to invite wiring the real
 facts in. Fix is cheap and worth doing next time the file is open: correct
 the attribution, and one line stating values are excluded on purpose.
@@ -847,7 +847,7 @@ the attribution, and one line stating values are excluded on purpose.
 ## Knowledge-swarm retrieval (semantic two-stage lookup, scalable storage) — shipped
 
 **Status: implemented.** `ParquetArchiveStore`, the archive index,
-Reasoning-as-selector, and Recall's parallel fan-out are all in `src` and
+Librarian-as-selector, and Recall's parallel fan-out are all in `src` and
 covered by tests. The rest of this section is kept as the design record for
 what was built, not as outstanding work.
 
@@ -932,21 +932,21 @@ cache (the selector LLM needs a populated index on the very first event,
 not just after the first live write) and then updated in-memory on every
 subsequent write whose `(category, topic, subtopic)` isn't already present
 in the cache — appended to, not re-read from disk, and not re-appended for
-a triple that's already indexed. Same lifecycle as `SelfAgent`'s persona
+a triple that's already indexed. Same lifecycle as `IdentityAgent`'s persona
 cache otherwise: invalidated/refreshed on the write epoch broadcast on
 `system.control` if a write happened out from under the in-memory copy
 (e.g. the seed import), never re-read from disk per event.
 
-**Reasoning — selector only, no advisory text.** `ReasoningAgent` drops its
+**Librarian — selector only, no advisory text.** `LibrarianAgent` drops its
 current "offer relevant reasoning" advisory sentence entirely — Intent now
-owns all advisory/reply framing. Reasoning's one substrate call instead
+owns all advisory/reply framing. Librarian's one substrate call instead
 reads the cached index and returns X selected `(category, topic, subtopic)`
 triples for the current turn — genuine semantic matching, e.g. "tell me
 about your system" maps to `system`/`architecture` without either word
 appearing literally in the question.
 
 **Recall — one substrate call per selected triple, run in parallel.** For
-each of Reasoning's X selected `(category, topic, subtopic)` triples,
+each of Librarian's X selected `(category, topic, subtopic)` triples,
 `RecallAgent` opens that category's Parquet shard, pre-trims candidate rows
 by `Importance` down to `MaxPerTopic`, and fires one substrate call scoped
 to *only* that triple's candidates, picking Y relevant rows. The prompt for
@@ -996,7 +996,7 @@ domain=external  category=system  topic=identity  subtopic=persona
 subject=this  key=name  value=morrow  importance=0.5  timestamp=now()
 ```
 
-`SelfAgent`'s existing identity store/file is separate and explicitly out
+`IdentityAgent`'s existing identity store/file is separate and explicitly out
 of scope here — untouched by this migration, keeps whatever it does today.
 
 **Consolidator hard-skips self-triggered turns.** A turn whose `meta` shows
@@ -1078,7 +1078,7 @@ question resolved) before implementation starts.
 keeps one file per pair, `index.parquet` is gone, and Recall does the
 subtopic resolution.
 
-**The problem.** `ReasoningAgent` showed its one substrate call the *entire*
+**The problem.** `LibrarianAgent` showed its one substrate call the *entire*
 in-memory index — every distinct `(category, topic, subtopic)` triple, one
 line each — and `MaxSelectedTriples` capped only how many it could pick, not
 how many it was shown. Fine at small scale; at 1000+ triples an unbounded,
@@ -1097,14 +1097,14 @@ subtopic.
 inventing a stage:
 
 ```
-Reasoning (Category + Topic)
+Librarian (Category + Topic)
   --> N x Recall (Subtopic + Subject + Key = Value)
         a pair holding more rows than RowsPerWorker splits into
         that many parallel workers, all in one flat WhenAll
 ```
 
-Dropping subtopic from Reasoning's index is a lossless dimensionality
-reduction, not a lossy split: every cross-category distinction Reasoning has
+Dropping subtopic from Librarian's index is a lossless dimensionality
+reduction, not a lossy split: every cross-category distinction Librarian has
 to make is still fully visible in one call. Subtopic moves down into Recall,
 which now reads it off the rows themselves.
 
@@ -1119,7 +1119,7 @@ items, well before its context window does.
 
 Splitting rows across workers carries the same "might separate things that
 needed comparing" risk bucketing had upstream, but at far lower stakes:
-Recall scores rows near-independently, where Reasoning does cross-category
+Recall scores rows near-independently, where Librarian does cross-category
 disambiguation. The trim to `MaxConcurrentRecalls` is breadth-first so every
 selected pair keeps its most-important chunk.
 
@@ -1168,9 +1168,9 @@ category/topic/subtopic it picks needs to be better. Its extraction prompt
 is the longest in the codebase and heavy on negative instruction, which is
 the first place to look.
 
-**Reasoning and Recall select too narrowly.** A request for the names of
+**Librarian and Recall select too narrowly.** A request for the names of
 known people came back empty. Both prompts are tuned for precision on a
-pointed question and have no path for an enumeration one: Reasoning caps at
+pointed question and have no path for an enumeration one: Librarian caps at
 `MaxSelectedPairs` (3) pairs, Recall at `MaxPickedPerWorker` (5) rows, and
 Recall's prompt says a row is relevant *only* if it is about the same thing
 being asked about — which actively suppresses breadth when the question is
@@ -1180,7 +1180,7 @@ text.
 Also worth checking the reverse of cutting: prompts that drifted apart
 where they should share a fragment, as `ArchiveWriteStyle` already does for
 the two writers. Sites to read together — Intent's `SystemInstruction` and
-`ResponseContract`, Consolidator's extraction prompt, Reasoning's selection
+`ResponseContract`, Consolidator's extraction prompt, Librarian's selection
 prompt, Recall's row-picking prompt, Reflection's batch prompt, and the
 shared `ArchiveWriteStyle` fragments.
 
@@ -1191,7 +1191,7 @@ the same edit made four times in four prompts.
 *Stage 1 — read them side by side and extract what is already shared.*
 Before changing any wording, put all seven sites in one buffer: Intent's
 `SystemInstruction` and `ResponseContract`, Consolidator's extraction
-prompt, Reasoning's selection prompt, Recall's row-picking prompt,
+prompt, Librarian's selection prompt, Recall's row-picking prompt,
 Reflection's batch prompt, and `ArchiveWriteStyle`. The output of this
 stage is not a reword; it is an inventory — every standing rule, which
 agent pays for it, and whether a second agent states the same rule in
@@ -1211,7 +1211,7 @@ the advisory framing from Stage 1 in the same pass: `[Impulse: …]` and
 `[Noted before: …]` arrive as bare brackets with nothing saying how to
 weigh them, which is why they read as flavour.
 
-*Stage 3 — the retrieval pair.* Reasoning and Recall are one problem
+*Stage 3 — the retrieval pair.* Librarian and Recall are one problem
 wearing two prompts, and the enumeration failure ("name the people you
 know about") needs both to change or neither will help. The caps
 (`MaxSelectedPairs`, `MaxPickedPerWorker`) are config and should become
@@ -1319,7 +1319,7 @@ decision.
 
 **Messaging-plumbing differences.** Python's synchronous recursive
 `publish()` vs. C#'s decoupled per-agent queues; Governance-as-orchestrator
-vs. Governance-as-bus-listener; Reasoning calling Knowledge directly vs.
+vs. Governance-as-bus-listener; Librarian calling Knowledge directly vs.
 selecting archive triples for Recall to fan out on. Per
 `csharp-rebuild-spec.md`'s framing, the port targets business logic, not
 architecture — these are by-design divergences, not things to reconcile.
@@ -1333,7 +1333,7 @@ around.
 **§4.2 `is_parroting()`.** Never a requirement on this project, and now
 structurally moot. The Python check stops Intent echoing *Analytics'* raw
 recommendation back to the user — a real risk there, since Analytics handed
-Intent advisory prose. In C#, `ReasoningAgent` is a pure selector returning
+Intent advisory prose. In C#, `LibrarianAgent` is a pure selector returning
 `(category, topic, subtopic)` triples and emitting no advisory text at all,
 so there is no analytical sentence to parrot. The related refusal-lead-in
 constraint is moot for the same kind of reason: Governance appends the
@@ -1347,21 +1347,21 @@ section — the merged, `Importance`-sorted result set replaces it on purpose.
 
 **Swappable personas.** Switching which persona is active ("which
 tamagotchi am I playing with today?"). Recall should stay shared
-across personas (it's "what happened," not character); Self should
+across personas (it's "what happened," not character); Identity should
 not — each persona needs its own trait bank that only develops while
 active. Open question: does a swap create a new Intent instance or
 re-hydrate the same one from a different store? Probably wants its own
 design doc before any code — this is the largest single piece of
 unscoped work in the project.
 
-**Match input to output, not just retrieve.** Self and Recall
+**Match input to output, not just retrieve.** Identity and Recall
 currently answer "what does the archive say that's relevant to this
 event" — a retrieval question. The sharper version is "given this
 event, what do I already know that changes how I should read it" — an
 inference question. Tension: archive-lookup's own design principle is
 "report what the records say, not what you happen to know — never
-invent a record." Pushing toward inference risks turning Recall/Self
-into a second Reasoning. Needs a real design conversation.
+invent a record." Pushing toward inference risks turning Recall/Identity
+into a second Librarian. Needs a real design conversation.
 
 **What the SSE stream ships — shipped.** `EnvelopeDto.From` serialised
 the whole MetaBag, so `intent.prompt` — the full composed prompt, the

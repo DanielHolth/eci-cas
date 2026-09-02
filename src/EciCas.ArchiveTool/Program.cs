@@ -166,7 +166,7 @@ static async Task DeleteByFilterAsync(string directory, string category, string 
 
 // An emptied pair loses its file rather than keeping a zero-row one: the
 // file's existence is what puts the pair in the index, so leaving it behind
-// would keep offering Reasoning a topic with nothing under it.
+// would keep offering Librarian a topic with nothing under it.
 static async Task SaveAsync(string path, List<ArchiveRecord> records)
 {
     if (records.Count == 0)

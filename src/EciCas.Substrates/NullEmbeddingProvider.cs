@@ -6,7 +6,7 @@ using EciCas.Core;
 /// The configured-off embedder. Reports unavailable rather than throwing, so
 /// "Embedding:Provider": "none" and "the ONNX weights aren't downloaded yet"
 /// take the identical branch in every caller: no vector search this turn, and
-/// the pre-vector Reasoning path runs unchanged.
+/// the pre-vector Librarian path runs unchanged.
 /// </summary>
 public sealed class NullEmbeddingProvider : IEmbeddingProvider
 {

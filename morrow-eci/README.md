@@ -50,7 +50,7 @@ constraint: read from the bus freely via SSE, write only through
 |---|---|
 | Perception's `perception.text` | `Utterance` — the person's own line, echoed opposite the persona so a turn on screen reads as an exchange |
 | Impulse's reflex / drive-vector expression (`src/EciCas.Agents/Impulse`) | `Avatar` — a drawn face, one bucketed pose per expression; the animation is decoration on top, not extra state |
-| Reasoning's selected pairs, Recall's picked rows, Self's advice | `ThoughtBubbles` — three colored bubbles, persist faded after speaking. Each faculty thinks in its own shape (pairs / rows / a line of text), so each has its own reader in `useEciStream` that collapses it to one terse string |
+| Librarian's selected pairs, Recall's picked rows, Identity's advice | `ThoughtBubbles` — three colored bubbles, persist faded after speaking. Each faculty thinks in its own shape (pairs / rows / a line of text), so each has its own reader in `useEciStream` that collapses it to one terse string |
 | Security's verdict (`src/EciCas.Agents/Security`) | `SecurityIcon` — only renders on yellow/red; click reveals the matched rule's concern |
 | Intent's advise/refuse output | `SpeechBubble` — dashed amber when Governance marks the turn `governance.degraded`, i.e. thought with a substrate missing |
 | `EpochWritten` (post-Memory milestone) | `ConsolidationDoodle` — clickable "+", first click reconciles, repeats are view-only |
@@ -72,9 +72,9 @@ react to — none of them are settled:
   which is why it's encoded in geometry rather than in movement. Adding a
   seventh mood is a row in `FACE`, not a redraw. Still a guess at the
   register: is a cartoon face right, or should this be more abstract?
-- **Bundle bubble colors** — Reasoning (blue) and Recall (orange) are
+- **Bundle bubble colors** — Librarian (blue) and Recall (orange) are
   carried over placeholders from the old console color table (now
-  archived with the Python prototype); Self's fuchsia is likewise
+  archived with the Python prototype); Identity's fuchsia is likewise
   unanchored. There's no console subscriber yet in the C# rebuild to
   pin a real palette to — worth revisiting once one exists.
 - **Doodle staleness** — a doodle can appear out of band with the
@@ -100,8 +100,8 @@ It also imported a `lib/mockTurn.ts` that didn't exist on disk, so the
 app didn't build. Judgment calls made to unblock it, without Daniel
 available to confirm:
 
-- Renamed the three bundle agents to the current roster: Reasoning,
-  Recall, Self (was Analytics/Knowledge/Personality).
+- Renamed the three bundle agents to the current roster: Librarian,
+  Recall, Identity (was Analytics/Knowledge/Personality).
 - Dropped the `swarmNodes` / clickable-detail concept on the Recall
   bubble entirely, rather than porting it — the C# plan's Recall
   (§3.4) is a thin adapter over `IArchiveStore`, not a Parquet swarm,

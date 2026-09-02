@@ -1,4 +1,4 @@
-using EciCas.Agents.Reasoning;
+using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
 using EciCas.Bus;
 using EciCas.Core;
@@ -19,8 +19,8 @@ public class RecallAgentTests
         Options.Create(new AgentSubstrateManifest { Agents = { ["Recall"] = new AgentSubstrateEntry { Class = "fast-low" } } });
 
     private static Envelope Selection(params ArchivePair[] pairs) =>
-        Envelope.Create(Topics.SelectedPairs, "Reasoning", Severity.Neutral,
-            MetaBag.Empty.With(ReasoningAgent.SelectedPairsKey, (IReadOnlyList<ArchivePair>)pairs));
+        Envelope.Create(Topics.SelectedPairs, "Librarian", Severity.Neutral,
+            MetaBag.Empty.With(LibrarianAgent.SelectedPairsKey, (IReadOnlyList<ArchivePair>)pairs));
 
     [Fact]
     public async Task PublishesAdvisory_WithPickedFacts()
@@ -223,7 +223,7 @@ public class RecallAgentTests
     }
 
     /// <summary>
-    /// The same rule Reasoning applies to the index, one stage down: rows
+    /// The same rule Librarian applies to the index, one stage down: rows
     /// that already fit in a single pick budget can only be narrowed by the
     /// call, so it is skipped and they all reach Intent.
     /// </summary>

@@ -3,7 +3,7 @@
 **Emergent Cognitive Identity (ECI)**, powered by the **Continuous Agent
 System (CAS)** — a persistent, multi-substrate AI persona built as a
 faculty-of-a-mind agent ecosystem on a message bus: Perception, Impulse,
-Reasoning, Recall, Self, Governance, Intent, Security, Action,
+Librarian, Recall, Identity, Governance, Intent, Security, Action,
 Consolidator, Reflection. Personality emerges from the interplay of
 narrowly specialized roles, not from any single agent.
 
@@ -24,7 +24,7 @@ eci-cas/
   src/
     EciCas.Core/         Envelope, MetaBag, Severity, Verdict, Topics, agent/bus/store/substrate contracts
     EciCas.Bus/           ChannelBus, AgentBase, BusActivityTracker
-    EciCas.Agents/         Perception, Impulse, Reasoning, Recall, Self, Governance, Intent, Security, Action, Consolidator, Reflection
+    EciCas.Agents/         Perception, Impulse, Librarian, Recall, Identity, Governance, Intent, Security, Action, Consolidator, Reflection
     EciCas.Substrates/     substrate provider registry (mock + live OpenAI-compatible HTTP)
     EciCas.Host/            Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
     EciCas.ArchiveTool/      console REPL for inspecting/editing the Parquet archive
@@ -91,7 +91,7 @@ independently:
 }
 ```
 
-Which class each cognitive agent (Intent, Reasoning, Recall, Reflection,
+Which class each cognitive agent (Intent, Librarian, Recall, Reflection,
 Consolidator) uses comes from `AgentSubstrates:Agents` in `appsettings.json` —
 an operator can retarget a role, or add a class like `fast-local`, without
 touching C#:
@@ -107,7 +107,7 @@ touching C#:
 
 `UseSubstrate: false` skips the substrate call and publishes the agent's
 fallback instead. It is honoured on all five substrate-calling agents —
-Intent, Reasoning, Recall, Reflection and Consolidator — and is deliberately
+Intent, Librarian, Recall, Reflection and Consolidator — and is deliberately
 *not* treated as a degradation: a turn run without a substrate by
 configuration is the persona working as configured, not the persona
 apologising. Note Intent's fallback is the fixed sentence *"I'm having
@@ -123,7 +123,7 @@ The `mock` provider echoes the prompt's last line back — where every prompt
 here puts the turn itself, so the echo stays diagnostic without pasting a
 wall of rules into the companion's speech bubble. The exception is the two
 prompts that
-enumerate candidates and expect index numbers back — Reasoning picking
+enumerate candidates and expect index numbers back — Librarian picking
 archive pairs and Recall picking rows. Those get the first index, so the whole
 knowledge swarm runs end to end on the free tier instead of silently taking
 its empty path.

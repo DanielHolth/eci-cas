@@ -18,7 +18,7 @@ public sealed class RecallOptions
 
     /// <summary>
     /// Ceiling on how many picking calls one turn may fan out into, across
-    /// all selected pairs. Sized against ReasoningOptions.MaxSelectedPairs —
+    /// all selected pairs. Sized against LibrarianOptions.MaxSelectedPairs —
     /// roughly twice it, so an ordinary turn never hits the ceiling and only
     /// an unusually deep pair does. Its own knob rather than a derived value,
     /// so the fan-out can be tuned without touching selection.

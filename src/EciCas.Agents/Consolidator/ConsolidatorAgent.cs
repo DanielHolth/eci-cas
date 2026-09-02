@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Reasoning;
+using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Bus;
@@ -15,7 +15,7 @@ namespace EciCas.Agents.Consolidator;
 /// live reply path (see plan's opening rationale: this is exactly the hop
 /// that broke the Python bus). Batches bundle content into ArchiveRecords and
 /// flushes to the store every BatchSize bundles, then announces the epoch on
-/// system.control so Self can invalidate its persona cache.
+/// system.control so Identity can invalidate its persona cache.
 ///
 /// Implements ICognitiveAgent directly rather than inheriting
 /// CognitiveAgent&lt;T&gt;: results batch rather than publish one-shot, which
@@ -151,7 +151,7 @@ public sealed class ConsolidatorAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics)> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
     {
-        var selected = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(ReasoningAgent.SelectedPairsKey) ?? [];
+        var selected = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey) ?? [];
         var known = selected.Count == 0
             ? "none"
             : string.Join(", ", selected.Select(t => $"{t.Category}/{t.Topic}"));

@@ -1,7 +1,7 @@
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
-using EciCas.Agents.Self;
+using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -24,7 +24,7 @@ public class IntentAgentTests
         var facts = new[] { new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow) };
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
             .With(PerceptionAgent.TextKey, "how's the weather")
-            .With(SelfAgent.AdviceKey, "I'm ECI, here to help.")
+            .With(IdentityAgent.AdviceKey, "I'm ECI, here to help.")
             .With(RecallAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)facts));
 
         await agent.HandleAsync(bundle, CancellationToken.None);

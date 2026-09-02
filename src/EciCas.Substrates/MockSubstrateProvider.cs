@@ -8,7 +8,7 @@ namespace EciCas.Substrates;
 /// substrate class resolves here until a manifest entry opts into "live".
 ///
 /// Echoing the prompt back is enough for the agents that just need *a*
-/// string, but not for the two that ask a numbered question: Reasoning
+/// string, but not for the two that ask a numbered question: Librarian
 /// picking archive pairs and Recall picking rows both enumerate candidates
 /// as "0. …", "1. …" and expect bare index numbers back. An echo parses to
 /// nothing there, so the whole knowledge swarm silently took its empty path

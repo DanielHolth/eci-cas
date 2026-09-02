@@ -4,7 +4,7 @@ using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
-using EciCas.Agents.Self;
+using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -14,7 +14,7 @@ namespace EciCas.Agents.Intent;
 
 /// <summary>
 /// Composes the considered reply: a substrate call over the perceived text
-/// plus whatever Impulse/Reasoning/Self contributed to the bundle. Cognitive
+/// plus whatever Impulse/Librarian/Identity contributed to the bundle. Cognitive
 /// tier — the mock-echo placeholder from M1 is gone.
 /// </summary>
 public sealed class IntentAgent : CognitiveAgent<string>
@@ -78,7 +78,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
             .Append("\n\nReply to: ").Append(text);
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
-        AppendAdvice(prompt, "Self", envelope.Meta.Get<string>(SelfAgent.AdviceKey));
+        AppendAdvice(prompt, "Identity", envelope.Meta.Get<string>(IdentityAgent.AdviceKey));
         AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey));
         AppendPassages(prompt, envelope.Meta.Get<IReadOnlyList<string>>(RecallAgent.RecalledPassagesKey));
 

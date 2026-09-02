@@ -1,7 +1,7 @@
 namespace EciCas.Core;
 
 /// <summary>
-/// Knowledge-swarm archive: the semantic two-stage store (Reasoning selects
+/// Knowledge-swarm archive: the semantic two-stage store (Librarian selects
 /// Category/Topic pairs, Recall reads rows within a pair).
 /// One record per fact, nine fields, all lowercase by convention.
 ///
@@ -19,7 +19,7 @@ namespace EciCas.Core;
 /// </summary>
 public interface IArchiveStore
 {
-    /// <summary>Distinct (Category, Topic) pairs visible to this profile — shared plus its own — for Reasoning's selection prompt.</summary>
+    /// <summary>Distinct (Category, Topic) pairs visible to this profile — shared plus its own — for Librarian's selection prompt.</summary>
     IReadOnlyList<ArchivePair> IndexFor(string? profileId);
 
     /// <summary>
@@ -89,7 +89,7 @@ public static class ArchiveWriteStyle
 
 /// <summary>
 /// Single-key state-blob storage — today's exact shape, unchanged. Used by
-/// SelfAgent's identity, ImpulseAgent's drive vectors, Governance's
+/// IdentityAgent's identity, ImpulseAgent's drive vectors, Governance's
 /// frustration log, and Reflection's eagerness read. Deliberately distinct
 /// from IArchiveStore: these are not knowledge-swarm facts.
 /// </summary>

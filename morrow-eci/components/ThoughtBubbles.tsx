@@ -5,9 +5,9 @@ import type { BundleAgent, BundleFinding } from "@/types/events";
  * and is archived). Pick real ones once a console subscriber has its own
  * palette (see README "open questions"). */
 const AGENT_STYLE: Record<BundleAgent, { dot: string; label: string }> = {
-  reasoning: { dot: "bg-blue-500", label: "Reasoning" },
+  librarian: { dot: "bg-blue-500", label: "Librarian" },
   recall: { dot: "bg-orange-500", label: "Recall" },
-  self: { dot: "bg-fuchsia-500", label: "Self" },
+  identity: { dot: "bg-fuchsia-500", label: "Identity" },
 };
 
 export function ThoughtBubbles({

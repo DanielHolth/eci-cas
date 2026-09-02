@@ -17,7 +17,7 @@ public sealed record SubstrateResult(string Text, TimeSpan Latency, int? TokenCo
 /// half the persona's faculties missing can say so.
 ///
 /// A fallback that is published *unmarked* is the dangerous case: when
-/// Reasoning and Recall fail but Intent succeeds, the person gets a fluent,
+/// Librarian and Recall fail but Intent succeeds, the person gets a fluent,
 /// confident, entirely ungrounded answer and no signal that anything went
 /// wrong. Marking is every substrate caller's job; deciding what to say
 /// about it is Governance's alone, since it is the only agent that sees the
