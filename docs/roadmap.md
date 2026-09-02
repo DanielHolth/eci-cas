@@ -1184,6 +1184,62 @@ the two writers. Sites to read together — Intent's `SystemInstruction` and
 prompt, Recall's row-picking prompt, Reflection's batch prompt, and the
 shared `ArchiveWriteStyle` fragments.
 
+**The plan, in four stages.** The ordering is deliberate: build the shared
+vocabulary first, so each later fix is a change to one fragment rather than
+the same edit made four times in four prompts.
+
+*Stage 1 — read them side by side and extract what is already shared.*
+Before changing any wording, put all seven sites in one buffer: Intent's
+`SystemInstruction` and `ResponseContract`, Consolidator's extraction
+prompt, Reasoning's selection prompt, Recall's row-picking prompt,
+Reflection's batch prompt, and `ArchiveWriteStyle`. The output of this
+stage is not a reword; it is an inventory — every standing rule, which
+agent pays for it, and whether a second agent states the same rule in
+different words. `ArchiveWriteStyle` is the precedent: two writers, one
+fragment. Expect at least two more fragments to fall out (how to weigh an
+advisory, what "relevant" means for a lookup) and put them in
+`EciCas.Core` beside `ArchiveWriteStyle` rather than in either caller.
+
+*Stage 2 — Intent's voice.* Two suspected causes and they should be
+changed one at a time, because the symptom is subjective and a combined
+edit tells us nothing about which half did the work. First the
+`ResponseContract` length clamp, since [that already moved once][1] and is
+the cheaper revert; only then the "spokesperson on behalf of a collective
+of emerging agents" framing. The path-convention rule stays untouched —
+it is load-bearing and it is not what makes the persona theatric. Fold in
+the advisory framing from Stage 1 in the same pass: `[Impulse: …]` and
+`[Noted before: …]` arrive as bare brackets with nothing saying how to
+weigh them, which is why they read as flavour.
+
+*Stage 3 — the retrieval pair.* Reasoning and Recall are one problem
+wearing two prompts, and the enumeration failure ("name the people you
+know about") needs both to change or neither will help. The caps
+(`MaxSelectedPairs`, `MaxPickedPerWorker`) are config and should become
+question-shaped rather than fixed — an enumeration question legitimately
+wants breadth where a pointed one wants precision. Recall's "relevant
+only if it is about the same thing being asked about" is prompt text and
+is the actual suppressor. Ship this stage with a fixture that asks an
+enumeration question and asserts more than one topic comes back; without
+it there is no way to tell a fix from a coincidence.
+
+*Stage 4 — Consolidator.* Last on purpose. Its extraction prompt is the
+longest in the codebase and the heaviest on negative instruction, so it
+benefits most from the fragments the earlier stages extract, and its
+failures are the slowest to observe — a bad category choice only shows up
+turns later when a lookup misses. Tighten `ArchiveWriteStyle.TerseValue`
+below its current "1-5 content words" here rather than in Stage 1, so the
+change lands with the agent whose output it is meant to fix. Reflection
+shares the fragment and must be re-read after, not before.
+
+**What this is measured against.** Every stage removes more instruction
+text than it adds, or it explains why not. A standing rule is a per-turn
+bill on every substrate, and the whole reason this section exists is that
+nobody has audited what is being paid for. Cost per turn is already
+logged at default level, so the before/after is observable without new
+instrumentation.
+
+[1]: commit 407e5f1 — `refactor(prompts): trim Intent's contract`
+
 ## Parked
 
 Real gaps against the Python prototype's `current-spec.md`, deliberately

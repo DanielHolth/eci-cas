@@ -29,9 +29,27 @@ public abstract class AgentBase : BackgroundService, IAgent
 
     protected virtual int WorkerCount => 1;
 
+    // Subscribing is what claims a queue; consuming only drains it. Those
+    // have to happen at different times: ChannelBus drops a publish that
+    // arrives before the subscriber exists, silently and with no error, so
+    // an agent whose queue is created inside ExecuteAsync misses every
+    // envelope published between host startup and its own loop spinning up.
+    // StartAsync runs to completion for each hosted service in registration
+    // order, so claiming the queue here means every agent is subscribed
+    // before any of them can publish.
+    private List<System.Threading.Channels.ChannelReader<Envelope>>? _readers;
+
+    public override Task StartAsync(CancellationToken cancellationToken)
+    {
+        _readers = Subscriptions.Select(_bus.Subscribe).ToList();
+        return base.StartAsync(cancellationToken);
+    }
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var readers = Subscriptions.Select(_bus.Subscribe).ToList();
+        // Non-null in the normal hosted path; the fallback keeps a directly
+        // constructed agent (some tests) working rather than throwing.
+        var readers = _readers ??= Subscriptions.Select(_bus.Subscribe).ToList();
 
         var workers = readers
             .SelectMany(reader => Enumerable.Range(0, WorkerCount).Select(_ => ConsumeAsync(reader, stoppingToken)));
