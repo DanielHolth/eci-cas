@@ -1305,11 +1305,9 @@ Intent then attributes to the user. That is a defect today, before any
 instruction moves.
 
 Point 3 therefore splits nothing here; the drift already happened. The
-acceptance is the same shape as `ArchiveWriteStyle` but the work is not:
-each of the three files states the part of the convention its own agent
-needs, in its own words, and Archivist gains the clause it is missing.
-Same mitigation shape — a test asserting each file still carries its
-half, not that they match.
+repair is the rename below, and the rename makes most of the convention
+unwritable-because-unnecessary: see "cut first" at the end of this
+section.
 
 **The category itself is wrong, and renaming it is the repair.** `system`
 holds two things that are not alike in the reader's eyes: 60 rows of CAS
@@ -1352,6 +1350,29 @@ visible in Stage 3's symptom list if Intent flattens after the change.
 Migration is small — nothing tracked carries `system/` except the two
 instruction files and one comment in `LibrarianAgent`. The seeded rows
 live in an untracked runtime `memory.jsonl`.
+
+**Cut first, and let the prototype find the flaws.** The rename removes
+the reason these clauses existed. Archivist never had one and now needs
+none — it mints `assistant/identity/...` because that is where the token
+already points. Intent's five lines are a lookup table for an opaque
+segment that is no longer opaque. Recall's clause does slightly more than
+decode — it is a selection policy, and one Stage 3 already suspects of
+over-narrowing retrieval, so it may go for a second reason.
+
+Delete all three and run it. Not delete-behind-a-fixture: a rule kept in
+case it is load-bearing is never tested, and so can never be removed
+later either — which is how `ResponseContract` grew back after 407e5f1
+trimmed it. Overly terse is the diagnostic. The four symptoms in Stage 3
+were found this way, by the system failing in the open, not by anyone
+designing a fixture to catch them.
+
+The one asymmetry: **reads are free to break, writes leave residue.** A
+bad Intent reply is one visible turn, discarded. A bad Archivist write is
+a row in an append-only archive that Recall serves back, Reflection
+thinks about and Hindsight eventually wakes — the mis-minted category
+outlives the instruction that caused it. So cut Intent and Recall to the
+bone; on Archivist terse is still right, but the cheap recovery is a way
+to re-file rows, not a fatter instruction.
 
 ### Stage 3 — Daniel revises
 
