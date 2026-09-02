@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Impulse;
+using EciCas.Agents.Hindsight;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Security;
@@ -268,6 +269,16 @@ public sealed class GovernanceAgent : AgentBase
             .With(IntentAgent.ReplyKey, replyToSpeak)
             .With(IntentAgent.PromptKey, prompt)
             .With(SecurityAgent.VerdictKey, value);
+
+        // Second and last hop for the note lineage: Reflection reads it off
+        // the conclusion, and this bag is built fresh rather than inherited.
+        // Same forwarding PromptKey needs, for the same reason.
+        if (verdict.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NoteIdsKey) is { Count: > 0 } noteIds)
+        {
+            actionMeta = actionMeta
+                .With(HindsightAgent.NoteIdsKey, noteIds)
+                .With(HindsightAgent.EchoDepthKey, verdict.Meta.Get<int>(HindsightAgent.EchoDepthKey));
+        }
         if (notice is not null && value != Verdict.Red)
         {
             actionMeta = actionMeta.With(DegradedKey, true);

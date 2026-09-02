@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using EciCas.Agents.Archivist;
+using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Passages;
@@ -98,10 +99,16 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         var prompt = envelope.Meta.Get<string>(IntentAgent.PromptKey) ?? string.Empty;
         var reply = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty;
 
+        // Lineage, forwarded by Intent and Governance across the two hops
+        // where Derive starts a fresh bag. Which notes were awake when this
+        // turn was answered is what makes the new note's ancestry knowable.
+        var wokenIds = envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NoteIdsKey) ?? [];
+        var wokenDepth = envelope.Meta.Get<int>(HindsightAgent.EchoDepthKey);
+
         List<BufferedConclusion>? batch = null;
         lock (_pendingLock)
         {
-            _pending.Add(new BufferedConclusion(prompt, reply, envelope.Generation));
+            _pending.Add(new BufferedConclusion(prompt, reply, envelope.Generation, wokenIds, wokenDepth));
             if (_pending.Count >= _options.BatchSize)
             {
                 batch = [.. _pending];
@@ -185,7 +192,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             return;
         }
 
-        await WritePassagesAsync(notes, previous, cancellationToken).ConfigureAwait(false);
+        await WritePassagesAsync(notes, previous, batch, cancellationToken).ConfigureAwait(false);
 
         if (candidates.Count == 0)
         {
@@ -402,7 +409,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// have already happened, and a corpus that missed one entry is a weaker
     /// shortcut, not a broken turn.
     /// </summary>
-    private async Task WritePassagesAsync(List<Note> notes, Passage? previous, CancellationToken cancellationToken)
+    private async Task WritePassagesAsync(List<Note> notes, Passage? previous, List<BufferedConclusion> batch, CancellationToken cancellationToken)
     {
         if (notes.Count == 0 || !_embeddings.Available)
         {
@@ -428,10 +435,23 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         }
 
         var now = DateTimeOffset.UtcNow;
+
+        // Every note Hindsight woke across the batch is a parent of what the
+        // batch produced: those thoughts were in the prompts these replies
+        // were written from. Depth is one past the deepest of them, so a
+        // thought traceable to turns the persona had not already coloured
+        // sits at zero and a resonance climbs.
+        var parents = batch.SelectMany(b => b.WokenNoteIds).Distinct().ToList();
+        var depth = parents.Count == 0 ? 0 : batch.Max(b => b.WokenEchoDepth) + 1;
+        var generation = batch.Max(b => b.Generation);
+
         var added = writing
             .Select((n, i) => n.IsRevisit
-                ? new Passage(previous!.Id, n.Text, n.Pairs, previous.Timestamp, vectors[i])
-                : new Passage(Guid.NewGuid().ToString("n"), n.Text, n.Pairs, now, vectors[i]))
+                // A revisit is the same thought sharpened, so it keeps its
+                // own ancestry along with its id and timestamp. Revising a
+                // thought does not make it a descendant of itself.
+                ? previous! with { Text = n.Text, Pairs = n.Pairs, Embedding = vectors[i] }
+                : new Passage(Guid.NewGuid().ToString("n"), n.Text, n.Pairs, now, vectors[i], parents, depth, generation))
             .ToList();
 
         await _passages.WriteAsync(added, revisit is null ? null : previous!.Id, cancellationToken).ConfigureAwait(false);
@@ -494,7 +514,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             .Select(p => new ArchivePair(p[0].Trim().ToLowerInvariant(), p[1].Trim().ToLowerInvariant()))
             .Distinct()];
 
-    private sealed record BufferedConclusion(string Prompt, string ReplyText, int Generation);
+    private sealed record BufferedConclusion(
+        string Prompt, string ReplyText, int Generation, IReadOnlyList<string> WokenNoteIds, int WokenEchoDepth);
 
     private sealed record Candidate(double Score, string Subtopic, string Idea);
     private sealed record Note(bool IsRevisit, string Text, IReadOnlyList<ArchivePair> Pairs);

@@ -162,8 +162,22 @@ public sealed class IntentAgent : CognitiveAgent<string>
         // Marked, not just spoken: Intent's fallback sentence sounds honest,
         // but Governance is the one that decides what the person is told, and
         // it can only do that if the fallback says it is one.
+        var meta = MetaBag.Empty.With(ReplyKey, result).With(PromptKey, prompt);
+
+        // Which notes Hindsight woke for this turn, carried forward the same
+        // way PromptKey is: Derive starts a fresh bag rather than inheriting
+        // the bundle's, so without this the lineage dies here and Reflection
+        // cannot record what its new note descends from. Diagnostic payload
+        // only — Intent has already read the notes themselves as prose.
+        if (envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NoteIdsKey) is { Count: > 0 } noteIds)
+        {
+            meta = meta
+                .With(HindsightAgent.NoteIdsKey, noteIds)
+                .With(HindsightAgent.EchoDepthKey, envelope.Meta.Get<int>(HindsightAgent.EchoDepthKey));
+        }
+
         var proposal = envelope.Derive(Topics.Proposal, Name, envelope.Severity,
-            SubstrateHealth.Mark(MetaBag.Empty.With(ReplyKey, result).With(PromptKey, prompt), degraded));
+            SubstrateHealth.Mark(meta, degraded));
         _bus.Publish(Topics.Proposal, proposal);
     }
 }

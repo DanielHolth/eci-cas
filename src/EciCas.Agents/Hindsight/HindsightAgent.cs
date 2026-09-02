@@ -41,6 +41,28 @@ public sealed class HindsightAgent : AgentBase
     /// </summary>
     public const string NotesKey = "hindsight.notes";
 
+    /// <summary>
+    /// Ids of the notes woken this turn, parallel to <see cref="NotesKey"/>.
+    /// Not for reading — for parentage: whatever Reflection later writes
+    /// about this turn descends from these, and recording that is the only
+    /// way to see the ring (Hindsight -> Intent -> reply -> note ->
+    /// Hindsight) from the outside once it is turning.
+    /// </summary>
+    public const string NoteIdsKey = "hindsight.note_ids";
+
+    /// <summary>
+    /// The deepest echo depth among the notes woken this turn. Published
+    /// rather than looked up later so Reflection can stamp its new note at
+    /// depth+1 without a second corpus read, and so the number travels the
+    /// same hop as the ids it belongs to.
+    ///
+    /// A diagnostic, never a retrieval input. The moment a shallow note is
+    /// preferred over a deep one, the persona can lower its own echo depth
+    /// by writing thoughts with no history — which is exactly the behaviour
+    /// the number exists to detect.
+    /// </summary>
+    public const string EchoDepthKey = "hindsight.echo_depth";
+
     private readonly IMessageBus _bus;
     private readonly IEmbeddingProvider _embeddings;
     private readonly IPassageStore _passages;
@@ -63,13 +85,21 @@ public sealed class HindsightAgent : AgentBase
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        var notes = await WakeAsync(PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey)), cancellationToken).ConfigureAwait(false);
+        var woken = await WakeAsync(PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey)), cancellationToken).ConfigureAwait(false);
 
         // Published even when empty, and even when there is no embedder at
         // all: Hindsight is a roster slot now, and a slot that stays silent
         // holds the whole bundle open until Governance times it out. Having
         // thought nothing about a turn is a normal answer.
-        var meta = notes.Count > 0 ? MetaBag.Empty.With(NotesKey, notes) : MetaBag.Empty;
+        var meta = MetaBag.Empty;
+        if (woken.Count > 0)
+        {
+            meta = meta
+                .With(NotesKey, (IReadOnlyList<string>)[.. woken.Select(h => $"{Age(h.Passage.Timestamp)}: {h.Passage.Text}")])
+                .With(NoteIdsKey, (IReadOnlyList<string>)[.. woken.Select(h => h.Passage.Id)])
+                .With(EchoDepthKey, woken.Max(h => h.Passage.EchoDepth));
+        }
+
         _bus.Publish(Topics.Advisories, envelope.Derive(Topics.Advisories, Name, envelope.Severity, meta));
     }
 
@@ -79,7 +109,7 @@ public sealed class HindsightAgent : AgentBase
     /// marks the turn impaired. Same posture SearchPassagesAsync held when
     /// this lived in Librarian.
     /// </summary>
-    private async Task<IReadOnlyList<string>> WakeAsync(string text, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<PassageHit>> WakeAsync(string text, CancellationToken cancellationToken)
     {
         if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || _options.TopK <= 0)
         {
@@ -98,10 +128,10 @@ public sealed class HindsightAgent : AgentBase
             return [];
         }
 
-        _logger.LogInformation("{Agent} woke {Count} note(s): {Texts}",
-            Name, hits.Count, string.Join(" | ", hits.Select(h => h.Passage.Text)));
+        _logger.LogInformation("{Agent} woke {Count} note(s), deepest echo {Depth}: {Texts}",
+            Name, hits.Count, hits.Max(h => h.Passage.EchoDepth), string.Join(" | ", hits.Select(h => h.Passage.Text)));
 
-        return [.. hits.Select(h => $"{Age(h.Passage.Timestamp)}: {h.Passage.Text}")];
+        return hits;
     }
 
     /// <summary>

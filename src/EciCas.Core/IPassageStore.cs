@@ -37,13 +37,43 @@ public interface IEmbeddingProvider
 /// Timestamp is load-bearing, not bookkeeping: it reaches Intent as the age
 /// on the front of the note, and a revisit preserves it so a sharpened
 /// thought keeps the age of the thought it sharpens.
+///
+/// <para><b>Lineage.</b> Hindsight -> Intent's bundle -> Intent's reply ->
+/// Reflection -> new note is a ring with no external grounding, and it will
+/// not announce itself: a persona settling into a groove and a persona
+/// developing a personality are the same observation from inside. These
+/// three fields are how it is seen from the outside.</para>
+///
+/// <para><see cref="ParentIds"/> names the notes that were awake in the turns
+/// this one was written about — empty means the thought came from turns the
+/// persona had not already coloured. <see cref="EchoDepth"/> is the longest
+/// such chain, one more than the deepest parent, zero with no parents; a
+/// rising average across the corpus is the alarm. <see cref="Generation"/>
+/// is the separate ring — how many times Reflection had reposted its own
+/// idea as perception before this note — which the other two are silent
+/// about, and which is silent about them.</para>
+///
+/// <para>Both are diagnostics and neither may ever weight retrieval. Prefer
+/// a shallow note and the persona can lower its own echo depth by writing
+/// thoughts with no history, which is the behaviour the number exists to
+/// detect.</para>
+///
+/// <para>Rows written before these fields existed read back with no parents
+/// and depth zero. That is not a claim they were grounded — it is the honest
+/// default for an ancestry nobody recorded.</para>
 /// </summary>
 public sealed record Passage(
     string Id,
     string Text,
     IReadOnlyList<ArchivePair> Pairs,
     DateTimeOffset Timestamp,
-    float[] Embedding);
+    float[] Embedding,
+    IReadOnlyList<string>? ParentIds = null,
+    int EchoDepth = 0,
+    int Generation = 0)
+{
+    public IReadOnlyList<string> ParentIds { get; init; } = ParentIds ?? [];
+}
 
 /// <summary>
 /// Shared-tier only, by construction: a self-critique belongs to the persona

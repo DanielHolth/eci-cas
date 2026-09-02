@@ -243,6 +243,41 @@ public class PassageMemoryTests
     }
 
     /// <summary>
+    /// The lineage hop, end to end: a note Hindsight woke is carried through
+    /// Intent and Governance on the meta bag, and comes out as the parent of
+    /// whatever thought that turn provoked. Depth climbs so a note built on
+    /// notes is distinguishable from one built on turns the persona had not
+    /// already coloured.
+    /// </summary>
+    [Fact]
+    public async Task Reflection_RecordsTheWokenNotesAsParents_AndClimbsEchoDepth()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var passages = new InMemoryPassageStore();
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
+            "mood|curious\nthought|person/family|a thought provoked by an older one", TimeSpan.Zero, 5, 0m)));
+
+        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
+            new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
+            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            passages, new StubEmbeddings(_ => Unit(1)));
+
+        var conclusion = Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral,
+            MetaBag.Empty
+                .With(HindsightAgent.NoteIdsKey, (IReadOnlyList<string>)["a", "b"])
+                .With(HindsightAgent.EchoDepthKey, 2)) with { Generation = 4 };
+
+        await agent.HandleAsync(conclusion, CancellationToken.None);
+
+        var note = Assert.Single(passages.Passages);
+        Assert.Equal(["a", "b"], note.ParentIds);
+        Assert.Equal(3, note.EchoDepth);
+        Assert.Equal(4, note.Generation);
+    }
+
+    /// <summary>
     /// No embedder means no vector to store a passage under, so the corpus is
     /// left alone rather than filled with rows nothing can ever match.
     /// </summary>

@@ -37,6 +37,14 @@ public sealed class ParquetPassageStore : IPassageStore
         public string Pairs { get; set; } = "";
         public string Timestamp { get; set; } = "";
         public string Embedding { get; set; } = "";
+
+        // Nullable so a file written before lineage existed still
+        // deserializes: Parquet gives a missing column its default, and for
+        // these three that default is the honest answer — nobody recorded an
+        // ancestry, so we do not claim one.
+        public string? ParentIds { get; set; }
+        public int? EchoDepth { get; set; }
+        public int? Generation { get; set; }
     }
 
     private readonly string _path;
@@ -136,6 +144,9 @@ public sealed class ParquetPassageStore : IPassageStore
         Pairs = JsonSerializer.Serialize(p.Pairs),
         Timestamp = p.Timestamp.ToString("O"),
         Embedding = Convert.ToBase64String(EncodeFloats(p.Embedding)),
+        ParentIds = JsonSerializer.Serialize(p.ParentIds),
+        EchoDepth = p.EchoDepth,
+        Generation = p.Generation,
     };
 
     private static Passage FromRow(PassageRow r) => new(
@@ -143,7 +154,10 @@ public sealed class ParquetPassageStore : IPassageStore
         r.Text,
         JsonSerializer.Deserialize<List<ArchivePair>>(r.Pairs) ?? [],
         DateTimeOffset.TryParse(r.Timestamp, out var ts) ? ts : DateTimeOffset.MinValue,
-        DecodeFloats(Convert.FromBase64String(r.Embedding)));
+        DecodeFloats(Convert.FromBase64String(r.Embedding)),
+        r.ParentIds is null ? [] : JsonSerializer.Deserialize<List<string>>(r.ParentIds) ?? [],
+        r.EchoDepth ?? 0,
+        r.Generation ?? 0);
 
     private static byte[] EncodeFloats(float[] v)
     {
