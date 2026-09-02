@@ -1240,6 +1240,56 @@ instrumentation.
 
 [1]: commit 407e5f1 — `refactor(prompts): trim Intent's contract`
 
+## Security rule coverage — low priority
+
+Read the eight rules in `config/security-rules.json` end to end against what
+Security is *for*: not causing harm, not violating rights, not doing
+anything illegal. The engine itself is the right shape — deterministic,
+order-independent, every verdict names the rule that produced it, `unless`
+clauses so offering a helpline isn't caught by the self-harm rule. Nothing
+here argues for a bigger rule set as such. Rules are a backstop, not the
+primary safety mechanism, and a backstop that grows without bound stops
+being auditable, which was the whole reason for keeping it mechanical.
+
+Two findings look like defects rather than deliberate minimalism, and one
+limitation is inherent and should stay.
+
+**Every pattern is English.** `kill yourself`, `how to`, `take 5 mg`,
+`rm -rf` — the tokens are English and the regexes are matched against the
+reply text. The same reply in Norwegian matches nothing and passes all
+eight rules. Given the persona is spoken to in both languages this is the
+common path, not an edge case: a backstop covering one of two languages is
+nearer to no coverage than to half. Fixing it is not translating the
+patterns one for one — some rules (`bypass-this-system`) are about phrasings
+that don't translate, others (`weapons-and-precursors`) are about nouns that
+mostly do. Worth a pass that decides per rule.
+
+**The irreversible rules are on the soft side of the split.** Only
+`weapons-and-precursors`, `self-harm-method` and `bypass-this-system` are
+Red. `irreversible-world-effect`, `spend-money` and `disclose-credentials`
+are Yellow, which means Intent revises once and then proceeds. For the
+categories where the damage cannot be taken back that is a strange default,
+and `irreversible-world-effect`'s own description argues the other way —
+"Action executes literally. Anything destructive must not reach it by
+accident." The description wants Red and the verdict says Yellow. Decide
+which is right; they currently disagree in the same rule.
+
+**Not a defect: Security sees only the proposed reply text.** It catches
+phrasings, not intentions, so paraphrase walks past it. That is the cost of
+keeping the hard stop mechanical and unable to be argued with, and it is
+the cost worth paying — a gate that could weigh the case *for* a reply would
+be evaluating the argument, which is Intent's job. Leave it.
+
+**Why this is low priority.** Nothing here is load-bearing for the current
+system: the rules that exist fire correctly, the gate is wired to Action,
+and the failure mode of the language gap is the same failure mode the
+system already accepts everywhere else — the backstop not catching
+something the primary path should have handled. Revisit when the persona is
+routinely spoken to in Norwegian by someone other than its author, or when
+Action gains a side effect that reaches outside the process, whichever
+comes first. The severity split is the cheaper half and can be done any
+time; it is a one-word change per rule plus a test.
+
 ## Parked
 
 Real gaps against the Python prototype's `current-spec.md`, deliberately
