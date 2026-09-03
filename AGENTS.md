@@ -1,12 +1,13 @@
 # Agent instructions
 
-Be terse. No preamble, no restating the request, no trailing summary
-unless asked. Prefer diffs/snippets over full file dumps.
+Keep responses terse and to the point. Try to spend less tokens whenever
+possible. Less is more. No preamble, no restating the request, no trailing
+summary unless asked. Prefer diffs/snippets over full file dumps.
 
 Write the least code/tests/docs that fully satisfies the requirement — no
 speculative abstractions, no redundant test variants for the same claim,
 no comments or docs restating what the code already says; when in doubt,
-cut. Less is more.
+cut.
 
 ## Where to work
 
