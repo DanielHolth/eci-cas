@@ -13,11 +13,11 @@ using EciCas.Core;
 /// N reads to rebuild the same list.
 ///
 /// The corpus is small by construction: one passage per Reflection batch,
-/// and the revisit replaces rather than appends. At BatchSize 10 that is a
-/// row per ten concluded turns, so brute-force cosine over the in-memory
-/// cache is microseconds and needs no ANN index — the same "a persona's own
-/// knowledge base, not a data lake" reasoning ParquetArchiveStore gives for
-/// rewriting a whole pair file per write.
+/// and the revisit replaces rather than appends. At the shipped BatchSize
+/// of 5 that is a row per five concluded turns, so brute-force cosine over
+/// the in-memory cache is microseconds and needs no ANN index — the same
+/// "a persona's own knowledge base, not a data lake" reasoning
+/// ParquetArchiveStore gives for rewriting a whole pair file per write.
 ///
 /// The embedding rides as a base64 blob rather than a Parquet list column:
 /// it is opaque to every reader (nothing filters or projects on a single

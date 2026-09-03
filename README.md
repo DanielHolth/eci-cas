@@ -52,10 +52,12 @@ dotnet run --project src/EciCas.Host -- --Tier=Default --Verbose=true
 dotnet run --project src/EciCas.ArchiveTool -- src/EciCas.Host/bin/Debug/net10.0/archive
 ```
 
-The host prints six lines per turn by default — substrate cost, what Recall
-read, what Archivist/Reflection wrote, what Intent said, what Security
-blocked; `--Verbose=true` restores the exhaustive per-envelope trace. The
-archive tool is a REPL over the same Parquet files (`list`, then
+The host prints roughly a line per agent per turn by default — substrate
+cost, what Recall read, what Archivist/Reflection wrote, what Intent said,
+what Security blocked. It is not a fixed count: Recall prints one line per
+picking call, so a deep archive is noisier than a young one.
+`--Verbose=true` restores the exhaustive per-envelope trace. The archive
+tool is a REPL over the same Parquet files (`list`, then
 `show <category> <topic>`); it takes the archive directory as its one
 argument, which lives next to the host's binary rather than in the repo
 root. On Windows use PowerShell or forward slashes — Git Bash mangles a

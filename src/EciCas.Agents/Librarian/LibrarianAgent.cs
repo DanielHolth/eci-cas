@@ -129,9 +129,16 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         var index = _store.IndexFor(envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
 
+        // The count at Information, the pairs at Debug. An index of one pair
+        // is a seeded-empty archive, i.e. the host was started from the wrong
+        // folder (see docs/appendix.md), and that has already been debugged
+        // as a Recall fault once — so the tell has to be visible at the level
+        // someone is actually running when they get confused. The count is
+        // free; the join is not, hence the guard on the detail line only.
+        _logger.LogInformation("{Agent} index holds {Count} pair(s)", Name, index.Count);
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            _logger.LogDebug("{Agent} index holds {Count} pair(s): {Pairs}", Name, index.Count,
+            _logger.LogDebug("{Agent} index: {Pairs}", Name,
                 string.Join(", ", index.Select(p => $"{p.Category}/{p.Topic}")));
         }
 

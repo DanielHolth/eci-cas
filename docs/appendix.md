@@ -33,11 +33,14 @@ name?" with "You're Morrow", and looks for all the world like Recall is
 broken. The tell is in the first line of the turn:
 
 ```
-LibrarianAgent  Librarian index holds 1 pair(s): assistant/identity
+LibrarianAgent  Librarian index holds 1 pair(s)
 ```
 
 One pair means an empty archive, which means the wrong folder. A real
 archive has dozens. `git pull` does not move an archive; nothing does.
+
+The count prints at `Information`, so this is visible in an ordinary
+session; the pair list beside it needs `Debug`.
 
 **A running host holds a lock on `bin/`.** Stop it before rebuilding, or
 the build fails with a file-in-use error rather than anything that
@@ -49,7 +52,10 @@ mentions the host still running.
 dotnet run --project src/EciCas.Host -- --Tier=Default --Logging:LogLevel:EciCas=Debug
 ```
 
-At `Information` the console shows one line per agent per turn. At `Debug`
+At `Information` the console shows one line per agent per turn, except
+Recall, which prints one line per picking call — the fan-out is what
+scales with the archive, so a single folded total hid the number worth
+seeing. At `Debug`
 it also shows both edges of both stores, and every prompt and raw response.
 That is the level to use when tuning an instruction file, because it prints
 what the agent was actually handed rather than a summary of it.

@@ -118,23 +118,10 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // enough to say so, and the first cause is as good as any.
         var degraded = results.Select(r => r.Degraded).FirstOrDefault(c => c is not null);
 
-        // One line for the whole turn, not one per worker: aggregate latency
-        // (wall-clock across the parallel calls, not summed) and sum tokens/
-        // cost across every worker that actually reached the substrate. The
-        // per-worker breakdown is one line each, below.
-        var diagnostics = results.Select(r => r.Diagnostics).Where(d => d is not null).Select(d => d!).ToList();
-        if (diagnostics.Count > 0)
-        {
-            _logger.LogInformation("{Agent} picking calls [{Class}] ({Workers} workers, {LatencyMs}ms wall-clock, {Tokens} tokens, ${Cost} est. cost)",
-                Name, entry.Class, diagnostics.Count, diagnostics.Max(d => d.Latency.TotalMilliseconds), diagnostics.Sum(d => d.TokenCount), diagnostics.Sum(d => d.Cost));
-
-            for (var i = 0; i < diagnostics.Count; i++)
-            {
-                _logger.LogInformation("{Agent}   worker {Worker}/{Workers} [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                    Name, i + 1, diagnostics.Count, entry.Class, diagnostics[i].Latency.TotalMilliseconds, diagnostics[i].TokenCount, diagnostics[i].Cost);
-            }
-        }
-
+        // No aggregate line: one line per substrate call, printed by the
+        // worker that made it. Folding N calls into a total needed a
+        // wall-clock caveat to not be misread as a sum, and the per-call
+        // lines carry the same numbers without needing one.
         Publish(envelope, picked, degraded);
     }
 
@@ -161,9 +148,21 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             }
         }
 
-        return chunks.Count <= _options.MaxConcurrentRecalls
-            ? chunks
-            : [.. chunks.Take(_options.MaxConcurrentRecalls)];
+        if (chunks.Count <= _options.MaxConcurrentRecalls)
+        {
+            return chunks;
+        }
+
+        // Said out loud, because the rows in a dropped chunk were selected,
+        // loaded, and then never read, and nothing downstream shows it: the
+        // turn looks like an ordinary one that recalled less. Not marked
+        // degraded — the cap is a deliberate budget, not a substrate
+        // failing — but it is the number that explains a thin answer from a
+        // deep archive.
+        _logger.LogWarning("{Agent} fan-out capped at {Cap}: {Dropped} chunk(s) of loaded rows go unread this turn",
+            Name, _options.MaxConcurrentRecalls, chunks.Count - _options.MaxConcurrentRecalls);
+
+        return [.. chunks.Take(_options.MaxConcurrentRecalls)];
     }
 
     private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string? degraded)
@@ -188,9 +187,9 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     /// <summary>
     /// One substrate call scoped to a single chunk's candidates. Failure is
     /// non-gating and isolated: a broken call contributes nothing for this
-    /// chunk, no retry, no turn-level failure. Diagnostics travel back with
-    /// the facts instead of being logged here, so HandleAsync can fold every
-    /// worker's numbers into one line per turn.
+    /// chunk, no retry, no turn-level failure. Cost is logged here, one line
+    /// per call; the diagnostics still travel back because the degraded flag
+    /// is a turn-level decision only HandleAsync can make.
     /// </summary>
     private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics, string? Degraded)> PickAsync(
         IReadOnlyList<ArchiveRecord> candidates, string text, string substrateClass, CancellationToken cancellationToken)
@@ -206,6 +205,16 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             _logger.LogDebug("{Agent} picking prompt >>>\n{Prompt}", Name, prompt);
             var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} picking response <<<\n{Response}", Name, result.Text);
+
+            // Named by the pair rather than an ordinal: "worker 2 of 3" is
+            // not a fact about the archive, and the failure path below
+            // already names the pair — so an ordinal made the success line
+            // say less about the same chunk than the warning does.
+            var read = candidates[0];
+            _logger.LogInformation("{Agent} picked from {Category}/{Topic} ({Rows} row(s)) [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, read.Category, read.Topic, candidates.Count, substrateClass,
+                result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+
             return (ParsePicked(result.Text, candidates), result, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
