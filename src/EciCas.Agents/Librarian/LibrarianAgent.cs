@@ -126,8 +126,11 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         var index = _store.IndexFor(envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
 
-        _logger.LogDebug("{Agent} index holds {Count} pair(s): {Pairs}", Name, index.Count,
-            string.Join(", ", index.Select(p => $"{p.Category}/{p.Topic}")));
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("{Agent} index holds {Count} pair(s): {Pairs}", Name, index.Count,
+                string.Join(", ", index.Select(p => $"{p.Category}/{p.Topic}")));
+        }
 
         // The vector half, and it runs first because it is the cheap one: a
         // local embedding and a cosine sweep, no substrate call and no tier.
@@ -237,8 +240,11 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             .ToList();
 
         _logger.LogInformation("{Agent} matched {Count} note(s) for {Pairs} lead(s)", Name, hits.Count, pairs.Count);
-        _logger.LogDebug("{Agent} passage hits: {Hits}", Name,
-            string.Join(" | ", hits.Select(h => $"{h.Score:F3} {h.Passage.Text} -> [{string.Join(", ", h.Passage.Pairs.Select(p => $"{p.Category}/{p.Topic}"))}]")));
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("{Agent} passage hits: {Hits}", Name,
+                string.Join(" | ", hits.Select(h => $"{h.Score:F3} {h.Passage.Text} -> [{string.Join(", ", h.Passage.Pairs.Select(p => $"{p.Category}/{p.Topic}"))}]")));
+        }
 
         return pairs;
     }

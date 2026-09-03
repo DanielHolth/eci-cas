@@ -132,8 +132,11 @@ public sealed class HindsightAgent : AgentBase
 
         _logger.LogInformation("{Agent} woke {Count} note(s), deepest echo {Depth}: {Texts}",
             Name, hits.Count, hits.Max(h => h.Passage.EchoDepth), string.Join(" | ", hits.Select(h => h.Passage.Text)));
-        _logger.LogDebug("{Agent} hits for \"{Text}\": {Hits}", Name, text,
-            string.Join(" | ", hits.Select(h => $"{h.Score:F3} [{h.Passage.Id}] depth {h.Passage.EchoDepth} {h.Passage.Text} -> [{string.Join(", ", h.Passage.Pairs.Select(p => $"{p.Category}/{p.Topic}"))}]")));
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("{Agent} hits for \"{Text}\": {Hits}", Name, text,
+                string.Join(" | ", hits.Select(h => $"{h.Score:F3} [{h.Passage.Id}] depth {h.Passage.EchoDepth} {h.Passage.Text} -> [{string.Join(", ", h.Passage.Pairs.Select(p => $"{p.Category}/{p.Topic}"))}]")));
+        }
 
         return hits;
     }

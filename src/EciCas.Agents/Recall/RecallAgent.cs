@@ -91,9 +91,15 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // gives Intent. Skipping it removes the second of the turn's three
         // serial substrate calls on a young archive. Order is preserved —
         // the store already sorted by Importance.
-        _logger.LogDebug("{Agent} read {Rows} row(s) from {Pairs}: {Loaded}",
-            Name, loaded.Sum(rows => rows.Count), pairs.Count,
-            string.Join(" | ", loaded.SelectMany(rows => rows).Select(Describe)));
+        // Guarded because the join is an argument, not part of the template:
+        // it walks every loaded row on every turn at every level, and only
+        // Debug ever reads the result.
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("{Agent} read {Rows} row(s) from {Pairs}: {Loaded}",
+                Name, loaded.Sum(rows => rows.Count), pairs.Count,
+                string.Join(" | ", loaded.SelectMany(rows => rows).Select(Describe)));
+        }
 
         var total = loaded.Sum(rows => rows.Count);
         if (total <= MaxPickedPerWorker)
