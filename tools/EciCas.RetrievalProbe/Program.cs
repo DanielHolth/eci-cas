@@ -16,11 +16,29 @@ using Microsoft.Extensions.Options;
 // don't work on paths" — a distinction that decides whether the fix is a
 // different architecture or a different string.
 
+// --list first: writing the questions file means knowing the addresses to
+// expect, and those live inside parquet where nothing else prints them.
+// Deliberately before the model check, because listing needs no weights.
+if (args.Length == 2 && args[0].TrimStart('-') == "list")
+{
+    var listing = new ParquetArchiveStore(System.IO.Path.GetFullPath(args[1]), null);
+    foreach (var pair in listing.IndexFor(null))
+    {
+        foreach (var row in await listing.LookupAsync(pair, null, CancellationToken.None))
+        {
+            Console.WriteLine($"{row.Category}/{row.Topic}/{row.Subtopic}/{row.Subject}/{row.Key} = {row.Value}");
+        }
+    }
+
+    return 0;
+}
+
 var args_ = Args.Parse(args);
 if (args_ is null)
 {
     Console.Error.WriteLine("""
-        usage: dotnet run --project tools/EciCas.RetrievalProbe -- \
+        usage: dotnet run --project tools/EciCas.RetrievalProbe -- --list <archive dir>
+               dotnet run --project tools/EciCas.RetrievalProbe -- \
             --archive <dir> --questions <file.json> \
             --model <model.onnx> --vocab <vocab.txt> \
             [--glosses <file.json>] [--query-prefix "query: "] [--passage-prefix "passage: "]

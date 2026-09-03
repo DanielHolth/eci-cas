@@ -23,6 +23,19 @@ So the probe scores three representations of the same row separately:
 `raw` is the honest baseline. If `gloss` does not beat it clearly, one-hop
 retrieval is dead and the afternoon was cheap.
 
+## Finding your addresses
+
+The questions file needs the address each question should retrieve, and
+those only exist inside the parquet files. This prints every one, and
+needs no weights:
+
+```
+dotnet run --project tools/EciCas.RetrievalProbe -- --list <archive dir>
+```
+
+One row per line, `address = value`. Copy the addresses you want to ask
+about into the `expect` fields.
+
 ## Running
 
 Needs the embedding weights (`./scripts/get-embedding-model.ps1`) and a real
