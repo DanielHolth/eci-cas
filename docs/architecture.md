@@ -302,8 +302,9 @@ having the prose ride Librarian's envelope into Recall's slot laundered
 one through the other. Intent now weighs "what the archive held" and "what
 I once thought about this" as two contributions and can disagree with
 either. The cost is one extra embed per turn — a local ONNX call — since
-Librarian and Hindsight sweep the same corpus for different halves of it;
-sharing a per-turn embedding is a listed optimisation.
+Librarian and Hindsight sweep the same corpus for different halves of it.
+The two embeds are also serialized by the provider's lock rather than
+merely duplicated — see the roadmap's "The turn is embedded twice".
 
 **The revisit.** The previous batch's note is quoted back at the top of the
 next Reflection prompt, which may rewrite it in light of what happened

@@ -450,6 +450,42 @@ Three consequences that constrain the build:
   developing a personality are the same observation from inside; if it
   starts agreeing with itself, look here first.
 
+### The turn is embedded twice, and the two calls serialize
+
+`architecture.md` calls sharing a per-turn embedding "a listed
+optimisation" and it was never actually listed anywhere. Written down now,
+with the part that note missed.
+
+Librarian and Hindsight both subscribe to `events.perception` and both call
+`EmbedAsync([text])` on the same string — each is `PromptCap.Apply` of
+`perception.text`, so the inputs are identical and so are the vectors.
+That much was known. What makes it more than a duplicated cheap call is
+that `OnnxEmbeddingProvider.EmbedAsync` holds a `SemaphoreSlim` across
+inference: the two agents do not run their embeds in parallel, the second
+waits for the first and then recomputes a bit-identical result. Two serial
+ONNX passes on the critical path where one would do.
+
+**The fix belongs in the provider, not on the bus.** A small cache keyed on
+the input string — one entry is enough, since the two calls arrive
+milliseconds apart with the same key — collapses the second to a dictionary
+hit. Nothing about the agents changes: neither learns the other exists,
+no message is added, no ordering is assumed. The faster alternative is
+embedding once in Perception and forwarding the vector on the envelope,
+and that is rejected on point 1 of the four-point plan: a float array is
+the largest thing that would ever ride the bus, to save an in-process
+recomputation.
+
+Measure before building. On a MiniLM-sized model the pass may be a few
+milliseconds, in which case this is real but small; it grows with
+`Embedding:MaxTokens`. Visible at `--Logging:LogLevel:EciCas=Debug`.
+
+Related, and already fixed (f34b5a8): several of those debug lines passed a
+`string.Join` as an argument, so the join ran at every log level and the
+result was discarded at `Information`. Recall's walked every row read from
+parquet on every turn. The general shape is worth remembering — structured
+logging defers formatting the template, never evaluating the arguments, so
+anything data-proportional needs an `IsEnabled` guard.
+
 ### A passage agent of its own (idea)
 
 Vector retrieval currently lives inside `LibrarianAgent`, and its output
