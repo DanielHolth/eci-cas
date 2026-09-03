@@ -486,23 +486,34 @@ parquet on every turn. The general shape is worth remembering — structured
 logging defers formatting the template, never evaluating the arguments, so
 anything data-proportional needs an `IsEnabled` guard.
 
-### A passage agent of its own (idea)
+### A passage agent of its own — shipped as Hindsight
 
-Vector retrieval currently lives inside `LibrarianAgent`, and its output
-reaches Intent by riding Librarian's envelope chain into Recall's roster
-slot. Pull it out into its own agent on `events.perception` that publishes
-an advisory and joins `Governance:BundleRoster`.
+Written as an idea; built in c69a34e as `HindsightAgent`, which is now on
+the roster in [architecture.md](architecture.md#agent-roster). The record
+of why, since the section it was proposed in still describes the shape.
 
-The point is to make it a fourth independent contributor alongside
-Impulse/Recall/Identity, so Intent weighs archive facts and the terse
-reflection notes as two separate bundle slots rather than one arriving as
-a passenger on the other's envelope. Costs no new per-turn substrate call
-— still an embed plus a cosine sweep.
+Vector retrieval lived inside `LibrarianAgent`, and the note text reached
+Intent by riding Librarian's envelope chain into Recall's roster slot.
+Hindsight is its own subscriber on `events.perception` publishing
+`hindsight.notes` as an advisory, and its own slot in
+`Governance:BundleRoster` — a fourth independent contributor alongside
+Impulse/Recall/Identity, so Intent weighs archive facts and the persona's
+own prose as two separate bundle slots rather than one arriving as a
+passenger on the other's envelope. No new per-turn substrate call: an
+embed and a cosine sweep, which is also what makes the duplicate embed
+above worth fixing.
 
-One constraint to carry into the build: the passages are the persona's own
-prose, so whatever the new agent publishes must stay out of Archivist's
-extraction scope. Its `TriggeredBy == "self"` guard covers reposted ideas
-arriving as perception, not generated text arriving as an advisory.
+Librarian kept the *pointer* half — a matched note's pairs still merge
+into its selection — so the split is prose to Hindsight, leads to
+Librarian, which is the "prose and facts are different substances" rule
+holding at the retrieval layer too.
+
+The constraint carried into the build held: passages are the persona's own
+prose and must stay out of Archivist's extraction scope. Archivist reads
+`perception.text` and `librarian.selected_pairs` and nothing else, so
+`hindsight.notes` never reaches it — by omission rather than by a guard,
+which is the same shape as the recalled-values boundary and now has a test
+for the same reason.
 
 ### Two-layer vector retrieval
 
@@ -1554,7 +1565,20 @@ Around 450 characters. If the extraction gets worse, that is the
 cut-first method working as intended — the symptom is visible in the
 archive on the next turn.
 
-### Stage 3 — Daniel revises
+### Stage 3 — Daniel revises — closed, no changes
+
+Reviewed on the 2026-09-03 commute and accepted as shipped: the five
+files were read one by one and none was revised. So the stage closes with
+the character count Stage 2 left it at, which is the "or a written reason
+why not" branch of the measurement below — the reason being that the
+cut-first method had already been applied during authoring rather than
+saved for this stage.
+
+That makes the four symptoms below the open list, not this stage. They
+were written as candidate targets for a revision pass and survive as the
+things to watch in the archive and in Intent's replies; a symptom that
+persists now needs a fixture, not a rewording. The rest of the section is
+kept as written, since it is what the review was performed against.
 
 The point of the preceding stages. Terse, and giving the substrate room
 rather than steering it — less is more. Two things worth knowing while
