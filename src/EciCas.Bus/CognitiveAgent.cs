@@ -89,6 +89,11 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
 
         var prompt = BuildPrompt(envelope);
 
+        // Debug only, and the whole prompt: tuning an instruction file means
+        // seeing exactly what the agent was handed, recalled facts and woken
+        // notes included, not a summary of it.
+        _logger.LogDebug("{Agent} prompt >>>\n{Prompt}", Name, prompt);
+
         if (!entry.UseSubstrate)
         {
             Publish(envelope, prompt, FallbackResult(envelope), diagnostics: null, degraded: null);
@@ -104,6 +109,7 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
             var diagnostics = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
+            _logger.LogDebug("{Agent} response <<<\n{Response}", Name, diagnostics.Text);
 
             Publish(envelope, prompt, ParseResult(diagnostics), diagnostics, degraded: null);
         }

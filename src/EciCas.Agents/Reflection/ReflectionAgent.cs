@@ -150,9 +150,11 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         try
         {
             var batchPrompt = BuildBatchPrompt(batch, previous);
+            _logger.LogDebug("{Agent} prompt >>>\n{Prompt}", Name, batchPrompt);
             var result = await _substrate.CompleteAsync(entry.Class, batchPrompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            _logger.LogDebug("{Agent} response <<<\n{Response}", Name, result.Text);
 
             // Same guard as ArchivistAgent.ExtractFactsAsync: the mock
             // tier echoes the prompt back verbatim, and its own worked
@@ -224,6 +226,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // profileId null: Reflection's own ideas belong to the persona, not
         // to whoever happened to be talking when it had them.
         await _store.WriteAsync(internalRecords, profileId: null, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("{Agent} wrote {Count} record(s): {Paths}", Name, internalRecords.Count,
+            string.Join(", ", internalRecords.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value} (importance {r.Importance})")));
 
         if (shouldPush)
         {
@@ -452,7 +456,10 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             .ToList();
 
         await _passages.WriteAsync(added, revisit is null ? null : previous!.Id, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("{Agent} wrote {Count} passage(s): {Texts}", Name, added.Count, string.Join(" | ", added.Select(p => p.Text)));
+        _logger.LogInformation("{Agent} wrote {Count} passage(s): {Texts}", Name, added.Count,
+            string.Join(" | ", added.Select(p => $"[{p.Id}] {p.Text} -> [{string.Join(", ", p.Pairs.Select(q => $"{q.Category}/{q.Topic}"))}]")));
+        _logger.LogDebug("{Agent} passage detail: supersedes {Superseded}, parents [{Parents}], echo depth {Depth}, generation {Generation}, model {Model}",
+            Name, revisit is null ? "nothing" : previous!.Id, string.Join(", ", parents), depth, generation, _embeddings.ModelId);
     }
 
     /// <summary>

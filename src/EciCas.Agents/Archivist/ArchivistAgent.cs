@@ -144,7 +144,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             .Select(g => _store.WriteAsync([.. g.Select(p => p.Record)], g.Key, cancellationToken)))
             .ConfigureAwait(false);
         _logger.LogInformation("{Agent} wrote {Count} records: {Paths}",
-            Name, batch.Count, string.Join(", ", batch.Select(p => $"{p.Record.Category}/{p.Record.Topic}/{p.Record.Subtopic}")));
+            Name, batch.Count, string.Join(", ", batch.Select(p => $"{p.Record.Category}/{p.Record.Topic}/{p.Record.Subtopic}/{p.Record.Subject}/{p.Record.Key} = {p.Record.Value}")));
 
         var written = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
             MetaBag.Empty.With(ControlKindKey, WrittenKind));
@@ -171,7 +171,9 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 
         try
         {
+            _logger.LogDebug("{Agent} extraction prompt >>>\n{Prompt}", Name, prompt);
             var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            _logger.LogDebug("{Agent} extraction response <<<\n{Response}", Name, result.Text);
 
             // The mock tier echoes the prompt back verbatim — parsing that
             // would just re-harvest our own worked examples (each one a

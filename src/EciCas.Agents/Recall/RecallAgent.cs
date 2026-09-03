@@ -91,6 +91,10 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // gives Intent. Skipping it removes the second of the turn's three
         // serial substrate calls on a young archive. Order is preserved —
         // the store already sorted by Importance.
+        _logger.LogDebug("{Agent} read {Rows} row(s) from {Pairs}: {Loaded}",
+            Name, loaded.Sum(rows => rows.Count), pairs.Count,
+            string.Join(" | ", loaded.SelectMany(rows => rows).Select(Describe)));
+
         var total = loaded.Sum(rows => rows.Count);
         if (total <= MaxPickedPerWorker)
         {
@@ -114,11 +118,8 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var diagnostics = results.Select(r => r.Diagnostics).Where(d => d is not null).Select(d => d!).ToList();
         if (diagnostics.Count > 0)
         {
-            var paths = picked.Count == 0
-                ? "nothing on file"
-                : string.Join(", ", picked.Select(f => $"{f.Category}/{f.Topic}/{f.Subtopic}/{f.Subject}/{f.Key} = {f.Value}"));
-            _logger.LogInformation("{Agent} {Paths} ({Workers} workers, {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
-                Name, paths, diagnostics.Count, diagnostics.Max(d => d.Latency.TotalMilliseconds), diagnostics.Sum(d => d.TokenCount), diagnostics.Sum(d => d.Cost));
+            _logger.LogInformation("{Agent} picking calls ({Workers} workers, {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
+                Name, diagnostics.Count, diagnostics.Max(d => d.Latency.TotalMilliseconds), diagnostics.Sum(d => d.TokenCount), diagnostics.Sum(d => d.Cost));
         }
 
         Publish(envelope, picked, degraded);
@@ -154,11 +155,22 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
     private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string? degraded)
     {
+        // Logged here rather than beside the picking calls, because the two
+        // paths that skip those calls — nothing selected, and an archive
+        // small enough to pass whole — still hand Intent facts, and a turn
+        // that recalled Morrow silently is indistinguishable from one that
+        // recalled nothing.
+        _logger.LogInformation("{Agent} {Facts}", Name,
+            facts.Count == 0 ? "nothing on file" : string.Join(", ", facts.Select(Describe)));
+
         var meta = MetaBag.Empty.With(RecalledFactsKey, facts);
 
         var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, SubstrateHealth.Mark(meta, degraded));
         _bus.Publish(Topics.Advisories, advisory);
     }
+
+    private static string Describe(ArchiveRecord r) =>
+        $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value} (importance {r.Importance})";
 
     /// <summary>
     /// One substrate call scoped to a single chunk's candidates. Failure is
@@ -177,7 +189,10 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
         try
         {
-            var result = await _substrate.CompleteAsync(substrateClass, BuildPrompt(text, candidates), cancellationToken).ConfigureAwait(false);
+            var prompt = BuildPrompt(text, candidates);
+            _logger.LogDebug("{Agent} picking prompt >>>\n{Prompt}", Name, prompt);
+            var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            _logger.LogDebug("{Agent} picking response <<<\n{Response}", Name, result.Text);
             return (ParsePicked(result.Text, candidates), result, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

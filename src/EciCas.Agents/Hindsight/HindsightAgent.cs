@@ -113,6 +113,7 @@ public sealed class HindsightAgent : AgentBase
     {
         if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || _options.TopK <= 0)
         {
+            _logger.LogDebug("{Agent} did not search: embeddings available {Available}, topK {TopK}", Name, _embeddings.Available, _options.TopK);
             return [];
         }
 
@@ -125,11 +126,14 @@ public sealed class HindsightAgent : AgentBase
         var hits = await _passages.SearchAsync(query[0], _options.TopK, _options.MinScore, cancellationToken).ConfigureAwait(false);
         if (hits.Count == 0)
         {
+            _logger.LogDebug("{Agent} woke nothing for \"{Text}\" (topK {TopK}, min score {MinScore})", Name, text, _options.TopK, _options.MinScore);
             return [];
         }
 
         _logger.LogInformation("{Agent} woke {Count} note(s), deepest echo {Depth}: {Texts}",
             Name, hits.Count, hits.Max(h => h.Passage.EchoDepth), string.Join(" | ", hits.Select(h => h.Passage.Text)));
+        _logger.LogDebug("{Agent} hits for \"{Text}\": {Hits}", Name, text,
+            string.Join(" | ", hits.Select(h => $"{h.Score:F3} [{h.Passage.Id}] depth {h.Passage.EchoDepth} {h.Passage.Text} -> [{string.Join(", ", h.Passage.Pairs.Select(p => $"{p.Category}/{p.Topic}"))}]")));
 
         return hits;
     }
