@@ -1,8 +1,16 @@
-namespace EciCas.Core;
+﻿namespace EciCas.Core;
 
 /// <summary>
 /// Loads every agent's instruction file once, at startup, and validates it
 /// against what the agent will actually fill in.
+///
+/// Not only the agents that call a substrate. Identity's persona, Impulse's
+/// reflex reply and Governance's three notices never reach a model at all —
+/// they are read by the person directly — but they colour how the persona
+/// sounds just as much as a prompt does, and anything that does that is a
+/// writing job rather than a programming one. They were C# constants until
+/// the persona's own self-description turned out to have been unreviewable
+/// for months because changing it meant a rebuild.
 ///
 /// Both failures are startup failures on purpose. A missing file cannot
 /// fall back to an empty instruction: an agent that silently loses its
@@ -28,8 +36,11 @@ public sealed class FileInstructionStore : IInstructionStore
             ["Intent"] = [],
             ["Librarian"] = ["options", "max", "text"],
             ["Recall"] = ["rows", "max", "text"],
-            ["Archivist"] = ["known", "terse", "english", "text"],
-            ["Reflection"] = ["turns", "revisit", "moods", "terse", "english", "previous", "topics"],
+            ["Archivist"] = ["known", "terse", "text"],
+            ["Reflection"] = ["turns", "revisit", "moods", "terse", "previous", "topics", "drive"],
+            ["Identity"] = [],
+            ["Impulse"] = [],
+            ["Governance"] = ["cause", "impaired", "concern"],
         };
 
     public FileInstructionStore(string directory)

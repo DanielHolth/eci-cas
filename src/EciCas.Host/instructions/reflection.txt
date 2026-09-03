@@ -25,9 +25,15 @@ the pairs the thought touches, so it can be checked against what actually
 exists: use only pairs appearing in the interactions above, and leave the
 field empty if it touches none.
 Write no line at all if nothing struck you.
+
+Your own state over the recent past, for what it is worth: {drive}
+That is where you have been, not a subject to write about. Let it colour the
+note if it genuinely bears on what you noticed; otherwise ignore it. Never
+report it back, and never perform a feeling you do not have grounds for.
 {revisit}
 
-{english}
+category, topic, subtopic and key in English whatever language the turn was
+in. Never translate a name, place or organisation.
 
 Interactions:
 {turns}

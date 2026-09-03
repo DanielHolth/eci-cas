@@ -34,4 +34,12 @@ public sealed class ReflectionOptions
 
     /// <summary>Minimum persona eagerness (see DriveVectors) for the batch's best-ranked idea to be pushed to events.perception instead of just archived internally.</summary>
     public double EagernessThreshold { get; set; } = 0.6;
+
+    /// <summary>
+    /// How many past drive states Reflection reads to describe how the
+    /// persona has been moving. One is a gauge and says nothing about
+    /// direction; enough of them span a session. The store keeps its own
+    /// window, so asking for more than it retains simply gets what it has.
+    /// </summary>
+    public int DriveHistory { get; set; } = 20;
 }

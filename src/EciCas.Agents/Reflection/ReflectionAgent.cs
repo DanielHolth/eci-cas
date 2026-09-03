@@ -147,6 +147,10 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         }
 
         var previous = await SelectRevisitAsync(batch, cancellationToken).ConfigureAwait(false);
+        // One read of the drive history serves both jobs below: the note is
+        // written knowing how the mood has been moving, and the same newest
+        // state decides whether the idea is worth pushing.
+        var (eagerness, driveTrend) = await GetDriveAsync(cancellationToken).ConfigureAwait(false);
 
         List<Candidate> candidates;
         string? mood;
@@ -154,7 +158,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         var started = Stopwatch.GetTimestamp();
         try
         {
-            var batchPrompt = BuildBatchPrompt(batch, previous);
+            var batchPrompt = BuildBatchPrompt(batch, previous, driveTrend);
             _logger.LogDebug("{Agent} prompt >>>\n{Prompt}", Name, batchPrompt);
             var result = await _substrate.CompleteAsync(entry.Class, batchPrompt, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
@@ -214,7 +218,6 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
         var best = candidates.MaxBy(c => c.Score)!;
         var maxGeneration = batch.Max(b => b.Generation);
-        var eagerness = await GetEagernessAsync(cancellationToken).ConfigureAwait(false);
         var shouldPush = maxGeneration < _options.MaxIdeaGeneration && eagerness >= _options.EagernessThreshold;
 
         var now = DateTimeOffset.UtcNow;
@@ -262,17 +265,52 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         _bus.Publish(Topics.SystemControl, Envelope.Create(Topics.SystemControl, Name, Severity.Neutral, meta));
     }
 
-    private async Task<double> GetEagernessAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads the retained window of drive states in one pass and returns
+    /// both things Reflection wants from it: how eager the persona is right
+    /// now, and how it has been moving.
+    ///
+    /// One lookup, because these were nearly two — the gate has always read
+    /// the newest state, and the trend needs that same newest state plus the
+    /// ones behind it. Asking twice would scan the file twice for a strict
+    /// superset of the same lines.
+    /// </summary>
+    private async Task<(double Eagerness, string Trend)> GetDriveAsync(CancellationToken cancellationToken)
     {
-        var records = await _stateStore.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
-        var vectors = records.Count > 0
-            ? JsonSerializer.Deserialize<DriveVectors>(records[0].Content) ?? new DriveVectors()
-            : new DriveVectors();
+        var records = await _stateStore.LookupAsync(
+            [ImpulseAgent.DrivePath], maxPerPath: _options.DriveHistory, cancellationToken).ConfigureAwait(false);
+
+        // Newest first, matching the store's reverse scan — DriveTrend reads
+        // index 0 as now.
+        var states = records
+            .Select(r => TryDeserialize(r.Content))
+            .OfType<DriveVectors>()
+            .ToList();
+
+        var now = states.Count > 0 ? states[0] : new DriveVectors();
 
         // Ports Python's `engagement` appraisal axis (curiosity - 0.4*fatigue)
         // from agents/impulse/agent.py — the closest existing analog to "eager
         // enough to share an idea"; no new formula invented.
-        return Math.Clamp(vectors.Curiosity - 0.4 * vectors.Fatigue, 0.0, 1.0);
+        return (Math.Clamp(now.Curiosity - 0.4 * now.Fatigue, 0.0, 1.0), DriveTrend.Describe(states));
+    }
+
+    /// <summary>
+    /// A drive line this build cannot read is skipped, not fatal. The store
+    /// keeps lines it could not parse on purpose, and a persona that refuses
+    /// to reflect because one old state has a field it doesn't recognise
+    /// would be trading the whole faculty for a schema change.
+    /// </summary>
+    private static DriveVectors? TryDeserialize(string content)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<DriveVectors>(content);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -324,7 +362,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         return await _passages.LatestAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous)
+    private string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous, string driveTrend)
     {
         var turns = string.Join("\n\n", batch.Select((b, i) =>
             $"{i + 1}. Given: {PromptCap.Apply(b.Context)}\n   Replied: {PromptCap.Apply(b.ReplyText)}"));
@@ -341,8 +379,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
         return InstructionFile.Fill(_instructions.For(Name),
             ("terse", ArchiveWriteStyle.TerseValue),
-            ("english", ArchiveWriteStyle.EnglishFields),
             ("moods", MoodLabels),
+            ("drive", driveTrend),
             ("revisit", revisit),
             ("turns", turns));
     }

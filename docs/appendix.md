@@ -81,11 +81,24 @@ with no substrate call has nothing per-turn to report.
 The honest answer is usually "not where you think". In order of how often
 it has fooled someone:
 
-**Identity injects the persona on every turn.** `MorrowIdentity` is a
-constant in `Program.cs`, seeded into `IAgentStateStore` at `assistant/persona`
-and published as advice on every `events.perception`. It reaches Intent as
-`[Identity: I'm Morrow. ...]`. No archive read, no log line, every turn. If
-the persona "remembers" its own name, this is why.
+**Identity injects the persona on every turn.** It is published as advice on
+every `events.perception` and reaches Intent as `[Identity: You are Morrow.
+...]`. No archive read, no log line, every turn. If the persona "remembers"
+its own name, this is why.
+
+The text lives in `instructions/identity.txt`, but only as a *seed*: the host
+writes it to `IAgentStateStore` at `assistant/persona` the first time it finds
+that path empty, and reads the store from then on. Editing the file changes
+nothing on an existing brain — that is deliberate, since a persona that grows
+should not be silently rewritten by a `git pull`. The boot log says which of
+the two happened. To re-seed, delete the `assistant/persona` line from
+`memory.jsonl` and restart.
+
+`memory.jsonl` also holds Impulse's drive states, and keeps a window of them
+per path rather than only the newest, because the superseded ones are the only
+record of how the persona has been moving. Reflection reads that window and is
+told the direction in words — "engagement rising, warmth steady" — never the
+numbers, which would only invite the persona to quote its own telemetry back.
 
 **Recall can publish facts without making a substrate call.** When the
 selected pairs hold `<= MaxPickedPerWorker` rows, the picking call is pure
