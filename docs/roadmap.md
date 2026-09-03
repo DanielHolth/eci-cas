@@ -1604,9 +1604,12 @@ The four observed symptoms, unchanged, as candidate targets:
 - **Librarian and Recall select too narrowly.** "Name the people you know
   about" comes back empty. Recall's prompt says a row is relevant *only*
   if it is about the same thing being asked about, which suppresses
-  breadth on an enumeration question. The caps (`MaxSelectedPairs` 3,
-  `MaxPickedPerWorker` 5) are config; the relevance rule is instruction
-  text. Ship with a fixture that asks an enumeration question and asserts
+  breadth on an enumeration question. `MaxSelectedPairs` was raised across
+  every tier (2/4/6/8) to give the selector more room, and
+  `MaxConcurrentRecalls` with it so the wider selection is not trimmed back
+  by the fan-out cap. `MaxPickedPerWorker` is still a `const` in
+  `RecallAgent` rather than config, and it is the knob that decides how many
+  addresses reach Intent. The relevance rule is instruction text. Ship with a fixture that asks an enumeration question and asserts
   more than one topic returns.
 - **Archivist needs handholding.** The longest instruction in the codebase
   and the heaviest on negative instruction. Its category/topic choices are
