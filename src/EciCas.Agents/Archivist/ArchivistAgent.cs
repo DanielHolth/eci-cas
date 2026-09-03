@@ -166,7 +166,6 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         var prompt = InstructionFile.Fill(_instructions.For(Name),
             ("known", known),
             ("terse", ArchiveWriteStyle.TerseValue),
-            ("english", ArchiveWriteStyle.EnglishFields),
             ("text", text));
 
         try

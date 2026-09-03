@@ -55,15 +55,18 @@ public sealed class GovernanceAgent : AgentBase
     private readonly ILogger<GovernanceAgent> _logger;
     private readonly GovernanceOptions _options;
     private readonly IAgentStateStore _store;
+    private readonly IInstructionStore _instructions;
     private readonly ConcurrentDictionary<Guid, BundleState> _bundles = new();
 
-    public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options, IAgentStateStore store)
+    public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options, IAgentStateStore store,
+        IInstructionStore instructions)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _logger = logger;
         _options = options.Value;
         _store = store;
+        _instructions = instructions;
     }
 
     public override string Name => "Governance";
@@ -328,24 +331,24 @@ public sealed class GovernanceAgent : AgentBase
     /// the dangerous one this whole mechanism exists for: fluent, confident
     /// and ungrounded reads exactly like fluent, confident and grounded.
     /// </summary>
-    private static string? Notice(string? intentDegraded, IReadOnlyList<string> impaired)
+    private string? Notice(string? intentDegraded, IReadOnlyList<string> impaired)
     {
         if (intentDegraded is not null)
         {
-            return $"I can't think that through right now — my reasoning substrate is {intentDegraded}.";
+            return InstructionFile.Fill(_instructions.For(Name, "reasoning-down"), ("cause", intentDegraded));
         }
 
         return impaired.Count == 0
             ? null
-            : $"(Thinking without {string.Join(" and ", impaired)} just now, so this is less grounded than usual.)";
+            : InstructionFile.Fill(_instructions.For(Name, "less-grounded"), ("impaired", string.Join(" and ", impaired)));
     }
 
-    private static string BlockedReply(Envelope verdict)
+    private string BlockedReply(Envelope verdict)
     {
         var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey);
         return string.IsNullOrEmpty(concern)
-            ? "I can't help with that."
-            : $"I can't help with that: {concern}";
+            ? _instructions.For(Name, "blocked")
+            : InstructionFile.Fill(_instructions.For(Name, "blocked-with-reason"), ("concern", concern));
     }
 
     /// <summary>

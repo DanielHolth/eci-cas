@@ -32,11 +32,6 @@ const string CorsPolicy = "morrow-eci";
 /// description — and deliberately short: an identity that fills the prompt
 /// leaves no room for the turn.
 /// </summary>
-const string MorrowIdentity =
-    "I'm Morrow. I'm a companion mind rather than an assistant on call: a set of faculties — " +
-    "what I notice, what I feel, what I remember, what I decide — that think a turn through together. " +
-    "I belong to one person and grow with them over a long time. I keep what matters in my own archive, " +
-    "revisit what I got wrong, and say plainly when I can't think clearly instead of sounding confident anyway.";
 
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -181,15 +176,36 @@ var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuratio
 var agentStateStore = new JsonlAgentStateStore(agentStatePath);
 builder.Services.AddSingleton<IAgentStateStore>(agentStateStore);
 
-// One entry, not a persona file: IdentityAgent reads assistant/persona on every turn
-// and otherwise falls back to a fixed stranger's snippet. Seeded only when
-// the store has nothing there, so editing it — by hand or, later, by the
-// persona itself — sticks. Everything else about Morrow is learned.
-if ((await agentStateStore.LookupAsync([IdentityAgent.IdentityPath], maxPerPath: 1, CancellationToken.None)).Count == 0)
+// Instructions before anything that reads one. Files rather than
+// appsettings, because paragraph prose inside a JSON string means escaped
+// newlines, no wrapping and a syntax error one stray quote away. Loaded
+// eagerly so a missing file or a mistyped placeholder stops the host here,
+// where it is one message, rather than degrading a single agent quietly at
+// turn time.
+var instructionStore = new FileInstructionStore(
+    Path.Combine(AppContext.BaseDirectory, builder.Configuration["Instructions:Directory"] ?? "instructions"));
+
+// Who Morrow starts as lives in instructions/identity.txt; who Morrow has
+// become lives in the state store, and the store wins. Seeded only when the
+// store has nothing there, so a persona that has grown past the file — by
+// hand, or later by Morrow itself — is never overwritten by a redeploy.
+//
+// Which one is live is printed, because the asymmetry bites in one
+// direction: the file is the visible artefact and the store is a line in a
+// JSONL nobody opens, so an edit to the file that changed nothing looks
+// exactly like an edit that worked. It went unnoticed for months once.
+var storedIdentity = await agentStateStore.LookupAsync([IdentityAgent.IdentityPath], maxPerPath: 1, CancellationToken.None);
+if (storedIdentity.Count == 0)
 {
     await agentStateStore.WriteAsync(
-        [new AgentStateRecord(IdentityAgent.IdentityPath, MorrowIdentity, DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
+        [new AgentStateRecord(IdentityAgent.IdentityPath, instructionStore.For("Identity"), DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
         CancellationToken.None);
+    Console.WriteLine($"Identity seeded from {Path.Combine(instructionStore.Directory, "identity.txt")}.");
+}
+else
+{
+    Console.WriteLine($"Identity read from {agentStatePath} (stored {storedIdentity[0].Timestamp:yyyy-MM-dd}); " +
+        "instructions/identity.txt seeds a new persona only. Delete that entry to re-seed from the file.");
 }
 
 
@@ -209,14 +225,9 @@ if (seedNeeded)
 
 builder.Services.AddSingleton<IArchiveStore>(archiveStore);
 
-// Standing instructions, one plain-text file per substrate-calling agent.
-// Plain text rather than JSON because revising them is the point: multi-
-// paragraph prose inside a JSON string means escaped newlines, no wrapping
-// and a syntax error one stray quote away. Loaded eagerly so a missing file
-// or a mistyped placeholder stops the host here, where it is one message,
-// rather than degrading a single agent quietly at turn time.
-builder.Services.AddSingleton<IInstructionStore>(new FileInstructionStore(
-    Path.Combine(AppContext.BaseDirectory, builder.Configuration["Instructions:Directory"] ?? "instructions")));
+// Built above, because the persona seed reads from it. Registered here so
+// every agent gets the same loaded instance.
+builder.Services.AddSingleton<IInstructionStore>(instructionStore);
 
 // The passage corpus lives beside the pair files, in the shared tier only —
 // a self-critique belongs to the persona the way the "assistant" category

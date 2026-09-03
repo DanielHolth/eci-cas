@@ -138,14 +138,17 @@ public sealed class ImpulseAgent : AgentBase
 
     private readonly IMessageBus _bus;
     private readonly IAgentStateStore _store;
+    private readonly IInstructionStore _instructions;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private readonly Dictionary<string, DriveVectors> _cached = [];
 
-    public ImpulseAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ImpulseAgent> logger, IAgentStateStore store)
+    public ImpulseAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ImpulseAgent> logger, IAgentStateStore store,
+        IInstructionStore instructions)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
+        _instructions = instructions;
     }
 
     public override string Name => "Impulse";
@@ -185,7 +188,7 @@ public sealed class ImpulseAgent : AgentBase
 
         if (isCritical)
         {
-            var reply = "This sounds urgent — I'm on it right away.";
+            var reply = _instructions.For(Name);
             var proposal = envelope.Derive(Topics.Proposal, Name, severity,
                 MetaBag.Empty.With(IntentAgent.ReplyKey, reply).With(ReflexKey, true));
             _bus.Publish(Topics.Proposal, proposal);

@@ -10,7 +10,7 @@ namespace EciCas.Tests.Agents;
 public class IdentityAgentTests
 {
     private static IdentityAgent CreateAgent(IMessageBus bus, BusActivityTracker activity, string? tempFile = null) =>
-        new(bus, activity, NullLogger<IdentityAgent>.Instance, new JsonlAgentStateStore(tempFile ?? Path.GetTempFileName()));
+        new(bus, activity, NullLogger<IdentityAgent>.Instance, new JsonlAgentStateStore(tempFile ?? Path.GetTempFileName()), ShippedInstructions.Store);
 
     [Fact]
     public async Task PublishesIdentityAdvisory()

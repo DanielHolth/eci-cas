@@ -140,7 +140,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     protected override string ParseResult(SubstrateResult result) => result.Text.Trim();
 
-    protected override string FallbackResult(Envelope envelope) => "I'm having trouble thinking that through right now.";
+    protected override string FallbackResult(Envelope envelope) => _instructions.For(Name, "fallback");
 
     protected override void Publish(Envelope envelope, string prompt, string result, SubstrateResult? diagnostics, string? degraded)
     {

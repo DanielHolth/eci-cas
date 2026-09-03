@@ -1,4 +1,4 @@
-namespace EciCas.Core;
+﻿namespace EciCas.Core;
 
 /// <summary>
 /// Knowledge-swarm archive: the semantic two-stage store (Librarian selects
@@ -72,17 +72,6 @@ public static class ArchiveWriteStyle
 {
     public const string TerseValue = "1-5 keywords, or one terse sentence with no filler";
 
-    /// <summary>
-    /// Lookup is by pair, so the same fact stated in two languages would
-    /// otherwise land on two pairs and never dedup. Normalizing the
-    /// structural vocabulary to English at write time keeps one fact as one
-    /// entry whatever language it arrived in. Proper nouns are carved out
-    /// deliberately: translating a name or a place would corrupt the record
-    /// itself, which is worse than the duplication this prevents.
-    /// </summary>
-    public const string EnglishFields =
-        "category, topic, subtopic and key in English whatever language the " +
-        "turn was in. Never translate a name, place or organisation.";
 }
 
 /// <summary>

@@ -22,7 +22,7 @@ public class ImpulseAgentTests
         var advisories = bus.Subscribe(Topics.Advisories);
         var proposals = bus.Subscribe(Topics.Proposal);
         var store = new JsonlAgentStateStore(Path.GetTempFileName());
-        var agent = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store);
+        var agent = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store, ShippedInstructions.Store);
         return (agent, advisories, proposals, store);
     }
 

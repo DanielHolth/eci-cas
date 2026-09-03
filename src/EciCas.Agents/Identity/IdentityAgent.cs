@@ -1,4 +1,4 @@
-using EciCas.Agents.Archivist;
+﻿using EciCas.Agents.Archivist;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -34,18 +34,23 @@ public sealed class IdentityAgent : AgentBase
     /// state store; the facts are rows, in parquet.
     /// </summary>
     public const string IdentityPath = "assistant/persona";
-    private const string DefaultIdentitySnippet = "I'm ECI, here to help.";
+
+    /// <summary>What a persona that has lost its own description says instead.</summary>
+    public const string StrangerSection = "stranger";
 
     private readonly IMessageBus _bus;
     private readonly IAgentStateStore _store;
+    private readonly IInstructionStore _instructions;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private string? _cachedIdentity;
 
-    public IdentityAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IdentityAgent> logger, IAgentStateStore store)
+    public IdentityAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IdentityAgent> logger, IAgentStateStore store,
+        IInstructionStore instructions)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
+        _instructions = instructions;
     }
 
     public override string Name => "Identity";
@@ -109,7 +114,7 @@ public sealed class IdentityAgent : AgentBase
             }
 
             var records = await _store.LookupAsync([IdentityPath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
-            _cachedIdentity = records.Count > 0 ? records[0].Content : DefaultIdentitySnippet;
+            _cachedIdentity = records.Count > 0 ? records[0].Content : _instructions.For(Name, StrangerSection);
             return _cachedIdentity;
         }
         finally

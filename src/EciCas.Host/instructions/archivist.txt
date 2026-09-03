@@ -15,7 +15,8 @@ that nearly duplicates it.
 
 {known}
 
-{english}
+category, topic, subtopic and key in English whatever language the turn was
+in. Never translate a name, place or organisation.
 
 Nothing stated: reply nothing.
 

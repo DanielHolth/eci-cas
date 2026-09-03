@@ -14,7 +14,7 @@ public class GovernanceAgentTests
 {
     private static GovernanceAgent CreateAgent(IMessageBus bus, BusActivityTracker activity, string[] roster) =>
         new(bus, activity, NullLogger<GovernanceAgent>.Instance, Options.Create(new GovernanceOptions { BundleRoster = roster }),
-            new JsonlAgentStateStore(Path.GetTempFileName()));
+            new JsonlAgentStateStore(Path.GetTempFileName()), ShippedInstructions.Store);
 
     [Theory]
     [InlineData("A")]
@@ -151,8 +151,8 @@ public class GovernanceAgentTests
         var systemControlReader = bus.Subscribe(Topics.SystemControl);
         var store = new JsonlAgentStateStore(Path.GetTempFileName());
         var agent = new GovernanceAgent(bus, activity, NullLogger<GovernanceAgent>.Instance,
-            Options.Create(new GovernanceOptions { BundleRoster = [] }), store);
-        var impulse = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store);
+            Options.Create(new GovernanceOptions { BundleRoster = [] }), store, ShippedInstructions.Store);
+        var impulse = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store, ShippedInstructions.Store);
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
         await agent.HandleAsync(perception, CancellationToken.None);
