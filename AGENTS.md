@@ -8,6 +8,19 @@ speculative abstractions, no redundant test variants for the same claim,
 no comments or docs restating what the code already says; when in doubt,
 cut. Less is more.
 
+## Where to work
+
+**`main` in `C:\Users\holdan\source\eci-cas`, always.** One developer, no
+branches, no worktrees — commit to `main` and push. If a worktree exists,
+it is leftover plumbing, not somewhere to work.
+
+This is not only a preference. Each worktree carries its own `bin/`, and
+the archive lives in the build output, so a host started from the wrong
+folder gets a *different persona with an empty memory* — it seeds
+`assistant/identity` and knows nothing else. That reads exactly like a
+retrieval bug and has already been debugged as one. If Librarian reports
+an index of one pair, check the folder before the code.
+
 ## Architecture
 
 Always use loose coupling and async processes for transactions between

@@ -24,6 +24,25 @@ is true and the host runs until shutdown instead, because the first
 `ReadLine()` would return null and take the whole surface down with it.
 Drive it with `POST /api/perceive` (`{"text": "..."}`) in that case.
 
+**Run from `C:\Users\holdan\source\eci-cas` — the `main` checkout.** The
+archive lives under the build output (`bin/Debug/net10.0/archive`), so
+every checkout has a *different persona*. Start the host from a worktree
+or a second clone and you get a freshly seeded brain that knows only
+`assistant/identity/persona/this/name = morrow`, answers "what is my
+name?" with "You're Morrow", and looks for all the world like Recall is
+broken. The tell is in the first line of the turn:
+
+```
+LibrarianAgent  Librarian index holds 1 pair(s): assistant/identity
+```
+
+One pair means an empty archive, which means the wrong folder. A real
+archive has dozens. `git pull` does not move an archive; nothing does.
+
+**A running host holds a lock on `bin/`.** Stop it before rebuilding, or
+the build fails with a file-in-use error rather than anything that
+mentions the host still running.
+
 ## Debug tracing
 
 ```
@@ -85,6 +104,13 @@ the full five-part address, so a reply that quotes
 `person/interaction/nationality/french guy/perceived nationality` verbatim
 was reading a row, not reminiscing. Librarian's index only ever carries
 `Category/Topic`, so anything deeper than two segments came from Recall.
+
+**`prompt >>>` is a log line, not an envelope.** It prints what goes into
+the HTTP call, which is instructions plus context — the rules have to
+reach the model somehow. Nothing puts them on the bus: Intent publishes
+`intent.context`, built by `BuildContext`, which is the turn's text and
+the bundle's contributions and deliberately never the standing rules.
+Seeing an instruction file in the console at `Debug` is not a leak.
 
 ## Passage retrieval is off by default
 
