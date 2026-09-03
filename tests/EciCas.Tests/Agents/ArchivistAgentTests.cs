@@ -1,5 +1,7 @@
-using EciCas.Agents.Archivist;
+﻿using EciCas.Agents.Archivist;
+using EciCas.Agents.Librarian;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
@@ -180,5 +182,48 @@ public class ArchivistAgentTests
         }
 
         Assert.Equal(["ada", "daniel"], store.Scoped.Select(r => r.ProfileId).Order());
+    }
+
+    /// <summary>
+    /// The bundle carries both Librarian's selected pairs and the rows Recall
+    /// actually read. Archivist is shown the first and must never be shown the
+    /// second: the pair labels are what keep a restated fact landing on an
+    /// existing address, while the values would let a recalled fact be
+    /// re-extracted as a freshly stated one — and the write-time merge would
+    /// hide that by overwriting the row it came from. Load-bearing by
+    /// omission until this test, since "give Archivist more context" is a
+    /// one-line change that closes the loop.
+    /// </summary>
+    [Fact]
+    public async Task ExtractionPromptCarriesSelectedPairs_NeverRecalledValues()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var prompt = "";
+        var substrate = new StubSubstrate(p =>
+        {
+            prompt = p;
+            return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 10, 0m));
+        });
+
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
+
+        // Values deliberately unlike anything in the instruction file's own
+        // worked examples, so a hit is the recalled row and nothing else.
+        var recalled = new ArchiveRecord("person", "family", "daughter", "vera lind", "birthplace",
+            "tromso", DateTimeOffset.UtcNow, ArchiveDomain.External, 0.9);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty
+                .With(PerceptionAgent.TextKey, "how old is he now")
+                .With(LibrarianAgent.SelectedPairsKey, (IReadOnlyList<ArchivePair>)[new ArchivePair("person", "family")])
+                .With(RecallAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[recalled])),
+            CancellationToken.None);
+
+        Assert.Contains("person/family", prompt);
+        Assert.DoesNotContain("tromso", prompt);
+        Assert.DoesNotContain("vera lind", prompt);
     }
 }
