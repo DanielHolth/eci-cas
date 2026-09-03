@@ -6,6 +6,9 @@
     <Project Path="src/EciCas.Host/EciCas.Host.csproj" />
     <Project Path="src/EciCas.Substrates/EciCas.Substrates.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/EciCas.RetrievalProbe/EciCas.RetrievalProbe.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EciCas.Tests/EciCas.Tests.csproj" />
   </Folder>

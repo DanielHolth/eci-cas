@@ -1,0 +1,6 @@
+[
+  { "ask": "what is my son called?",        "expect": "person/family/son/marcus holth/name" },
+  { "ask": "when is the boy's birthday?",   "expect": "person/family/son/marcus holth/birthdate" },
+  { "ask": "who am I talking to?",          "expect": "assistant/identity/persona/this/name" },
+  { "ask": "what should I get the kids?",   "expect": "person/family/son/marcus holth/birthdate" }
+]

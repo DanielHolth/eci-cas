@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\src\EciCas.Bus\EciCas.Bus.csproj" />
     <ProjectReference Include="..\..\src\EciCas.Agents\EciCas.Agents.csproj" />
     <ProjectReference Include="..\..\src\EciCas.Substrates\EciCas.Substrates.csproj" />
+    <ProjectReference Include="..\..\tools\EciCas.RetrievalProbe\EciCas.RetrievalProbe.csproj" />
     <ProjectReference Include="..\..\src\EciCas.Host\EciCas.Host.csproj" />
   </ItemGroup>
 
