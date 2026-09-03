@@ -226,4 +226,33 @@ public class ArchivistAgentTests
         Assert.DoesNotContain("tromso", prompt);
         Assert.DoesNotContain("vera lind", prompt);
     }
+
+    /// <summary>
+    /// The instruction must contain no line that would parse as a fact.
+    ///
+    /// It used to carry four worked examples, and a real substrate copied
+    /// the first one back on a turn that stated nothing — "What is my
+    /// name?" — filing it as an extraction every turn after. It went
+    /// unnoticed because the example used the developer's own name, so a
+    /// copied example and a correct extraction were the same string.
+    ///
+    /// The examples are gone rather than guarded, which leaves the format
+    /// spec and the known-pairs list to teach the shape. This test is what
+    /// keeps them gone: re-adding one is the natural fix for a model that
+    /// starts formatting badly, and it would reintroduce the bug silently.
+    /// The placeholder line is excluded by its angle brackets, which is
+    /// also what makes it uncopyable as a fact.
+    /// </summary>
+    [Fact]
+    public void ShippedInstruction_DemonstratesNoFactItCouldBeCopiedFrom()
+    {
+        var lines = ShippedInstructions.Store.For("Archivist")
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.StartsWith("category=", StringComparison.OrdinalIgnoreCase))
+            .Where(l => !l.Contains('<'))
+            .ToList();
+
+        Assert.Empty(lines);
+    }
 }

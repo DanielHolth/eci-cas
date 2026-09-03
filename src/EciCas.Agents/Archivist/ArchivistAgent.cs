@@ -175,11 +175,12 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} extraction response <<<\n{Response}", Name, result.Text);
 
-            // The mock tier echoes the prompt back verbatim — parsing that
-            // would just re-harvest our own worked examples (each one a
-            // valid "category=..." line) out of the instructions as if
-            // they'd been extracted. A real substrate never reproduces its
-            // entire multi-hundred-char input inside a reply.
+            // The mock tier echoes the prompt back verbatim, and a reply
+            // that contains its own entire input is never an extraction.
+            // Cheap to keep, though the instruction it used to protect —
+            // worked examples, every one a well-formed "category=..." line
+            // waiting to be harvested back out — is gone: a real substrate
+            // copied one and filed it as a fact every turn.
             if (result.Text.Contains(prompt, StringComparison.Ordinal))
             {
                 return ([], result);
