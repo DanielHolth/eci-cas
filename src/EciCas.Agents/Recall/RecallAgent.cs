@@ -34,8 +34,6 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 {
     public const string RecalledFactsKey = "recall.facts";
 
-    private const int MaxPickedPerWorker = 5;
-
     private readonly IMessageBus _bus;
     private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
@@ -102,7 +100,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         }
 
         var total = loaded.Sum(rows => rows.Count);
-        if (total <= MaxPickedPerWorker)
+        if (total <= _options.MaxPickedPerWorker)
         {
             Publish(envelope, [.. loaded.SelectMany(rows => rows).OrderByDescending(r => r.Importance)], degraded: null);
             return;
@@ -243,7 +241,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var rows = string.Join("\n", candidates.Select((r, i) => $"{i}. {r.Subtopic} / {r.Subject} {r.Key} = {r.Value}"));
         return InstructionFile.Fill(_instructions.For(Name),
             ("rows", rows),
-            ("max", MaxPickedPerWorker.ToString()),
+            ("max", _options.MaxPickedPerWorker.ToString()),
             ("text", text));
     }
 

@@ -24,4 +24,14 @@ public sealed class RecallOptions
     /// so the fan-out can be tuned without touching selection.
     /// </summary>
     public int MaxConcurrentRecalls { get; set; } = 6;
+
+    /// <summary>
+    /// How many rows one picking call may hand back, and — because the
+    /// picking call is skipped entirely when a turn loads no more rows than
+    /// this — also the size below which a young archive passes whole without
+    /// a substrate call at all. Was a const in RecallAgent; it is per-tier
+    /// config because it, not the pair count, decides how many addresses
+    /// reach Intent, and the ceiling is this times MaxConcurrentRecalls.
+    /// </summary>
+    public int MaxPickedPerWorker { get; set; } = 5;
 }

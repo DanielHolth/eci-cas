@@ -130,24 +130,26 @@ builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();
 // HttpClient a completion provider already configured, so BaseUrl and the
 // key's environment variable are declared exactly once.
 var embeddingProvider = builder.Configuration["Embedding:Provider"] ?? "onnx";
+Func<IServiceProvider, IEmbeddingProvider> embedderFactory;
 switch (embeddingProvider.ToLowerInvariant())
 {
     case "onnx":
-        builder.Services.AddSingleton<IEmbeddingProvider, OnnxEmbeddingProvider>();
+        builder.Services.AddSingleton<OnnxEmbeddingProvider>();
+        embedderFactory = sp => sp.GetRequiredService<OnnxEmbeddingProvider>();
         break;
     case "openai":
         var apiProvider = builder.Configuration["Embedding:ApiProvider"] ?? "openai";
-        builder.Services.AddSingleton<IEmbeddingProvider>(sp => new OpenAiCompatibleEmbeddingProvider(
+        embedderFactory = sp => new OpenAiCompatibleEmbeddingProvider(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient(apiProvider),
             sp.GetRequiredService<IOptions<EmbeddingOptions>>(),
-            sp.GetRequiredService<ILogger<OpenAiCompatibleEmbeddingProvider>>()));
+            sp.GetRequiredService<ILogger<OpenAiCompatibleEmbeddingProvider>>());
         break;
     // "api" is docs/architecture.md's spelling of the same thing and is
     // accepted so the two cannot disagree in silence.
     case "api":
         goto case "openai";
     case "none":
-        builder.Services.AddSingleton<IEmbeddingProvider, NullEmbeddingProvider>();
+        embedderFactory = _ => new NullEmbeddingProvider();
         break;
     default:
         // Previously this branch was the default, so a typo turned the whole
@@ -159,6 +161,14 @@ switch (embeddingProvider.ToLowerInvariant())
             $"Embedding:Provider is \"{embeddingProvider}\". Valid values are \"onnx\" (local weights), " +
             "\"openai\" (an OpenAI-compatible embeddings endpoint, also spelled \"api\"), and \"none\".");
 }
+
+// Wrapped whichever way it was built. Librarian and Hindsight embed the same
+// perception text on the same turn, and the ONNX session serializes on a
+// lock, so the second was waiting for the first and then recomputing an
+// identical vector. Deduplicating here keeps both agents unaware of each
+// other and keeps the vector off the bus.
+builder.Services.AddSingleton<IEmbeddingProvider>(sp => new CachingEmbeddingProvider(
+    embedderFactory(sp), sp.GetRequiredService<ILogger<CachingEmbeddingProvider>>()));
 
 
 var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");

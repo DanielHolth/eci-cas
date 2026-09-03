@@ -450,7 +450,7 @@ Three consequences that constrain the build:
   developing a personality are the same observation from inside; if it
   starts agreeing with itself, look here first.
 
-### The turn is embedded twice, and the two calls serialize
+### The turn is embedded twice, and the two calls serialize — fixed
 
 `architecture.md` calls sharing a per-turn embedding "a listed
 optimisation" and it was never actually listed anywhere. Written down now,
@@ -465,7 +465,9 @@ inference: the two agents do not run their embeds in parallel, the second
 waits for the first and then recomputes a bit-identical result. Two serial
 ONNX passes on the critical path where one would do.
 
-**The fix belongs in the provider, not on the bus.** A small cache keyed on
+**Fixed in the provider, not on the bus** — `CachingEmbeddingProvider`
+wraps whichever embedder the config selects, so the API provider's two HTTP
+round trips collapse the same way the ONNX passes do. A small cache keyed on
 the input string — one entry is enough, since the two calls arrive
 milliseconds apart with the same key — collapses the second to a dictionary
 hit. Nothing about the agents changes: neither learns the other exists,
