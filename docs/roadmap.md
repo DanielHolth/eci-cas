@@ -390,6 +390,33 @@ before the stamp existed read back with no id and are excluded rather than
 counted as disagreeing: an unrecorded model is not a conflicting one, and
 this must not brick a host over a corpus that predates the field.
 
+### A misspelled provider disabled the corpus in silence (closed)
+
+The same failure shape as the section above, found while checking why
+Hindsight wakes nothing on a fresh clone. `architecture.md` told operators
+to set `Embedding:Provider = "api"`. The switch in `Program.cs` matched
+`"onnx"` and `"openai"`, and its `default:` branch registered
+`NullEmbeddingProvider` — so following the documentation turned the entire
+passage corpus off with no warning and no error.
+
+What made it bad was not the typo but the disguise: the result was
+byte-identical to the normal, announced "weights aren't downloaded yet"
+state, which the design deliberately treats as fine. Reflection wrote no
+passages, Hindsight woke nothing, and every one of those silences was the
+expected behaviour of a correctly configured system.
+
+`"api"` is now the documented alias it always claimed to be, `"none"` means
+none explicitly, and anything else throws at startup naming the valid
+values. The general rule this and the model stamp share: a corpus that
+nothing can search must be either deliberate or loud, never plausible.
+
+There is also now `scripts/get-embedding-model.ps1`, because the gap
+between Hindsight being complete and Hindsight being *tryable* was a 90MB
+download nobody had automated. It writes to `<repo>/models/embedding` and
+prints absolute paths for appsettings, since `Embedding:ModelPath` resolves
+a relative path against the build output — where `dotnet clean` deletes it
+and every configuration needs its own copy.
+
 ### Hindsight — what it is for
 
 Recall reads facts. Hindsight reads what the persona made of them.
@@ -1247,7 +1274,7 @@ Five agents call a substrate and therefore have instructions: Intent,
 Archivist, Librarian, Recall, Reflection. Security, Impulse and Identity
 are deterministic and have none.
 
-### Stage 0 — `intent.prompt` is a confirmed bug, fix it first
+### Stage 0 — `intent.prompt` is a confirmed bug, fix it first — shipped
 
 `IntentAgent.BuildPrompt` returns `SystemInstruction + ResponseContract +
 this turn's content`, and the whole string is published as
@@ -1278,7 +1305,7 @@ point 1 and point 2 arriving as a correctness fix rather than as tidiness,
 and it is the reason it goes first: until it lands, no instruction rewrite
 can be evaluated, because the batch prompt cannot show the difference.
 
-### Stage 1 — audit the bus
+### Stage 1 — audit the bus — shipped
 
 Twenty-five meta keys. For each one: which agent publishes it, which
 agents read it, and what breaks if it is not there. A key nobody reads is
@@ -1297,7 +1324,36 @@ The output is a table in `architecture.md`, and it is worth having on its
 own: the bus is the seam the whole design turns on and nothing currently
 documents what actually crosses it.
 
-### Stage 2 — instructions to config, one block per agent
+**What the sweep found.** The table is in
+[architecture.md](architecture.md#what-travels-on-the-bus). Two keys had no
+reader in the process and are gone. `control.epoch_id` put a fresh Guid on
+every archive-written announcement; Identity invalidates its persona cache
+on `control.kind` alone and never compared an epoch to anything.
+`perception.source_type` was set to `"idea"` on the same line that set
+`perception.triggered_by` to `"self"` — the "same content twice" shape
+above, and the dishonest version of it, since only one of the two was read.
+
+Neither could ever have failed a test, which is how both survived this
+long: a key nobody reads cannot be observed to be wrong. That is the
+argument for auditing rather than waiting for a symptom.
+
+Three keys — `governance.expression`, `governance.security_alert`,
+`governance.degraded` — also have no in-process reader and stay.
+`SseBroadcaster` fans whole envelopes to connected clients, so those are
+the display layer's contract, which is exactly the "belongs in the display
+layer" case above resolving the other way: they already live there. The
+table records them as read by SSE clients rather than leaving them looking
+dead, because the next person to run this sweep will otherwise cut them.
+
+No payload turned out to be larger than its purpose once Stage 0 removed
+`intent.prompt`. The one thing the table did expose is the cost of the
+fresh-bag rule: four keys are re-published by agents that did not originate
+them, because `Derive()` starts an empty bag and anything crossing more
+than one hop must be forwarded deliberately at each. That is the rule
+working as designed, paid visibly rather than by an inherited bag that
+silently accumulates everything forever.
+
+### Stage 2 — instructions to config, one block per agent — shipped
 
 **Plain text files, not JSON strings.** Point 4 is hand revision, and
 multi-paragraph prose inside a JSON string means escaped newlines, no
@@ -1477,7 +1533,9 @@ The four observed symptoms, unchanged, as candidate targets:
 - **Intent is theatric.** Suspected: the "spokesperson on behalf of a
   collective of emerging agents" framing, and the one-or-two-sentence
   clamp, which forces a compressed quippy delivery. The path-convention
-  rule (`system/` means the assistant) is load-bearing and stays.
+  clause is no longer among the candidates: renaming the category to
+  `assistant/` made it self-describing, and the clause was deleted rather
+  than revised (efc0125).
 - **Advisories arrive unweighted.** `[Impulse: …]` and `[Noted before: …]`
   are bare brackets with nothing saying how to weigh them, so they read as
   flavour. This matters more since Hindsight shipped: a woken note is the
@@ -1502,7 +1560,12 @@ Instructions: fewer characters after Stage 3 than before it, or a written
 reason why not. Cost per turn is already logged at default level, so the
 before-and-after is observable without new instrumentation.
 
-## Stale references and milestone tags
+## Stale references and milestone tags — shipped
+
+Swept in 556bc43. All of it landed as described below, with one correction
+worth keeping: the sweep was written as "all three survived the rename",
+but there were four items, the fourth being ArchivistAgent's class comment,
+recorded at the end of this section. The original text follows.
 
 Not instruction text, but the same decay, and cheap to sweep alongside
 the plan above. None of it affects behaviour; all of it misleads a reader. All three
