@@ -29,7 +29,7 @@ eci-cas/
     EciCas.Host/            Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
     EciCas.ArchiveTool/      console REPL for inspecting/editing the Parquet archive
   tests/EciCas.Tests/      xUnit
-  docs/                     architecture.md — system design; roadmap.md — plans, parked work, design records
+  docs/                     architecture.md — system design; roadmap.md — plans, parked work, design records; appendix.md — operational notes
   morrow-eci/                Next.js companion UI, consumes the SSE stream
   .github/copilot-instructions.md   C# style/architecture conventions
 ```
@@ -174,10 +174,11 @@ dotnet run --project src/EciCas.Host -- --Embedding:Provider=api --Embedding:Api
 
 ## Docs
 
-Two docs, deliberately:
+Three docs, deliberately:
 
 - [`docs/architecture.md`](docs/architecture.md) — what exists: agent roster, bus mechanics, storage, the knowledge swarm, archive tool, verification
 - [`docs/roadmap.md`](docs/roadmap.md) — everything else: what's next, what's parked, what's out of scope, and the design records for shipped work
+- [`docs/appendix.md`](docs/appendix.md) — operational notes: running the host, reading its output, and where the persona really got that from
 - [`AGENTS.md`](AGENTS.md) — standing engineering rules (loose coupling/async is non-negotiable)
 
 The Python prototype this project replaced lives, unmodified, in a

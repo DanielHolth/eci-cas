@@ -24,6 +24,10 @@ the full design. Don't reintroduce that coupling here.
 
 - `docs/architecture.md` — system design: agent roster, bus mechanics, storage, verification
 - `docs/roadmap.md` — what's ahead, open design questions
+- `docs/appendix.md` — operational notes: running the host, reading its
+  output, and traps that have already cost someone an afternoon. Add to
+  this whenever a debugging session turns up something worth not
+  rediscovering.
 
 The Python prototype this project replaced lives in the sibling folder
 `eci-cas-python-prototype` (also pushed to its own remote as a
