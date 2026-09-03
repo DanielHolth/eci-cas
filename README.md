@@ -27,6 +27,7 @@ eci-cas/
     EciCas.Agents/         Perception, Impulse, Librarian, Recall, Identity, Governance, Intent, Security, Action, Archivist, Reflection
     EciCas.Substrates/     substrate provider registry (mock + live OpenAI-compatible HTTP)
     EciCas.Host/            Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
+      instructions/          one .txt per agent — every sentence the persona speaks or is steered by
     EciCas.ArchiveTool/      console REPL for inspecting/editing the Parquet archive
   tests/EciCas.Tests/      xUnit
   docs/                     architecture.md — system design; roadmap.md — plans, parked work, design records; appendix.md — operational notes
@@ -107,14 +108,31 @@ touching C#:
 }
 ```
 
+### The instructions folder
+
+Every sentence the persona speaks or is steered by lives in
+`src/EciCas.Host/instructions/`, one `.txt` per agent — prompts, but also
+Identity's persona, Impulse's reflex reply and Governance's honesty notices,
+which never reach a model at all. Changing how the persona sounds is editing
+prose, not C#. Files split into sections on `## ` markers and interpolate
+`{placeholder}` values the agent supplies; a missing file or an unknown
+placeholder fails at startup rather than quietly shipping an agent with no
+standing text.
+
+One exception to "edit the file, restart": `identity.txt` *seeds* the
+persona the first time the store is empty and is ignored thereafter, so a
+persona that has grown is not overwritten by a `git pull`. The boot log says
+which happened; delete the `assistant/persona` line from `memory.jsonl` to
+re-seed.
+
 `UseSubstrate: false` skips the substrate call and publishes the agent's
 fallback instead. It is honoured on all five substrate-calling agents —
 Intent, Librarian, Recall, Reflection and Archivist — and is deliberately
 *not* treated as a degradation: a turn run without a substrate by
 configuration is the persona working as configured, not the persona
-apologising. Note Intent's fallback is the fixed sentence *"I'm having
-trouble thinking that through right now,"* so turning it off there makes that
-the only reply the persona can give.
+apologising. Note Intent's fallback is a fixed sentence — the `## fallback`
+section of `instructions/intent.txt` — so turning it off there makes that the
+only reply the persona can give.
 
 Both this manifest and `Substrates:Classes` are validated at startup — including that
 `Class` names a real substrate class even when `UseSubstrate` is `false` — so

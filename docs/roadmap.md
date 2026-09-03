@@ -1629,6 +1629,80 @@ Instructions: fewer characters after Stage 3 than before it, or a written
 reason why not. Cost per turn is already logged at default level, so the
 before-and-after is observable without new instrumentation.
 
+### Stage 4 — the agents that never call a substrate — shipped
+
+Stage 2 moved the five *prompt* files and stopped there, on the reasonable
+reading that instructions are what you send a model. That reading missed
+four places, all found when Daniel asked why he had never been shown the
+persona text he was supposed to revise in Stage 3: Identity's persona,
+Impulse's reflex reply and Governance's three notices were C# constants,
+so they were never in the folder he reviewed. The persona's own
+self-description had gone unreviewed for months because changing it meant
+a rebuild.
+
+The test is not "does a model see it" but "is this a writing decision".
+Identity, Impulse and Governance now read `IInstructionStore` like the
+rest, and `KnownPlaceholders` covers all eight agents.
+
+`ArchiveWriteStyle.EnglishFields` went the other way and was deleted
+outright: its whole job was deciding whether a sentence appeared in a
+prompt, which the instruction file now does directly. `TerseValue`
+survives, because the drift risk Stage 2 named is real — the same fact
+under two spellings — and one shared fragment is how that stays fixed.
+
+**Identity is a seed, not a setting.** The file writes to
+`assistant/persona` only when that path is empty, and the store wins
+thereafter. Editing the file changes nothing on a brain that already has
+one. That is the point: a persona meant to grow should not be silently
+replaced by a `git pull`, and the alternative — file always wins — makes
+the store pointless. The boot log names which of the two happened, since
+the failure mode is editing prose and seeing no effect.
+
+## Drive-state history as grounded interiority — shipped
+
+`memory.jsonl` was append-only, and every read asked for the newest line
+per path, so it grew forever to hold lines nothing could return. It had
+also accumulated ~135 archive-shaped rows from the pre-Parquet design —
+97% fossil — which were purged.
+
+The obvious fix was one line per path. That was recommended and then
+withdrawn, because it is the worse bug: Impulse writes a drive vector on
+every nudge, and the superseded ones are the only record the system has of
+how the persona has been over time. A scalar is a gauge; the series is a
+history, and nothing else in the system holds one about the persona
+itself.
+
+So the store keeps a **window** per path, `Reflection:DriveHistory` deep,
+trimmed on write. `DriveTrend.Describe` turns it into words on the axes
+`Expression()` already uses — *"engagement rising, alertness steady,
+warmth falling. Neutral then, alert now."* Reflection reads it while
+writing its note; one lookup serves both that and the eagerness gate,
+since the newest state of the window is the number that gate already read.
+
+**Words, never numbers**, and a test asserts no decimal reaches the prompt.
+`Curiosity: 0.83` in a prompt invites the persona to quote its own
+telemetry back, which is the register of a status page. The receiving
+instruction says plainly that this is where the persona has been rather
+than a subject to write about, and that it must not perform a feeling it
+has no grounds for.
+
+That last clause is the general rule, not a local one: **surface
+interiority only where something actually happened to cause it.**
+Governance's *"(Thinking without Recall just now, so this is less grounded
+than usual.)"* is the template — true, caused, silent otherwise. The
+failure it prevents has already been observed in output as
+`*feels the slight tension in your question*`.
+
+Direction was reviewed by a third model and accepted; the implementation
+here is not its, and departs from its sketch in two places — the trend is
+words rather than the telemetry-register sample it gave, and it is one
+store lookup rather than two.
+
+**Still open.** Whether the trend colours the note at all is unmeasured.
+Ignored is an acceptable outcome. Reported back — the persona announcing
+its own engagement is rising — is the failure, and would mean tightening
+the instruction rather than removing the input.
+
 ## Stale references and milestone tags — shipped
 
 Swept in 556bc43. All of it landed as described below, with one correction

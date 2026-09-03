@@ -11,7 +11,7 @@ cut.
 
 ## Where to work
 
-**`main` in `C:\Users\holdan\source\eci-cas`, always.** One developer, no
+**`main` in `D:\Dev\Claude\eci-cas`, always.** One developer, no
 branches, no worktrees — commit to `main` and push. If a worktree exists,
 it is leftover plumbing, not somewhere to work.
 
@@ -31,6 +31,21 @@ depend on another agent's message arriving before or after it —
 concurrent, message-passing, independently-listening agents, not a
 shared call stack wearing a pub-sub API. See `docs/architecture.md` for
 the full design. Don't reintroduce that coupling here.
+
+## Instructions are prose, not code
+
+Anything that colours how an agent behaves or answers belongs in
+`src/EciCas.Host/instructions/*.txt`, never in a C# string constant — a
+prompt, a persona, a canned reply, a notice the user reads. The test is not
+"does a model see it" but "is this a writing decision". If it is, a rebuild
+should not be the way to revise it.
+
+Surface interiority only where something actually happened to cause it.
+Governance's *"(Thinking without Recall just now, so this is less grounded
+than usual.)"* is the template: true, caused, and silent otherwise. A
+persona narrating a mood it has no grounds for is the failure this avoids,
+which is also why the drive window reaches Reflection as words and never as
+numbers.
 
 ## Docs
 

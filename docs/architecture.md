@@ -171,6 +171,43 @@ because an LLM-authored apology cannot be produced by the LLM that isn't
 answering. A degraded Intent replaces the reply; a degraded advisor
 appends a parenthetical; a Red verdict gets neither.
 
+## Instructions: the words are not code
+
+Every sentence the persona speaks or is steered by lives in
+`src/EciCas.Host/instructions/*.txt`, one file per agent, loaded once at
+startup by `FileInstructionStore`. This covers more than prompts. Identity's
+persona, Impulse's reflex reply and Governance's honesty notices never reach
+a model at all — a person reads them directly — but they colour how the
+persona sounds exactly as much as a prompt does, and that makes them a
+writing job rather than a programming one. They were C# constants until the
+persona's own self-description turned out to have gone unreviewed for months,
+because changing it meant a rebuild.
+
+A file splits into sections on `## ` markers; text before the first marker is
+`main`. `{placeholder}` substitution is the only templating, and an unknown
+placeholder is left visible rather than blanked, so a mistake reads as a
+mistake.
+
+Two startup failures, both deliberate. A **missing file** cannot fall back to
+an empty instruction — an agent that silently loses its standing text still
+answers, just worse, and surfaces turns later as a vague quality complaint
+rather than an error. An **unknown placeholder** has the same shape:
+`{turns}` mistyped as `{turn}` while revising would quietly stop passing the
+turns in. `KnownPlaceholders` names what each file may reference, and
+anything else refuses to boot. It is the contract between the prose and the
+code that splices into it — the one place a hand revision can go wrong
+without the text looking wrong.
+
+The tests load the *shipped* files, not doubles (`ShippedInstructions`). A
+stand-in would let a hand revision break every agent while the suite stayed
+green.
+
+**Identity is a seed, not a setting.** The host writes `identity.txt` to
+`assistant/persona` only when it finds that path empty, and reads the store
+from then on. Editing the file changes nothing on a brain that already has
+one — deliberately, since a persona meant to grow should not be silently
+overwritten by a `git pull`. The boot log says which of the two happened.
+
 ## Storage: a library, not an agent
 
 `IArchiveStore` owns the archive files, schema, and all concurrency,
@@ -220,13 +257,30 @@ it, but nothing looks up by it. That is what lets one subtopic be discussed
 at great length without earning its own index entry.
 
 Both Archivist (turn facts) and Reflection (self-generated ideas) extract
-records in this shape via substrate call. Rules that must hold for *every*
-write live once, as prompt fragments on `ArchiveWriteStyle`, interpolated
-into both writers' prompts so they can't drift apart: `TerseValue` (terse,
-noise-free values) and `EnglishFields` (structural fields normalized to
-English, proper nouns never translated — lookup is by pair, so the same
-fact in two languages would otherwise never dedup). Both exist so a later
-lookup actually intersects what got written.
+records in this shape via substrate call. One rule that must hold for *every* write lives once, as a prompt
+fragment on `ArchiveWriteStyle` interpolated into both writers' prompts so
+they cannot drift apart: `TerseValue`, terse noise-free values, so a later
+lookup actually intersects what got written. The companion rule — structural
+fields in English, proper nouns never translated, since lookup is by pair and
+the same fact in two languages would otherwise never dedup — is a sentence in
+each writer's instruction file rather than a C# constant. It is a rule
+addressed to a model, and those live in `instructions/`.
+
+### The third store: agent state
+
+`IAgentStateStore` (`JsonlAgentStateStore`, `memory.jsonl`) is neither of the
+above. It holds opaque blobs an agent keeps for itself — Impulse's drive
+vectors, Identity's persona — addressed by a flat path with no schema, no
+pair index and no vector. It exists because those are not facts about the
+world and do not belong in an archive that Librarian selects over.
+
+It keeps a **window** per path, not a log and not a single row. Every read
+asks for the newest, so an unbounded append-only file grows to hold lines
+nothing can return; but collapsing to one line per path would be the worse
+bug, because Impulse writes a drive vector on every nudge and the superseded
+ones are the only record of how the persona has been over time. Bounded,
+then: trimmed on write, `Reflection:DriveHistory` states deep. Lines the
+trimmer cannot parse are kept rather than guessed at.
 
 ## The Librarian to Recall knowledge swarm
 
@@ -240,6 +294,14 @@ LLM-driven rather than a deterministic keyword/bucket match, because
 disambiguating something like "name of system" vs. "name of person" needs
 semantic judgment, not string matching. It sees pairs rather than full
 triples so the selection prompt stays short as the archive deepens.
+
+It runs on **every** turn with a non-empty index, including one small enough
+that selecting everything would have been correct. Skipping it there saved a
+call but meant the selector's judgment was never exercised until the archive
+was already too big to check by eye — and near-duplicate pairs, the thing
+selection exists to tell apart, appear long before that. Recall keeps its own
+equivalent skip, because the budget it guards is per-worker rather than
+per-turn: an under-budget chunk is genuinely nothing to choose from.
 
 Recall then does the reading, in two parallel phases inside one
 `HandleAsync`:
@@ -413,6 +475,28 @@ The magnitude gap *is* the distinction between the two mechanisms — a test
 asserts every slow delta stays under every instant one, comparing the
 tables rather than pinned literals so both stay tunable.
 
+### Trajectory, not level
+
+A single drive state is a gauge; the window of them is a history, and that
+is what Reflection reads. `DriveTrend.Describe` collapses it the way
+`Expression()` already collapses five vectors into three appraisal axes —
+into words: *"Across the last 6 recorded states: engagement rising, alertness
+steady, warmth falling. Neutral then, alert now."*
+
+Never numbers. A prompt carrying `Curiosity: 0.83` invites the persona to
+quote its own telemetry back at the user, which is the register of a status
+page rather than of a mind; a test asserts no decimal ever reaches the
+prompt. The instruction that receives it is explicit that this is where the
+persona has been and not a subject to write about, and that it must not
+perform a feeling it has no grounds for — the same rule Governance follows
+when it says *"(Thinking without Recall just now, so this is less grounded
+than usual.)"* and stays silent otherwise.
+
+Surface interiority only where something actually happened to cause it. That
+is the line between grounded interiority and performed sentience, and it is a
+design rule here rather than a matter of taste: the failure it prevents is a
+persona narrating states it does not have.
+
 ## Prompt growth cap
 
 Every `CognitiveAgent<T>` prompt folds in upstream agents' advisory text,
@@ -486,12 +570,13 @@ design records for what shipped.
 ```
 src/EciCas.Core/        Envelope, MetaBag, Severity, Verdict, Topics, PromptCap,
                          IAgent, IMessageBus, IArchiveStore, IPassageStore,
-                         ISubstrateProvider
+                         IAgentStateStore, IInstructionStore, ISubstrateProvider
 src/EciCas.Bus/          ChannelBus, AgentBase, BusActivityTracker
 src/EciCas.Agents/       one folder per agent
 src/EciCas.Substrates/   SubstrateRegistry, MockSubstrateProvider, OpenAiCompatibleSubstrateProvider
                          OnnxEmbeddingProvider, NullEmbeddingProvider
 src/EciCas.Host/         Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
+src/EciCas.Host/instructions/   one .txt per agent — every sentence the persona speaks or is steered by
 src/EciCas.ArchiveTool/  console REPL for inspecting/editing the Parquet archive
 tests/EciCas.Tests/      xUnit
 morrow-eci/              Next.js companion UI, consumes the SSE stream

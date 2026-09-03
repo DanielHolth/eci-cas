@@ -24,7 +24,7 @@ is true and the host runs until shutdown instead, because the first
 `ReadLine()` would return null and take the whole surface down with it.
 Drive it with `POST /api/perceive` (`{"text": "..."}`) in that case.
 
-**Run from `C:\Users\holdan\source\eci-cas` — the `main` checkout.** The
+**Run from `D:\Dev\Claude\eci-cas` — the `main` checkout.** The
 archive lives under the build output (`bin/Debug/net10.0/archive`), so
 every checkout has a *different persona*. Start the host from a worktree
 or a second clone and you get a freshly seeded brain that knows only
