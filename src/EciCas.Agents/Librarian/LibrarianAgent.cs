@@ -164,13 +164,15 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         }
 
         var prompt = BuildSelectionPrompt(text, index);
+        _logger.LogDebug("{Agent} selection prompt >>>\n{Prompt}", Name, prompt);
 
         var started = Stopwatch.GetTimestamp();
         try
         {
             var result = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            _logger.LogDebug("{Agent} selection response <<<\n{Response}", Name, result.Text);
             Publish(envelope, Merge(ParsePairs(result.Text, index), remembered), degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

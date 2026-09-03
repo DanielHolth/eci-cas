@@ -152,8 +152,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             var batchPrompt = BuildBatchPrompt(batch, previous);
             _logger.LogDebug("{Agent} prompt >>>\n{Prompt}", Name, batchPrompt);
             var result = await _substrate.CompleteAsync(entry.Class, batchPrompt, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, result.Text);
 
             // Same guard as ArchivistAgent.ExtractFactsAsync: the mock

@@ -107,8 +107,8 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
         try
         {
             var diagnostics = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
+            _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, entry.Class, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, diagnostics.Text);
 
             Publish(envelope, prompt, ParseResult(diagnostics), diagnostics, degraded: null);

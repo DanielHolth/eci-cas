@@ -120,12 +120,19 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
         // One line for the whole turn, not one per worker: aggregate latency
         // (wall-clock across the parallel calls, not summed) and sum tokens/
-        // cost across every worker that actually reached the substrate.
+        // cost across every worker that actually reached the substrate. The
+        // per-worker breakdown is one line each, below.
         var diagnostics = results.Select(r => r.Diagnostics).Where(d => d is not null).Select(d => d!).ToList();
         if (diagnostics.Count > 0)
         {
-            _logger.LogInformation("{Agent} picking calls ({Workers} workers, {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
-                Name, diagnostics.Count, diagnostics.Max(d => d.Latency.TotalMilliseconds), diagnostics.Sum(d => d.TokenCount), diagnostics.Sum(d => d.Cost));
+            _logger.LogInformation("{Agent} picking calls [{Class}] ({Workers} workers, {LatencyMs}ms wall-clock, {Tokens} tokens, ${Cost} est. cost)",
+                Name, entry.Class, diagnostics.Count, diagnostics.Max(d => d.Latency.TotalMilliseconds), diagnostics.Sum(d => d.TokenCount), diagnostics.Sum(d => d.Cost));
+
+            for (var i = 0; i < diagnostics.Count; i++)
+            {
+                _logger.LogInformation("{Agent}   worker {Worker}/{Workers} [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                    Name, i + 1, diagnostics.Count, entry.Class, diagnostics[i].Latency.TotalMilliseconds, diagnostics[i].TokenCount, diagnostics[i].Cost);
+            }
         }
 
         Publish(envelope, picked, degraded);

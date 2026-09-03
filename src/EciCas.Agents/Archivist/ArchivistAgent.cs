@@ -109,8 +109,8 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         if (diagnostics is not null)
         {
             var facts = newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}"));
-            _logger.LogInformation("{Agent} {Facts} ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
-                Name, facts, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
+            _logger.LogInformation("{Agent} {Facts} [{Class}] ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
+                Name, facts, entry.Class, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
         }
 
         // Flushes every BatchSize turns processed, not every BatchSize facts
