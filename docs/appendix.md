@@ -82,7 +82,7 @@ The honest answer is usually "not where you think". In order of how often
 it has fooled someone:
 
 **Identity injects the persona on every turn.** `MorrowIdentity` is a
-constant in `Program.cs`, seeded into `IAgentStateStore` at `self/identity`
+constant in `Program.cs`, seeded into `IAgentStateStore` at `assistant/persona`
 and published as advice on every `events.perception`. It reaches Intent as
 `[Identity: I'm Morrow. ...]`. No archive read, no log line, every turn. If
 the persona "remembers" its own name, this is why.

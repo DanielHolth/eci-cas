@@ -59,9 +59,13 @@ and it bundles, and renaming toward the smaller job would bet that it stays
 small. **Intent** names the role being aimed at rather than what is
 demonstrably achieved, which is a reasonable thing for a name to do.
 
-The persisted `self/identity` archive path and the shared `self` category
-did not move with the Identity rename. Those are data, not names — see
-`IdentityAgent.IdentityPath`.
+The persona's own records all live under one category, `assistant`: the
+snippet Identity reads at `assistant/persona` in the agent state store,
+the identity facts at `assistant/identity` in the archive, and Reflection's
+filed ideas at `assistant/reflection`. There was a second category, `self`,
+holding the last of those; it was dropped because `self` alone said nothing
+about which of the three a reader was looking at, and the archive is
+pair-addressed, so one category still means three separate files.
 
 ## Bus mechanics
 

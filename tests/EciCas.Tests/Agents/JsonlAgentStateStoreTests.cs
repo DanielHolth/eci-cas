@@ -9,7 +9,7 @@ public class JsonlAgentStateStoreTests
     public async Task LookupAsync_WithNoFile_ReturnsEmpty()
     {
         var store = new JsonlAgentStateStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jsonl"));
-        var results = await store.LookupAsync(["self/identity"], maxPerPath: 3, CancellationToken.None);
+        var results = await store.LookupAsync(["assistant/persona"], maxPerPath: 3, CancellationToken.None);
         Assert.Empty(results);
     }
 

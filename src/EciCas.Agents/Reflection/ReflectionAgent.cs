@@ -49,7 +49,12 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// </summary>
     public const string MoodKey = "reflection.mood";
 
-    private const string FixedCategory = "self";
+    // "assistant" rather than "self": the persona owns both the facts it
+    // knows about itself and the ideas it has about them, and one category
+    // for both means the pair label reads as an address rather than as a
+    // mood. The pair is still its own file — the archive is pair-addressed,
+    // so assistant~reflection.parquet never touches assistant~identity.parquet.
+    private const string FixedCategory = "assistant";
     private const string FixedTopic = "reflection";
     private const string FixedSubject = "self";
     private const string FixedKey = "insight";
@@ -213,7 +218,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         var shouldPush = maxGeneration < _options.MaxIdeaGeneration && eagerness >= _options.EagernessThreshold;
 
         var now = DateTimeOffset.UtcNow;
-        // Category/Topic are fixed (self/reflection); Subtopic is the LLM's
+        // Category/Topic are fixed (assistant/reflection); Subtopic is the LLM's
         // own free-text functional label per candidate — not constrained to
         // an enumerated list, so nuance isn't lost to a fixed vocabulary.
         // Importance is fixed by role (quiet vs. pushed), not LLM-scored —

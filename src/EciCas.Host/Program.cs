@@ -181,7 +181,7 @@ var agentStatePath = Path.Combine(AppContext.BaseDirectory, builder.Configuratio
 var agentStateStore = new JsonlAgentStateStore(agentStatePath);
 builder.Services.AddSingleton<IAgentStateStore>(agentStateStore);
 
-// One entry, not a persona file: IdentityAgent reads self/identity on every turn
+// One entry, not a persona file: IdentityAgent reads assistant/persona on every turn
 // and otherwise falls back to a fixed stranger's snippet. Seeded only when
 // the store has nothing there, so editing it — by hand or, later, by the
 // persona itself — sticks. Everything else about Morrow is learned.
@@ -219,8 +219,8 @@ builder.Services.AddSingleton<IInstructionStore>(new FileInstructionStore(
     Path.Combine(AppContext.BaseDirectory, builder.Configuration["Instructions:Directory"] ?? "instructions")));
 
 // The passage corpus lives beside the pair files, in the shared tier only —
-// a self-critique belongs to the persona the way the "assistant" and
-// "self" categories already do.
+// a self-critique belongs to the persona the way the "assistant" category
+// already does.
 builder.Services.AddSingleton<IPassageStore>(new ParquetPassageStore(archiveDirectory));
 
 

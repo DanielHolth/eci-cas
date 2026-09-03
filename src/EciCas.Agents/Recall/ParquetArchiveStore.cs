@@ -52,13 +52,13 @@ public sealed class ParquetArchiveStore : IArchiveStore
 
     /// <summary>
     /// Categories that stay in the shared tier however personal the turn
-    /// was. The two the persona itself owns: "assistant" is everything it
-    /// knows about itself, its identity and the architecture it runs on
-    /// alike; "self" is what Reflection thinks, written under self/reflection
-    /// when an idea is worth pushing. Neither belongs to any one person on a
-    /// shared device.
+    /// was. One: "assistant", everything the persona knows about itself —
+    /// its identity, the architecture it runs on, and what Reflection thinks
+    /// under assistant/reflection. None of it belongs to any one person on a
+    /// shared device. It was two until "self" was folded in; the pair
+    /// addressing keeps the files apart without needing a second category.
     /// </summary>
-    public static readonly string[] DefaultSharedCategories = ["assistant", "self"];
+    public static readonly string[] DefaultSharedCategories = ["assistant"];
 
     private sealed class RecordRow
     {

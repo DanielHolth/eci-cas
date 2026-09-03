@@ -550,9 +550,8 @@ query will look like, not what the data looks like.**
 ### Aliases
 
 The embedded text and the stored path are not the same string.
-`system/identity` stays exactly that on disk — addressable, and still what
-Intent sees, which matters because ResponseContract's `system/` rule keys
-on it. What gets *embedded* is a separate retrieval-facing gloss written
+`assistant/identity` stays exactly that on disk — addressable, and still
+what Intent sees. What gets *embedded* is a separate retrieval-facing gloss written
 as the questions it should answer:
 
 > *"my own name, what I'm called, my traits, my personality, my
@@ -560,7 +559,7 @@ as the questions it should answer:
 
 This fixes the question-versus-label asymmetry on the document side,
 which is far cheaper than fixing it on the query side. And it is why
-always-including `system/*` was rejected: unconditional inclusion makes
+always-including `assistant/*` was rejected: unconditional inclusion makes
 the persona faintly self-absorbed on every turn, because facts in the
 prompt get used. The alias is selective — it matches "what is your name?"
 and not "what's the weather?".
@@ -570,7 +569,7 @@ are derived, one-way and disposable: never a second name for the pair,
 never written into a fact path, never shown to Intent. That is what keeps
 them clear of the store's no-drift property — that rule protects the
 source of truth, and a rebuildable cache isn't one. Hand-written for
-`system/*`; LLM-written once per user-space pair at creation, never per
+`assistant/*`; LLM-written once per user-space pair at creation, never per
 turn. When Morrow keeps missing a topic, the fix is **editing one line of
 English**, which is the same correctability argument that justified the
 symbolic archive in the first place.
@@ -1475,11 +1474,15 @@ bus/...`. Three reasons, in order of weight:
 - No reader needs the distinction. Recall only asks whether a row is
   about the assistant or the user, and both topics answer yes.
 
-`SharedCategories` becomes `["assistant", "self"]`. `self` stays: an
-earlier draft of this section claimed it was declared and never written,
-which was wrong — `ReflectionAgent.FixedCategory` files pushed ideas
-under `self/reflection`, and dropping it from the shared tier would send
-the persona's own ideas into whichever profile happened to be speaking.
+`SharedCategories` becomes `["assistant"]`. An earlier draft dropped
+`self` on the grounds it was declared and never written, which was wrong —
+`ReflectionAgent.FixedCategory` filed pushed ideas under `self/reflection`,
+and dropping the category alone would have sent the persona's own ideas
+into whichever profile happened to be speaking. Settled instead by moving
+the data: `self/reflection` became `assistant/reflection` and the JSONL
+snippet `self/identity` became `assistant/persona`, so one shared category
+covers all of it. No fallback was written for archives holding the old
+paths; there is one developer and one prototype.
 
 The cost, named: `assistant` is the role token, so every recalled row
 renders it into Intent's prompt carrying the helpful-assistant prior,
@@ -1609,9 +1612,10 @@ The four observed symptoms, unchanged, as candidate targets:
   breadth on an enumeration question. `MaxSelectedPairs` was raised across
   every tier (2/4/6/8) to give the selector more room, and
   `MaxConcurrentRecalls` with it so the wider selection is not trimmed back
-  by the fan-out cap. `MaxPickedPerWorker` is still a `const` in
-  `RecallAgent` rather than config, and it is the knob that decides how many
-  addresses reach Intent. The relevance rule is instruction text. Ship with a fixture that asks an enumeration question and asserts
+  by the fan-out cap. `MaxPickedPerWorker` moved from a `const` in
+  `RecallAgent` to per-tier config in the same pass, since it, not the pair
+  count, decides how many addresses reach Intent. The relevance rule is
+  instruction text. Ship with a fixture that asks an enumeration question and asserts
   more than one topic returns.
 - **Archivist needs handholding.** The longest instruction in the codebase
   and the heaviest on negative instruction. Its category/topic choices are

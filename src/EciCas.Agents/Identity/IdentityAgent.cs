@@ -16,7 +16,7 @@ namespace EciCas.Agents.Identity;
 /// Identity lookup: a persona snippet read from IArchiveStore and cached,
 /// re-hydrated whenever Archivist announces a new epoch on
 /// system.control (a write could have touched the persona record). Falls
-/// back to a fixed snippet when the store has nothing under "self/identity"
+/// back to a fixed snippet when the store has nothing under "assistant/persona"
 /// yet — nothing writes persona records in this pass, so that's the only
 /// path exercised today; the cache/invalidation plumbing is real and ready
 /// for whenever persona editing lands. Deterministic tier either way — no
@@ -27,13 +27,13 @@ public sealed class IdentityAgent : AgentBase
     public const string AdviceKey = "identity.advice";
 
     /// <summary>
-    /// Stays "self/identity" though the agent is now Identity: this is a
-    /// persisted archive path, not a name. Renaming it would orphan every
-    /// persona record already written, and "self" is a shared archive
-    /// category (see ParquetArchiveStore.DefaultSharedCategories) rather
-    /// than a reference to the agent.
+    /// "assistant/persona", not "assistant/identity": that pair already
+    /// exists in the parquet archive holding identity facts, and one address
+    /// meaning two things in two stores is exactly the ambiguity the rename
+    /// away from "self" was for. This is the snippet, in the JSONL agent
+    /// state store; the facts are rows, in parquet.
     /// </summary>
-    public const string IdentityPath = "self/identity";
+    public const string IdentityPath = "assistant/persona";
     private const string DefaultIdentitySnippet = "I'm ECI, here to help.";
 
     private readonly IMessageBus _bus;
