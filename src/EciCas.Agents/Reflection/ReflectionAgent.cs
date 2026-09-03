@@ -458,8 +458,11 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         await _passages.WriteAsync(added, revisit is null ? null : previous!.Id, cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("{Agent} wrote {Count} passage(s): {Texts}", Name, added.Count,
             string.Join(" | ", added.Select(p => $"[{p.Id}] {p.Text} -> [{string.Join(", ", p.Pairs.Select(q => $"{q.Category}/{q.Topic}"))}]")));
-        _logger.LogDebug("{Agent} passage detail: supersedes {Superseded}, parents [{Parents}], echo depth {Depth}, generation {Generation}, model {Model}",
-            Name, revisit is null ? "nothing" : previous!.Id, string.Join(", ", parents), depth, generation, _embeddings.ModelId);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("{Agent} passage detail: supersedes {Superseded}, parents [{Parents}], echo depth {Depth}, generation {Generation}, model {Model}",
+                Name, revisit is null ? "nothing" : previous!.Id, string.Join(", ", parents), depth, generation, _embeddings.ModelId);
+        }
     }
 
     /// <summary>

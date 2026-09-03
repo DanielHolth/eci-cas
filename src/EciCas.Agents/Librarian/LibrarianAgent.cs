@@ -110,8 +110,11 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 
         var selection = envelope.Derive(Topics.SelectedPairs, Name, envelope.Severity, meta);
 
-        _logger.LogDebug("{Agent} selected {Count} pair(s): {Pairs}", Name, result.Count,
-            result.Count == 0 ? "none" : string.Join(", ", result.Select(p => $"{p.Category}/{p.Topic}")));
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("{Agent} selected {Count} pair(s): {Pairs}", Name, result.Count,
+                result.Count == 0 ? "none" : string.Join(", ", result.Select(p => $"{p.Category}/{p.Topic}")));
+        }
 
         _bus.Publish(Topics.SelectedPairs, selection);
     }
