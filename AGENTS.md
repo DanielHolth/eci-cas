@@ -57,6 +57,9 @@ numbers.
   output, and traps that have already cost someone an afternoon. Add to
   this whenever a debugging session turns up something worth not
   rediscovering.
+- `docs/codereview.md` — open review findings, worst first, each with the
+  evidence that confirmed it. Delete an entry when it is fixed rather
+  than marking it done; the file is a worklist, not a changelog.
 
 The Python prototype this project replaced lives in the sibling folder
 `eci-cas-python-prototype` (also pushed to its own remote as a
