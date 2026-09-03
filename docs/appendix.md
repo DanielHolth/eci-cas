@@ -94,6 +94,10 @@ now fires from `Publish` so this path is visible, but any console capture
 predating that commit cannot distinguish "recalled nothing" from "recalled
 everything quietly".
 
+Librarian had the same skip on the pair index and no longer does — it calls
+the selector on every turn the index is non-empty. So a `Librarian substrate
+call` line on a three-pair archive is expected, not a sign the archive grew.
+
 **`Archivist nothing` is about writing, not reading.** It means the
 extraction call found no new fact worth storing this turn. It says nothing
 about what the archive already holds.

@@ -1,4 +1,4 @@
-using EciCas.Agents.Perception;
+﻿using EciCas.Agents.Perception;
 using EciCas.Agents.Librarian;
 using EciCas.Bus;
 using EciCas.Core;
@@ -83,12 +83,19 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var loaded = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
 
-        // Same rule Librarian applies to the index, one stage down: when
-        // every loaded row would fit in a single worker's pick budget, the
-        // picking call can only return a subset of what passing them all
-        // gives Intent. Skipping it removes the second of the turn's three
-        // serial substrate calls on a young archive. Order is preserved —
-        // the store already sorted by Importance.
+        // When every loaded row would fit in a single worker's pick budget,
+        // the picking call can only return a subset of what passing them all
+        // gives Intent. Skipping it removes one of the turn's serial
+        // substrate calls on a young archive. Order is preserved — the store
+        // already sorted by Importance.
+        //
+        // Librarian used to skip on the same reasoning and no longer does:
+        // its cap bounds how many pairs Recall opens, so passing an
+        // under-cap index whole is only free while the index is tiny, and it
+        // meant the selector never ran during exactly the period its
+        // judgment was being tuned. This one stays because the budget it
+        // guards is per-worker, not per-turn — an under-budget chunk is
+        // genuinely nothing to choose from.
         // Guarded because the join is an argument, not part of the template:
         // it walks every loaded row on every turn at every level, and only
         // Debug ever reads the result.

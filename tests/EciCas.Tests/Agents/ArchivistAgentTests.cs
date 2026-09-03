@@ -228,24 +228,34 @@ public class ArchivistAgentTests
     }
 
     /// <summary>
-    /// The instruction must contain no line that would parse as a fact.
+    /// Every literal example in the instruction must be about the sentinel
+    /// subject, so that a copied one is obvious in the archive.
     ///
-    /// It used to carry four worked examples, and a real substrate copied
-    /// the first one back on a turn that stated nothing — "What is my
-    /// name?" — filing it as an extraction every turn after. It went
-    /// unnoticed because the example used the developer's own name, so a
-    /// copied example and a correct extraction were the same string.
+    /// The instruction once carried four worked examples and a real
+    /// substrate copied the first back on a turn that stated nothing —
+    /// "What is my name?" — filing it every turn after. It hid because the
+    /// example used the developer's own name: a copied example and a
+    /// correct extraction were the same string.
     ///
-    /// The examples are gone rather than guarded, which leaves the format
-    /// spec and the known-pairs list to teach the shape. This test is what
-    /// keeps them gone: re-adding one is the natural fix for a model that
-    /// starts formatting badly, and it would reintroduce the bug silently.
-    /// The placeholder line is excluded by its angle brackets, which is
-    /// also what makes it uncopyable as a fact.
+    /// Deleting the examples fixed that and cost something else. Without
+    /// one, the model stopped reusing known category/topic groups and
+    /// started restating the value in the subject slot. Examples teach the
+    /// discipline, not just the format, so they are back — and the way to
+    /// keep the old bug from coming back with them is to make every example
+    /// unfalsifiable as an extraction. No turn will ever state a fact about
+    /// Lisbon's rainfall, so such a row can only have been copied.
     /// </summary>
     [Fact]
-    public void ShippedInstruction_DemonstratesNoFactItCouldBeCopiedFrom()
+    public void ShippedInstruction_ExamplesAreAboutNothingTheTurnCouldBeAbout()
     {
+        // A worked example is the strongest way to teach shape and the
+        // easiest thing to copy out as a fact — this once shipped an
+        // example using the developer's real name, so a copied example and
+        // a true extraction were byte-identical and the bug hid for weeks.
+        // The examples are back because removing them cost category
+        // discipline, but every literal one now has to be about the
+        // sentinel subject: nothing a turn says will ever produce a
+        // "lisbon" row, so a copy announces itself in the archive.
         var lines = ShippedInstructions.Store.For("Archivist")
             .Split('\n')
             .Select(l => l.Trim())
@@ -253,6 +263,7 @@ public class ArchivistAgentTests
             .Where(l => !l.Contains('<'))
             .ToList();
 
-        Assert.Empty(lines);
+        Assert.NotEmpty(lines);
+        Assert.All(lines, l => Assert.Contains("subject=lisbon", l, StringComparison.Ordinal));
     }
 }

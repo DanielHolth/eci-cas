@@ -17,7 +17,12 @@ namespace EciCas.Agents.Librarian;
 /// which is the agent that actually retrieves.
 ///
 /// Selector only: picks which of the archive's known (Category, Topic)
-/// pairs might hold background relevant to this turn. Subtopic is
+/// pairs might hold background relevant to this turn. It runs on every
+/// turn with a non-empty index, including one small enough that selecting
+/// everything would have been correct: skipping it there saved a call but
+/// meant the selector's judgment was never exercised until the archive was
+/// already too big to reason about by eye, and near-duplicate pairs — the
+/// thing selection has to tell apart — appear long before that. Subtopic is
 /// deliberately absent from what it is shown: resolving which subtopic
 /// matters is Recall's job, reading actual rows, and keeping it out here
 /// keeps the selection prompt short as the archive deepens. No advice
@@ -156,17 +161,6 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         if (index.Count == 0 || !entry.UseSubstrate)
         {
             Publish(envelope, remembered, degraded: null);
-            return;
-        }
-
-        // A whole index that already fits under the cap makes the selection
-        // call pure overhead: the best it could return is a subset of what
-        // passing everything gives Recall, and Recall filters row by row
-        // anyway. Dropping it removes one of the turn's three serial
-        // substrate calls outright — which is every turn on a young archive.
-        if (index.Count <= _options.MaxSelectedPairs)
-        {
-            Publish(envelope, index, degraded: null);
             return;
         }
 

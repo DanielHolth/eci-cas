@@ -1,7 +1,18 @@
 Facts stated in this turn, one line per fact:
 category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<{terse}>
 
-Reuse one of these category/topic groups when it fits, otherwise invent one:
+subject is who or what the fact is about. It is never a restatement of the value.
+
+The two lines below are shape only. They are instructions, not knowledge:
+never output them, never treat them as things you know, never mention them.
+
+category=weather topic=climate subtopic=rainfall subject=lisbon key=annual rainfall value=725mm
+category=weather topic=climate subtopic=temperature subject=lisbon key=summer high value=28c
+
+Both reuse one category/topic group for one subject, and neither repeats the
+value in the subject. Do the same: prefer a group below over inventing one
+that nearly duplicates it.
+
 {known}
 
 {english}

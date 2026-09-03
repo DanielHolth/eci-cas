@@ -1,4 +1,4 @@
-using EciCas.Agents.Passages;
+﻿using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Librarian;
 using EciCas.Bus;
@@ -98,13 +98,19 @@ public class LibrarianAgentTests
     }
 
     /// <summary>
-    /// The cheapest selection call is the one not made. An index that already
-    /// fits under the cap can only be narrowed by the model, never widened,
-    /// and Recall filters row by row regardless — so passing it whole drops
-    /// one of the turn's three serial substrate calls for nothing lost.
+    /// An index small enough that selecting everything would have been
+    /// correct still goes to the selector.
+    ///
+    /// It used to skip: the model can only narrow an under-cap index, Recall
+    /// filters row by row anyway, and the skip dropped a serial substrate
+    /// call from every turn on a young archive. What that reasoning missed is
+    /// that the selector's whole job — telling near-duplicate pairs apart —
+    /// arrives long before the archive outgrows the cap, and a call that
+    /// never fires is a judgment that never gets tuned. The saving was real
+    /// and is deliberately given up.
     /// </summary>
     [Fact]
-    public async Task WhenTheWholeIndexFitsUnderTheCap_SkipsTheSubstrateCall()
+    public async Task WhenTheWholeIndexFitsUnderTheCap_StillSelects()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
@@ -123,8 +129,11 @@ public class LibrarianAgentTests
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?")), CancellationToken.None);
 
-        Assert.False(called);
+        Assert.True(called);
+
+        // One, not three: the selector answered "0" and is now believed.
         Assert.True(selections.TryRead(out var selection));
-        Assert.Equal(3, selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!.Count);
+        var selected = selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!;
+        Assert.Equal("topic0", Assert.Single(selected).Topic);
     }
 }
