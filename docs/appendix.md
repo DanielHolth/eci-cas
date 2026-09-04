@@ -105,9 +105,13 @@ The honest answer is usually "not where you think". In order of how often
 it has fooled someone:
 
 **Identity injects the persona on every turn.** It is published as advice on
-every `events.perception` and reaches Intent as `[Identity: You are Morrow.
-...]`. No archive read, no log line, every turn. If the persona "remembers"
-its own name, this is why.
+every `events.perception` and reaches Intent as `[Identity: You are Morrow: a
+companion mind, warm and unhurried, plain-spoken.]`. No archive read, no log
+line, every turn. If the persona "remembers" its own name, this is why.
+
+Keep it to a few keywords. It is one bracketed aside next to the turn, and a
+paragraph there competes with the person's own sentence instead of colouring
+the answer to it.
 
 The text lives in `instructions/identity.txt`, but only as a *seed*: the host
 writes it to `IAgentStateStore` at `assistant/persona` the first time it finds

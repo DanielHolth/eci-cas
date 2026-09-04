@@ -249,6 +249,14 @@ from then on. Editing the file changes nothing on a brain that already has
 one — deliberately, since a persona meant to grow should not be silently
 overwritten by a `git pull`. The boot log says which of the two happened.
 
+**It is a colour, not a brief.** The seed is a handful of keywords —
+"a companion mind, warm and unhurried, plain-spoken" — because it reaches
+Intent as one bracketed aside beside the turn itself. Written as a
+paragraph of rules it stopped colouring and started competing: standing
+description outweighing the sentence the person actually typed. What the
+persona *is made of* is the architecture's concern, not the persona's;
+Intent does not need to be told it has a memory.
+
 ## Storage: a library, not an agent
 
 `IArchiveStore` owns the archive files, schema, and all concurrency,
@@ -549,6 +557,13 @@ in — applied in `IntentAgent.BuildPrompt`/`AppendAdvice`,
 `LibrarianAgent.BuildPrompt`, and `ArchivistAgent.ExtractFactsAsync` —
 so the per-hop ceiling is fixed no matter how deep a loop runs, rather
 than trying to track or trim history.
+
+It flattens as well as caps. Every call site folds the result into a slot
+that is one line by construction — a bracketed aside like `[Identity: …]`,
+or an entry in a numbered list the model answers by index — so a value
+carrying its own newlines splits that slot and takes the prompt's structure
+with it. The persona seed did exactly that: written as a hard-wrapped
+paragraph, it put four line breaks inside Intent's `[Identity: …]` bracket.
 
 ## Console output
 

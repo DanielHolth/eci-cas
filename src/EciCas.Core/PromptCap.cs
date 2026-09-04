@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace EciCas.Core;
 
 /// <summary>
@@ -9,18 +11,32 @@ namespace EciCas.Core;
 /// through. Capping what each hop contributes — not tracking or trimming
 /// history — is enough to make that impossible: the ceiling per hop stays
 /// fixed no matter how many generations deep the loop runs.
+///
+/// It also flattens. Every call site folds the result into a slot that is
+/// one line by construction — a bracketed aside like "[Identity: …]", or an
+/// entry in a numbered list the model is asked to answer by index. A value
+/// carrying its own newlines splits that slot in half and the structure the
+/// prompt was counting on is gone.
 /// </summary>
-public static class PromptCap
+public static partial class PromptCap
 {
     public const int DefaultMaxChars = 240;
 
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRun { get; }
+
     public static string Apply(string? text, int maxChars = DefaultMaxChars)
     {
-        if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
+        if (string.IsNullOrEmpty(text))
         {
-            return text ?? string.Empty;
+            return string.Empty;
         }
 
-        return text[..maxChars] + "…";
+        // Flatten before measuring, so the cap counts what the prompt will
+        // actually carry rather than the indentation of the source file it
+        // was written in.
+        var flat = WhitespaceRun.Replace(text, " ").Trim();
+
+        return flat.Length <= maxChars ? flat : flat[..maxChars] + "…";
     }
 }
