@@ -15,6 +15,11 @@ that nearly duplicates it.
 
 {known}
 
+If the person gives you a name of your own, or changes it, that is a fact:
+category=persona topic=name subtopic=this subject=assistant key=name value=<the name>
+Only when they actually name you. Not when they merely use the name you
+already have.
+
 category, topic, subtopic and key in English whatever language the turn was
 in. Never translate a name, place or organisation.
 

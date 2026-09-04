@@ -82,6 +82,11 @@ Remove-Item src\EciCas.Host\bin\Debug\net10.0\memory.jsonl
 dotnet run --project src/EciCas.Host -- --Tier=Default --Identity:Profile=grump
 ```
 
+Everyone's persona answers to `Morrow` until they rename it — say so in a
+turn, and it sticks if Archivist judges the name worth writing down. The name
+under the avatar is per profile, so two people on one device can each call it
+something different. `Identity:DefaultName` changes what it starts as.
+
 ## Run it locally
 
 ```bash
@@ -174,8 +179,10 @@ re-seed. That file holds several profiles as `## ` sections and
 person, never a paragraph of rules, because it reaches Intent as one
 bracketed aside beside the turn and a brief there competes with the person's
 own sentence instead of colouring the reply to it. No profile carries a name:
-the persona is told one like anything else it is told, and keeps it only if
-Archivist writes it down.
+the persona answers to `Identity:DefaultName` until someone renames it in a
+turn, and that rename is per profile, stored at
+`persona/name/this/assistant/name` — not under `assistant`, which is shared,
+so one household's two people each name their own.
 
 `UseSubstrate: false` skips the substrate call and publishes the agent's
 fallback instead. It is honoured on all five substrate-calling agents —

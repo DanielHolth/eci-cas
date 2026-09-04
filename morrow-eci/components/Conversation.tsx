@@ -11,6 +11,7 @@ import { IdeaStream } from "@/components/IdeaStream";
 import { ProfileChip } from "@/components/ProfileChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEciStream } from "@/lib/useEciStream";
+import { usePersona } from "@/lib/usePersona";
 import { useSpeaking } from "@/lib/useSpeaking";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { sendPerceive } from "@/lib/api";
@@ -25,6 +26,12 @@ import type { Profile } from "@/lib/profiles";
 export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch: () => void }) {
   const { turns, connected, acknowledge } = useEciStream(profile.id);
   const log = useTurnLog(profile.id);
+
+  // A rename is an ordinary archive write, so nothing pushes it. Re-reading
+  // once a turn has settled is the cheapest correct trigger: settling is
+  // exactly the point at which Archivist has finished writing.
+  const persona = usePersona(profile.id, log.length);
+
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
@@ -93,6 +100,12 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
           speaking={speaking}
           identity={profile.avatar}
         />
+
+        {persona.name && (
+          <p className="-mt-3 shrink-0 text-sm font-medium tracking-wide text-neutral-600 dark:text-neutral-300">
+            {persona.name}
+          </p>
+        )}
 
         {turn && turn.bundle.length > 0 && (
           <ThoughtBubbles findings={turn.bundle} faded={turn.stage === "speaking"} />

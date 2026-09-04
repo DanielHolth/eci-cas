@@ -57,6 +57,7 @@ constraint: read from the bus freely via SSE, write only through
 | Intent's advise/refuse output | `SpeechBubble` — dashed amber when Governance marks the turn `governance.degraded`, i.e. thought with a substrate missing |
 | `EpochWritten` (post-Memory milestone) | `ConsolidationDoodle` — clickable "+", first click reconciles, repeats are view-only |
 | Reflection's pushed idea (`perception.triggered_by = "self"`) | `IdeaStream` — a scrolling strip above the avatar's head, dashed and italic, never a transcript line; clicking one opens its entry in the drawer |
+| `GET /api/persona` (`src/EciCas.Host/Program.cs`) | The name under the avatar, and the tone line on the profile picker. Per profile and re-read once a turn settles, because a rename is an ordinary archive write that nothing pushes |
 | `GET /api/log` + `/api/log/stream` (`src/EciCas.Host/TurnLog`) | `EventLog` — a toggled right-hand drawer, one collapsed row per event, expanding to the fixed slot order Perception, Impulse, Librarian-n, Hindsight-n, Intent, Security (only when not green), Archivist-n, Reflection (behind a sub-toggle), Cost, Latency |
 
 The drawer holds no reduction of its own. `TurnProjection` on the host folds

@@ -236,6 +236,8 @@ public class SmokeTests
             services.AddSingleton<IArchiveStore>(new InMemoryArchiveStore());
             services.AddSingleton<IPassageStore>(new InMemoryPassageStore());
             services.AddSingleton<IAgentStateStore>(new JsonlAgentStateStore(Path.Combine(_dir, "memory.jsonl")));
+            services.AddSingleton(Options.Create(new PersonaNameOptions()));
+            services.AddSingleton<PersonaName>();
             // One rule, and a deliberately unmatchable one: SecurityRuleSet
             // refuses an empty set because clearing everything is
             // indistinguishable from mocking it out. The smoke test wants

@@ -1,4 +1,5 @@
 ﻿using EciCas.Agents.Archivist;
+using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -38,19 +39,24 @@ public sealed class IdentityAgent : AgentBase
     /// <summary>What a persona that has lost its own description says instead.</summary>
     public const string StrangerSection = "stranger";
 
+    /// <summary>How the persona's own name is phrased to Intent. Prose, so revising it is not a rebuild.</summary>
+    public const string NameSection = "name";
+
     private readonly IMessageBus _bus;
     private readonly IAgentStateStore _store;
     private readonly IInstructionStore _instructions;
+    private readonly PersonaName _names;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private string? _cachedIdentity;
 
     public IdentityAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IdentityAgent> logger, IAgentStateStore store,
-        IInstructionStore instructions)
+        IInstructionStore instructions, PersonaName names)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
         _instructions = instructions;
+        _names = names;
     }
 
     public override string Name => "Identity";
@@ -72,7 +78,15 @@ public sealed class IdentityAgent : AgentBase
     private async Task OnPerceptionAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         var identity = await GetIdentityAsync(cancellationToken).ConfigureAwait(false);
-        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(AdviceKey, identity));
+
+        // The tone is one persona for the whole device; the name belongs to
+        // whoever is talking. They arrive as one line because Intent reads one
+        // bracketed aside, not a structure.
+        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
+        var name = await _names.ForAsync(profileId, cancellationToken).ConfigureAwait(false);
+        var advice = $"{identity} {InstructionFile.Fill(_instructions.For(Name, NameSection), ("name", name))}";
+
+        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(AdviceKey, advice));
         _bus.Publish(Topics.Advisories, advisory);
     }
 
@@ -96,6 +110,8 @@ public sealed class IdentityAgent : AgentBase
         {
             _cacheLock.Release();
         }
+
+        _names.Forget();
     }
 
     private async Task<string> GetIdentityAsync(CancellationToken cancellationToken)

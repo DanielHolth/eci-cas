@@ -38,7 +38,7 @@ public sealed class FileInstructionStore : IInstructionStore
             ["Recall"] = ["rows", "max", "text"],
             ["Archivist"] = ["known", "terse", "text"],
             ["Reflection"] = ["turns", "revisit", "moods", "terse", "previous", "topics", "drive"],
-            ["Identity"] = [],
+            ["Identity"] = ["name"],
             ["Impulse"] = [],
             ["Governance"] = ["cause", "impaired", "concern"],
         };

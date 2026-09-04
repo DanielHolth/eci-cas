@@ -55,9 +55,9 @@ export function ProfilePicker({
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           Everyone gets their own memories — and their own Morrow.
         </p>
-        {persona && (
+        {persona.text && (
           <p className="mx-auto mt-3 max-w-sm text-sm italic text-neutral-400 dark:text-neutral-500">
-            {persona}
+            {persona.text}
           </p>
         )}
       </div>

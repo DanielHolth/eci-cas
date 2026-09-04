@@ -113,7 +113,8 @@ it has fooled someone:
 
 **Identity injects the persona on every turn.** It is published as advice on
 every `events.perception` and reaches Intent as `[Identity: Your tone is warm,
-unhurried, plain-spoken.]`. No archive read, no log line, every turn.
+unhurried, plain-spoken. You are called Morrow.]` — tone and name in one
+aside, because one aside is what Intent reads. No log line, every turn.
 
 Keep it to a few keywords. It is one bracketed aside next to the turn, and a
 paragraph there competes with the person's own sentence instead of colouring
@@ -137,11 +138,29 @@ Remove-Item src\EciCas.Host\bin\Debug\net10.0\memory.jsonl
 dotnet run --project src\EciCas.Host --Identity:Profile=grump
 ```
 
-**It does not know its own name.** Nothing seeds one. If you want it to have
-one, tell it in a turn and let Archivist decide the name is worth keeping —
-that is the intended path and the only one that exercises the write. Before
-that, asking it who it is gets an honest blank. The archive's single seed
-record is `assistant/system/eci/this/version = 0.1`.
+**Its name is per profile, and the default is not a record.** Every profile
+starts calling it `Identity:DefaultName` (`Morrow`). That is a fallback, not
+a row: nothing is written until somebody renames it, so there is no seed for
+a rename to lose a race with. Renaming is ordinary conversation — say what to
+call it and let Archivist decide the fact is worth keeping. The address is
+`persona/name/this/assistant/name`, deliberately *not* under `assistant`,
+which is a shared category: two people on one device name their own persona
+and neither overwrites the other. The archive's single seed record remains
+`assistant/system/eci/this/version = 0.1`.
+
+Two reasons a rename does not stick, both undramatic. On the mock tier
+Archivist extracts nothing at all, so no name is ever written — the console
+says `Archivist nothing`, and that is the whole story. On a real tier it is a
+judgement call, so saying it once in passing may simply not clear the bar;
+say it plainly. To check what actually landed rather than guessing, ask the
+surface:
+
+```powershell
+curl.exe -s "http://localhost:5179/api/persona?profileId=daniel"
+```
+
+That endpoint and Identity read the same object, so what it prints is what
+Intent was told.
 
 `memory.jsonl` also holds Impulse's drive states, and keeps a window of them
 per path rather than only the newest, because the superseded ones are the only

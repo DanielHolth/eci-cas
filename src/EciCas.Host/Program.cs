@@ -277,6 +277,9 @@ var costPath = builder.Configuration["TurnLog:CostPath"] ?? "cost.json";
 builder.Services.AddSingleton(new CostLedger(
     string.IsNullOrWhiteSpace(costPath) ? null : Path.Combine(AppContext.BaseDirectory, costPath)));
 
+builder.Services.Configure<PersonaNameOptions>(builder.Configuration.GetSection("Identity"));
+builder.Services.AddSingleton<PersonaName>();
+
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
 RegisterAgent<LibrarianAgent>(builder.Services);
@@ -320,11 +323,16 @@ app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.Lis
 // The persona's own card, read-only. Without this the personality is the one
 // configured thing with no surface at all: it colours every reply and a
 // person could only find out what it said by opening a JSONL file.
-app.MapGet("/api/persona", async (IAgentStateStore store, IInstructionStore instructions, CancellationToken cancellationToken) =>
+app.MapGet("/api/persona", async (IAgentStateStore store, IInstructionStore instructions, PersonaName names,
+    string? profileId, CancellationToken cancellationToken) =>
 {
     var stored = await store.LookupAsync([IdentityAgent.IdentityPath], maxPerPath: 1, cancellationToken);
     var text = stored.Count > 0 ? stored[0].Content : instructions.For("Identity", IdentityAgent.StrangerSection);
-    return Results.Json(new { text }, jsonOptions);
+
+    // The name is per profile, so an unnamed caller (the picker, before
+    // anyone has chosen) gets the default rather than someone else's.
+    var name = await names.ForAsync(ProfileStore.IsValidId(profileId) ? profileId : null, cancellationToken);
+    return Results.Json(new { text, name }, jsonOptions);
 });
 
 app.MapPost("/api/profiles", (CreateProfileRequest request, ProfileStore profiles) =>

@@ -287,6 +287,33 @@ exercised while the name was a seed. The archive's one seed record is
 `assistant/system/eci/this/version`, the only thing true before anything has
 been said.
 
+**And its name belongs to whoever is talking.** `PersonaName` reads
+`persona/name/this/assistant/name` from the archive, per profile, and that
+address is chosen for one reason: `assistant` is in
+`Archive:SharedCategories`, so a name filed there would be one name for
+everybody on the device. Two people can name the same persona differently
+and neither overwrites the other. Until someone does, `Identity:DefaultName`
+answers — configuration and not a constant, because the name a person reads
+under the avatar on first boot is a naming decision, and revising it should
+not be a rebuild. There is still no record; the default is what is said when
+the lookup finds nothing, which is what keeps the first rename an ordinary
+first write rather than a race with a seed.
+
+One reader would have been enough for Intent, but the surface prints the
+name too, so both go through the same object rather than each running its
+own lookup — a persona introducing itself as Sol under a caption reading
+Morrow is the failure that avoids. The cache clears on any write at all,
+since a rename looks exactly like every other write from where Identity is
+standing, and a stale name is worse than a redundant Parquet read.
+
+**How it hears its own name.** `identity.txt` has a `name` section holding
+one sentence with a `{name}` placeholder, appended to whichever profile is
+in force so Intent receives tone and name as the single bracketed aside it
+already reads. `archivist.txt` names the address a name goes to, and stops
+there — it says *when the person names you*, not *always write this*, so
+Archivist still decides. That is the difference between a persona that was
+told its name and one that was configured with it.
+
 ## Storage: a library, not an agent
 
 `IArchiveStore` owns the archive files, schema, and all concurrency,
