@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AVATAR_CHOICES, type Profile } from "@/lib/profiles";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { usePersona } from "@/lib/usePersona";
 
 /**
  * Cold-start screen: pick who is talking, or make a new profile. Two fields
@@ -28,6 +29,7 @@ export function ProfilePicker({
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState<string>(AVATAR_CHOICES[0]);
   const [saving, setSaving] = useState(false);
+  const persona = usePersona();
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -53,6 +55,11 @@ export function ProfilePicker({
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           Everyone gets their own memories — and their own Morrow.
         </p>
+        {persona && (
+          <p className="mx-auto mt-3 max-w-sm text-sm italic text-neutral-400 dark:text-neutral-500">
+            {persona}
+          </p>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

@@ -50,13 +50,13 @@ constraint: read from the bus freely via SSE, write only through
 
 | Backend source | UI element |
 |---|---|
-| Perception's `perception.text` | `Utterance` — the person's own line, echoed opposite the persona so a turn on screen reads as an exchange |
+| Perception's `perception.text` and Intent's reply | `Transcript` — a scrolling chat log, the person's line to the right, the persona's to the left. The newest exchange is not the only one on screen, so a self-triggered idea landing mid-conversation no longer overwrites what was just said |
 | Impulse's reflex / drive-vector expression (`src/EciCas.Agents/Impulse`) | `Avatar` — a drawn face, one bucketed pose per expression; the animation is decoration on top, not extra state |
 | Librarian's selected pairs, Recall's picked rows, Identity's advice | `ThoughtBubbles` — three colored bubbles, persist faded after speaking. Each faculty thinks in its own shape (pairs / rows / a line of text), so each has its own reader in `useEciStream` that collapses it to one terse string |
 | Security's verdict (`src/EciCas.Agents/Security`) | `SecurityIcon` — only renders on yellow/red; click reveals the matched rule's concern |
 | Intent's advise/refuse output | `SpeechBubble` — dashed amber when Governance marks the turn `governance.degraded`, i.e. thought with a substrate missing |
 | `EpochWritten` (post-Memory milestone) | `ConsolidationDoodle` — clickable "+", first click reconciles, repeats are view-only |
-| Reflection's pushed idea (`perception.triggered_by = "self"`) | `IdeaBubble` — dashed and italic, never an `Utterance`; clicking opens its entry in the drawer |
+| Reflection's pushed idea (`perception.triggered_by = "self"`) | `IdeaStream` — a scrolling strip above the avatar's head, dashed and italic, never a transcript line; clicking one opens its entry in the drawer |
 | `GET /api/log` + `/api/log/stream` (`src/EciCas.Host/TurnLog`) | `EventLog` — a toggled right-hand drawer, one collapsed row per event, expanding to the fixed slot order Perception, Impulse, Librarian-n, Hindsight-n, Intent, Security (only when not green), Archivist-n, Reflection (behind a sub-toggle), Cost, Latency |
 
 The drawer holds no reduction of its own. `TurnProjection` on the host folds

@@ -2,6 +2,7 @@ using EciCas.Agents.Archivist;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
+using EciCas.Agents.Librarian;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
@@ -34,6 +35,88 @@ public class TurnLogTests
         }
 
         return record!;
+    }
+
+    private static Envelope Telemetry(Envelope from, string agent, decimal cost) =>
+        from.Derive(Topics.Telemetry, agent, Severity.Neutral,
+            MetaBag.Empty.With(SubstrateTrace.AgentKey, agent)
+                .With(SubstrateTrace.ClassKey, "fast-low")
+                .With(SubstrateTrace.LatencyKey, 5d)
+                .With(SubstrateTrace.CostKey, cost));
+
+    [Fact]
+    public void Apply_WithSelectedPairs_ReportsWhatLibrarianOpened()
+    {
+        var perception = Perception("who is vera?");
+        var record = Project(perception,
+            perception.Derive(Topics.SelectedPairs, "Librarian", Severity.Neutral,
+                MetaBag.Empty.With(LibrarianAgent.SelectedPairsKey,
+                    (IReadOnlyList<ArchivePair>)[new ArchivePair("person", "family")])));
+
+        Assert.Equal("person/family", Assert.Single(record.Pairs));
+    }
+
+    /// <summary>
+    /// A turn's own cost is arithmetic over its calls, but the two running
+    /// totals are not: they have to accumulate across events and, for the
+    /// lifetime figure, across restarts.
+    /// </summary>
+    [Fact]
+    public async Task RunningTotals_AccumulateAcrossEvents()
+    {
+        var log = Subscriber(new CapturingSink(), settleMs: 10_000);
+
+        var first = Perception("one");
+        await log.HandleAsync(first, CancellationToken.None);
+        await log.HandleAsync(Telemetry(first, "Intent", 0.25m), CancellationToken.None);
+
+        var second = Perception("two");
+        await log.HandleAsync(second, CancellationToken.None);
+        await log.HandleAsync(Telemetry(second, "Intent", 0.75m), CancellationToken.None);
+
+        var records = log.Recent(null);
+        Assert.Equal(0.25m, records[0].Cost);
+        Assert.Equal(0.25m, records[0].SessionCost);
+        Assert.Equal(0.75m, records[1].Cost);
+        Assert.Equal(1.00m, records[1].SessionCost);
+        Assert.Equal(1.00m, records[1].TotalCost);
+    }
+
+    [Fact]
+    public async Task LifetimeTotal_SurvivesARestart_WhereTheSessionTotalDoesNot()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"eci-cost-{Guid.NewGuid():N}.json");
+        try
+        {
+            var first = new CostLedger(path);
+            var log = Subscriber(new CapturingSink(), settleMs: 1, ledger: first);
+            var perception = Perception("one");
+            await log.HandleAsync(perception, CancellationToken.None);
+            await log.HandleAsync(Telemetry(perception, "Intent", 0.4m), CancellationToken.None);
+            await Task.Delay(200);
+
+            var restarted = new CostLedger(path);
+            Assert.Equal(0m, restarted.Session);
+            Assert.Equal(0.4m, restarted.Lifetime);
+
+            restarted.Add(0.1m);
+            Assert.Equal(0.1m, restarted.Session);
+            Assert.Equal(0.5m, restarted.Lifetime);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CostLedger_WithNoPath_StillCountsTheSession()
+    {
+        var ledger = new CostLedger(path: null);
+        ledger.Add(0.3m);
+
+        Assert.Equal(0.3m, ledger.Session);
+        Assert.Equal(0.3m, ledger.Lifetime);
     }
 
     [Fact]
@@ -205,11 +288,13 @@ public class TurnLogTests
         Assert.Equal(["two", "three"], log.Recent(null).Select(r => r.Perception));
     }
 
-    private static TurnLogSubscriber Subscriber(ITurnLogSink sink, int settleMs, int retain = 100)
+    private static TurnLogSubscriber Subscriber(ITurnLogSink sink, int settleMs, int retain = 100,
+        CostLedger? ledger = null)
     {
         var activity = new BusActivityTracker();
         return new TurnLogSubscriber(new ChannelBus(activity), activity, NullLogger<TurnLogSubscriber>.Instance,
-            Options.Create(new TurnLogOptions { SettleMs = settleMs, Retain = retain }), [sink]);
+            Options.Create(new TurnLogOptions { SettleMs = settleMs, Retain = retain }), [sink],
+            ledger ?? new CostLedger(path: null));
     }
 
     private sealed class RecordingBus : IMessageBus

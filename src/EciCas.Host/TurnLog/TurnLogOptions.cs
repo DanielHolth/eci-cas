@@ -15,4 +15,12 @@ public sealed class TurnLogOptions
 
     /// <summary>Where to append the JSONL log, relative to the content root. Empty means no disk log — off by default, since this is the one part of the surface that writes.</summary>
     public string Path { get; set; } = "";
+
+    /// <summary>
+    /// Where the lifetime spend total is kept, relative to the content root.
+    /// On by default, unlike <see cref="Path"/>: a running total that resets
+    /// every restart answers nothing anyone asks about money. Empty turns it
+    /// off, and the session total still works.
+    /// </summary>
+    public string CostPath { get; set; } = "cost.json";
 }

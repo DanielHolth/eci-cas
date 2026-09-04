@@ -12,11 +12,15 @@ function stamp(iso: string): { date: string; time: string } {
   };
 }
 
-/** An em dash when nothing priced the turn. Both null and zero land here:
- * the mock tier prices at zero, and a rendered $0.0000 would read as free
- * rather than as unmeasured. */
+/** Four decimals is enough for a turn and not enough for a fraction of a
+ * tenth of a cent, which is what a cheap model on a short turn actually
+ * costs. A rendered $0.0000 read as free, so anything that rounds away
+ * says so instead. Null — nothing priced the turn at all — is an em dash. */
 function money(total: number | null): string {
-  return total ? `$${total.toFixed(4)}` : "—";
+  if (total === null) return "—";
+  if (total === 0) return "$0";
+  if (total < 0.0001) return "<$0.0001";
+  return `$${total.toFixed(4)}`;
 }
 
 /** The addends are the individual calls; the total is the turn's wall-clock.
@@ -62,7 +66,9 @@ function headlineOf(record: TurnRecord): string {
  * person should read first. A slot with nothing in it is not drawn.
  */
 export function EventLogEntry({ record, openSignal }: { record: TurnRecord; openSignal?: number }) {
-  const [expanded, setExpanded] = useState(false);
+  // Open by default. The drawer exists to be read, and a wall of collapsed
+  // one-line summaries made seeing a turn a click per event.
+  const [expanded, setExpanded] = useState(true);
   const [showReflection, setShowReflection] = useState(false);
   const [lastSignal, setLastSignal] = useState(openSignal);
 
@@ -96,8 +102,13 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
             <Line agent={record.selfTriggered ? "Idea" : "Perception"}>{record.perception}</Line>
           )}
           {record.impulse && <Line agent="Impulse">{record.impulse}</Line>}
+          {record.pairs.map((pair, i) => (
+            <Line key={`pair-${i}`} agent={`Librarian-${i + 1}`}>
+              {pair}
+            </Line>
+          ))}
           {record.reads.map((read, i) => (
-            <Line key={`read-${i}`} agent={`Librarian-${i + 1}`}>
+            <Line key={`read-${i}`} agent={`Recall-${i + 1}`}>
               {read}
             </Line>
           ))}
@@ -146,7 +157,11 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
           {record.calls.length > 0 && (
             <>
               <Line agent="Cost">
-                {money(record.cost)}
+                <span className="text-neutral-800 dark:text-neutral-200">event {money(record.cost)}</span>
+                <span className="text-neutral-400 dark:text-neutral-500">
+                  {" · "}session {money(record.sessionCost)}
+                  {" · "}total {money(record.totalCost)}
+                </span>
                 <span className="ml-1 text-neutral-400 dark:text-neutral-500">
                   ({record.calls.map((c) => c.label ?? c.agent).join(", ")})
                 </span>

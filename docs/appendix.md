@@ -99,6 +99,13 @@ not rewrite the file.
 `TurnLog:Retain` (100) caps what `/api/log` can replay. It is memory, not
 history; the file has no cap, and the archive remains the audit trail.
 
+Separately, `TurnLog:CostPath` (`cost.json`, on by default, resolved the
+same way) holds one number: everything this installation has ever spent on
+substrate calls. The drawer's `Cost:` line reads *event · session · total* —
+the first from the record, the second reset by every host restart, the third
+from that file. Deleting it is how you zero the lifetime figure; nothing
+else reads it, and losing it costs no history beyond the total itself.
+
 ## Where did the persona get that from?
 
 The honest answer is usually "not where you think". In order of how often

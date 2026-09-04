@@ -4,14 +4,14 @@ import { useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { ThoughtBubbles } from "@/components/ThoughtBubbles";
 import { SecurityIcon } from "@/components/SecurityIcon";
-import { SpeechBubble } from "@/components/SpeechBubble";
-import { Utterance } from "@/components/Utterance";
+import { Transcript } from "@/components/Transcript";
 import { ConsolidationDoodle } from "@/components/ConsolidationDoodle";
 import { EventLog } from "@/components/EventLog";
-import { IdeaBubble } from "@/components/IdeaBubble";
+import { IdeaStream } from "@/components/IdeaStream";
 import { ProfileChip } from "@/components/ProfileChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEciStream } from "@/lib/useEciStream";
+import { useSpeaking } from "@/lib/useSpeaking";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { sendPerceive } from "@/lib/api";
 import type { Profile } from "@/lib/profiles";
@@ -35,6 +35,11 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
 
   const turn = turns[turns.length - 1];
 
+  // The last thing actually said, which is not the last turn: Reflection's
+  // ideas arrive as turns of their own and say nothing aloud.
+  const spoken = turns.filter((t) => t.output);
+  const speaking = useSpeaking(spoken[spoken.length - 1]?.output?.text);
+
   function openInLog(correlationId: string) {
     setLogOpen(true);
     setOpened((current) => ({ correlationId, signal: (current?.signal ?? 0) + 1 }));
@@ -57,7 +62,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
 
   return (
     <div className="flex h-screen">
-      <main className="flex-1 min-w-0 overflow-y-auto flex flex-col items-center gap-8 p-10 bg-neutral-50 dark:bg-neutral-950">
+      <main className="flex-1 min-w-0 overflow-hidden flex flex-col items-center gap-6 p-10 bg-neutral-50 dark:bg-neutral-950">
         <div className="flex w-full max-w-md items-start justify-between gap-4">
           <div className="flex-1 text-center">
             <h1 className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">ECI-CAS Avatar</h1>
@@ -80,13 +85,12 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
           </div>
         </div>
 
-        {turn?.input && <Utterance text={turn.input} />}
-        {turn?.idea && <IdeaBubble idea={turn.idea} onOpen={() => openInLog(turn.turnId)} />}
+        <IdeaStream turns={turns} onOpen={openInLog} />
 
         <Avatar
           expression={turn?.impulse?.expression ?? "neutral"}
           reflex={turn?.impulse?.reflex ?? "At rest."}
-          speaking={turn?.stage === "speaking" && !!turn.output}
+          speaking={speaking}
           identity={profile.avatar}
         />
 
@@ -98,8 +102,6 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
           <SecurityIcon outcomes={turn.security} />
         )}
 
-        {turn?.stage === "speaking" && turn.output && <SpeechBubble output={turn.output} />}
-
         {turn?.stage === "speaking" && turn.epoch && (
           <ConsolidationDoodle
             epoch={turn.epoch}
@@ -107,7 +109,9 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
           />
         )}
 
-        <form onSubmit={handleSubmit} className="mt-4 flex w-full max-w-md gap-2">
+        <Transcript turns={turns} />
+
+        <form onSubmit={handleSubmit} className="flex w-full max-w-md shrink-0 gap-2">
           <input
             type="text"
             value={text}

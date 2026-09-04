@@ -28,6 +28,7 @@ public sealed class TurnLogSubscriber : AgentBase
 {
     private readonly TurnLogOptions _options;
     private readonly IReadOnlyList<ITurnLogSink> _sinks;
+    private readonly CostLedger _ledger;
     private readonly ILogger _logger;
 
     private readonly Dictionary<Guid, Entry> _entries = [];
@@ -46,11 +47,12 @@ public sealed class TurnLogSubscriber : AgentBase
     private sealed record Client(ChannelWriter<TurnRecord> Writer, string? ProfileId);
 
     public TurnLogSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<TurnLogSubscriber> logger,
-        IOptions<TurnLogOptions> options, IEnumerable<ITurnLogSink> sinks)
+        IOptions<TurnLogOptions> options, IEnumerable<ITurnLogSink> sinks, CostLedger ledger)
         : base(bus, activity, logger)
     {
         _options = options.Value;
         _sinks = [.. sinks];
+        _ledger = ledger;
         _logger = logger;
     }
 
@@ -59,6 +61,15 @@ public sealed class TurnLogSubscriber : AgentBase
 
     public override Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        // Counted here rather than off the record, because a record is
+        // rebuilt on every envelope and re-summing it would double-count. A
+        // telemetry envelope is published once per call and never replayed,
+        // so adding as it lands is the one place the arithmetic is exact.
+        if (envelope.Topic == Topics.Telemetry && envelope.Meta.ContainsKey(SubstrateTrace.CostKey))
+        {
+            _ledger.Add(envelope.Meta.Get<decimal>(SubstrateTrace.CostKey));
+        }
+
         TurnRecord record;
         int version;
         lock (_gate)
@@ -74,6 +85,11 @@ public sealed class TurnLogSubscriber : AgentBase
             {
                 entry.Record = TurnProjection.Apply(entry.Record, envelope, entry.Record.Seq);
             }
+
+            // Stamped on every envelope, so an event that is still filling in
+            // shows the running totals as they stand — and freezes them once
+            // it goes quiet, which is what a replayed event should show.
+            entry.Record = entry.Record with { SessionCost = _ledger.Session, TotalCost = _ledger.Lifetime };
 
             entry.Version++;
             record = entry.Record;
@@ -165,6 +181,12 @@ public sealed class TurnLogSubscriber : AgentBase
                 _logger.LogWarning(ex, "{Agent} sink {Sink} failed for event {Seq}", Name, sink.GetType().Name, record.Seq);
             }
         }
+
+        // Once per settled event rather than once per call: the lifetime
+        // total only has to survive a restart, and a file rewritten on every
+        // substrate trace would write five times per turn to say the same
+        // thing.
+        await _ledger.PersistAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>A client that named no profile sees everything; one that did also sees the events nobody owns, since the persona's own thinking belongs to every window rather than to none.</summary>

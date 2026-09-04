@@ -270,6 +270,13 @@ if (!string.IsNullOrWhiteSpace(turnLogPath))
     builder.Services.AddSingleton<ITurnLogSink, JsonlTurnLogSink>();
 }
 
+// Resolved against the binary the same way, and on by default: the session
+// total is arithmetic, but the lifetime total is only worth showing if it
+// outlives the process that spent it.
+var costPath = builder.Configuration["TurnLog:CostPath"] ?? "cost.json";
+builder.Services.AddSingleton(new CostLedger(
+    string.IsNullOrWhiteSpace(costPath) ? null : Path.Combine(AppContext.BaseDirectory, costPath)));
+
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
 RegisterAgent<LibrarianAgent>(builder.Services);
@@ -309,6 +316,16 @@ app.UseCors(CorsPolicy);
 var jsonOptions = app.Services.GetRequiredService<JsonSerializerOptions>();
 
 app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.List(), jsonOptions));
+
+// The persona's own card, read-only. Without this the personality is the one
+// configured thing with no surface at all: it colours every reply and a
+// person could only find out what it said by opening a JSONL file.
+app.MapGet("/api/persona", async (IAgentStateStore store, IInstructionStore instructions, CancellationToken cancellationToken) =>
+{
+    var stored = await store.LookupAsync([IdentityAgent.IdentityPath], maxPerPath: 1, cancellationToken);
+    var text = stored.Count > 0 ? stored[0].Content : instructions.For("Identity", IdentityAgent.StrangerSection);
+    return Results.Json(new { text }, jsonOptions);
+});
 
 app.MapPost("/api/profiles", (CreateProfileRequest request, ProfileStore profiles) =>
 {

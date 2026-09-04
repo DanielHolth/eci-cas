@@ -117,6 +117,7 @@ export interface TurnRecord {
   selfTriggered: boolean;
   impulse: string | null;
   reads: string[];
+  pairs: string[];
   hindsight: string[];
   intent: string | null;
   verdict: string | null;
@@ -127,5 +128,10 @@ export interface TurnRecord {
   calls: SubstrateCall[];
   concluded: boolean;
   cost: number | null;
+  /** Running totals as of this event: this host run, and every run ever.
+   * Frozen into the record, so replaying an old event shows what was true
+   * then rather than what is true now. */
+  sessionCost: number;
+  totalCost: number;
   wallClockMs: number;
 }

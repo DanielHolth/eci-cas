@@ -112,7 +112,7 @@ publishes the next envelope. That makes this table the whole contract.
 | `impulse.expression` | Impulse | Governance |
 | `impulse.reflex` | Impulse | Governance |
 | `identity.advice` | Identity | Intent |
-| `librarian.selected_pairs` | Librarian | Recall, Archivist |
+| `librarian.selected_pairs` | Librarian | Recall, Archivist, TurnLog |
 | `recall.facts` | Recall | Intent |
 | `hindsight.notes` | Hindsight | Intent |
 | `hindsight.note_ids` | Hindsight, Intent, Governance (both forward) | Reflection |
@@ -191,6 +191,17 @@ the person has been answered.
 Profile scoping mirrors `SseBroadcaster`: a client naming a profile sees its
 own turns plus the ones nobody owns, so a self-triggered idea appears in
 every window and one person's turn appears in no other.
+
+`CostLedger` keeps the two totals a per-event figure cannot answer: what
+this run has spent, and what every run has. Accumulation happens on the
+telemetry envelope as it arrives, never by re-summing the record — a record
+is rebuilt on every envelope of its turn, so summing it would count the same
+call once per envelope, while a telemetry envelope is published once and
+never replayed. Both figures are stamped onto the record rather than derived
+at render time, so reopening an old event shows what was true then. Only the
+lifetime total persists (`TurnLog:CostPath`, `cost.json` beside the
+archive); the session total starts at zero because that is what "this run"
+means.
 
 ## Governance: decision-only
 

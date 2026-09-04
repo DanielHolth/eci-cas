@@ -35,8 +35,11 @@ public sealed record TurnRecord
 
     public string? Impulse { get; init; }
 
-    /// <summary>Rows read out of the archive, at their full path. Recall does the reading; the surface files it under Librarian, which is the faculty a person asked for.</summary>
+    /// <summary>Rows read out of the archive, at their full path — Recall's work, after Librarian chose which pairs were worth opening.</summary>
     public IReadOnlyList<string> Reads { get; init; } = [];
+
+    /// <summary>Archive pairs Librarian selected this turn. What was considered, where <see cref="Reads"/> is what was found in it.</summary>
+    public IReadOnlyList<string> Pairs { get; init; } = [];
 
     public IReadOnlyList<string> Hindsight { get; init; } = [];
     public string? Intent { get; init; }
@@ -56,6 +59,17 @@ public sealed record TurnRecord
     /// <summary>Null when no call reported a cost, rather than zero.</summary>
     [JsonInclude]
     public decimal? Cost => Calls.Any(c => c.Cost is not null) ? Calls.Sum(c => c.Cost ?? 0m) : null;
+
+    /// <summary>
+    /// Everything spent this run as of this event, and everything spent ever
+    /// as of this event. Stamped by <see cref="TurnLogSubscriber"/> rather
+    /// than derived here: they are running totals the projection has no way
+    /// to know, and freezing them into the record is what makes an old event
+    /// still true when it is replayed a week later.
+    /// </summary>
+    public decimal SessionCost { get; init; }
+
+    public decimal TotalCost { get; init; }
 
     /// <summary>
     /// Wall-clock across the event, not the sum of the calls. The fan-out is
