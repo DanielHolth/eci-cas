@@ -44,11 +44,10 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   const unseenReflections = thoughtsOpen ? 0 : Math.max(0, reflectionCount(log) - seenReflections);
 
   function toggleThoughts() {
-    setThoughtsOpen((v) => {
-      const next = !v;
-      setSeenReflections(reflectionCount(log));
-      return next;
-    });
+    // Both writes happen on the click, not inside an updater: a state updater
+    // has to stay pure, and StrictMode runs it twice to prove it.
+    setSeenReflections(reflectionCount(log));
+    setThoughtsOpen((v) => !v);
   }
 
   // Opening the drawer at a specific event is a signal, not a selection: a
@@ -88,74 +87,78 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
         <ThoughtsPanel records={log} onClose={() => setThoughtsOpen(false)} onOpen={openInLog} />
       )}
 
-      <main className="flex-1 min-w-0 overflow-hidden flex flex-col items-center gap-2 p-4 bg-neutral-50 dark:bg-neutral-950">
-        <div className="flex w-full items-start justify-between gap-4">
-          <div className="flex-1 text-center">
-            <h1 className="text-base font-semibold text-neutral-800 dark:text-neutral-100">
-              {persona.name || "ECI-CAS"}
-            </h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              ECI · {connected ? "Live" : "Disconnected"} ·{" "}
-              {turn ? <span className="font-mono">{turn.stage}</span> : "waiting for a first thought"}
-              {" · "}
-              {turn?.impulse?.reflex ?? "At rest."}
-            </p>
+      <main className="flex flex-1 min-w-0 flex-col items-center overflow-hidden bg-neutral-50 p-4 dark:bg-neutral-950">
+        {/* The column stops widening past a readable measure; the drawers get
+            the rest of a wide screen, and on a narrow one this is a no-op. */}
+        <div className="flex h-full w-full max-w-3xl flex-col items-center gap-2">
+          <div className="flex w-full items-start justify-between gap-4">
+            <div className="flex-1 text-center">
+              <h1 className="text-base font-semibold text-neutral-800 dark:text-neutral-100">
+                {persona.name || "ECI-CAS"}
+              </h1>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                ECI · {connected ? "Live" : "Disconnected"} ·{" "}
+                {turn ? <span className="font-mono">{turn.stage}</span> : "waiting for a first thought"}
+                {" · "}
+                {turn?.impulse?.reflex ?? "At rest."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleThoughts}
+                aria-pressed={thoughtsOpen}
+                className="relative rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              >
+                Thoughts
+                {unseenReflections > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                    {unseenReflections}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogOpen((v) => !v)}
+                aria-pressed={logOpen}
+                className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              >
+                Debug
+              </button>
+              <ProfileChip profile={profile} onSwitch={onSwitch} />
+              <ThemeToggle />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleThoughts}
-              aria-pressed={thoughtsOpen}
-              className="relative rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            >
-              Thoughts
-              {unseenReflections > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
-                  {unseenReflections}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setLogOpen((v) => !v)}
-              aria-pressed={logOpen}
-              className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            >
-              Debug
-            </button>
-            <ProfileChip profile={profile} onSwitch={onSwitch} />
-            <ThemeToggle />
-          </div>
-        </div>
 
-        <Avatar
-          expression={turn?.impulse?.expression ?? "neutral"}
-          speaking={speaking}
-          identity={profile.avatar}
-        />
-
-        {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
-          <SecurityIcon outcomes={turn.security} />
-        )}
-
-        <Transcript turns={turns} />
-
-        <form onSubmit={handleSubmit} className="flex w-full shrink-0 gap-2">
-          <input
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={`Say something to ECI-CAS, ${profile.displayName}…`}
-            className="flex-1 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-neutral-500"
+          <Avatar
+            expression={turn?.impulse?.expression ?? "neutral"}
+            speaking={speaking}
+            identity={profile.avatar}
           />
-          <button
-            type="submit"
-            disabled={sending || !text.trim()}
-            className="rounded-full bg-neutral-800 px-5 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
-          >
-            Send
-          </button>
-        </form>
+
+          {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
+            <SecurityIcon outcomes={turn.security} />
+          )}
+
+          <Transcript turns={turns} />
+
+          <form onSubmit={handleSubmit} className="flex w-full shrink-0 gap-2">
+            <input
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={`Say something to ${persona.name || "ECI-CAS"}, ${profile.displayName}…`}
+              className="flex-1 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-neutral-500"
+            />
+            <button
+              type="submit"
+              disabled={sending || !text.trim()}
+              className="rounded-full bg-neutral-800 px-5 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
+            >
+              Send
+            </button>
+          </form>
+        </div>
       </main>
 
       {logOpen && (

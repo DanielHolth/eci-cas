@@ -27,8 +27,11 @@ export function Transcript({ turns }: { turns: TurnEvent[] }) {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [spoken.length]);
 
+  // Not `null`: the composer below is pinned to the bottom by this element's
+  // `flex-1`, so an empty transcript that renders nothing drags the input box
+  // up under the avatar and leaves the rest of the screen blank.
   if (spoken.length === 0) {
-    return null;
+    return <div className="w-full flex-1" />;
   }
 
   return (
