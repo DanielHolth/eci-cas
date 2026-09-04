@@ -12,9 +12,9 @@ function stamp(iso: string): { date: string; time: string } {
   };
 }
 
-/** Cost renders as an em dash when nothing priced the turn. A rendered
- * $0.0000 would read as free rather than as unmeasured, and the mock tier
- * prices nothing. */
+/** An em dash when nothing priced the turn. Both null and zero land here:
+ * the mock tier prices at zero, and a rendered $0.0000 would read as free
+ * rather than as unmeasured. */
 function money(total: number | null): string {
   return total ? `$${total.toFixed(4)}` : "—";
 }
@@ -37,6 +37,25 @@ function Line({ agent, children }: { agent: string; children: React.ReactNode })
   );
 }
 
+/** Only an event that started from something perceived is waiting on a
+ * reply. A Reflection flush never gets an Action envelope, so a permanent
+ * "still arriving" marker on it would be a lie. */
+function stillArriving(record: TurnRecord): boolean {
+  return !!record.perception && !record.concluded;
+}
+
+/** What the row says when collapsed. An event with no perception is the
+ * persona thinking on its own time — a Reflection flush that surfaced no
+ * idea still spent a call, so it is named by the faculties that ran rather
+ * than left as a blank line. */
+function headlineOf(record: TurnRecord): string {
+  const said = record.perception ?? record.idea ?? record.intent;
+  if (said) return said;
+
+  const ran = [...new Set(record.calls.map((c) => c.agent))];
+  return ran.length > 0 ? `${ran.join(", ")} — thinking on its own` : "…";
+}
+
 /**
  * One event, in a fixed slot order rather than arrival order — the fan-out is
  * concurrent by design, so what arrived first says nothing about what a
@@ -54,7 +73,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
   }
 
   const { date, time } = stamp(record.startedAt);
-  const headline = record.perception ?? record.idea ?? record.intent ?? "…";
+  const headline = headlineOf(record);
 
   return (
     <li className="border-b border-neutral-200 dark:border-neutral-800">
@@ -66,7 +85,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
         <span className="font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
           Event {String(record.seq).padStart(3, "0")} · {date} · {time}
           {record.selfTriggered && " · self"}
-          {!record.concluded && " · …"}
+          {stillArriving(record) && " · …"}
         </span>
         <span className="line-clamp-1 text-neutral-700 dark:text-neutral-300">{headline}</span>
       </button>

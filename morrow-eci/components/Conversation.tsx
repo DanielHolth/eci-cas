@@ -56,8 +56,8 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   }
 
   return (
-    <div className="flex flex-1 min-h-full">
-      <main className="flex-1 flex flex-col items-center gap-8 p-10 bg-neutral-50 dark:bg-neutral-950 min-h-full">
+    <div className="flex h-screen">
+      <main className="flex-1 min-w-0 overflow-y-auto flex flex-col items-center gap-8 p-10 bg-neutral-50 dark:bg-neutral-950">
         <div className="flex w-full max-w-md items-start justify-between gap-4">
           <div className="flex-1 text-center">
             <h1 className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">ECI-CAS Avatar</h1>

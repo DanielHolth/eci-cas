@@ -6,7 +6,9 @@ import type { TurnRecord } from "@/types/events";
 /**
  * Everything the console prints about a turn, on the surface. Newest first,
  * scrolling independently of the avatar column — a person watching the face
- * should not have to lose it to read what the faculties did.
+ * should not have to lose it to read what the faculties did. Below `lg` it
+ * overlays instead of splitting: a fixed-width pane taking half a narrow
+ * window leaves neither column readable.
  */
 export function EventLog({
   records,
@@ -20,7 +22,7 @@ export function EventLog({
   onClose: () => void;
 }) {
   return (
-    <aside className="flex h-full w-full max-w-sm flex-col border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+    <aside className="fixed inset-y-0 right-0 z-20 flex h-full w-80 shrink-0 flex-col border-l border-neutral-200 bg-white shadow-xl lg:static lg:z-auto lg:shadow-none dark:border-neutral-800 dark:bg-neutral-950">
       <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
         <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">History</h2>
         <button
