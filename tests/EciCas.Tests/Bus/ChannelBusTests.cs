@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using EciCas.Bus;
 using EciCas.Core;
 
@@ -6,26 +5,45 @@ namespace EciCas.Tests.Bus;
 
 public class ChannelBusTests
 {
-    [Fact]
-    public async Task Publish_WithSlowSubscriber_ReturnsImmediately()
+    /// <summary>
+    /// The rule the whole architecture rests on: Publish() never waits on a
+    /// subscriber. Proven by construction rather than by the clock — the
+    /// consumer takes the envelope and then parks on a gate that only this
+    /// test can open, and it opens it after Publish has already returned. A
+    /// bus that waited on its subscribers could not reach that line, so the
+    /// failure is a hang, and Timeout turns the hang into a red test.
+    ///
+    /// It used to assert "under 5 ms", which measured the machine as much as
+    /// the bus: a cold JIT on the first run of a session could lose that race
+    /// while the invariant held perfectly. Speed was never the property worth
+    /// pinning — not blocking is.
+    /// </summary>
+    [Fact(Timeout = 10_000)]
+    public async Task Publish_DoesNotWaitForASubscriberToFinishHandling()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var reader = bus.Subscribe(Topics.Perception);
 
+        var received = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         var consumer = Task.Run(async () =>
         {
-            var envelope = await reader.ReadAsync();
-            await Task.Delay(500);
+            await reader.ReadAsync();
+            received.SetResult();
+            await release.Task;
             activity.OnHandled();
         });
 
-        var stopwatch = Stopwatch.StartNew();
         bus.Publish(Topics.Perception, Envelope.Create(Topics.Perception, "Test", Severity.Neutral));
-        stopwatch.Stop();
 
-        Assert.True(stopwatch.ElapsedMilliseconds < 5, $"Publish took {stopwatch.ElapsedMilliseconds}ms — a slow subscriber must never block the publisher.");
+        // Publish returned. Nothing else has been allowed to happen yet, so
+        // this is the invariant itself and not a symptom of it.
+        Assert.False(consumer.IsCompleted);
 
+        await received.Task;
+        release.SetResult();
         await consumer;
     }
 
