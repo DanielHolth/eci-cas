@@ -1,20 +1,7 @@
 # Morrow-ECI
 
-A Next.js/React/TypeScript scaffold for the companion app described in
-the C# rebuild plan (`docs/architecture.md`). This is the frontend companion surface
-for the ECI-CAS backend, which lives one level up in this repo
-(`src/EciCas.*`).
-
-The surface milestone (M5) is now wired to the real backend: `lib/api.ts`
-posts to `POST /api/perceive`, and `lib/useEciStream.ts` opens
-`GET /api/stream` (an SSE feed off `EciCas.Host`, see
-`src/EciCas.Host/Program.cs`) and reduces the raw envelope feed into the
-`TurnEvent` shape the components already expected from the mock-era pass.
-The mock feed (`lib/mockTurn.ts`) that stood in for it during the earlier
-scaffold-only pass has been removed now that a real feed exists. The "+"
-doodle stays client-side-only
-(see `components/ConsolidationDoodle.tsx`) — no backend endpoint was built
-for `source_type: "ui_click"` ingestion.
+The companion surface for ECI-CAS. Next.js/React/TypeScript; the backend
+lives one level up (`src/EciCas.*`). See [`docs/architecture.md`](../docs/architecture.md).
 
 ## Running it
 
@@ -23,149 +10,70 @@ npm install
 npm run dev
 ```
 
-Requires `EciCas.Host` running (`dotnet run --project ../src/EciCas.Host`)
-on `http://localhost:5179` — override via `NEXT_PUBLIC_ECI_API_BASE` if it's
-running elsewhere. Started bare like that the host runs on the free mock
-tier, where every substrate call echoes its prompt back; add `-- --Tier=Default`
-and the vendor API keys for real replies (see the root README). Type into the
-input box and press Send; the avatar, thought bubbles, security icon, and
-speech bubble update live as envelopes arrive over SSE.
+Needs `EciCas.Host` on `http://localhost:5179` (`dotnet run --project
+../src/EciCas.Host`); override with `NEXT_PUBLIC_ECI_API_BASE`. Bare like
+that the host runs the free mock tier and every reply is an echo of its
+prompt — add `-- --Tier=Default` plus vendor keys for real ones.
 
-## What this app is allowed to do (void-observer discipline)
+## What it may do
 
-Per the plan, this UI is a **void observer** on the bus — it subscribes
-to `events.*` and never publishes directly to it. It does now have one
-sanctioned way in: `POST /api/perceive`, which is exactly what typing at
-the console REPL does on the backend side (`PerceptionAgent.Perceive`) —
-not a second privileged path. The consolidation doodle's click was the
-plan's other sanctioned exception (`Perception.ingest(source_type:
-"ui_click")`), but that stays unbuilt on the backend (see
-`components/ConsolidationDoodle.tsx`) — a scope decision, not an oversight.
+A **void observer**: it reads `events.*` over SSE and never publishes to the
+bus. The one sanctioned way in is `POST /api/perceive`, which is exactly
+what typing at the console REPL does. Keep future features inside that.
 
-Any future interaction idea for this app should stay inside that same
-constraint: read from the bus freely via SSE, write only through
-`/api/perceive`.
+## Layout
 
-## Event → UI map
+Three columns, the outer two collapsible and drag-resizable
+(`ResizableAside`; width persists in `localStorage`).
 
-| Backend source | UI element |
+| Column | Component | Source |
+|---|---|---|
+| left · Thoughts | `ThoughtsPanel` | what Recall read, Archivist wrote, Reflection noticed — a running list, newest first, with a badge for unseen ideas |
+| centre | `Avatar`, `Transcript`, composer | the conversation |
+| right · Debug | `KnobsPanel` + `EventLog` | live knobs, then one row per event |
+
+## Event → UI
+
+| Backend | UI |
 |---|---|
-| Perception's `perception.text` and Intent's reply | `Transcript` — a scrolling chat log, the person's line to the right, the persona's to the left. The newest exchange is not the only one on screen, so a self-triggered idea landing mid-conversation no longer overwrites what was just said |
-| Impulse's reflex / drive-vector expression (`src/EciCas.Agents/Impulse`) | `Avatar` — a drawn face, one bucketed pose per expression; the animation is decoration on top, not extra state |
-| Librarian's selected pairs, Recall's picked rows, Identity's advice | `ThoughtBubbles` — three colored bubbles, persist faded after speaking. Each faculty thinks in its own shape (pairs / rows / a line of text), so each has its own reader in `useEciStream` that collapses it to one terse string |
-| Security's verdict (`src/EciCas.Agents/Security`) | `SecurityIcon` — only renders on yellow/red; click reveals the matched rule's concern |
-| Intent's advise/refuse output | `SpeechBubble` — dashed amber when Governance marks the turn `governance.degraded`, i.e. thought with a substrate missing |
-| `EpochWritten` (post-Memory milestone) | `ConsolidationDoodle` — clickable "+", first click reconciles, repeats are view-only |
-| Reflection's pushed idea (`perception.triggered_by = "self"`) | `IdeaStream` — a scrolling strip above the avatar's head, dashed and italic, never a transcript line; clicking one opens its entry in the drawer |
-| `GET /api/persona` (`src/EciCas.Host/Program.cs`) | The name under the avatar, and the tone line on the profile picker. Per profile and re-read once a turn settles, because a rename is an ordinary archive write that nothing pushes |
-| `GET /api/log` + `/api/log/stream` (`src/EciCas.Host/TurnLog`) | `EventLog` — a toggled right-hand drawer, one collapsed row per event, expanding to the fixed slot order Perception, Impulse, Librarian-n, Hindsight-n, Intent, Security (only when not green), Archivist-n, Reflection (behind a sub-toggle), Cost, Latency |
+| `perception.text` + Intent's reply | `Transcript` — scrolling log, person right, persona left |
+| Impulse's expression | `Avatar` — a drawn face, one pose per expression, animation on top |
+| Security's verdict | `SecurityIcon` — yellow/red only; click for the matched rule |
+| Intent's advise/refuse | `SpeechBubble` — dashed amber when `governance.degraded` |
+| `GET /api/persona` | the name under the avatar; re-read once a turn settles, since a rename is an ordinary archive write nothing pushes |
+| `GET /api/log` + `/api/log/stream` | `EventLog` — collapsed rows expanding to fixed slots: Perception, Impulse, Librarian-n, Hindsight-n, Intent, Security (when not green), Archivist-n, Reflection, Cost, Latency |
+| `GET/POST /api/knobs` | `KnobsPanel` — reply length, tone, reflection cadence, recall depth. Session experiments, not config: they reset on host restart |
+| `GET/POST /api/profiles` | `ProfilePicker`, `ProfileChip` — the archive is scoped per person |
 
-The drawer holds no reduction of its own. `TurnProjection` on the host folds
+The drawer holds no reduction of its own: `TurnProjection` on the host folds
 a turn's envelopes into one `TurnRecord` of plain strings, and the same
-records feed the optional JSONL sink — so what a person reads and what lands
-on disk cannot drift. `useTurnLog` replays `/api/log`, then follows
-`/api/log/stream`, replacing by `correlationId` as an event fills in.
-Envelope arrival order is not display order: slots are named and filled, not
-appended.
+records feed the optional JSONL sink, so screen and disk cannot drift.
+`useTurnLog` replays `/api/log` then follows `/api/log/stream`, replacing by
+`correlationId`. Slots are named and filled, not appended — envelope arrival
+order is not display order.
 
-## Open questions for Daniel
+The **expression is chosen on the backend, never here.** Impulse appraises it
+and Governance forwards it on the action, which is fresher on a block.
+`readExpression` only validates the word against the six this app can draw.
 
-These are placeholder decisions made to have something concrete to
-react to — none of them are settled:
+## Known quirks
 
-- **Expression rendering** — `Avatar` is now a drawn face: hand-written
-  SVG geometry (brow angle, eye openness, mouth path) plus CSS keyframes,
-  no sprite sheet and no animation library. Two motion layers, kept
-  separate on purpose — an idle layer (breathing, blinking, pupil drift)
-  that never stops so the persona is alive between turns, and an
-  expression layer that belongs to the current mood (a tremble for
-  scared, a slow droop for sad, a seething shudder for angry). Poses
-  transition rather than cut, and all motion is suppressed under
+- The **Live/Disconnected** label reflects `EventSource.onopen`, which in some
+  setups doesn't fire until the first message arrives — it can read
+  Disconnected while connected and merely idle.
+- Below `lg`, both drawers overlay the conversation rather than reflowing it.
+
+## Open
+
+- **Register.** `Avatar` is a hand-drawn SVG face — brow angle, eye openness,
+  mouth path, plus CSS keyframes, no sprite sheet, no animation library. Two
+  motion layers: an idle one (breathing, blinking, pupil drift) so the persona
+  is alive between turns, and an expression one belonging to the current mood.
+  Poses transition rather than cut, and all motion is off under
   `prefers-reduced-motion` — the mood stays legible from the static pose,
-  which is why it's encoded in geometry rather than in movement. Adding a
-  seventh mood is a row in `FACE`, not a redraw. Still a guess at the
-  register: is a cartoon face right, or should this be more abstract?
-- **Bundle bubble colors** — Librarian (blue) and Recall (orange) are
-  carried over placeholders from the old console color table (now
-  archived with the Python prototype); Identity's fuchsia is likewise
-  unanchored. *Partly answered:* the drawer now prints the same agent
-  lines the console does, so there is a palette to anchor to — the
-  bubbles should be pinned to it rather than left as guesses.
-- **Doodle staleness** — a doodle can appear out of band with the
-  current turn if consolidation runs off-path on a background worker.
-  This mock always shows the doodle attached to the turn that produced
-  it; the real UI needs a way to signal "this doodle is from N turns
-  ago" without it reading as part of the current exchange.
-- **Web vs. desktop shell** — left open by the plan; this scaffold is a
-  plain Next.js web app, which assumes "web" is fine for now.
-
-## Not in this pass
-
-- No `ui_click` write path — the doodle acknowledges locally only.
-- No visual polish beyond "clearly reviewable" — placeholders are
-  called out inline and above, not final design.
-
-## Assumptions made while unblocking this pass (2026-08-29/30)
-
-This scaffold predated the C# rebuild and referenced the old Python
-agent names (Sensory/Analytics/Personality/Knowledge) and a Phase-0.8
-Parquet "knowledge swarm" concept that never made it into the C# plan.
-It also imported a `lib/mockTurn.ts` that didn't exist on disk, so the
-app didn't build. Judgment calls made to unblock it, without Daniel
-available to confirm:
-
-- Renamed the three bundle agents to the current roster: Librarian,
-  Recall, Identity (was Analytics/Knowledge/Personality).
-- Dropped the `swarmNodes` / clickable-detail concept on the Recall
-  bubble entirely, rather than porting it — the C# plan's Recall
-  (§3.4) is a thin adapter over `IArchiveStore`, not a Parquet swarm,
-  and nothing in the current plan calls for per-path drill-down in the
-  UI. If Recall later needs that, it can come back.
-- Wrote two brand-new mock turns from scratch (the original
-  `mockTurn.ts` this scaffold's README described was never committed).
-  Second turn exercises yellow-then-red on the *same* correlation to
-  show the Blocked-notice path, since that's the one gating-matrix
-  branch the first turn doesn't cover.
-- Renamed the doodle's stub log line from `Sensory.ingest` to
-  `Perception.ingest` to match the plan's agent rename (§1).
-
-## Assumptions made while wiring M5 (2026-08-30)
-
-Made autonomously while Daniel was asleep, per his standing "keep going,
-document assumptions" instruction:
-
-- **Kestrel port fixed at `http://localhost:5179`** via
-  `Surface:Url` config, rather than leaving it to `launchSettings.json`
-  defaults — `EciCas.Host` has none (it started as a console app), and a
-  stable documented port is needed for this app's default `API_BASE`.
-- **JSON wire casing is camelCase** for both property names (`eventId`,
-  not `EventId`) and enum values (`"green"`, not `"Green"`) — idiomatic
-  for a TS consumer, configured in `EciCas.Host/Program.cs`'s
-  `jsonOptions`.
-- **Expression is chosen on the backend, never here.** Impulse appraises
-  it from its drive vectors and publishes `impulse.expression`;
-  Governance forwards it on the action as `governance.expression`, which
-  is fresher on a block (the frustration nudge has landed by then).
-  `lib/useEciStream.ts: readExpression` only validates the word against
-  the six this app can draw and falls back to `neutral` — the surface
-  decides how to draw a mood, never which one.
-- **Bundle findings are upserted, not appended**, keyed by agent name —
-  `ThoughtBubbles` renders one row per `BundleAgent` via `f.agent` as a
-  React key, so a second advisory from the same agent (e.g. a revision
-  pass) replaces its row rather than duplicating it.
-- **A consolidation epoch attaches to whichever turn is open on this
-  client when `system.control` "Written" arrives** — there's no
-  correlation between Archivist's batch-write announcement and any
-  single triggering turn (it's a batch over N turns), so "the current
-  turn" is a simplification pending the "doodle staleness" open question
-  above.
-- **`ConsolidationDoodle` stays client-side-only** — no backend endpoint
-  exists for `source_type: "ui_click"`, and building one wasn't asked for.
-- **Known cosmetic quirk:** the "Live"/"Disconnected" label in `app/page.tsx`
-  reflects `EventSource.onopen`, which in some network setups doesn't fire
-  until the first SSE message actually arrives rather than as soon as
-  headers land — so it can read "Disconnected" while genuinely connected
-  and simply idle. Confirmed functionally working end-to-end (browser
-  verification: typing a message correctly drove Avatar/ThoughtBubbles/
-  ConsolidationDoodle from live backend envelopes); the label itself is
-  just not a reliable idle-state indicator yet.
+  which is why it lives in geometry. A seventh mood is a row in `FACE`. Still
+  a guess, though: cartoon face, or something more abstract?
+- **Thought colours** — Recall orange, Archivist emerald, Reflection indigo
+  are inherited placeholders. The drawer prints the same agent lines the
+  console does, so there is a palette to pin them to.
+- **Web vs. desktop shell** — still open; this is a plain web app.

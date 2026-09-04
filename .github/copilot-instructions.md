@@ -35,8 +35,9 @@ applyTo: "**/*.cs,**/*.csproj"
 - `SemaphoreSlim` for async synchronisation (governance buffering).
 - `Severity` enum with OR-upscale-only rule — never lower upstream severity.
 - Security verdicts: Green → Action, Yellow → one Intent revision then proceed, Red → deterministic Blocked notice (never reaches Action).
-- Budget tiers drive substrate selection — never hardcode model names.
+- `Substrates:Classes` drives substrate selection — never hardcode model names.
 - Substrate providers implement `ISubstrateProvider`, registered via DI.
+- Prose the persona speaks or is steered by lives in `src/EciCas.Host/instructions/*.txt`, never a C# string constant.
 
 ## Testing
 
@@ -45,7 +46,7 @@ applyTo: "**/*.cs,**/*.csproj"
 - No Arrange / Act / Assert comments.
 - `[Trait("Category", "Live")]` for real-LLM tests (opt-in via env var).
 - `[Trait("Category", "Calibration")]` for judgment tests.
-- Moq or NSubstitute for mocking — pick one per project and stay consistent.
+- Hand-written fakes, no mocking library.
 
 ## Project Layout
 
@@ -54,4 +55,5 @@ applyTo: "**/*.cs,**/*.csproj"
 - `EciCas.Agents` — all agent implementations.
 - `EciCas.Substrates` — provider interfaces and implementations.
 - `EciCas.Host` — Generic Host wiring, DI registration, `ConsoleSubscriber`, `ArchiveLogger`, routing manifest.
+- `EciCas.ArchiveTool` — REPL over the Parquet archive.
 - `EciCas.Tests` — all tests.

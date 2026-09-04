@@ -15,13 +15,12 @@ cut.
 worktrees — commit to `main` and push. If a worktree or a second clone
 exists, it is leftover plumbing, not somewhere to work.
 
-This is not only a preference. Each checkout carries its own `bin/`, and
-the archive lives in the build output
+Not only a preference: each checkout carries its own `bin/`, and the
+archive lives in the build output
 (`src/EciCas.Host/bin/<config>/net10.0/archive`), so a host started from
-the wrong folder gets a *different persona with an empty memory* — it
-seeds `assistant/identity` and knows nothing else. That reads exactly
-like a retrieval bug and has already been debugged as one. If Librarian
-reports an index of one pair, check the folder before the code.
+the wrong folder gets a *different persona with an empty memory*. That
+reads exactly like a retrieval bug and has already been debugged as one.
+If Librarian reports an index of one pair, check the folder first.
 
 ## Architecture
 
@@ -60,15 +59,13 @@ numbers.
 - `docs/architecture.md` — system design: agent roster, bus mechanics, storage, verification
 - `docs/roadmap.md` — what's ahead, open design questions
 - `docs/appendix.md` — operational notes: running the host, reading its
-  output, and traps that have already cost someone an afternoon. Add to
-  this whenever a debugging session turns up something worth not
-  rediscovering.
+  output, and traps that cost someone an afternoon. Add to it whenever a
+  debugging session turns up something worth not rediscovering.
 
 A review that lands as its own document is a worklist, not a changelog:
 delete an entry when it is fixed rather than marking it done, move
 anything that survives into `docs/roadmap.md`, and delete the document
 once nothing is left in it.
 
-The Python prototype this project replaced lives in the sibling folder
-`eci-cas-python-prototype` (also pushed to its own remote as a
-fallback) — not part of this repo, reference only.
+The Python prototype this replaced lives in the sibling folder
+`eci-cas-python-prototype` — reference only, not part of this repo.
