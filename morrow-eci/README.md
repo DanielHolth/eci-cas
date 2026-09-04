@@ -25,9 +25,11 @@ npm run dev
 
 Requires `EciCas.Host` running (`dotnet run --project ../src/EciCas.Host`)
 on `http://localhost:5179` — override via `NEXT_PUBLIC_ECI_API_BASE` if it's
-running elsewhere. Type into the input box and press Send; the avatar,
-thought bubbles, security icon, and speech bubble update live as envelopes
-arrive over SSE.
+running elsewhere. Started bare like that the host runs on the free mock
+tier, where every substrate call echoes its prompt back; add `-- --Tier=Default`
+and the vendor API keys for real replies (see the root README). Type into the
+input box and press Send; the avatar, thought bubbles, security icon, and
+speech bubble update live as envelopes arrive over SSE.
 
 ## What this app is allowed to do (void-observer discipline)
 

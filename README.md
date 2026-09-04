@@ -35,12 +35,58 @@ eci-cas/
   .github/copilot-instructions.md   C# style/architecture conventions
 ```
 
+## Run the companion UI
+
+Two terminals. The host serves the bus and the SSE feed on `:5179`; the
+Next.js surface talks to it from `:3000`.
+
+```powershell
+# terminal 1 — the swarm
+$env:MISTRAL_API_KEY = "..."      # fast-* classes
+$env:OPENAI_API_KEY  = "..."      # slow-* classes
+dotnet run --project src/EciCas.Host -- --Tier=Default
+```
+
+```powershell
+# terminal 2 — the surface
+cd morrow-eci
+npm install                        # first time only
+npm run dev
+```
+
+Then open **http://localhost:3000**. The first screen asks who is talking —
+pick an existing profile or make one, since the archive is scoped per person.
+Type, press Send, and the avatar, thought bubbles and speech bubble update
+live as envelopes arrive. The **History** toggle at the top right opens a
+drawer with one row per event: what each faculty contributed, what was read
+and written, and the turn's cost and latency.
+
+**No API keys?** Drop the `--Tier=Default` and everything runs on the free
+mock tier — same agents, same UI, same drawer, but each substrate call
+echoes its prompt back instead of thinking. It is the right way to see the
+machinery; it is not a way to hear the persona. Replies look like
+`[mock:fast-high] Reply to: what is a tide`, which is the echo, not a
+failure to answer.
+
+Order does not matter and neither survives the other: the surface retries
+the stream, and a host started later is picked up without a page reload.
+If the host is not on `:5179`, point the surface at it with
+`NEXT_PUBLIC_ECI_API_BASE`.
+
+The persona starts nameless and sounds however `Identity:Profile` says —
+`grump`, `educator`, `playmate`, or unset for warm and plain-spoken. It only
+applies to a *new* persona, so switching means clearing the stored one:
+
+```powershell
+Remove-Item src\EciCas.Host\bin\Debug\net10.0\memory.jsonl
+dotnet run --project src/EciCas.Host -- --Tier=Default --Identity:Profile=grump
+```
+
 ## Run it locally
 
 ```bash
 dotnet test EciCas.slnx                    # build + full test suite
 dotnet run --project src/EciCas.Host       # interactive prompt loop (SSE + console)
-cd morrow-eci && npm install && npm run dev   # companion UI at localhost:3000
 ```
 
 Two console tools, run separately:
@@ -123,7 +169,13 @@ One exception to "edit the file, restart": `identity.txt` *seeds* the
 persona the first time the store is empty and is ignored thereafter, so a
 persona that has grown is not overwritten by a `git pull`. The boot log says
 which happened; delete the `assistant/persona` line from `memory.jsonl` to
-re-seed.
+re-seed. That file holds several profiles as `## ` sections and
+`Identity:Profile` names which one seeds — a few keywords in the second
+person, never a paragraph of rules, because it reaches Intent as one
+bracketed aside beside the turn and a brief there competes with the person's
+own sentence instead of colouring the reply to it. No profile carries a name:
+the persona is told one like anything else it is told, and keeps it only if
+Archivist writes it down.
 
 `UseSubstrate: false` skips the substrate call and publishes the agent's
 fallback instead. It is honoured on all five substrate-calling agents —
@@ -140,9 +192,11 @@ a typo in either one fails loud before the bus starts rather than silently
 falling back to mock.
 
 The `mock` provider echoes the prompt's last line back — where every prompt
-here puts the turn itself, so the echo stays diagnostic without pasting a
-wall of rules into the companion's speech bubble. The exception is the two
-prompts that
+here puts the turn itself — stopping at the first bracketed aside, since the
+`[Impulse: …] [Identity: …] [Recall: …]` run that trails a turn is identical
+every time and buried the only part worth reading. So the echo stays
+diagnostic without pasting a wall of rules into the companion's speech
+bubble. The exception is the two prompts that
 enumerate candidates and expect index numbers back — Librarian picking
 archive pairs and Recall picking rows. Those get the first index, so the whole
 knowledge swarm runs end to end on the free tier instead of silently taking
