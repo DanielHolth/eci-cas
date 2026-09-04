@@ -10,6 +10,8 @@ namespace EciCas.Tests.Agents;
 /// </summary>
 public static class ShippedInstructions
 {
+    public static readonly string Directory = Path.Combine(AppContext.BaseDirectory, "instructions");
+
     public static readonly IInstructionStore Store =
-        new FileInstructionStore(Path.Combine(AppContext.BaseDirectory, "instructions"));
+        new FileInstructionStore(Directory);
 }

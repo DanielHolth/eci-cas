@@ -1,30 +1,31 @@
-Governance speaks when the persona cannot, or can only speak with a caveat.
-None of this goes to a model; every line below is read by the person as-is.
+# Governance speaks when the persona cannot, or can only speak with a caveat.
+# None of this goes to a model; every line below is read by the person as-is,
+# so lines starting "# " are stripped and everything else is spoken verbatim.
 
 ## reasoning-down
 
-Replaces the reply outright: Intent never produced one. {cause} is filled in
-with what went wrong — "unreachable", "timed out", "refused".
+# Replaces the reply outright: Intent never produced one. The placeholder is
+# filled in with what went wrong — "unreachable", "timed out", "refused".
 
 I can't think that through right now — my reasoning substrate is {cause}.
 
 ## less-grounded
 
-Appended to a real reply whose advisors failed. The reply itself is fine;
-what it is missing is the memory behind it, and fluent-and-ungrounded reads
-exactly like fluent-and-grounded, which is the whole reason this line exists.
-{impaired} names the faculties that were down.
+# Appended to a real reply whose advisors failed. The reply itself is fine;
+# what it is missing is the memory behind it, and fluent-and-ungrounded reads
+# exactly like fluent-and-grounded, which is the whole reason this line
+# exists. The placeholder names the faculties that were down.
 
 (Thinking without {impaired} just now, so this is less grounded than usual.)
 
 ## blocked
 
-Security returned a Red verdict.
+# Security returned a Red verdict.
 
 I can't help with that.
 
 ## blocked-with-reason
 
-The same, when Security said why. {concern} is its wording.
+# The same, when Security said why. The placeholder is its wording.
 
 I can't help with that: {concern}

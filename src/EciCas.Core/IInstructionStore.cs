@@ -36,10 +36,20 @@ public static class InstructionFile
 
     private const string SectionMarker = "## ";
 
+    private const string CommentMarker = "#";
+
     /// <summary>
     /// Splits on lines beginning "## ". Text before the first marker is the
     /// main section, so a file that needs only one block is just prose with
     /// no markers in it at all.
+    ///
+    /// Lines beginning "# " are commentary and are stripped. Most of these
+    /// files are prompts, where a note to the reader costs only tokens; but
+    /// Identity, Impulse and Governance are read aloud, and there a file had
+    /// no way to say anything the person was not going to hear — a fresh
+    /// persona introduced itself by explaining what an identity file is for.
+    /// A convention the parser enforces is the only kind that survives the
+    /// next person who documents a file.
     /// </summary>
     public static IReadOnlyDictionary<string, string> Parse(string text)
     {
@@ -54,6 +64,14 @@ public static class InstructionFile
                 sections[name] = string.Join('\n', body).Trim();
                 name = line[SectionMarker.Length..].Trim();
                 body.Clear();
+                continue;
+            }
+
+            // Anything else starting '#' is commentary. Checked after the
+            // marker so "## section" stays a marker, and by first character
+            // rather than "# " so a bare '#' spacer line counts too.
+            if (line.StartsWith(CommentMarker, StringComparison.Ordinal))
+            {
                 continue;
             }
 

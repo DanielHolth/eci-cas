@@ -66,8 +66,22 @@ public sealed class JsonlAgentStateStore : IAgentStateStore
                     continue;
                 }
 
-                var record = JsonSerializer.Deserialize<AgentStateRecord>(lines[i])!;
-                if (!pathSet.Contains(record.Path))
+                // Skipped, not thrown on: TrimAsync deliberately keeps a
+                // line it cannot parse, so the reader has to agree with it.
+                // Otherwise one bad line takes down every read of the file —
+                // Identity's persona and Reflection's drive history both
+                // come through here.
+                AgentStateRecord? record;
+                try
+                {
+                    record = JsonSerializer.Deserialize<AgentStateRecord>(lines[i]);
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                if (record is null || !pathSet.Contains(record.Path))
                 {
                     continue;
                 }

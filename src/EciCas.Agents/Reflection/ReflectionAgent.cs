@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Hindsight;
@@ -432,7 +433,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             var scoreText = parts[0].Trim();
             var subtopic = parts[1].Trim();
             var idea = parts[2].Trim();
-            if (idea.Length > 0 && subtopic.Length > 0 && double.TryParse(scoreText, out var score))
+            if (idea.Length > 0 && subtopic.Length > 0 && double.TryParse(scoreText, NumberStyles.Float, CultureInfo.InvariantCulture, out var score))
             {
                 candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), subtopic, idea));
             }

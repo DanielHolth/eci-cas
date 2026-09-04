@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
@@ -269,12 +270,31 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             ("text", text ?? string.Empty));
     }
 
-    private static IReadOnlyList<ArchivePair> ParsePairs(string response, IReadOnlyList<ArchivePair> index)
+    /// <summary>
+    /// Indices the selector named, in the order it named them, each pair at
+    /// most once and no more than the configured cap.
+    ///
+    /// Both limits are enforced here because the prompt cannot enforce
+    /// either. "3, 3, 3" is a plausible thing for a small model to answer
+    /// and would otherwise open one file three times and weight its rows
+    /// three times in Intent's prompt; "0,1,2,...,40" would fan phase one
+    /// out over 41 concurrent reads, which MaxConcurrentRecalls does not
+    /// cover — that caps the chunks in phase two, after every selected pair
+    /// has already been read.
+    /// </summary>
+    private IReadOnlyList<ArchivePair> ParsePairs(string response, IReadOnlyList<ArchivePair> index)
     {
         var selected = new List<ArchivePair>();
+        var seen = new HashSet<int>();
         foreach (var token in response.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (int.TryParse(token, out var i) && i >= 0 && i < index.Count)
+            if (selected.Count >= _options.MaxSelectedPairs)
+            {
+                break;
+            }
+
+            if (int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)
+                && i >= 0 && i < index.Count && seen.Add(i))
             {
                 selected.Add(index[i]);
             }

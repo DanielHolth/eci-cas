@@ -95,7 +95,15 @@ public sealed class ParquetPassageStore : IPassageStore
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var rows = await ReadUnlockedAsync(cancellationToken).ConfigureAwait(false);
+            // A copy, never the cache itself: ReadUnlockedAsync hands back
+            // _cache directly when warm, and LoadAsync's fast path returns it
+            // without taking this lock. Editing it in place lets a Hindsight
+            // or Librarian search enumerating the same list see it change
+            // mid-sweep. It also keeps the cache honest if the write below
+            // throws — rows nothing persisted would otherwise stay searchable
+            // until restart. ParquetArchiveStore.Merged already works this
+            // way; this is the same shape.
+            var rows = new List<Passage>(await ReadUnlockedAsync(cancellationToken).ConfigureAwait(false));
             if (replacedId is not null)
             {
                 rows.RemoveAll(p => p.Id == replacedId);
@@ -104,8 +112,16 @@ public sealed class ParquetPassageStore : IPassageStore
             rows.AddRange(added);
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
 
-            await using var stream = File.Create(_path);
-            await ParquetSerializer.SerializeAsync(rows.Select(ToRow).ToList(), stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            // Through a temp file: the corpus is one file, so a crash or a
+            // full disk partway through an in-place write loses every note
+            // the persona ever wrote, not the one being added.
+            var temp = _path + ".tmp";
+            await using (var stream = File.Create(temp))
+            {
+                await ParquetSerializer.SerializeAsync(rows.Select(ToRow).ToList(), stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(temp, _path, overwrite: true);
             _cache = rows;
         }
         finally

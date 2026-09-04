@@ -26,14 +26,6 @@ using Microsoft.Extensions.Options;
 
 const string CorsPolicy = "morrow-eci";
 
-/// <summary>
-/// Who the persona is when nothing has taught it otherwise. Written in the
-/// first person because IdentityAgent hands it to Intent as advice, not as a
-/// description — and deliberately short: an identity that fills the prompt
-/// leaves no room for the turn.
-/// </summary>
-
-
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,

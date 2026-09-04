@@ -79,10 +79,70 @@ public class InstructionStoreTests
     {
         foreach (var (agent, allowed) in FileInstructionStore.KnownPlaceholders)
         {
-            var text = ShippedInstructions.Store.For(agent);
+            // Sections, not just main: Governance is nothing but sections,
+            // so "main is non-empty" stopped being the claim worth making.
+            var sections = InstructionFile.Parse(
+                File.ReadAllText(Path.Combine(ShippedInstructions.Directory, agent.ToLowerInvariant() + ".txt")));
 
-            Assert.False(string.IsNullOrWhiteSpace(text), $"{agent} has an empty instruction");
-            Assert.Empty(InstructionFile.PlaceholdersIn(text).Except(allowed));
+            Assert.Contains(sections, kv => !string.IsNullOrWhiteSpace(kv.Value));
+            foreach (var (_, text) in sections)
+            {
+                Assert.Empty(InstructionFile.PlaceholdersIn(text).Except(allowed));
+            }
         }
+    }
+
+    [Fact]
+    public void CommentaryIsStrippedFromEverySection()
+    {
+        var sections = InstructionFile.Parse(
+            "# why this file exists\nsay this\n\n## other\n\n# and why this bit\nsay that");
+
+        Assert.Equal("say this", sections[InstructionFile.MainSection]);
+        Assert.Equal("say that", sections["other"]);
+    }
+
+    [Fact]
+    public void AMarkerIsStillAMarker_NotACommentThatHappensToStartWithAHash()
+    {
+        var sections = InstructionFile.Parse("main\n## section\nbody");
+
+        Assert.Equal("body", sections["section"]);
+    }
+
+    [Fact]
+    public void NothingTheStoreHandsOutCarriesItsOwnDocumentation()
+    {
+        // The whole failure this guards: these files explain themselves in
+        // the same block they hand to the caller, and three of them are read
+        // aloud rather than sent to a model, so a note to the reader is a
+        // sentence the person hears. A fresh persona once introduced itself
+        // by explaining what an identity file is for.
+        foreach (var (agent, _) in FileInstructionStore.KnownPlaceholders)
+        {
+            foreach (var line in ShippedInstructions.Store.For(agent).Split('\n'))
+            {
+                Assert.False(line.TrimStart().StartsWith('#'), $"{agent} speaks a comment line: {line}");
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("Impulse", null, "I can see this is urgent. I'm on it.")]
+    [InlineData("Governance", "blocked", "I can't help with that.")]
+    [InlineData("Governance", "blocked-with-reason", "I can't help with that: {concern}")]
+    [InlineData("Governance", "reasoning-down", "I can't think that through right now — my reasoning substrate is {cause}.")]
+    [InlineData("Governance", "less-grounded", "(Thinking without {impaired} just now, so this is less grounded than usual.)")]
+    [InlineData("Identity", "stranger", "You are ECI. You do not have your own description to hand right now.")]
+    public void SpokenTextIsExactlyWhatTheFileSays(string agent, string? section, string expected)
+    {
+        // Equality, not Contains: an assertion that only checks the sentence
+        // is in there passes with arbitrary prose in front of it, which is
+        // exactly how the commentary shipped.
+        var text = section is null
+            ? ShippedInstructions.Store.For(agent)
+            : ShippedInstructions.Store.For(agent, section);
+
+        Assert.Equal(expected, text);
     }
 }

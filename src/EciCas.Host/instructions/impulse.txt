@@ -1,6 +1,6 @@
-Impulse makes no substrate call. This is the reflex reply it publishes
-directly when a turn trips a critical trigger — the one sentence the person
-sees before any thinking has happened, so it promises attention and nothing
-else.
+# Impulse makes no substrate call. This is the reflex reply it publishes
+# directly when a turn trips a critical trigger — the one sentence the person
+# sees before any thinking has happened, so it promises attention and nothing
+# else. Lines starting "# " are stripped; everything else is spoken verbatim.
 
 I can see this is urgent. I'm on it.
