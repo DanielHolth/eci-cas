@@ -95,4 +95,43 @@ public class CachingEmbeddingProviderTests
         Assert.Equal("onnx:test", provider.ModelId);
         await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// A cache is allowed to forget; a caller is not allowed to notice.
+    /// Answers used to be read back out of the cache after storing, so a call
+    /// wider than Capacity evicted its own earliest entries before the
+    /// projection reached them and threw KeyNotFoundException. Nothing batches
+    /// this wide today, which is exactly why it needs a test — the first
+    /// caller to backfill a corpus would have found it in production.
+    /// </summary>
+    [Fact]
+    public async Task MoreDistinctTextsThanCapacity_StillAnswersAllOfThem()
+    {
+        var inner = new CountingProvider();
+        var provider = Wrap(inner);
+        var texts = Enumerable.Range(0, 40).Select(i => new string('x', i + 1)).ToList();
+
+        var vectors = await provider.EmbedAsync(texts, CancellationToken.None);
+
+        Assert.Equal(texts.Count, vectors.Count);
+        for (var i = 0; i < texts.Count; i++)
+        {
+            Assert.Equal(texts[i].Length, vectors[i][0]);
+        }
+    }
+
+    /// <summary>Duplicates within one call are one model pass, and every position still gets its answer.</summary>
+    [Fact]
+    public async Task RepeatedTextWithinOneCall_IsEmbeddedOnceAndAnsweredEverywhere()
+    {
+        var inner = new CountingProvider();
+        var provider = Wrap(inner);
+
+        var vectors = await provider.EmbedAsync(["ab", "abc", "ab"], CancellationToken.None);
+
+        Assert.Equal(2, inner.TextsEmbedded);
+        Assert.Equal(3, vectors.Count);
+        Assert.Equal(vectors[0], vectors[2]);
+        Assert.NotSame(vectors[0], vectors[2]);
+    }
 }

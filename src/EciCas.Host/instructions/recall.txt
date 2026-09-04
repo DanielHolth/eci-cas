@@ -1,8 +1,10 @@
+# Rules before rows before turn, for the prefix-caching reason given in
+# librarian.txt. The rows move whenever the archive does; the rules do not.
+Pick up to {max} of the candidate facts listed below that actually help answer
+this turn — respond with just their index numbers, comma-separated (e.g.
+"0, 2"). If none are relevant, respond with nothing.
+
 Candidate facts (index: subtopic / subject key = value), most important first:
 {rows}
-
-Pick up to {max} rows that actually help answer this turn — respond with just
-their index numbers, comma-separated (e.g. "0, 2"). If none are relevant,
-respond with nothing.
 
 Turn: {text}

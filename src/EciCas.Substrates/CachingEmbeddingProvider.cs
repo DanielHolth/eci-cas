@@ -46,42 +46,83 @@ public sealed class CachingEmbeddingProvider(
             return [];
         }
 
+        // Answers are collected here rather than read back out of the cache at
+        // the end. Reading back tied correctness to Capacity: nine distinct
+        // texts in one call evicted the earliest entries before the projection
+        // reached them, and the lookup threw. Nothing batches that wide today,
+        // so it was a landmine rather than a fire — but a cache is allowed to
+        // forget, and a caller is not allowed to notice.
+        var answers = new Dictionary<string, float[]>(StringComparer.Ordinal);
+        List<string> missing;
+
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var missing = texts.Where(t => !_cache.ContainsKey(t)).Distinct(StringComparer.Ordinal).ToList();
-            if (missing.Count > 0)
+            missing = [];
+            var queued = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var text in texts)
             {
-                var fresh = await inner.EmbedAsync(missing, cancellationToken).ConfigureAwait(false);
-
-                // A provider that returns nothing is unavailable mid-flight
-                // rather than at startup. Say nothing, cache nothing, and let
-                // the caller take its no-vector path — the same shape every
-                // other Available check has.
-                if (fresh.Count != missing.Count)
+                if (answers.ContainsKey(text))
                 {
-                    return fresh;
+                    continue;
                 }
 
-                for (var i = 0; i < missing.Count; i++)
+                if (_cache.TryGetValue(text, out var hit))
                 {
-                    Store(missing[i], fresh[i]);
+                    answers[text] = hit;
+                }
+                else if (queued.Add(text))
+                {
+                    missing.Add(text);
                 }
             }
-            else
-            {
-                logger.LogDebug("Embedding cache hit for all {Count} text(s), no model pass", texts.Count);
-            }
-
-            // Copied per caller: before this type every EmbedAsync allocated a
-            // fresh array, and handing out the cached instance would quietly
-            // alias two agents' vectors to one buffer.
-            return [.. texts.Select(t => _cache[t].AsSpan().ToArray())];
         }
         finally
         {
             _lock.Release();
         }
+
+        if (missing.Count == 0)
+        {
+            logger.LogDebug("Embedding cache hit for all {Count} text(s), no model pass", texts.Count);
+        }
+        else
+        {
+            // Deliberately outside the lock. Holding it across the call made
+            // concurrent HTTP embeds serial on the API provider for no gain —
+            // ONNX serialises itself anyway. The cost of letting go is that two
+            // callers racing on the same text may both compute it: duplicated
+            // work, never a wrong answer, and the pair of them then agree.
+            var fresh = await inner.EmbedAsync(missing, cancellationToken).ConfigureAwait(false);
+
+            // A provider that returns nothing is unavailable mid-flight rather
+            // than at startup. Say nothing, cache nothing, and let the caller
+            // take its no-vector path — the same shape every other Available
+            // check has.
+            if (fresh.Count != missing.Count)
+            {
+                return fresh;
+            }
+
+            await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                for (var i = 0; i < missing.Count; i++)
+                {
+                    answers[missing[i]] = fresh[i];
+                    Store(missing[i], fresh[i]);
+                }
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        // Copied per caller: before this type every EmbedAsync allocated a
+        // fresh array, and handing out the cached instance would quietly alias
+        // two agents' vectors to one buffer.
+        return [.. texts.Select(t => answers[t].AsSpan().ToArray())];
     }
 
     private void Store(string text, float[] vector)

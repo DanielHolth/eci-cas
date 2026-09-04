@@ -101,7 +101,7 @@ public sealed class GovernanceAgent : AgentBase
 
         if (justArrived)
         {
-            _ = RunTimeoutAsync(state);
+            _ = RunTimeoutAsync(perception.CorrelationId, state);
         }
 
         TryComplete(state);
@@ -123,18 +123,35 @@ public sealed class GovernanceAgent : AgentBase
         TryComplete(state);
     }
 
-    private async Task RunTimeoutAsync(BundleState state)
+    /// <summary>
+    /// The one timer a bundle gets, doing both jobs in sequence: complete it
+    /// when the advisors have had long enough, then let it go if the verdict
+    /// never comes back.
+    ///
+    /// There is no cancellation here, and that is the point. This used to hold
+    /// a CancellationTokenSource so an early completion could end the wait a
+    /// few seconds sooner — a source nobody disposed, one per turn, in a
+    /// process meant to run for years beside one person. An uncancelled delay
+    /// costs a pending timer that clears itself, and both calls below are
+    /// no-ops once the bundle has moved on. Cheaper to run and cheaper to
+    /// reason about than a resource with no owner.
+    /// </summary>
+    private async Task RunTimeoutAsync(Guid correlationId, BundleState state)
     {
-        try
-        {
-            await Task.Delay(_options.BundleTimeoutMs, state.TimeoutCts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-
+        await Task.Delay(_options.BundleTimeoutMs).ConfigureAwait(false);
         TryComplete(state, forced: true);
+
+        await Task.Delay(_options.BundleAbandonMs).ConfigureAwait(false);
+
+        // Reached only when no verdict ever arrived — OnVerdictAsync retires
+        // its own bundle. Before this, such a turn stayed in the dictionary
+        // for good, and a persona that runs for years accumulates every turn
+        // that ever broke.
+        if (_bundles.TryRemove(correlationId, out _))
+        {
+            _logger.LogWarning("Governance bundle {CorrelationId} abandoned after {Ms} ms with no verdict",
+                correlationId, _options.BundleAbandonMs);
+        }
     }
 
     private void TryComplete(BundleState state, bool forced = false)
@@ -181,8 +198,6 @@ public sealed class GovernanceAgent : AgentBase
                 : null;
         }
 
-        state.TimeoutCts.Cancel();
-
         if (forced)
         {
             var missing = _options.BundleRoster.Except(advisoryKeys).ToList();
@@ -224,12 +239,17 @@ public sealed class GovernanceAgent : AgentBase
             Envelope? revisionBundle = null;
             lock (state)
             {
-                if (state.RevisionCount < _options.MaxRevisionPasses)
+                // Perception can be null here: GetOrAdd above will have minted
+                // an empty state for a verdict whose bundle was already
+                // retired, and a revision needs the originating envelope to
+                // derive from. Falling through proceeds to Action, which is
+                // where a second verdict belongs anyway.
+                if (state.Perception is not null && state.RevisionCount < _options.MaxRevisionPasses)
                 {
                     state.RevisionCount++;
                     var concern = verdict.Meta.Get<string>(SecurityAgent.ConcernKey) ?? string.Empty;
-                    var revisionMeta = BuildBundleMeta(state.Perception!, [.. state.Advisories.Values]).With(RevisionConcernKey, concern);
-                    revisionBundle = state.Perception!.Derive(Topics.Bundle, Name, verdict.Severity, revisionMeta);
+                    var revisionMeta = BuildBundleMeta(state.Perception, [.. state.Advisories.Values]).With(RevisionConcernKey, concern);
+                    revisionBundle = state.Perception.Derive(Topics.Bundle, Name, verdict.Severity, revisionMeta);
                 }
             }
 
@@ -394,6 +414,5 @@ public sealed class GovernanceAgent : AgentBase
         public string[] Impaired { get; set; } = [];
         public bool Completed { get; set; }
         public int RevisionCount { get; set; }
-        public CancellationTokenSource TimeoutCts { get; } = new();
     }
 }

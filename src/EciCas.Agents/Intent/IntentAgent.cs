@@ -120,8 +120,24 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// </summary>
     private static void AppendRecalledFacts(StringBuilder prompt, IReadOnlyList<ArchiveRecord>? facts)
     {
-        if (facts is null || facts.Count == 0)
+        // Null and empty are different answers and must not read the same.
+        // Null is no advisory at all — Recall never ran, or failed, and Intent
+        // has no standing to say anything about the archive. Empty is Recall
+        // reporting back: it looked, and there is nothing on file.
+        //
+        // Both used to produce a byte-identical prompt, and the model filled
+        // the silence — the mechanism behind "I know your name, but you
+        // haven't told me yours yet." Six tokens turn that invention into an
+        // honest "I don't think you've told me." Same argument the degraded
+        // notice already won, applied to the faculty that worked.
+        if (facts is null)
         {
+            return;
+        }
+
+        if (facts.Count == 0)
+        {
+            prompt.Append(" [Recall: nothing on file]");
             return;
         }
 

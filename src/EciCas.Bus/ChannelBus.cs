@@ -26,8 +26,14 @@ public sealed class ChannelBus : IMessageBus
             {
                 foreach (var writer in exact)
                 {
-                    _activity.OnEnqueue();
-                    writer.TryWrite(envelope);
+                    // Counted only once the write took. Unreachable while the
+                    // channels are unbounded, but the tracker is what tells
+                    // the display the bus is idle, and a leaked count would
+                    // leave it busy forever.
+                    if (writer.TryWrite(envelope))
+                    {
+                        _activity.OnEnqueue();
+                    }
                 }
             }
         }
@@ -38,8 +44,14 @@ public sealed class ChannelBus : IMessageBus
             {
                 foreach (var writer in wildcard)
                 {
-                    _activity.OnEnqueue();
-                    writer.TryWrite(envelope);
+                    // Counted only once the write took. Unreachable while the
+                    // channels are unbounded, but the tracker is what tells
+                    // the display the bus is idle, and a leaked count would
+                    // leave it busy forever.
+                    if (writer.TryWrite(envelope))
+                    {
+                        _activity.OnEnqueue();
+                    }
                 }
             }
         }

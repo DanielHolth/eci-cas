@@ -69,4 +69,37 @@ public class IntentAgentTests
         // front, so the turn has to be inside it, not merely present.
         Assert.Contains("when is the wedding", PromptCap.Apply(context));
     }
+
+    /// <summary>
+    /// An empty recall and an absent one used to build a byte-identical
+    /// prompt, and the model bridged the gap by inventing — the mechanism
+    /// behind "I know your name, but you haven't told me yours yet." Recall
+    /// always publishes the key, even with nothing in it, so the two cases
+    /// are distinguishable here and must read differently.
+    /// </summary>
+    [Fact]
+    public async Task RecallThatLookedAndFoundNothing_SaysSo_WhereRecallThatNeverRanIsSilent()
+    {
+        static async Task<string> ContextFor(MetaBag meta)
+        {
+            var activity = new BusActivityTracker();
+            var bus = new ChannelBus(activity);
+            var proposals = bus.Subscribe(Topics.Proposal);
+            var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
+                Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }), ShippedInstructions.Store);
+
+            await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, meta), CancellationToken.None);
+            Assert.True(proposals.TryRead(out var proposal));
+            return proposal!.Meta.Get<string>(IntentAgent.ContextKey)!;
+        }
+
+        var turn = MetaBag.Empty.With(PerceptionAgent.TextKey, "what's my name");
+
+        var neverRan = await ContextFor(turn);
+        var foundNothing = await ContextFor(turn.With(RecallAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[]));
+
+        Assert.DoesNotContain("Recall", neverRan);
+        Assert.Contains("[Recall: nothing on file]", foundNothing);
+        Assert.NotEqual(neverRan, foundNothing);
+    }
 }

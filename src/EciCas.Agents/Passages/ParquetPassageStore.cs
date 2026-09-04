@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Globalization;
+using System.Text.Json;
 using Parquet.Serialization;
 
 namespace EciCas.Agents.Passages;
@@ -169,7 +170,7 @@ public sealed class ParquetPassageStore : IPassageStore
         Id = p.Id,
         Text = p.Text,
         Pairs = JsonSerializer.Serialize(p.Pairs),
-        Timestamp = p.Timestamp.ToString("O"),
+        Timestamp = p.Timestamp.ToString("O", CultureInfo.InvariantCulture),
         Embedding = Convert.ToBase64String(EncodeFloats(p.Embedding)),
         ParentIds = JsonSerializer.Serialize(p.ParentIds),
         EchoDepth = p.EchoDepth,
@@ -181,7 +182,11 @@ public sealed class ParquetPassageStore : IPassageStore
         r.Id,
         r.Text,
         JsonSerializer.Deserialize<List<ArchivePair>>(r.Pairs) ?? [],
-        DateTimeOffset.TryParse(r.Timestamp, out var ts) ? ts : DateTimeOffset.MinValue,
+        // Invariant on both sides, matching ParquetArchiveStore. The fallback
+        // is silent, so a culture mismatch would not surface as an error but
+        // as every note being two millennia old — wrong ages in Hindsight and
+        // LatestAsync picking whichever row parsed.
+        DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var ts) ? ts : DateTimeOffset.MinValue,
         DecodeFloats(Convert.FromBase64String(r.Embedding)),
         r.ParentIds is null ? [] : JsonSerializer.Deserialize<List<string>>(r.ParentIds) ?? [],
         r.EchoDepth ?? 0,

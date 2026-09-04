@@ -4,9 +4,14 @@ questions worth exploring later. Respond with zero or more lines, each
 formatted as "score|subtopic|idea" where score is 0.0-1.0 insight-worthiness
 and subtopic is a short (1-2 word) functional label for the kind of thought it
 is — pick whatever label fits best, e.g. pattern, hypothesis, meta-rule,
-synthesis, question, or another label of your own choosing. Idea ({terse}),
-e.g. "0.7|hypothesis|trip dates vs deadline". If nothing stands out, respond
-with no candidate lines.
+synthesis, question, or another label of your own choosing. Idea ({terse}).
+So: "<0.0-1.0>|<label>|<the thought>". If nothing stands out, respond with no
+candidate lines.
+# The worked example that used to sit here was a plausible-looking thought,
+# and a real substrate copies those: 9fbd7aa removed Archivist's after it
+# filed the example as a fact every turn. The shape still has to be shown —
+# three pipe-separated fields is not guessable — so it is shown as a schema
+# with nothing fillable in it.
 
 On its own line, describe the overall tone of these interactions as
 "mood|<label>" where label is exactly one of: {moods}. Always include this

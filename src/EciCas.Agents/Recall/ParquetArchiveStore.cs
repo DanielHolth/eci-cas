@@ -422,6 +422,14 @@ public sealed class ParquetArchiveStore : IArchiveStore
             Domain = r.Domain,
             Importance = r.Importance,
         });
-        await ParquetSerializer.SerializeAsync(rows, path, cancellationToken: cancellationToken).ConfigureAwait(false);
+        // Through a temp file, for the reason JsonlAgentStateStore already
+        // gives about the persona's state: a crash, a full disk or a killed
+        // process midway leaves the original intact, where writing straight
+        // over the destination leaves a truncated file. The archive's stated
+        // goal is to outlive this software, so it is the last place that
+        // should risk a half-written pair.
+        var temp = path + ".tmp";
+        await ParquetSerializer.SerializeAsync(rows, temp, cancellationToken: cancellationToken).ConfigureAwait(false);
+        File.Move(temp, path, overwrite: true);
     }
 }

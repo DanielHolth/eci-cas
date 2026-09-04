@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace EciCas.Core;
 
 /// <summary>
@@ -109,14 +111,45 @@ public static class InstructionFile
     /// rather than blanked — a gap the agent did not fill is visible in the
     /// prompt, where an empty string would look like the model was simply
     /// told nothing.
+    ///
+    /// One pass, so a substituted value is never itself scanned for
+    /// placeholders. Replacing in sequence over the accumulating string meant
+    /// a value containing a later placeholder got expanded: Recall fills
+    /// {rows} — archive values, written by a model — before {text}, so a fact
+    /// whose value was the literal "{text}" injected the turn into the prompt.
     /// </summary>
     public static string Fill(string text, params (string Name, string Value)[] values)
     {
+        var lookup = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (name, value) in values)
         {
-            text = text.Replace("{" + name + "}", value, StringComparison.Ordinal);
+            lookup[name] = value;
         }
 
-        return text;
+        var built = new StringBuilder(text.Length);
+        var at = 0;
+        while (at < text.Length)
+        {
+            var open = text.IndexOf('{', at);
+            if (open < 0)
+            {
+                built.Append(text, at, text.Length - at);
+                break;
+            }
+
+            var close = text.IndexOf('}', open + 1);
+            if (close < 0)
+            {
+                built.Append(text, at, text.Length - at);
+                break;
+            }
+
+            built.Append(text, at, open - at);
+            var name = text[(open + 1)..close];
+            built.Append(lookup.TryGetValue(name, out var value) ? value : text[open..(close + 1)]);
+            at = close + 1;
+        }
+
+        return built.ToString();
     }
 }
