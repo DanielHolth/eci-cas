@@ -7,8 +7,10 @@ parked, what's deliberately out of scope, and the design records for work
 already shipped.
 
 **Next up:** nothing is outstanding against the Python prototype's
-business logic. Everything here is parked, further out, or a record of
-what's already built.
+business logic. What is live comes from the September 2026 external
+review — see "From the external review" below. Two things lead it:
+giving the persona a sense of elapsed time, and streaming Intent's
+tokens once the first sentence has cleared Security.
 
 ## Long-term goals
 
@@ -1793,6 +1795,148 @@ routinely spoken to in Norwegian by someone other than its author, or when
 Action gains a side effect that reaches outside the process, whichever
 comes first. The severity split is the cheaper half and can be done any
 time; it is a one-word change per rule plus a test.
+
+## From the external review — the deferred half
+
+An outside model reviewed the whole codebase in September 2026. Fourteen
+findings and twelve ideas; the findings are all fixed (`ccab952`,
+`5609174`) and the review document is gone, because a worklist that
+records what was already done is a changelog wearing the wrong hat.
+
+What survives it is here: the ideas worth building, with the reasoning
+that decided their order. Three were pulled forward out of this chapter
+and shipped with the fixes, because they were defects wearing an idea's
+clothes — putting the standing rules ahead of the volatile data in
+`librarian.txt` and `recall.txt`, and saying `[Recall: nothing on file]`
+out loud. One suggestion was declined outright: a per-key in-flight
+`Task` map inside `CachingEmbeddingProvider`. Releasing the lock across
+the call gets the parallelism; the map only adds deduplication for a
+batching caller that does not exist. Build it when one does.
+
+### Latency — the three serial calls
+
+The floor is **Librarian → Recall → Intent**, roughly 700 ms + 500 ms +
+900 ms before a word reaches the person. Impulse, Identity and Hindsight
+run beside them and cost nothing. Everything below is about those three,
+in the order they should be attempted.
+
+**Stream Intent's tokens.** The largest available win, and it moves
+perceived latency rather than actual: time to first token is a few hundred
+milliseconds against a second or more for the full body.
+`OpenAiCompatibleSubstrateProvider` posts non-streaming and waits.
+
+The obstacle is that Security gates the reply and **Red must never reach
+Action**. Streaming provisionally and retracting on Red breaks that
+invariant in front of the person, so it is out. Running `SecurityRuleSet`
+incrementally over the accumulating text is affordable — the rules are
+deterministic and cheap — but whether a rule written against a whole
+sentence stays sound on a prefix is an open question, and not one to
+answer under deadline. So: **stream only after the first sentence has
+cleared the rules.** It gives up the first ~200 ms, keeps the invariant
+intact, and commits to nothing. If incremental evaluation later proves
+out, it replaces the first-sentence gate without anything downstream
+noticing.
+
+**Prefetch Recall's file reads from Hindsight's leads.** Librarian's
+substrate call and its cosine sweep both produce pairs, but Recall waits
+for the whole envelope. The passage sweep is local and finishes in
+microseconds, and its leads are usually a subset of the final selection.
+Reading those pair files while the selection call is still in flight
+spends disk that is idle and free, and warms `ParquetArchiveStore`'s cache
+so phase one becomes a dictionary hit. No substrate cost, no new bus
+message, and it fails safe: a wrong prefetch is a wasted read.
+
+**Raise Recall's skip threshold.** `a0b43c9` removed *Librarian's* fast
+path so the selector's judgment gets exercised, and that stands. Recall's
+equivalent is a different question, and the interesting move is skipping
+*harder*: with `MaxPickedPerWorker` at 6, an archive of 40 rows still pays
+a full picking round to discard almost nothing. A threshold set at "as
+much as a prompt comfortably holds" removes a serial call from most turns
+for a long time, and degrades into today's behaviour the moment it stops
+being true.
+
+The distinction that makes this safe rather than a repeat of `a0b43c9`:
+that fast path skipped the *selector*, and its failure was the index
+quietly becoming the answer whenever it happened to fit. This one skips
+picking *after* selection has already happened, so no judgment is
+bypassed — only a filter that had nothing to filter. It is a config knob,
+not a constant, and `RetrievalProbe` measures it.
+
+**Pre-warm the HTTP connections at boot.** Each named `HttpClient` pays
+DNS, TCP and TLS on its first call, and that call lands on the first turn
+a person types. A throwaway request per provider during startup moves the
+cost to where nobody is waiting. Pair it with an explicit
+`PooledConnectionLifetime` so handler rotation is a decision rather than a
+default.
+
+### Interiority that is actually grounded
+
+Constrained by the rule `architecture.md` already sets: **surface
+interiority only where something actually happened to cause it.** Every
+item below is an event the system already detects and currently throws
+away. Nothing here makes the persona talk about itself more; that is the
+failure mode, not the goal.
+
+**The persona has no sense of elapsed time.** Nothing anywhere knows
+whether the last turn was ninety seconds or three weeks ago. This is the
+largest single gap between the system as built and a mind that feels
+continuous, and it is nearly free: Perception knows `DateTimeOffset.UtcNow`
+and the store knows the last conclusion's timestamp.
+
+Stamp the gap on the perception envelope; let Impulse map it to a drive
+nudge; pass it to Intent the way `DriveTrend` is passed — as words rather
+than a number, *"[Since: three weeks]"*. Then "it's been a while" is a
+claim about something measurable, which is exactly the bar `DriveTrend`
+set. Every mechanism the system has describes *state*; none describes
+*time*, and time is most of what makes a relationship feel like one.
+This one is first.
+
+**Notice when a fact changes.** `ParquetArchiveStore.Merged` already
+detects the collision — a new row at an existing `subtopic/subject/key`
+replaces the old one, deliberately and silently. That is the persona
+changing its mind about the world, and it is discarded. Carrying the
+superseded value forward, into the archive as a prior or as a one-line
+note to Reflection, buys *"you said Oslo before"* with no new retrieval,
+no new call and no invention. The cheapest grounded interiority available,
+because the event is already found and merely not reported.
+
+**Let salience decay without deleting anything.** The archive's "nothing
+is ever deleted" rule is right and does not move. But `Importance` is
+fixed at write time and never revisited, so a fact that mattered once
+outranks a fact that matters now, forever, and Recall's picking budget is
+spent on it. Decaying importance with age unless a row is re-touched —
+purely as a *retrieval* weight — gives forgetting-shaped behaviour with no
+data loss. The row stays on disk, readable by DuckDB in forty years, and
+simply stops crowding the prompt. The capsule cares about what is stored;
+the persona cares about what surfaces. They are allowed to differ.
+
+**Let the corpus grow while nobody is talking.** `ReflectionAgent` already
+publishes self-triggered perceptions (`TriggeredByKey = "self"`,
+generation-capped), and the Watchdog's idle timer is parked pending a
+platform decision. But the valuable half needs no platform: firing
+Reflection on silence so it **thinks** rather than speaks. Coming back
+after a week to a persona that has had thoughts in the meantime is a
+different thing from one resuming mid-sentence. Speaking unprompted needs
+the platform decision; thinking unprompted does not.
+
+Sequenced after elapsed time on purpose, and not only for dependency
+reasons. This is the one item that lets the system act without a person in
+the loop, so it wants the generation cap honoured, a hard ceiling on notes
+per idle period, and the same "no new writers" discipline the architecture
+already relies on. Cheap to build, worth building carefully.
+
+**Make the echo depth do something.** `Hindsight` computes `EchoDepth` and
+threads it through Intent and Governance, and nothing reads it. It was
+built to detect the persona resonating with its own past thoughts rather
+than the person's present one — a real failure mode for a system that
+feeds its own notes back in. Using it as a damper turns a diagnostic into
+a corrective, and is the difference between a mind with a memory and one
+talking to itself.
+
+Last of the five, because the damper can suppress genuine continuity as
+easily as an echo, and there is no evidence yet about which one the
+numbers are describing. Log what `EchoDepth` actually does across real
+sessions before letting it change a reply.
 
 ## Parked
 

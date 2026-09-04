@@ -199,7 +199,6 @@ Four docs, deliberately:
 - [`docs/architecture.md`](docs/architecture.md) — what exists: agent roster, bus mechanics, storage, the knowledge swarm, archive tool, verification
 - [`docs/roadmap.md`](docs/roadmap.md) — everything else: what's next, what's parked, what's out of scope, and the design records for shipped work
 - [`docs/appendix.md`](docs/appendix.md) — operational notes: running the host, reading its output, and where the persona really got that from
-- [`docs/codereview.md`](docs/codereview.md) — standing review findings, worst first, and the ideas chapter behind them
 - [`AGENTS.md`](AGENTS.md) — standing engineering rules (loose coupling/async is non-negotiable)
 
 The Python prototype this project replaced lives, unmodified, in a
