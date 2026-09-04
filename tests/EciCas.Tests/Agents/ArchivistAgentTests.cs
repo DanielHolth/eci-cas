@@ -46,6 +46,7 @@ public class ArchivistAgentTests
 
         Assert.True(control.TryRead(out var written));
         Assert.Equal(ArchivistAgent.WrittenKind, written!.Meta.Get<string>(ArchivistAgent.ControlKindKey));
+        Assert.Equal(2, written.Meta.Get<IReadOnlyList<string>>(ArchivistAgent.WrittenRecordsKey)!.Count);
 
         var records = await store.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None);
         Assert.Equal(2, records.Count);

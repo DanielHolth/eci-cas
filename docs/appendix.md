@@ -24,7 +24,7 @@ is true and the host runs until shutdown instead, because the first
 `ReadLine()` would return null and take the whole surface down with it.
 Drive it with `POST /api/perceive` (`{"text": "..."}`) in that case.
 
-**Run from `D:\Dev\Claude\eci-cas` — the `main` checkout.** The
+**Run from the `main` checkout.** The
 archive lives under the build output (`bin/Debug/net10.0/archive`), so
 every checkout has a *different persona*. Start the host from a worktree
 or a second clone and you get a freshly seeded brain that knows only
@@ -75,6 +75,29 @@ what the agent was actually handed rather than a summary of it.
 
 Identity is deliberately silent — it is a placeholder, and a cached lookup
 with no substrate call has nothing per-turn to report.
+
+## The turn log on disk
+
+Everything the console prints about a turn is also projected into one
+`TurnRecord` per event and served at `GET /api/log` (what a client missed)
+and `GET /api/log/stream` (what happens next), both accepting `?profileId=`.
+
+To keep a file as well, set a path — relative resolves against the build
+output, beside the archive:
+
+```
+dotnet run --project src/EciCas.Host --TurnLog:Path=turnlog.jsonl
+```
+
+One JSON object per line, appended when the event has been quiet for
+`TurnLog:SettleMs` (3 s by default). That delay is not slack: Archivist and
+Reflection land *behind* the reply, so a record written the moment the
+person is answered would be missing what the turn remembered. A line is
+written once — a straggler still updates memory and live clients but does
+not rewrite the file.
+
+`TurnLog:Retain` (100) caps what `/api/log` can replay. It is memory, not
+history; the file has no cap, and the archive remains the audit trail.
 
 ## Where did the persona get that from?
 
@@ -166,3 +189,10 @@ another.
 `ChannelBusTests.Publish_WithSlowSubscriber_ReturnsImmediately` asserts a
 publish completes in under 5ms and can fail on cold-start JIT. The claim is
 worth keeping; the margin is what's thin.
+
+`PassageMemoryTests.PassageStore_RoundTripsPairsAndVectors_...` occasionally
+fails with `UnauthorizedAccessException` from `File.Move` in
+`ParquetPassageStore.WriteAsync`. The torn-write fix writes a temp file and
+moves it over the real one; on Windows a virus scanner holding the
+destination open for a few milliseconds turns that move into a denial. Rerun
+before believing it.

@@ -323,6 +323,7 @@ public class PassageMemoryTests
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
         var passages = new InMemoryPassageStore();
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
@@ -344,6 +345,9 @@ public class PassageMemoryTests
         Assert.Equal(["a", "b"], note.ParentIds);
         Assert.Equal(3, note.EchoDepth);
         Assert.Equal(4, note.Generation);
+
+        Assert.True(control.TryRead(out var reflected));
+        Assert.Equal([note.Text], reflected!.Meta.Get<IReadOnlyList<string>>(ReflectionAgent.PassagesKey));
     }
 
     /// <summary>

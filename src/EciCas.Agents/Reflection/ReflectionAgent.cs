@@ -50,6 +50,12 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// </summary>
     public const string MoodKey = "reflection.mood";
 
+    /// <summary>The notes this batch left in the passage corpus, one string per passage. Read by the display layer only — nothing in the process acts on it.</summary>
+    public const string PassagesKey = "reflection.passages";
+
+    /// <summary>The idea this batch judged good enough to push back onto perception, when it pushed one. Also display-only: the push itself is the perception envelope, not this key.</summary>
+    public const string IdeaKey = "reflection.idea";
+
     // "assistant" rather than "self": the persona owns both the facts it
     // knows about itself and the ideas it has about them, and one category
     // for both means the pair label reads as an address rather than as a
@@ -153,6 +159,13 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // state decides whether the idea is worth pushing.
         var (eagerness, driveTrend) = await GetDriveAsync(cancellationToken).ConfigureAwait(false);
 
+        // One correlation for the whole flush. The batch is the persona's own
+        // work across several turns, not the work of whichever turn happened
+        // to fill the buffer, so what it cost and what it wrote group under
+        // an event of their own — and one nobody owns, since a thought had
+        // between conversations belongs to the whole device.
+        var flush = Envelope.Create(Topics.SystemControl, Name, Severity.Neutral);
+
         List<Candidate> candidates;
         string? mood;
         List<Note> notes;
@@ -165,6 +178,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, result.Text);
+            SubstrateTrace.Publish(_bus, flush, Name, entry.Class, result);
 
             // Same guard as ArchivistAgent.ExtractFactsAsync: the mock
             // tier echoes the prompt back verbatim, and its own worked
@@ -190,8 +204,11 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             // MaxBufferedBatches so a long outage can't grow the buffer
             // without limit, or hand the substrate an enormous prompt the
             // moment it comes back.
+            var cause = SubstrateHealth.Classify(ex);
+            var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _logger.LogWarning("{Agent} batch scoring {Cause} after {LatencyMs}ms, retaining {Count} turns for the next flush",
-                Name, SubstrateHealth.Classify(ex), Stopwatch.GetElapsedTime(started).TotalMilliseconds, batch.Count);
+                Name, cause, elapsed, batch.Count);
+            SubstrateTrace.PublishFailure(_bus, flush, Name, entry.Class, elapsed, cause);
 
             lock (_pendingLock)
             {
@@ -206,14 +223,14 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             return;
         }
 
-        await WritePassagesAsync(notes, previous, batch, cancellationToken).ConfigureAwait(false);
+        var passages = await WritePassagesAsync(notes, previous, batch, cancellationToken).ConfigureAwait(false);
 
         if (candidates.Count == 0)
         {
             // A batch can legitimately surface no idea and still have a
             // tone worth colouring by, so the control envelope goes out
             // either way — only a failed or echoed call skips it.
-            PublishReflected(mood);
+            PublishReflected(flush, mood, passages, idea: null);
             return;
         }
 
@@ -247,15 +264,19 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             _bus.Publish(Topics.Perception, idea);
         }
 
-        PublishReflected(mood);
+        PublishReflected(flush, mood, passages, shouldPush ? best.Idea : null);
     }
 
     /// <summary>
-    /// One control envelope carries both the write-epoch signal and the
-    /// batch's mood label — no new message type, and Impulse is already
-    /// subscribed to system.control for GovernanceAgent.FrustrationKind.
+    /// One control envelope carries the write-epoch signal, the batch's mood
+    /// label, and what the batch left behind — no new message type, and
+    /// Impulse is already subscribed to system.control for
+    /// GovernanceAgent.FrustrationKind.
+    ///
+    /// Derived from the flush's own envelope rather than from a concluded
+    /// turn, so this stays a turn nobody owns and every window sees it.
     /// </summary>
-    private void PublishReflected(string? mood)
+    private void PublishReflected(Envelope flush, string? mood, IReadOnlyList<string> passages, string? idea)
     {
         var meta = MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ReflectedKind);
         if (mood is not null)
@@ -263,7 +284,17 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             meta = meta.With(MoodKey, mood);
         }
 
-        _bus.Publish(Topics.SystemControl, Envelope.Create(Topics.SystemControl, Name, Severity.Neutral, meta));
+        if (passages.Count > 0)
+        {
+            meta = meta.With(PassagesKey, passages);
+        }
+
+        if (idea is not null)
+        {
+            meta = meta.With(IdeaKey, idea);
+        }
+
+        _bus.Publish(Topics.SystemControl, flush.Derive(Topics.SystemControl, Name, Severity.Neutral, meta));
     }
 
     /// <summary>
@@ -452,13 +483,14 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// Both texts go through one EmbedAsync call. Failure here loses the
     /// notes and nothing else — the batch's ideas, mood and archive writes
     /// have already happened, and a corpus that missed one entry is a weaker
-    /// shortcut, not a broken turn.
+    /// shortcut, not a broken turn. Returns what actually landed, so the
+    /// control envelope can say so without re-reading the store.
     /// </summary>
-    private async Task WritePassagesAsync(List<Note> notes, Passage? previous, List<BufferedConclusion> batch, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> WritePassagesAsync(List<Note> notes, Passage? previous, List<BufferedConclusion> batch, CancellationToken cancellationToken)
     {
         if (notes.Count == 0 || !_embeddings.Available)
         {
-            return;
+            return [];
         }
 
         // A revisit with nothing to revise is the model answering a question
@@ -469,14 +501,14 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         var writing = new[] { revisit, current }.OfType<Note>().ToList();
         if (writing.Count == 0)
         {
-            return;
+            return [];
         }
 
         var vectors = await _embeddings.EmbedAsync([.. writing.Select(n => n.Text)], cancellationToken).ConfigureAwait(false);
         if (vectors.Count != writing.Count)
         {
             _logger.LogWarning("{Agent} could not embed its notes, passage corpus unchanged", Name);
-            return;
+            return [];
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -507,6 +539,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             _logger.LogDebug("{Agent} passage detail: supersedes {Superseded}, parents [{Parents}], echo depth {Depth}, generation {Generation}, model {Model}",
                 Name, revisit is null ? "nothing" : previous!.Id, string.Join(", ", parents), depth, generation, _embeddings.ModelId);
         }
+
+        return [.. added.Select(p => p.Text)];
     }
 
     /// <summary>

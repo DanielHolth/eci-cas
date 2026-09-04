@@ -67,6 +67,11 @@ export interface TurnEvent {
   security: SecurityOutcome[];
   output?: IntentOutput;
   epoch?: ConsolidationEpoch;
+  /** The persona pushed one of its own ideas back onto perception. The text
+   * is its thought, not something a person said, and must never be drawn as
+   * an utterance. */
+  selfTriggered?: boolean;
+  idea?: string;
 }
 
 /**
@@ -82,4 +87,45 @@ export interface RawEnvelope {
   severity: "restful" | "neutral" | "elevated" | "critical";
   generation: number;
   meta: Record<string, unknown>;
+}
+
+/** One substrate call as the host reports it. `tokens`/`cost` are null when
+ * the provider does not report them — the mock tier reports neither. */
+export interface SubstrateCall {
+  agent: string;
+  class: string;
+  label: string | null;
+  latencyMs: number;
+  tokens: number | null;
+  cost: number | null;
+  degraded: string | null;
+}
+
+/**
+ * Mirror of src/EciCas.Host/TurnLog/TurnRecord.cs — the host's own reduction
+ * of one event, served by GET /api/log and /api/log/stream. Holds strings, so
+ * nothing here re-derives anything from meta keys: the drawer renders slots,
+ * and a null or empty slot is one it skips.
+ */
+export interface TurnRecord {
+  seq: number;
+  correlationId: string;
+  profileId: string | null;
+  startedAt: string;
+  endedAt: string;
+  perception: string | null;
+  selfTriggered: boolean;
+  impulse: string | null;
+  reads: string[];
+  hindsight: string[];
+  intent: string | null;
+  verdict: string | null;
+  concern: string | null;
+  writes: string[];
+  passages: string[];
+  idea: string | null;
+  calls: SubstrateCall[];
+  concluded: boolean;
+  cost: number | null;
+  wallClockMs: number;
 }

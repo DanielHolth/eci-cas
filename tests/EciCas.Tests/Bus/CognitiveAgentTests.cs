@@ -102,4 +102,52 @@ public class CognitiveAgentTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None));
     }
+
+    [Fact]
+    public async Task WhenSubstrateSucceeds_PublishesWhatTheCallCost()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var telemetry = bus.Subscribe(Topics.Telemetry);
+        var substrate = new StubSubstrate((_, _) => Task.FromResult(new SubstrateResult("real answer", TimeSpan.FromMilliseconds(42), 10, 0.002m)));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low"));
+
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
+
+        Assert.True(telemetry.TryRead(out var trace));
+        Assert.Equal("Test", trace.Meta.Get<string>(SubstrateTrace.AgentKey));
+        Assert.Equal("fast-low", trace.Meta.Get<string>(SubstrateTrace.ClassKey));
+        Assert.Equal(42d, trace.Meta.Get<double>(SubstrateTrace.LatencyKey));
+        Assert.Equal(0.002m, trace.Meta.Get<decimal>(SubstrateTrace.CostKey));
+    }
+
+    [Fact]
+    public async Task WhenSubstrateFails_PublishesTheCauseAndNoCost()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var telemetry = bus.Subscribe(Topics.Telemetry);
+        var substrate = new StubSubstrate((_, _) => throw new HttpRequestException("down"));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low"));
+
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
+
+        Assert.True(telemetry.TryRead(out var trace));
+        Assert.Equal(SubstrateHealth.Unreachable, trace.Meta.Get<string>(SubstrateHealth.DegradedKey));
+        Assert.False(trace.Meta.ContainsKey(SubstrateTrace.CostKey));
+    }
+
+    [Fact]
+    public async Task WhenUseSubstrateIsFalse_PublishesNoTelemetry()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var telemetry = bus.Subscribe(Topics.Telemetry);
+        var substrate = new StubSubstrate((_, _) => Task.FromResult(new SubstrateResult("real answer", TimeSpan.Zero, 10, 0m)));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low", useSubstrate: false));
+
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
+
+        Assert.False(telemetry.TryRead(out _));
+    }
 }

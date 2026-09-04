@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Diagnostics;
+using System.Text.RegularExpressions;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
@@ -38,6 +39,9 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 {
     public const string ControlKindKey = "control.kind";
     public const string WrittenKind = "Written";
+
+    /// <summary>What the flush actually put on disk, one "path = value" string per record — the same strings the log line prints, so the surface and the console agree without either reading the other.</summary>
+    public const string WrittenRecordsKey = "archivist.written";
 
     private readonly IMessageBus _bus;
     private readonly IInstructionStore _instructions;
@@ -108,7 +112,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         // identical to a turn that legitimately had nothing to remember.
         if (diagnostics is not null)
         {
-            var facts = newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}"));
+            var facts = newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(Describe));
             _logger.LogInformation("{Agent} {Facts} [{Class}] ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
                 Name, facts, entry.Class, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
         }
@@ -143,13 +147,17 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             .GroupBy(p => p.ProfileId)
             .Select(g => _store.WriteAsync([.. g.Select(p => p.Record)], g.Key, cancellationToken)))
             .ConfigureAwait(false);
-        _logger.LogInformation("{Agent} wrote {Count} records: {Paths}",
-            Name, batch.Count, string.Join(", ", batch.Select(p => $"{p.Record.Category}/{p.Record.Topic}/{p.Record.Subtopic}/{p.Record.Subject}/{p.Record.Key} = {p.Record.Value}")));
 
-        var written = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
-            MetaBag.Empty.With(ControlKindKey, WrittenKind));
-        _bus.Publish(Topics.SystemControl, written);
+        var written = batch.Select(p => Describe(p.Record)).ToList();
+        _logger.LogInformation("{Agent} wrote {Count} records: {Paths}", Name, batch.Count, string.Join(", ", written));
+
+        var announcement = envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
+            MetaBag.Empty.With(ControlKindKey, WrittenKind).With(WrittenRecordsKey, written));
+        _bus.Publish(Topics.SystemControl, announcement);
     }
+
+    private static string Describe(ArchiveRecord r) =>
+        $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}";
 
     /// <summary>
     /// A broken or unavailable substrate call skips this turn's write
@@ -168,11 +176,13 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             ("terse", ArchiveWriteStyle.TerseValue),
             ("text", text));
 
+        var started = Stopwatch.GetTimestamp();
         try
         {
             _logger.LogDebug("{Agent} extraction prompt >>>\n{Prompt}", Name, prompt);
             var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} extraction response <<<\n{Response}", Name, result.Text);
+            SubstrateTrace.Publish(_bus, envelope, Name, substrateClass, result);
 
             // The mock tier echoes the prompt back verbatim, and a reply
             // that contains its own entire input is never an extraction.
@@ -192,7 +202,9 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             // Nothing to retain: unlike Reflection's buffered turns, the
             // facts this call would have produced were never extracted, so
             // there is no raw material a retry could work from.
-            _logger.LogWarning("{Agent} fact extraction {Cause}, skipping", Name, SubstrateHealth.Classify(ex));
+            var cause = SubstrateHealth.Classify(ex);
+            _logger.LogWarning("{Agent} fact extraction {Cause}, skipping", Name, cause);
+            SubstrateTrace.PublishFailure(_bus, envelope, Name, substrateClass, Stopwatch.GetElapsedTime(started).TotalMilliseconds, cause);
             return ([], null);
         }
     }

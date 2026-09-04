@@ -24,6 +24,7 @@ agent can never stall another agent's turn.
 | Reflection | `events.conclusion` | `events.perception` (ideas), `system.control` | cognitive |
 | ArchiveLogger | `Topics.All` | — | deterministic |
 | ConsoleSubscriber | `Topics.All` | — | display |
+| TurnLog | `Topics.All` | — | display |
 
 `IArchiveStore` and `IPassageStore` are **libraries**, not bus citizens —
 see below.
@@ -127,6 +128,15 @@ publishes the next envelope. That makes this table the whole contract.
 | `governance.degraded` | Governance | SSE clients |
 | `control.kind` | Archivist, Governance, Reflection | Identity, Impulse |
 | `reflection.mood` | Reflection | Impulse |
+| `archivist.written` | Archivist (on `Written`) | TurnLog |
+| `reflection.passages` | Reflection (on `Reflected`) | TurnLog |
+| `reflection.idea` | Reflection (on `Reflected`) | TurnLog |
+| `substrate.agent` | every substrate caller, via `SubstrateTrace` | TurnLog |
+| `substrate.class` | every substrate caller, via `SubstrateTrace` | TurnLog |
+| `substrate.label` | Recall (the pair it picked for) | TurnLog |
+| `substrate.latency_ms` | every substrate caller, via `SubstrateTrace` | TurnLog |
+| `substrate.tokens` | every substrate caller, via `SubstrateTrace` | TurnLog |
+| `substrate.cost` | every substrate caller, via `SubstrateTrace` | TurnLog |
 
 Three of these are read by nobody in this process. That is not a defect:
 `SseBroadcaster` fans whole envelopes to connected clients, so the
@@ -150,6 +160,37 @@ means a key crossing more than one hop must be re-published at each one, and
 Governance carries several purely so Reflection can see them after the turn
 concludes. That is the cost of the fresh-bag rule, paid visibly rather than
 by an inherited bag that quietly accumulates everything forever.
+
+## Telemetry and the turn log
+
+What a substrate call cost used to exist only as a log line. `SubstrateTrace`
+publishes it instead: one envelope per call on `system.telemetry`, derived
+from the envelope that triggered it so `CorrelationId` files it under the
+turn. It is a topic rather than keys on the caller's own envelope because
+the two are not one-to-one — Recall fans out a call per pair behind a single
+advisory, Reflection's call spans a whole batch, and Archivist publishes
+only when it flushes. A call is its own event, so it gets its own envelope.
+No trace is published when an agent runs `UseSubstrate: false`: a configured
+deterministic answer is not a call.
+
+`TurnLog` is a wildcard subscriber that folds every envelope of a turn into
+one `TurnRecord` — perception, impulse, what Librarian and Recall read, what
+Archivist wrote, the reply, a verdict when it is not green, Reflection's
+passages and pushed idea, and every substrate call with its latency and
+cost. The reduction lives in `TurnProjection`, a pure function over
+`(record, envelope)`, so display code holds none of it and arrival order
+does not matter: envelopes fill named slots rather than appending.
+
+Three consumers read the same records: SSE clients on `/api/log/stream`,
+`/api/log` for what a client missed, and any `ITurnLogSink`. One sink ships
+— `JsonlTurnLogSink`, off unless `TurnLog:Path` is set. A record reaches the
+sinks once, after `TurnLog:SettleMs` of quiet on its correlation, because
+Archivist and Reflection land behind the reply and an event is not over when
+the person has been answered.
+
+Profile scoping mirrors `SseBroadcaster`: a client naming a profile sees its
+own turns plus the ones nobody owns, so a self-triggered idea appears in
+every window and one person's turn appears in no other.
 
 ## Governance: decision-only
 
@@ -571,11 +612,12 @@ design records for what shipped.
 src/EciCas.Core/        Envelope, MetaBag, Severity, Verdict, Topics, PromptCap,
                          IAgent, IMessageBus, IArchiveStore, IPassageStore,
                          IAgentStateStore, IInstructionStore, ISubstrateProvider
-src/EciCas.Bus/          ChannelBus, AgentBase, BusActivityTracker
+src/EciCas.Bus/          ChannelBus, AgentBase, BusActivityTracker, SubstrateTrace
 src/EciCas.Agents/       one folder per agent
 src/EciCas.Substrates/   SubstrateRegistry, MockSubstrateProvider, OpenAiCompatibleSubstrateProvider
                          OnnxEmbeddingProvider, NullEmbeddingProvider
 src/EciCas.Host/         Generic Host wiring, ConsoleSubscriber, ArchiveLogger, routing manifest, SSE endpoint
+src/EciCas.Host/TurnLog/        TurnRecord, TurnProjection, TurnLogSubscriber, ITurnLogSink
 src/EciCas.Host/instructions/   one .txt per agent — every sentence the persona speaks or is steered by
 src/EciCas.ArchiveTool/  console REPL for inspecting/editing the Parquet archive
 tests/EciCas.Tests/      xUnit

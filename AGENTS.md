@@ -11,16 +11,17 @@ cut.
 
 ## Where to work
 
-**`main` in `D:\Dev\Claude\eci-cas`, always.** One developer, no
-branches, no worktrees — commit to `main` and push. If a worktree exists,
-it is leftover plumbing, not somewhere to work.
+**`main` in the one checkout, always.** One developer, no branches, no
+worktrees — commit to `main` and push. If a worktree or a second clone
+exists, it is leftover plumbing, not somewhere to work.
 
-This is not only a preference. Each worktree carries its own `bin/`, and
-the archive lives in the build output, so a host started from the wrong
-folder gets a *different persona with an empty memory* — it seeds
-`assistant/identity` and knows nothing else. That reads exactly like a
-retrieval bug and has already been debugged as one. If Librarian reports
-an index of one pair, check the folder before the code.
+This is not only a preference. Each checkout carries its own `bin/`, and
+the archive lives in the build output
+(`src/EciCas.Host/bin/<config>/net10.0/archive`), so a host started from
+the wrong folder gets a *different persona with an empty memory* — it
+seeds `assistant/identity` and knows nothing else. That reads exactly
+like a retrieval bug and has already been debugged as one. If Librarian
+reports an index of one pair, check the folder before the code.
 
 ## Architecture
 

@@ -80,7 +80,17 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
         turns.delete(order.shift()!);
       }
     }
-    turn.input = String(raw.meta["perception.text"] ?? "");
+    const text = String(raw.meta["perception.text"] ?? "");
+
+    // Reflection pushes its own ideas back onto perception. That is the
+    // persona thinking, not the person speaking — drawing it as an utterance
+    // puts words in someone's mouth.
+    if (raw.meta["perception.triggered_by"] === "self") {
+      turn.selfTriggered = true;
+      turn.idea = text;
+      return;
+    }
+    turn.input = text;
     return;
   }
 

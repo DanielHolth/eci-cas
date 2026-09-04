@@ -54,6 +54,16 @@ constraint: read from the bus freely via SSE, write only through
 | Security's verdict (`src/EciCas.Agents/Security`) | `SecurityIcon` — only renders on yellow/red; click reveals the matched rule's concern |
 | Intent's advise/refuse output | `SpeechBubble` — dashed amber when Governance marks the turn `governance.degraded`, i.e. thought with a substrate missing |
 | `EpochWritten` (post-Memory milestone) | `ConsolidationDoodle` — clickable "+", first click reconciles, repeats are view-only |
+| Reflection's pushed idea (`perception.triggered_by = "self"`) | `IdeaBubble` — dashed and italic, never an `Utterance`; clicking opens its entry in the drawer |
+| `GET /api/log` + `/api/log/stream` (`src/EciCas.Host/TurnLog`) | `EventLog` — a toggled right-hand drawer, one collapsed row per event, expanding to the fixed slot order Perception, Impulse, Librarian-n, Hindsight-n, Intent, Security (only when not green), Archivist-n, Reflection (behind a sub-toggle), Cost, Latency |
+
+The drawer holds no reduction of its own. `TurnProjection` on the host folds
+a turn's envelopes into one `TurnRecord` of plain strings, and the same
+records feed the optional JSONL sink — so what a person reads and what lands
+on disk cannot drift. `useTurnLog` replays `/api/log`, then follows
+`/api/log/stream`, replacing by `correlationId` as an event fills in.
+Envelope arrival order is not display order: slots are named and filled, not
+appended.
 
 ## Open questions for Daniel
 
@@ -75,8 +85,9 @@ react to — none of them are settled:
 - **Bundle bubble colors** — Librarian (blue) and Recall (orange) are
   carried over placeholders from the old console color table (now
   archived with the Python prototype); Identity's fuchsia is likewise
-  unanchored. There's no console subscriber yet in the C# rebuild to
-  pin a real palette to — worth revisiting once one exists.
+  unanchored. *Partly answered:* the drawer now prints the same agent
+  lines the console does, so there is a palette to anchor to — the
+  bubbles should be pinned to it rather than left as guesses.
 - **Doodle staleness** — a doodle can appear out of band with the
   current turn if consolidation runs off-path on a background worker.
   This mock always shows the doodle attached to the turn that produced

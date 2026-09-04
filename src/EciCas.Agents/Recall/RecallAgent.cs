@@ -4,6 +4,7 @@ using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 
 namespace EciCas.Agents.Recall;
 
@@ -115,7 +116,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
         // Phase two: one flat set of workers over every chunk of every pair.
         var chunks = Chunks(loaded);
-        var results = await Task.WhenAll(chunks.Select(c => PickAsync(c, text, entry.Class, cancellationToken))).ConfigureAwait(false);
+        var results = await Task.WhenAll(chunks.Select(c => PickAsync(envelope, c, text, entry.Class, cancellationToken))).ConfigureAwait(false);
         var picked = results.SelectMany(r => r.Facts).OrderByDescending(r => r.Importance).ToList();
 
         // Any worker failing means some of the archive went unread, so the
@@ -197,13 +198,14 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     /// is a turn-level decision only HandleAsync can make.
     /// </summary>
     private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics, string? Degraded)> PickAsync(
-        IReadOnlyList<ArchiveRecord> candidates, string text, string substrateClass, CancellationToken cancellationToken)
+        Envelope envelope, IReadOnlyList<ArchiveRecord> candidates, string text, string substrateClass, CancellationToken cancellationToken)
     {
         if (candidates.Count == 0)
         {
             return ([], null, null);
         }
 
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var prompt = BuildPrompt(text, candidates);
@@ -219,6 +221,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             _logger.LogInformation("{Agent} picked from {Category}/{Topic} ({Rows} row(s)) [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, read.Category, read.Topic, candidates.Count, substrateClass,
                 result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            SubstrateTrace.Publish(_bus, envelope, Name, substrateClass, result, $"{read.Category}/{read.Topic}");
 
             return (ParsePicked(result.Text, candidates), result, null);
         }
@@ -227,6 +230,8 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             var first = candidates[0];
             var cause = SubstrateHealth.Classify(ex);
             _logger.LogWarning("{Agent} lookup for {Category}/{Topic} {Cause}, skipping", Name, first.Category, first.Topic, cause);
+            SubstrateTrace.PublishFailure(_bus, envelope, Name, substrateClass,
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds, cause, $"{first.Category}/{first.Topic}");
             return ([], null, cause);
         }
     }

@@ -45,6 +45,7 @@ public sealed class AgentSubstrateManifest
 public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
 {
     private readonly ISubstrateProvider _substrate;
+    private readonly IMessageBus _bus;
     private readonly ILogger _logger;
     private readonly AgentSubstrateManifest _agentSubstrates;
 
@@ -52,6 +53,7 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
         : base(bus, activity, logger)
     {
         _substrate = substrate;
+        _bus = bus;
         _logger = logger;
         _agentSubstrates = agentSubstrates.Value;
     }
@@ -110,14 +112,17 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
             _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, entry.Class, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, diagnostics.Text);
+            SubstrateTrace.Publish(_bus, envelope, Name, entry.Class, diagnostics);
 
             Publish(envelope, prompt, ParseResult(diagnostics), diagnostics, degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var cause = SubstrateHealth.Classify(ex);
+            var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _logger.LogWarning("{Agent} substrate call {Cause} after {LatencyMs}ms, fallback posture {Posture}",
-                Name, cause, Stopwatch.GetElapsedTime(started).TotalMilliseconds, Fallback);
+                Name, cause, elapsed, Fallback);
+            SubstrateTrace.PublishFailure(_bus, envelope, Name, entry.Class, elapsed, cause);
 
             if (Fallback == FallbackPosture.Open)
             {

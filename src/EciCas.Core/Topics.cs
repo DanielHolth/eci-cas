@@ -18,4 +18,11 @@ public static class Topics
     public const string Conclusion = "events.conclusion";
     public const string Verdict = "events.verdict";
     public const string SystemControl = "system.control";
+
+    /// <summary>
+    /// One envelope per substrate call, derived from whatever triggered it.
+    /// Not an event of cognition — nothing downstream decides anything on
+    /// it — so it sits beside system.control rather than under events.*.
+    /// </summary>
+    public const string Telemetry = "system.telemetry";
 }

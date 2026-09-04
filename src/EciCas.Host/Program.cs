@@ -17,6 +17,7 @@ using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Host;
+using EciCas.Host.TurnLog;
 using EciCas.Substrates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,6 +73,7 @@ builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("
 builder.Services.Configure<PassageOptions>(builder.Configuration.GetSection("Passages"));
 builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("Embedding"));
 builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
+builder.Services.Configure<TurnLogOptions>(builder.Configuration.GetSection("TurnLog"));
 
 builder.Services.AddSingleton<BusActivityTracker>();
 builder.Services.AddSingleton<IMessageBus, ChannelBus>();
@@ -231,6 +233,24 @@ builder.Services.AddSingleton<IPassageStore>(new ParquetPassageStore(archiveDire
 // under archive/profiles/. A surface concern, not a bus citizen.
 builder.Services.AddSingleton(new ProfileStore(archiveDirectory));
 
+// One JSON shape for every surface: the HTTP endpoints below and the disk
+// sink, which is the same record a client reads.
+builder.Services.AddSingleton(new JsonSerializerOptions
+{
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+});
+
+// Off unless asked for. TurnLog:Path is resolved against the build output
+// the same way the archive is, so the log sits beside the persona it
+// describes rather than wherever the process happened to start.
+var turnLogPath = builder.Configuration["TurnLog:Path"];
+if (!string.IsNullOrWhiteSpace(turnLogPath))
+{
+    builder.Configuration["TurnLog:Path"] = Path.Combine(AppContext.BaseDirectory, turnLogPath);
+    builder.Services.AddSingleton<ITurnLogSink, JsonlTurnLogSink>();
+}
+
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
 RegisterAgent<LibrarianAgent>(builder.Services);
@@ -246,6 +266,7 @@ RegisterAgent<ReflectionAgent>(builder.Services);
 RegisterAgent<ArchiveLogger>(builder.Services);
 RegisterAgent<ConsoleSubscriber>(builder.Services);
 RegisterAgent<SseBroadcaster>(builder.Services);
+RegisterAgent<TurnLogSubscriber>(builder.Services);
 
 var app = builder.Build();
 
@@ -266,11 +287,7 @@ PassageCorpus.EnsureModelAgreement(
 
 app.UseCors(CorsPolicy);
 
-var jsonOptions = new JsonSerializerOptions
-{
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-};
+var jsonOptions = app.Services.GetRequiredService<JsonSerializerOptions>();
 
 app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.List(), jsonOptions));
 
@@ -351,6 +368,44 @@ app.MapGet("/api/stream", async (HttpContext context, SseBroadcaster broadcaster
     finally
     {
         broadcaster.Disconnect(clientId);
+    }
+});
+
+// The same projection the disk sink reads, served two ways: what a client
+// missed, and what happens next. A client holds no reduction logic of its
+// own — see TurnLogSubscriber.
+app.MapGet("/api/log", (HttpContext context, TurnLogSubscriber log) =>
+{
+    var profileId = context.Request.Query["profileId"].ToString();
+    return Results.Json(log.Recent(string.IsNullOrEmpty(profileId) ? null : profileId), jsonOptions);
+});
+
+app.MapGet("/api/log/stream", async (HttpContext context, TurnLogSubscriber log, CancellationToken cancellationToken) =>
+{
+    context.Response.Headers.CacheControl = "no-cache";
+    context.Response.ContentType = "text/event-stream";
+    await context.Response.StartAsync(cancellationToken);
+    await context.Response.WriteAsync(": connected\n\n", cancellationToken);
+    await context.Response.Body.FlushAsync(cancellationToken);
+
+    var profileId = context.Request.Query["profileId"].ToString();
+    var reader = log.Connect(string.IsNullOrEmpty(profileId) ? null : profileId, out var clientId);
+    try
+    {
+        await foreach (var record in reader.ReadAllAsync(cancellationToken))
+        {
+            var json = JsonSerializer.Serialize(record, jsonOptions);
+            await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
+            await context.Response.Body.FlushAsync(cancellationToken);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // Client disconnected — expected, not an error.
+    }
+    finally
+    {
+        log.Disconnect(clientId);
     }
 });
 

@@ -175,13 +175,16 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
                 Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             _logger.LogDebug("{Agent} selection response <<<\n{Response}", Name, result.Text);
+            SubstrateTrace.Publish(_bus, envelope, Name, entry.Class, result);
             Publish(envelope, Merge(ParsePairs(result.Text, index), remembered), degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var cause = SubstrateHealth.Classify(ex);
+            var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _logger.LogWarning("{Agent} substrate call {Cause} after {LatencyMs}ms, fallback posture {Posture}",
-                Name, cause, Stopwatch.GetElapsedTime(started).TotalMilliseconds, Fallback);
+                Name, cause, elapsed, Fallback);
+            SubstrateTrace.PublishFailure(_bus, envelope, Name, entry.Class, elapsed, cause);
 
             // Open posture, and the passages are exactly what makes it worth
             // something: a selection call that failed still leaves the turn

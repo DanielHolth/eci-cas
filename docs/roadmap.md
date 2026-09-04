@@ -902,6 +902,40 @@ through an emergency reads as not having heard it. Slow
 colouring stays an order of magnitude below all of it, which is the
 invariant `ImpulseAgentTests` already guarded.
 
+**The turn was opaque — shipped.** A person saw an avatar, three bubbles
+and a reply, and nothing about which faculties ran, what memory was read or
+written, what it cost or how long it took. All of that existed, but only as
+console lines on a machine nobody using the persona is looking at.
+
+The fix is a projection, not a renderer. `TurnProjection` folds a turn's
+envelopes into one `TurnRecord`; `TurnLog` subscribes to `Topics.All` and
+serves those records three ways — `/api/log` for what a client missed,
+`/api/log/stream` for what happens next, and any `ITurnLogSink` for a copy
+on disk (`TurnLog:Path`, off by default). The drawer is one consumer of a
+shape three things read, which is why the reduction did not go in React.
+
+Getting the facts onto the bus was most of the work. `SubstrateResult`
+carries latency, tokens and cost, and every one of the five call sites
+logged it and dropped it; `SubstrateTrace` now publishes one envelope per
+call on `system.telemetry`, derived from the triggering envelope so it files
+under the turn. Archivist's written paths and Reflection's passages and
+pushed idea were in the same position — built for a log line, never
+published — and now ride the control envelopes they belong to.
+
+Two things surfaced. Reflection's flush spans a batch, so deriving its
+telemetry from a concluded turn would have scoped a shared cost to one
+person's window; it now creates its own correlation and the batch reads as
+what it is, unowned. And a record cannot be written when the reply lands:
+Archivist and Reflection arrive behind it, so sinks are handed a record
+after `TurnLog:SettleMs` of quiet instead.
+
+What it deliberately does not do: embedding calls are invisible, because
+`IEmbeddingProvider` reports neither latency nor cost, so the drawer's
+`Cost` line means substrate calls and not every call. There is no
+cross-turn total — per event only. The latency total is the turn's
+wall-clock rather than the sum of its addends, since a parallel fan-out
+that summed would claim more time than the turn took.
+
 **The picker does not solve attribution.** `localStorage` keeps the last
 person's identity until someone explicitly switches, so on a shared
 device the persona happily attributes one person's turn to another. With
