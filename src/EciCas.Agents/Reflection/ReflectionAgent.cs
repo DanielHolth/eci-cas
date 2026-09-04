@@ -78,12 +78,13 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly ILogger _logger;
     private readonly ReflectionOptions _options;
+    private readonly RuntimeKnobs _knobs;
     private readonly List<BufferedConclusion> _pending = [];
     private readonly object _pendingLock = new();
 
     public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, IArchiveStore store, IAgentStateStore stateStore,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options,
-        IPassageStore passages, IEmbeddingProvider embeddings, IInstructionStore instructions)
+        IPassageStore passages, IEmbeddingProvider embeddings, IInstructionStore instructions, RuntimeKnobs knobs)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -96,6 +97,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         _agentSubstrates = agentSubstrates.Value;
         _logger = logger;
         _options = options.Value;
+        _knobs = knobs;
     }
 
     public override string Name => "Reflection";
@@ -123,7 +125,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         lock (_pendingLock)
         {
             _pending.Add(new BufferedConclusion(context, reply, envelope.Generation, wokenIds, wokenDepth));
-            if (_pending.Count >= _options.BatchSize)
+            if (_pending.Count >= _knobs.ReflectionEvery)
             {
                 batch = [.. _pending];
                 _pending.Clear();
@@ -213,7 +215,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             lock (_pendingLock)
             {
                 _pending.InsertRange(0, batch);
-                var cap = _options.BatchSize * Math.Max(1, _options.MaxBufferedBatches);
+                var cap = _knobs.ReflectionEvery * Math.Max(1, _options.MaxBufferedBatches);
                 if (_pending.Count > cap)
                 {
                     _pending.RemoveRange(0, _pending.Count - cap);

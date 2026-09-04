@@ -1,4 +1,4 @@
-﻿using EciCas.Agents.Passages;
+using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Librarian;
@@ -14,8 +14,8 @@ namespace EciCas.Tests.Agents;
 
 /// <summary>
 /// The vector half of memory: Reflection writes passages, Librarian matches
-/// them and turns them into leads. Asserts outcome — what got written, what
-/// got selected — never the order agents ran in.
+/// them and turns them into leads. Asserts outcome â€” what got written, what
+/// got selected â€” never the order agents ran in.
 /// </summary>
 public class PassageMemoryTests
 {
@@ -56,7 +56,7 @@ public class PassageMemoryTests
             Assert.Equal(1.0, hit.Score, 5);
 
             // The revisit keeps the id and the timestamp, so it replaces the
-            // note rather than accumulating beside it — and "latest" still
+            // note rather than accumulating beside it â€” and "latest" still
             // means the newest event-series, not the newest edit.
             var revised = first with { Text = "the warmth is for anything with a name, not only people" };
             var current = new Passage("b", "it hedges hardest when a question carries a deadline", [], DateTimeOffset.UtcNow, Unit(1));
@@ -185,7 +185,7 @@ public class PassageMemoryTests
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings(_ => Unit(0)), ShippedInstructions.Store);
+            passages, new StubEmbeddings(_ => Unit(0)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
 
@@ -218,7 +218,7 @@ public class PassageMemoryTests
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings(_ => Unit(2)), ShippedInstructions.Store);
+            passages, new StubEmbeddings(_ => Unit(2)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
 
@@ -249,7 +249,7 @@ public class PassageMemoryTests
             new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?")), CancellationToken.None);
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?").With(ReflectionAgent.TriggeredByKey, "self")), CancellationToken.None);
 
         Assert.True(advisories.TryRead(out var advisory));
         Assert.Equal("Hindsight", advisory!.PublishedBy);
@@ -299,7 +299,7 @@ public class PassageMemoryTests
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store);
+            passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
 
@@ -332,7 +332,7 @@ public class PassageMemoryTests
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store);
+            passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         var conclusion = Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral,
             MetaBag.Empty
@@ -365,7 +365,7 @@ public class PassageMemoryTests
             new JsonlAgentStateStore(Path.GetTempFileName()),
             new StubSubstrate(_ => Task.FromResult(new SubstrateResult("mood|dull\nthought|person/family|note", TimeSpan.Zero, 5, 0m))),
             Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
-            passages, new StubEmbeddings(), ShippedInstructions.Store);
+            passages, new StubEmbeddings(), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
 

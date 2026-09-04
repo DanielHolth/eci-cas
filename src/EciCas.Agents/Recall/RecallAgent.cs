@@ -41,11 +41,12 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly RecallOptions _options;
+    private readonly RuntimeKnobs _knobs;
     private readonly ILogger _logger;
 
     public RecallAgent(IMessageBus bus, BusActivityTracker activity, ILogger<RecallAgent> logger, IArchiveStore store,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<RecallOptions> options,
-        IInstructionStore instructions)
+        IInstructionStore instructions, RuntimeKnobs knobs)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -54,6 +55,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
+        _knobs = knobs;
         _logger = logger;
     }
 
@@ -108,7 +110,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         }
 
         var total = loaded.Sum(rows => rows.Count);
-        if (total <= _options.MaxPickedPerWorker)
+        if (total <= _knobs.RecallDepth)
         {
             Publish(envelope, [.. loaded.SelectMany(rows => rows).OrderByDescending(r => r.Importance)], degraded: null);
             return;
@@ -253,7 +255,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var rows = string.Join("\n", candidates.Select((r, i) => $"{i}. {r.Subtopic} / {r.Subject} {r.Key} = {r.Value}"));
         return InstructionFile.Fill(_instructions.For(Name),
             ("rows", rows),
-            ("max", _options.MaxPickedPerWorker.ToString()),
+            ("max", _knobs.RecallDepth.ToString()),
             ("text", text));
     }
 

@@ -46,7 +46,17 @@ session; the pair list beside it needs `Debug`.
 the build fails with a file-in-use error rather than anything that
 mentions the host still running.
 
-## Debug tracing
+## Resetting the archive
+
+`dotnet run --project src/EciCas.ArchiveTool -- <archive-dir>`, then `reset`
+at its prompt. Deletes every `*.parquet` under that directory — shared tier
+and all profiles — and reseeds one fact:
+`assistant/system/eci/this/version = 0.1`, so the archive is never truly
+empty and Librarian always has at least one pair to index. Stop the host
+first (same `bin/` lock as above). This is what "reset parquet" means when
+asked for.
+
+
 
 ```
 dotnet run --project src/EciCas.Host -- --Tier=Default --Logging:LogLevel:EciCas=Debug

@@ -19,7 +19,7 @@ public class IntentAgentTests
         var bus = new ChannelBus(activity);
         var proposals = bus.Subscribe(Topics.Proposal);
         var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
-            Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }), ShippedInstructions.Store);
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }), ShippedInstructions.Store, new RuntimeKnobs());
 
         var facts = new[] { new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow) };
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
@@ -48,7 +48,7 @@ public class IntentAgentTests
         var bus = new ChannelBus(activity);
         var proposals = bus.Subscribe(Topics.Proposal);
         var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
-            Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }), ShippedInstructions.Store);
+            Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }), ShippedInstructions.Store, new RuntimeKnobs());
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
             .With(PerceptionAgent.TextKey, "when is the wedding")
@@ -86,7 +86,7 @@ public class IntentAgentTests
             var bus = new ChannelBus(activity);
             var proposals = bus.Subscribe(Topics.Proposal);
             var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
-                Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }), ShippedInstructions.Store);
+                Options.Create(new AgentSubstrateManifest { Agents = { ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" } } }), ShippedInstructions.Store, new RuntimeKnobs());
 
             await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, meta), CancellationToken.None);
             Assert.True(proposals.TryRead(out var proposal));

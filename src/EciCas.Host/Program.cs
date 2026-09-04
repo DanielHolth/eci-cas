@@ -279,6 +279,7 @@ builder.Services.AddSingleton(new CostLedger(
 
 builder.Services.Configure<PersonaNameOptions>(builder.Configuration.GetSection("Identity"));
 builder.Services.AddSingleton<PersonaName>();
+builder.Services.AddSingleton<RuntimeKnobs>();
 
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
@@ -319,6 +320,44 @@ app.UseCors(CorsPolicy);
 var jsonOptions = app.Services.GetRequiredService<JsonSerializerOptions>();
 
 app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.List(), jsonOptions));
+
+// The Debug panel's sliders — live, in-memory, and reset on restart. Read
+// on every Intent prompt, so a drag takes effect on the very next turn.
+app.MapGet("/api/knobs", (RuntimeKnobs knobs) => Results.Json(ToKnobsPayload(knobs), jsonOptions));
+
+app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs) =>
+{
+    if (request.MaxSentences is { } n)
+    {
+        knobs.MaxSentences = n;
+    }
+
+    if (request.ReflectionEvery is { } r)
+    {
+        knobs.ReflectionEvery = r;
+    }
+
+    if (request.RecallDepth is { } d)
+    {
+        knobs.RecallDepth = d;
+    }
+
+    if (request.Tone is { } toneName && Enum.TryParse<Tone>(toneName, ignoreCase: true, out var tone))
+    {
+        knobs.Tone = tone;
+    }
+
+    return Results.Json(ToKnobsPayload(knobs), jsonOptions);
+});
+
+static object ToKnobsPayload(RuntimeKnobs knobs) => new
+{
+    maxSentences = knobs.MaxSentences,
+    reflectionEvery = knobs.ReflectionEvery,
+    recallDepth = knobs.RecallDepth,
+    tone = knobs.Tone.ToString(),
+    tones = Enum.GetNames<Tone>(),
+};
 
 // The persona's own card, read-only. Without this the personality is the one
 // configured thing with no surface at all: it colours every reply and a
@@ -494,5 +533,7 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
 }
 
 internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
+
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, string? Tone = null);
 
 internal sealed record CreateProfileRequest(string DisplayName, string Avatar);

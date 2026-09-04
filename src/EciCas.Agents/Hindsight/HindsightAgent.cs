@@ -1,5 +1,6 @@
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -85,7 +86,16 @@ public sealed class HindsightAgent : AgentBase
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        var woken = await WakeAsync(PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey)), cancellationToken).ConfigureAwait(false);
+        // Waking notes on every human turn meant an embed-and-search call
+        // (network latency, unlike everything else here) sat on the fast
+        // path of every single reply. Reflection's own reposted ideas arrive
+        // back through events.perception exactly like a human turn (see
+        // ArchivistAgent's matching skip) — that repost is the one moment
+        // the ring (Hindsight -> Intent -> reply -> note -> Hindsight) is
+        // actually being closed, so it is the only trigger Hindsight needs.
+        var woken = envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self"
+            ? await WakeAsync(PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey)), cancellationToken).ConfigureAwait(false)
+            : [];
 
         // Published even when empty, and even when there is no embedder at
         // all: Hindsight is a roster slot now, and a slot that stays silent

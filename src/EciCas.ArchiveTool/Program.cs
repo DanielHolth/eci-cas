@@ -4,7 +4,7 @@ using EciCas.Core;
 var directory = args.Length > 0 ? args[0] : "archive";
 Directory.CreateDirectory(directory);
 
-const string Usage = "list | show <category> [topic] [subtopic] | showall <category> [topic] [subtopic] | del <category> <topic> <index[,index...]> | del <category> <topic> [subtopic] | help | exit";
+const string Usage = "list | show <category> [topic] [subtopic] | showall <category> [topic] [subtopic] | del <category> <topic> <index[,index...]> | del <category> <topic> [subtopic] | reset | help | exit";
 
 Console.WriteLine($"EciCas Archive Tool — {Path.GetFullPath(directory)}");
 Console.WriteLine($"Commands: {Usage}");
@@ -54,6 +54,10 @@ while (true)
 
             case "del" when parts.Length >= 3:
                 await DeleteByFilterAsync(directory, parts[1], parts[2], parts.ElementAtOrDefault(3));
+                break;
+
+            case "reset":
+                await ResetAsync(directory);
                 break;
 
             default:
@@ -167,6 +171,25 @@ static async Task DeleteByFilterAsync(string directory, string category, string 
 // An emptied pair loses its file rather than keeping a zero-row one: the
 // file's existence is what puts the pair in the index, so leaving it behind
 // would keep offering Librarian a topic with nothing under it.
+// Wipes every pair file — shared tier and all profiles' own — and reseeds the
+// single fact "reset parquet" always leaves behind, so a fresh archive is
+// never truly empty: assistant/system/eci/this/version = 0.1.
+static async Task ResetAsync(string directory)
+{
+    foreach (var file in Directory.GetFiles(directory, "*.parquet", SearchOption.AllDirectories))
+    {
+        File.Delete(file);
+    }
+
+    var record = new ArchiveRecord(
+        "assistant", "system", "eci", "this", "version", "0.1",
+        DateTimeOffset.UtcNow, ArchiveDomain.Internal, 1.0);
+
+    var path = ParquetArchiveStore.PairPathFor(directory, new ArchivePair("assistant", "system"));
+    await ParquetArchiveStore.WriteRecordsAsync(path, [record], CancellationToken.None);
+    Console.WriteLine("Parquet reset.");
+}
+
 static async Task SaveAsync(string path, List<ArchiveRecord> records)
 {
     if (records.Count == 0)

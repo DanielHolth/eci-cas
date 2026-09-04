@@ -51,12 +51,10 @@ const FACE: Record<
 
 export function Avatar({
   expression,
-  reflex,
   speaking = false,
   identity,
 }: {
   expression: Expression;
-  reflex: string;
   /** Moves the mouth while Action is voicing a reply. */
   speaking?: boolean;
   /** The active profile's chosen emoji, worn as a badge beside the face —
@@ -66,68 +64,63 @@ export function Avatar({
 }) {
   const face = FACE[expression];
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="relative">
-        <svg
-          viewBox="0 0 120 120"
-          className="h-32 w-32 overflow-visible"
-          role="img"
-          aria-label={`Avatar expression: ${face.label}`}
-          style={{ ["--eci-motion" as string]: face.motion }}
-        >
-          <defs>
-            <radialGradient id="eci-skin" cx="38%" cy="30%" r="80%">
-              <stop offset="0%" stopColor={face.from} />
-              <stop offset="100%" stopColor={face.to} />
-            </radialGradient>
-          </defs>
+    <div className="relative shrink-0">
+      <svg
+        viewBox="0 0 120 120"
+        className="h-20 w-20 overflow-visible"
+        role="img"
+        aria-label={`Avatar expression: ${face.label}`}
+        style={{ ["--eci-motion" as string]: face.motion }}
+      >
+        <defs>
+          <radialGradient id="eci-skin" cx="38%" cy="30%" r="80%">
+            <stop offset="0%" stopColor={face.from} />
+            <stop offset="100%" stopColor={face.to} />
+          </radialGradient>
+        </defs>
 
-          {/* Aura: the mood spilling past the edge of the face, so a change
-              of expression is visible from across the room. */}
-          <circle className="eci-aura" cx="60" cy="60" r="50" fill={face.from} />
+        {/* Aura: the mood spilling past the edge of the face, so a change
+            of expression is visible from across the room. */}
+        <circle className="eci-aura" cx="60" cy="60" r="50" fill={face.from} />
 
-          <g className="eci-face">
-            <circle cx="60" cy="60" r="46" fill="url(#eci-skin)" />
+        <g className="eci-face">
+          <circle cx="60" cy="60" r="46" fill="url(#eci-skin)" />
 
-            <g className="eci-eyes" fill="#1e293b">
-              {[44, 76].map((cx) => (
-                <g key={cx} className="eci-eye" style={{ transformOrigin: `${cx}px 54px` }}>
-                  <ellipse cx={cx} cy="54" rx="7" ry={7 * face.open} fill="#fff" />
-                  <circle className="eci-pupil" cx={cx} cy="54" r="3.4" />
-                </g>
-              ))}
-            </g>
-
-            <g stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" fill="none">
-              {/* Mirrored: the inner end of each brow is the one nearest the
-                  nose, so one angle drives both and never disagrees. */}
-              <path className="eci-brow" d="M35 41 L53 41" style={{ transform: `translateY(${face.browY}px) rotate(${face.brow}deg)`, transformOrigin: "44px 41px" }} />
-              <path className="eci-brow" d="M67 41 L85 41" style={{ transform: `translateY(${face.browY}px) rotate(${-face.brow}deg)`, transformOrigin: "76px 41px" }} />
-            </g>
-
-            <path
-              className={`eci-mouth${speaking ? " eci-speaking" : ""}`}
-              d={face.mouth}
-              stroke="#1e293b"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              fill="none"
-            />
+          <g className="eci-eyes" fill="#1e293b">
+            {[44, 76].map((cx) => (
+              <g key={cx} className="eci-eye" style={{ transformOrigin: `${cx}px 54px` }}>
+                <ellipse cx={cx} cy="54" rx="7" ry={7 * face.open} fill="#fff" />
+                <circle className="eci-pupil" cx={cx} cy="54" r="3.4" />
+              </g>
+            ))}
           </g>
-        </svg>
 
-        {identity && (
-          <span
-            aria-hidden
-            className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-xl shadow ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-700"
-          >
-            {identity}
-          </span>
-        )}
-      </div>
-      <p className="text-sm text-neutral-500 dark:text-neutral-400 italic max-w-xs text-center">
-        {reflex}
-      </p>
+          <g stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" fill="none">
+            {/* Mirrored: the inner end of each brow is the one nearest the
+                nose, so one angle drives both and never disagrees. */}
+            <path className="eci-brow" d="M35 41 L53 41" style={{ transform: `translateY(${face.browY}px) rotate(${face.brow}deg)`, transformOrigin: "44px 41px" }} />
+            <path className="eci-brow" d="M67 41 L85 41" style={{ transform: `translateY(${face.browY}px) rotate(${-face.brow}deg)`, transformOrigin: "76px 41px" }} />
+          </g>
+
+          <path
+            className={`eci-mouth${speaking ? " eci-speaking" : ""}`}
+            d={face.mouth}
+            stroke="#1e293b"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </g>
+      </svg>
+
+      {identity && (
+        <span
+          aria-hidden
+          className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm shadow ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-700"
+        >
+          {identity}
+        </span>
+      )}
     </div>
   );
 }

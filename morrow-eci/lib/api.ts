@@ -19,3 +19,37 @@ export async function sendPerceive(text: string, profileId?: string): Promise<vo
     throw new Error(`perceive failed: ${response.status}`);
   }
 }
+
+export interface Knobs {
+  maxSentences: number;
+  reflectionEvery: number;
+  recallDepth: number;
+  tone: string;
+  tones: string[];
+}
+
+export async function fetchKnobs(): Promise<Knobs> {
+  const response = await fetch(`${API_BASE}/api/knobs`);
+  if (!response.ok) {
+    throw new Error(`knobs fetch failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "tone", number | string>>): Promise<Knobs> {
+  const response = await fetch(`${API_BASE}/api/knobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`knobs update failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export const setMaxSentences = (maxSentences: number) => postKnobs({ maxSentences });
+export const setReflectionEvery = (reflectionEvery: number) => postKnobs({ reflectionEvery });
+export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth });
+export const setTone = (tone: string) => postKnobs({ tone });

@@ -2,12 +2,10 @@
 
 import { useState } from "react";
 import { Avatar } from "@/components/Avatar";
-import { ThoughtBubbles } from "@/components/ThoughtBubbles";
 import { SecurityIcon } from "@/components/SecurityIcon";
 import { Transcript } from "@/components/Transcript";
-import { ConsolidationDoodle } from "@/components/ConsolidationDoodle";
 import { EventLog } from "@/components/EventLog";
-import { IdeaStream } from "@/components/IdeaStream";
+import { ThoughtsPanel, reflectionCount } from "@/components/ThoughtsPanel";
 import { ProfileChip } from "@/components/ProfileChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEciStream } from "@/lib/useEciStream";
@@ -24,7 +22,7 @@ import type { Profile } from "@/lib/profiles";
  * clear them in place.
  */
 export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch: () => void }) {
-  const { turns, connected, acknowledge } = useEciStream(profile.id);
+  const { turns, connected } = useEciStream(profile.id);
   const log = useTurnLog(profile.id);
 
   // A rename is an ordinary archive write, so nothing pushes it. Re-reading
@@ -35,6 +33,23 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [thoughtsOpen, setThoughtsOpen] = useState(false);
+
+  // Ideas seen the last time the Thoughts panel was open — the badge counts
+  // only what arrived since, and opening it again clears the count back to
+  // what is currently on screen rather than to zero forever. While the
+  // panel is open the badge stays at zero outright: the user is already
+  // looking at the content, so there is nothing "unseen" to flag.
+  const [seenReflections, setSeenReflections] = useState(0);
+  const unseenReflections = thoughtsOpen ? 0 : Math.max(0, reflectionCount(log) - seenReflections);
+
+  function toggleThoughts() {
+    setThoughtsOpen((v) => {
+      const next = !v;
+      setSeenReflections(reflectionCount(log));
+      return next;
+    });
+  }
 
   // Opening the drawer at a specific event is a signal, not a selection: a
   // second click on the same bubble should reopen it after it was collapsed.
@@ -69,62 +84,63 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
 
   return (
     <div className="flex h-screen">
-      <main className="flex-1 min-w-0 overflow-hidden flex flex-col items-center gap-6 p-10 bg-neutral-50 dark:bg-neutral-950">
-        <div className="flex w-full max-w-md items-start justify-between gap-4">
+      {thoughtsOpen && (
+        <ThoughtsPanel records={log} onClose={() => setThoughtsOpen(false)} onOpen={openInLog} />
+      )}
+
+      <main className="flex-1 min-w-0 overflow-hidden flex flex-col items-center gap-2 p-4 bg-neutral-50 dark:bg-neutral-950">
+        <div className="flex w-full items-start justify-between gap-4">
           <div className="flex-1 text-center">
-            <h1 className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">ECI-CAS Avatar</h1>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              {connected ? "Live" : "Disconnected"} ·{" "}
+            <h1 className="text-base font-semibold text-neutral-800 dark:text-neutral-100">
+              {persona.name || "ECI-CAS"}
+            </h1>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              ECI · {connected ? "Live" : "Disconnected"} ·{" "}
               {turn ? <span className="font-mono">{turn.stage}</span> : "waiting for a first thought"}
+              {" · "}
+              {turn?.impulse?.reflex ?? "At rest."}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleThoughts}
+              aria-pressed={thoughtsOpen}
+              className="relative rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              Thoughts
+              {unseenReflections > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                  {unseenReflections}
+                </span>
+              )}
+            </button>
             <button
               type="button"
               onClick={() => setLogOpen((v) => !v)}
               aria-pressed={logOpen}
               className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
             >
-              History
+              Debug
             </button>
             <ProfileChip profile={profile} onSwitch={onSwitch} />
             <ThemeToggle />
           </div>
         </div>
 
-        <IdeaStream turns={turns} onOpen={openInLog} />
-
         <Avatar
           expression={turn?.impulse?.expression ?? "neutral"}
-          reflex={turn?.impulse?.reflex ?? "At rest."}
           speaking={speaking}
           identity={profile.avatar}
         />
-
-        {persona.name && (
-          <p className="-mt-3 shrink-0 text-sm font-medium tracking-wide text-neutral-600 dark:text-neutral-300">
-            {persona.name}
-          </p>
-        )}
-
-        {turn && turn.bundle.length > 0 && (
-          <ThoughtBubbles findings={turn.bundle} faded={turn.stage === "speaking"} />
-        )}
 
         {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
           <SecurityIcon outcomes={turn.security} />
         )}
 
-        {turn?.stage === "speaking" && turn.epoch && (
-          <ConsolidationDoodle
-            epoch={turn.epoch}
-            onAcknowledge={(epochId) => acknowledge(turn.turnId, epochId)}
-          />
-        )}
-
         <Transcript turns={turns} />
 
-        <form onSubmit={handleSubmit} className="flex w-full max-w-md shrink-0 gap-2">
+        <form onSubmit={handleSubmit} className="flex w-full shrink-0 gap-2">
           <input
             type="text"
             value={text}

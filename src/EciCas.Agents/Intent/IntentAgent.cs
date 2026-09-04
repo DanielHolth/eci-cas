@@ -32,12 +32,14 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     private readonly IMessageBus _bus;
     private readonly IInstructionStore _instructions;
+    private readonly RuntimeKnobs _knobs;
 
-    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IInstructionStore instructions)
+    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IInstructionStore instructions, RuntimeKnobs knobs)
         : base(bus, activity, logger, substrate, agentSubstrates)
     {
         _bus = bus;
         _instructions = instructions;
+        _knobs = knobs;
     }
 
     public override string Name => "Intent";
@@ -46,7 +48,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
     protected override FallbackPosture Fallback => FallbackPosture.Open;
 
     protected override string BuildPrompt(Envelope envelope) =>
-        _instructions.For(Name) + Environment.NewLine + Environment.NewLine + BuildContext(envelope);
+        _instructions.For(Name) + Environment.NewLine + Environment.NewLine + BuildContext(envelope, _knobs.MaxSentences, _knobs.Tone);
 
     /// <summary>
     /// Everything this turn actually contributed: the person's text plus
@@ -57,7 +59,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// Recomputed rather than stashed, so it stays a pure function of the
     /// envelope and no per-turn state has to live on the agent.
     /// </summary>
-    private static string BuildContext(Envelope envelope)
+    private static string BuildContext(Envelope envelope, int maxSentences, Tone tone)
     {
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
 
@@ -67,6 +69,8 @@ public sealed class IntentAgent : CognitiveAgent<string>
         AppendAdvice(prompt, "Identity", envelope.Meta.Get<string>(IdentityAgent.AdviceKey));
         AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey));
         AppendNotes(prompt, envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey));
+        AppendLengthLimit(prompt, maxSentences);
+        AppendTone(prompt, tone);
 
         var revisionConcern = envelope.Meta.Get<string>(GovernanceAgent.RevisionConcernKey);
         if (!string.IsNullOrEmpty(revisionConcern))
@@ -75,6 +79,34 @@ public sealed class IntentAgent : CognitiveAgent<string>
         }
 
         return prompt.ToString();
+    }
+
+    /// <summary>
+    /// The Debug panel's sentence-count slider, rendered the same
+    /// bracket-tag way every other advisory is — a per-turn override of
+    /// intent.txt's own "one sentence, two at most" default, not a
+    /// replacement for it.
+    /// </summary>
+    private static void AppendLengthLimit(StringBuilder prompt, int maxSentences)
+    {
+        prompt.Append(" [Length: ")
+            .Append(maxSentences == 1 ? "1 sentence" : $"1-{maxSentences} sentences")
+            .Append(". Keep it terse.]");
+    }
+
+    /// <summary>
+    /// The Debug panel's tone slider — a per-turn override sitting alongside
+    /// Identity's own advisory rather than replacing it, so a wildly
+    /// different mood is still spoken in the persona's own voice.
+    /// </summary>
+    private static void AppendTone(StringBuilder prompt, Tone tone)
+    {
+        if (tone == Tone.Neutral)
+        {
+            return;
+        }
+
+        prompt.Append(" [Tone: ").Append(tone).Append('.').Append(']');
     }
 
     /// <summary>
@@ -163,7 +195,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
         // Marked, not just spoken: Intent's fallback sentence sounds honest,
         // but Governance is the one that decides what the person is told, and
         // it can only do that if the fallback says it is one.
-        var meta = MetaBag.Empty.With(ReplyKey, result).With(ContextKey, BuildContext(envelope));
+        var meta = MetaBag.Empty.With(ReplyKey, result).With(ContextKey, BuildContext(envelope, _knobs.MaxSentences, _knobs.Tone));
 
         // Which notes Hindsight woke for this turn, carried forward the same
         // way ContextKey is: Derive starts a fresh bag rather than inheriting

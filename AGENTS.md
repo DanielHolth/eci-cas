@@ -48,6 +48,11 @@ persona narrating a mood it has no grounds for is the failure this avoids,
 which is also why the drive window reaches Reflection as words and never as
 numbers.
 
+## Commands
+
+"Reset parquet" — see `docs/appendix.md` § Resetting the archive
+(`dotnet run --project src/EciCas.ArchiveTool -- <dir>`, then `reset`).
+
 ## Docs
 
 `docs/` holds:

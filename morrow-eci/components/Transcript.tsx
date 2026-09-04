@@ -32,7 +32,7 @@ export function Transcript({ turns }: { turns: TurnEvent[] }) {
   }
 
   return (
-    <div className="flex w-full max-w-md min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+    <div className="flex w-full min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
       {spoken.map((turn) => (
         <div key={turn.turnId} className="flex flex-col gap-3">
           {turn.input && <Utterance text={turn.input} />}
