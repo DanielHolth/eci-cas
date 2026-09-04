@@ -17,22 +17,40 @@ namespace EciCas.Substrates;
 /// enumerated-candidate *format* the two prompts share, not their wording,
 /// so rephrasing either prompt doesn't break it.
 ///
-/// Everything else echoes the prompt's LAST line rather than the whole
-/// thing. A whole prompt is a wall of rules and recalled context, and it
-/// lands in a speech bubble on the companion surface — the free tier's
-/// entire visible output. The last line is where every prompt here puts the
-/// turn itself, so the echo stays diagnostic and becomes legible at the
-/// same time.
+/// Everything else echoes the prompt's LAST line, minus the bracketed
+/// asides on the end of it. A whole prompt is a wall of rules and recalled
+/// context, and it lands in a speech bubble on the companion surface — the
+/// free tier's entire visible output. The last line is where every prompt
+/// here puts the turn itself, and what follows the turn on that line is
+/// standing context every turn carries: "[Impulse: …] [Identity: …]
+/// [Recall: …]". Echoing those back buried the one thing a reader was
+/// looking for — what was actually said — under the same three brackets
+/// every time.
 /// </summary>
 public sealed partial class MockSubstrateProvider : ISubstrateProvider
 {
     [GeneratedRegex(@"^\s*0\.\s", RegexOptions.Multiline)]
     private static partial Regex EnumeratedCandidates { get; }
 
+    /// <summary>
+    /// The first " [Label: " that opens the run of asides. Matched on shape
+    /// rather than on the known labels, so adding one to a prompt does not
+    /// need a change here.
+    /// </summary>
+    [GeneratedRegex(@"\s\[[A-Z][^\[\]:]*:\s")]
+    private static partial Regex FirstAside { get; }
+
     public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
     {
-        var text = EnumeratedCandidates.IsMatch(prompt) ? "0" : $"[mock:{substrateClass}] {LastLine(prompt)}";
+        var text = EnumeratedCandidates.IsMatch(prompt) ? "0" : $"[mock:{substrateClass}] {Turn(prompt)}";
         return Task.FromResult(new SubstrateResult(text, TimeSpan.FromMilliseconds(5), prompt.Length / 4, 0m));
+    }
+
+    private static string Turn(string prompt)
+    {
+        var line = LastLine(prompt);
+        var aside = FirstAside.Match(line);
+        return aside.Success ? line[..aside.Index] : line;
     }
 
     private static string LastLine(string prompt)

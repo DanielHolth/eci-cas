@@ -24,6 +24,14 @@ public interface IInstructionStore
     /// everything before the first <c>## section</c> marker.
     /// </summary>
     string For(string agent, string section = InstructionFile.MainSection);
+
+    /// <summary>
+    /// Every section an agent's file defines. Sections are how a file offers
+    /// alternatives a person picks between — Identity's profiles — so
+    /// something has to be able to list the choices when config names one
+    /// that isn't there.
+    /// </summary>
+    IReadOnlyCollection<string> SectionsFor(string agent);
 }
 
 /// <summary>

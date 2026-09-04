@@ -179,22 +179,33 @@ builder.Services.AddSingleton<IAgentStateStore>(agentStateStore);
 var instructionStore = new FileInstructionStore(
     Path.Combine(AppContext.BaseDirectory, builder.Configuration["Instructions:Directory"] ?? "instructions"));
 
-// Who Morrow starts as lives in instructions/identity.txt; who Morrow has
+// Who the persona starts as lives in instructions/identity.txt; who it has
 // become lives in the state store, and the store wins. Seeded only when the
 // store has nothing there, so a persona that has grown past the file — by
-// hand, or later by Morrow itself — is never overwritten by a redeploy.
+// hand, or later by the persona itself — is never overwritten by a redeploy.
 //
 // Which one is live is printed, because the asymmetry bites in one
 // direction: the file is the visible artefact and the store is a line in a
 // JSONL nobody opens, so an edit to the file that changed nothing looks
 // exactly like an edit that worked. It went unnoticed for months once.
+//
+// "Identity:Profile" picks which section of that file seeds a new persona.
+// Resolved here rather than at first use so a name that matches no section
+// stops the host with the list of real ones, instead of surfacing turns
+// later as a persona that sounds subtly wrong.
+var identityProfile = builder.Configuration["Identity:Profile"];
+var identitySection = string.IsNullOrWhiteSpace(identityProfile)
+    ? InstructionFile.MainSection
+    : identityProfile.Trim();
+
 var storedIdentity = await agentStateStore.LookupAsync([IdentityAgent.IdentityPath], maxPerPath: 1, CancellationToken.None);
 if (storedIdentity.Count == 0)
 {
     await agentStateStore.WriteAsync(
-        [new AgentStateRecord(IdentityAgent.IdentityPath, instructionStore.For("Identity"), DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
+        [new AgentStateRecord(IdentityAgent.IdentityPath, instructionStore.For("Identity", identitySection), DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
         CancellationToken.None);
-    Console.WriteLine($"Identity seeded from {Path.Combine(instructionStore.Directory, "identity.txt")}.");
+    Console.WriteLine($"Identity seeded from {Path.Combine(instructionStore.Directory, "identity.txt")} " +
+        $"(profile '{identitySection}').");
 }
 else
 {
@@ -204,15 +215,23 @@ else
 
 
 var archiveDirectory = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Archive:Directory"] ?? "archive");
-// One record, not a migration: the archive that isn't there yet starts as
-// the persona knowing its own name, and everything else is learned.
-var seedNeeded = !File.Exists(ParquetArchiveStore.PairPathFor(archiveDirectory, new ArchivePair("assistant", "identity")));
+// One record, not a migration: an empty archive gets the one fact that is
+// true before anything has been said, which is what build is running.
+//
+// Notably NOT its own name. A persona that boots already knowing what it is
+// called cannot be introduced to anyone and cannot be renamed either — the
+// seeded fact outranks the conversation, so being told a different name read
+// as a fact about the stranger rather than about itself. It starts nameless,
+// is told a name like anything else it is told, and keeps it only if
+// Archivist judges it worth writing down. That is the whole point of having
+// an Archivist, and it was never once exercised while the name was a seed.
+var seedNeeded = !File.Exists(ParquetArchiveStore.PairPathFor(archiveDirectory, new ArchivePair("assistant", "system")));
 var archiveStore = new ParquetArchiveStore(archiveDirectory,
     builder.Configuration.GetSection("Archive:SharedCategories").Get<string[]>());
 if (seedNeeded)
 {
     var seedRecord = new ArchiveRecord(
-        Category: "assistant", Topic: "identity", Subtopic: "persona", Subject: "this", Key: "name", Value: "morrow",
+        Category: "assistant", Topic: "system", Subtopic: "eci", Subject: "this", Key: "version", Value: "0.1",
         Timestamp: DateTimeOffset.UtcNow, Domain: ArchiveDomain.External, Importance: 0.5);
     await archiveStore.WriteAsync([seedRecord], profileId: null, CancellationToken.None);
 }

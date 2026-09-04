@@ -250,12 +250,31 @@ one — deliberately, since a persona meant to grow should not be silently
 overwritten by a `git pull`. The boot log says which of the two happened.
 
 **It is a colour, not a brief.** The seed is a handful of keywords —
-"a companion mind, warm and unhurried, plain-spoken" — because it reaches
-Intent as one bracketed aside beside the turn itself. Written as a
-paragraph of rules it stopped colouring and started competing: standing
-description outweighing the sentence the person actually typed. What the
-persona *is made of* is the architecture's concern, not the persona's;
-Intent does not need to be told it has a memory.
+"Your tone is warm, unhurried, plain-spoken" — because it reaches Intent as
+one bracketed aside beside the turn itself. Written as a paragraph of rules
+it stopped colouring and started competing: standing description outweighing
+the sentence the person actually typed. What the persona *is made of* is the
+architecture's concern, not the persona's; Intent does not need to be told it
+has a memory.
+
+**The profiles are sections, and config picks one.** `identity.txt` holds
+several — `grump`, `educator`, `playmate` — and `Identity:Profile` names the
+one that seeds a new persona; unset takes the unnamed block. A name matching
+no section stops the host at boot with the real list, because the alternative
+is a persona that sounds subtly wrong for a week. Alternatives belong in the
+file with each other rather than in config as a string, for the same reason
+every other prompt does: choosing between two voices means reading both.
+
+**It starts nameless.** Nothing seeds a name — not the profile, and not the
+archive. A persona that boots already knowing what it is called cannot be
+introduced to anyone, and cannot be renamed either: the seeded fact outranks
+the conversation, so being told a different name read as a fact about the
+stranger rather than about itself. It is told a name like anything else it is
+told, and keeps it only if Archivist judges it worth writing down — the path
+that is the whole point of having an Archivist, and that was never once
+exercised while the name was a seed. The archive's one seed record is
+`assistant/system/eci/this/version`, the only thing true before anything has
+been said.
 
 ## Storage: a library, not an agent
 

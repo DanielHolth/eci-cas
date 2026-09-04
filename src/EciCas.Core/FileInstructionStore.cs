@@ -74,6 +74,11 @@ public sealed class FileInstructionStore : IInstructionStore
 
     public string Directory { get; }
 
+    public IReadOnlyCollection<string> SectionsFor(string agent) =>
+        _agents.TryGetValue(agent, out var sections)
+            ? (IReadOnlyCollection<string>)sections.Keys.ToList()
+            : throw new KeyNotFoundException($"No instructions loaded for {agent}.");
+
     public string For(string agent, string section = InstructionFile.MainSection)
     {
         if (!_agents.TryGetValue(agent, out var sections))
@@ -83,6 +88,7 @@ public sealed class FileInstructionStore : IInstructionStore
 
         return sections.TryGetValue(section, out var body)
             ? body
-            : throw new KeyNotFoundException($"{agent}'s instruction file has no '{section}' section.");
+            : throw new KeyNotFoundException(
+                $"{agent}'s instruction file has no '{section}' section. It has: {string.Join(", ", sections.Keys)}.");
     }
 }

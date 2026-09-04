@@ -105,9 +105,8 @@ The honest answer is usually "not where you think". In order of how often
 it has fooled someone:
 
 **Identity injects the persona on every turn.** It is published as advice on
-every `events.perception` and reaches Intent as `[Identity: You are Morrow: a
-companion mind, warm and unhurried, plain-spoken.]`. No archive read, no log
-line, every turn. If the persona "remembers" its own name, this is why.
+every `events.perception` and reaches Intent as `[Identity: Your tone is warm,
+unhurried, plain-spoken.]`. No archive read, no log line, every turn.
 
 Keep it to a few keywords. It is one bracketed aside next to the turn, and a
 paragraph there competes with the person's own sentence instead of colouring
@@ -120,6 +119,22 @@ nothing on an existing brain — that is deliberate, since a persona that grows
 should not be silently rewritten by a `git pull`. The boot log says which of
 the two happened. To re-seed, delete the `assistant/persona` line from
 `memory.jsonl` and restart.
+
+Which section of the file gets seeded is `Identity:Profile` in
+`appsettings.json` — `grump`, `educator`, `playmate`, or unset for the
+unnamed default. It only applies on a re-seed, so switching profiles means
+clearing `assistant/persona` too:
+
+```powershell
+Remove-Item src\EciCas.Host\bin\Debug\net10.0\memory.jsonl
+dotnet run --project src\EciCas.Host --Identity:Profile=grump
+```
+
+**It does not know its own name.** Nothing seeds one. If you want it to have
+one, tell it in a turn and let Archivist decide the name is worth keeping —
+that is the intended path and the only one that exercises the write. Before
+that, asking it who it is gets an honest blank. The archive's single seed
+record is `assistant/system/eci/this/version = 0.1`.
 
 `memory.jsonl` also holds Impulse's drive states, and keeps a window of them
 per path rather than only the newest, because the superseded ones are the only
@@ -141,6 +156,17 @@ call` line on a three-pair archive is expected, not a sign the archive grew.
 **`Archivist nothing` is about writing, not reading.** It means the
 extraction call found no new fact worth storing this turn. It says nothing
 about what the archive already holds.
+
+**On the mock tier, the reply is an echo — read it as one.** Every substrate
+class ships pointed at `MockSubstrateProvider`, which answers a numbered
+question with `0` and everything else with `[mock:<class>] ` followed by the
+turn as it reached that agent. So `[mock:fast-high] Reply to: what is a tide`
+is not the persona failing to answer; it is the free tier showing you the
+prompt's payload. It deliberately stops at the first bracketed aside, because
+the `[Impulse: …] [Identity: …] [Recall: …]` run that follows the turn is the
+same every time and buried the one part worth reading. To see the asides, use
+`--Logging:LogLevel:EciCas=Debug` and read the prompt, or the History drawer,
+which shows each of them in its own slot.
 
 **There is no conversation history.** Intent's prompt is this turn's text
 plus the bundle — advisories, recalled facts, woken notes — and nothing

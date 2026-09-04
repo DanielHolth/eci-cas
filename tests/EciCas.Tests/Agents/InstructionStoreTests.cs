@@ -92,6 +92,46 @@ public class InstructionStoreTests
         }
     }
 
+    /// <summary>
+    /// Identity's sections are a menu "Identity:Profile" picks from, so the
+    /// store has to be able to say what the choices are — a name that matches
+    /// nothing should stop the host with the real list rather than fall back
+    /// to something plausible.
+    /// </summary>
+    [Fact]
+    public void ProfilesAreListable_AndAMissingOneNamesTheRealOnes()
+    {
+        var sections = ShippedInstructions.Store.SectionsFor("Identity");
+
+        Assert.Contains(InstructionFile.MainSection, sections);
+        Assert.Contains("grump", sections);
+
+        var ex = Assert.Throws<KeyNotFoundException>(() => ShippedInstructions.Store.For("Identity", "wistful"));
+        Assert.Contains("grump", ex.Message);
+    }
+
+    /// <summary>
+    /// A profile is a colour, not a brief. It reaches Intent as one bracketed
+    /// aside beside the turn, and written longer it stops tinting the reply
+    /// and starts competing with the person's own sentence for attention.
+    ///
+    /// Nameless on purpose too: a persona that boots knowing what it is
+    /// called cannot be introduced to anyone, and being told a different name
+    /// reads as a fact about the stranger rather than about itself.
+    /// </summary>
+    [Fact]
+    public void EveryProfileIsAFewKeywordsInTheSecondPerson()
+    {
+        foreach (var section in ShippedInstructions.Store.SectionsFor("Identity"))
+        {
+            var text = ShippedInstructions.Store.For("Identity", section);
+
+            Assert.DoesNotContain('\n', text);
+            Assert.True(text.Length <= 80, $"Identity profile '{section}' is a brief, not a colour: {text}");
+            Assert.StartsWith("You", text, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void CommentaryIsStrippedFromEverySection()
     {
@@ -133,7 +173,7 @@ public class InstructionStoreTests
     [InlineData("Governance", "blocked-with-reason", "I can't help with that: {concern}")]
     [InlineData("Governance", "reasoning-down", "I can't think that through right now — my reasoning substrate is {cause}.")]
     [InlineData("Governance", "less-grounded", "(Thinking without {impaired} just now, so this is less grounded than usual.)")]
-    [InlineData("Identity", "stranger", "You are ECI. You do not have your own description to hand right now.")]
+    [InlineData("Identity", "stranger", "You do not have your own description to hand right now.")]
     public void SpokenTextIsExactlyWhatTheFileSays(string agent, string? section, string expected)
     {
         // Equality, not Contains: an assertion that only checks the sentence
