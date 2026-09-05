@@ -279,6 +279,15 @@ a slow one. Truncation is the failure mode worth engineering against here: it
 is silent, it looks like output, and nothing downstream can tell a finished
 thought from a severed one.
 
+Raising them did not fix Archivist. At 4096 it still runs to the ceiling and
+returns no writes and no passages at all -- 41 seconds for nothing. That is a
+runaway, not a truncation, and no budget fixes a runaway: 8192 would take
+eighty seconds to produce the same nothing. It looks like the same failure
+seen at 16 tokens, where reasoning consumed the budget and `content` came
+back empty, only three orders of magnitude larger. The thing to test is
+`slow-low` with `Thinking: false` -- if a plain Archivist writes a real entry,
+the flag is the fault and not the ceiling.
+
 If a generous cap makes a turn hang, raise `TimeoutMs`; do not claw the
 ceiling back. That is not rhetorical -- 4096 tokens at the ~56 tok/s this
 model generates is over a minute, so the `local` provider's timeout went to
