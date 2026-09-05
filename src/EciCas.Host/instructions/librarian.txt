@@ -18,12 +18,33 @@
 # both are present the abstraction is the one to cut. Comments are stripped
 # before the prompt is built, so keeping the argument up here is free.
 #
+# The example's vocabulary leaks, and the polarity does not. Measured over 20
+# runs a turn: the previous example ended "breakfast does not", and on a turn
+# about breakfast that pushed the right topic from 2/20 to 15/20 — the word
+# promoted what the sentence denied. Naming a counter-example is naming a
+# candidate.
+#
+# So the words are chosen rather than inherited. "family member" and "person"
+# leak toward the person topic, which is rarely a wrong place to look; "hobby"
+# leaks toward the hobby topic, which is rarely urgent and usually pleasant to
+# have wandered into. The previous example won on breakfast turns and only
+# breakfast turns, by accident, and paid for it everywhere else.
+#
+# "person" over "people" on purpose: it is the word the index uses, and a
+# variant saying "people" tripled picks of the person topic by inflating a
+# concept next to the namespace instead of matching it. Ungrammatical, and the
+# grammar is not what the model is matching on.
+#
+# Where the topic name shares a word with the turn none of this matters -- two
+# such turns scored 20/20 under every variant tried. Wording only moves the
+# turns where the match has to be semantic.
+#
 # "best first" is not politeness. ParsePairs stops at MaxSelectedPairs, so
 # without an order the reply that gets truncated loses whichever came last
 # rather than whichever mattered least.
 A topic passes if what is inside might bear on this turn — a broader topic that
-would cover it passes too. Asked about a card game: that game's topic passes,
-so does one about games, breakfast does not.
+would cover it passes too. Asked about a family member: that family's topic
+passes, so does one about person, hobby does not.
 
 Reply with the numbers that pass, best first, bare digits, comma-separated
 (e.g. "0, 2"), at most {max}. If none pass, reply "none".
