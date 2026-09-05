@@ -22,14 +22,18 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
     private readonly IOptions<SubstrateOptions> _options;
     private readonly TimeSpan _circuitOpen;
 
+    /// <summary>Null when the provider is ungated, which is every vendor API.</summary>
+    private readonly SemaphoreSlim? _slots;
+
     /// <summary>Tick count until which this provider is considered dead; 0 means closed.</summary>
     private long _openUntil;
 
-    public OpenAiCompatibleSubstrateProvider(HttpClient http, IOptions<SubstrateOptions> options, TimeSpan circuitOpen = default)
+    public OpenAiCompatibleSubstrateProvider(HttpClient http, IOptions<SubstrateOptions> options, TimeSpan circuitOpen = default, int maxConcurrent = 0)
     {
         _http = http;
         _options = options;
         _circuitOpen = circuitOpen;
+        _slots = maxConcurrent > 0 ? new SemaphoreSlim(maxConcurrent, maxConcurrent) : null;
     }
 
     public async Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
@@ -37,7 +41,12 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         var options = _options.Value;
         var classEntry = options.Classes.GetValueOrDefault(substrateClass);
         var model = classEntry?.Model ?? substrateClass;
-        var request = new ChatCompletionRequest(model, [new ChatMessage("user", prompt)], classEntry?.Effort);
+        var request = new ChatCompletionRequest(
+            model,
+            [new ChatMessage("user", prompt)],
+            classEntry?.Effort,
+            classEntry?.MaxTokens,
+            classEntry?.Thinking is bool thinking ? new ChatTemplateKwargs(thinking) : null);
 
         // Fail fast while the circuit is open. One dead endpoint would
         // otherwise cost every agent in the fan-out a full timeout each,
@@ -47,7 +56,16 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
             throw new HttpRequestException($"Substrate provider is circuit-open for another {until - Environment.TickCount64}ms.");
         }
 
+        // Timed from before the queue rather than after: the wait is part of
+        // what the turn cost, and a trace that hid it would make a saturated
+        // local server look fast right up until someone complained.
         var started = Stopwatch.GetTimestamp();
+
+        if (_slots is not null)
+        {
+            await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         HttpResponseMessage response;
         try
         {
@@ -57,6 +75,10 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         {
             Trip();
             throw;
+        }
+        finally
+        {
+            _slots?.Release();
         }
 
         using var _ = response;
@@ -73,11 +95,30 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         // A reply of any shape means the endpoint is alive again.
         Interlocked.Exchange(ref _openUntil, 0);
 
-        var text = payload.Choices.Count > 0 ? payload.Choices[0].Message.Content : string.Empty;
+        var text = StripThinking(payload.Choices.Count > 0 ? payload.Choices[0].Message.Content : string.Empty);
         var tokens = payload.Usage?.TotalTokens;
         var cost = tokens is int t ? t * (classEntry?.CostPerTokenUsd ?? 0m) : (decimal?)null;
 
         return new SubstrateResult(text, elapsed, tokens, cost);
+    }
+
+    /// <summary>
+    /// Drops a leading reasoning block. A model told not to think can still
+    /// emit one, and every parser downstream expects the answer to start at
+    /// the first character — Recall's whole reply is meant to be a number.
+    /// An unterminated block means the output ran into MaxTokens before the
+    /// answer arrived; nothing usable is left, so it all goes.
+    /// </summary>
+    private static string StripThinking(string text)
+    {
+        var trimmed = text.AsSpan().TrimStart();
+        if (!trimmed.StartsWith("<think>", StringComparison.OrdinalIgnoreCase))
+        {
+            return text;
+        }
+
+        var end = trimmed.IndexOf("</think>", StringComparison.OrdinalIgnoreCase);
+        return end < 0 ? string.Empty : trimmed[(end + "</think>".Length)..].TrimStart().ToString();
     }
 
     private void Trip()
@@ -91,7 +132,12 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
     private sealed record ChatCompletionRequest(
         string Model,
         ChatMessage[] Messages,
-        [property: JsonPropertyName("reasoning_effort"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReasoningEffort = null);
+        [property: JsonPropertyName("reasoning_effort"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReasoningEffort = null,
+        [property: JsonPropertyName("max_tokens"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? MaxTokens = null,
+        [property: JsonPropertyName("chat_template_kwargs"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatTemplateKwargs? ChatTemplateKwargs = null);
+
+    private sealed record ChatTemplateKwargs(
+        [property: JsonPropertyName("enable_thinking")] bool EnableThinking);
     private sealed record ChatMessage(string Role, string Content);
     private sealed record ChatCompletionResponse(List<ChatChoice> Choices, ChatUsage? Usage);
     private sealed record ChatChoice(ChatMessage Message);

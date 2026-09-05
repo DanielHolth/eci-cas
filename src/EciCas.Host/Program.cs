@@ -92,6 +92,7 @@ foreach (var providerSection in builder.Configuration.GetSection("Substrates:Pro
     var apiKeyEnvironmentVariable = providerSection["ApiKeyEnvironmentVariable"];
     var timeoutMs = int.TryParse(providerSection["TimeoutMs"], out var t) ? t : 20_000;
     var circuitOpen = TimeSpan.FromMilliseconds(int.TryParse(providerSection["CircuitOpenMs"], out var c) ? c : 5_000);
+    var maxConcurrent = int.TryParse(providerSection["MaxConcurrent"], out var m) ? m : 0;
 
     builder.Services.AddHttpClient(providerName, http =>
     {
@@ -109,7 +110,8 @@ foreach (var providerSection in builder.Configuration.GetSection("Substrates:Pro
         new OpenAiCompatibleSubstrateProvider(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient((string)key!),
             sp.GetRequiredService<IOptions<SubstrateOptions>>(),
-            circuitOpen));
+            circuitOpen,
+            maxConcurrent));
 }
 
 builder.Services.AddSingleton<ISubstrateProvider, SubstrateRegistry>();

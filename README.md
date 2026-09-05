@@ -56,11 +56,12 @@ Order doesn't matter and neither survives the other: the surface retries the
 stream, and a host started later is picked up without a reload. If the host
 isn't on `:5179`, point the surface at it with `NEXT_PUBLIC_ECI_API_BASE`.
 
-**No API keys?** Drop `--Tier=Default` and everything runs on the free mock
-tier — same agents, same UI. Each substrate call echoes its prompt back, so
-`[mock:fast-high] Reply to: what is a tide` is the echo, not a failure to
-answer. It is the right way to see the machinery, not a way to hear the
-persona.
+**No API keys?** Two free routes. `--Tier=Mock` needs nothing at all: each
+substrate call echoes its prompt back, so `[mock:fast-high] Reply to: what is
+a tide` is the echo, not a failure to answer — the right way to see the
+machinery, not a way to hear the persona. `--Tier=Minimal` is the one that
+actually thinks, running a local Qwen3.5 4B behind every faculty for $0; it
+costs one ~2.5GB download and llama.cpp, both set up below.
 
 Other entry points:
 
@@ -80,9 +81,33 @@ traps that have already cost an afternoon.
 ## Configuration
 
 `Tier` (env var or `--Tier=X`) layers `appsettings.<Tier>.json` over the
-defaults: **Minimal** (all mock, $0), **Budget** (cheap live models),
-**Default** (Mistral for `fast-*`, OpenAI for `slow-*`), **Super**. Operator
-only — nothing edits this config or restarts the process on your behalf.
+defaults: **Mock** (no substrate at all, $0, no dependencies), **Minimal**
+(one local Qwen3.5 4B behind every class — free, but needs a server up),
+**Budget** (cheap live models), **Default** (Mistral for `fast-*`, OpenAI for
+`slow-*`), **Super**. Operator only — nothing edits this config or restarts
+the process on your behalf.
+
+Minimal expects an OpenAI-compatible server on `http://localhost:8080/v1/`.
+One command gets you there:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/get-local-model.ps1 -Start
+```
+
+That fetches the Qwen3.5 4B GGUF (~2.7GB, uncommitted, into `models/local/`),
+installs llama.cpp via winget if it is missing, finds `llama-server.exe` even
+when winget leaves it off PATH, reports which GPU it will use, and starts the
+server. Drop `-Start` to get the launch line printed instead of run.
+
+The flags it uses are not decorative. `-ngl 99` puts the layers on the GPU;
+without it llama.cpp runs on CPU beside an idle card and a turn takes long
+enough to feel broken rather than slow. `--jinja` is what lets the tier's
+`Thinking` flag reach the chat template. The first call after a cold start
+pays one-off shader compilation and can take seconds; warm picking calls land
+in tens of milliseconds.
+
+Without a server the tier degrades rather than crashing, but `Mock` is the
+tier that is meant to run on nothing.
 
 Any key can be overridden on the command line, which is the cheap way to
 exercise one agent live against an otherwise mocked swarm:

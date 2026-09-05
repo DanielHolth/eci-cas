@@ -11,8 +11,9 @@ dotnet run --project src/EciCas.Host -- --Tier=Default
 ```
 
 `--Tier=X` layers `appsettings.X.json` over `appsettings.json` — `Default`,
-`Budget`, `Minimal`, `Super`; unset means no extra layer. Also works as the
-`Tier` environment variable.
+`Budget`, `Minimal`, `Mock`, `Super`; unset means no extra layer. Also works
+as the `Tier` environment variable. `Minimal` wants a local model server
+running (see below); `Mock` is the one that needs nothing.
 
 The host starts the surface on `Surface:Url` (default
 `http://localhost:5179`, SSE at `/api/stream`) and then reads prompts from
@@ -218,6 +219,129 @@ paths resolve against the build output, not the repo root.
 
 Changing model later is a startup error rather than a silent swap: the corpus
 stamps which model wrote it and the host refuses to search it with another.
+
+## Qwen3.5 4B on the minimal tier
+
+One Qwen3.5 4B GGUF under `llama-server` backs **all eight substrate
+classes**, making `minimal` a tier that is both free and actually thinking.
+Most of the plumbing was already there:
+`OpenAiCompatibleSubstrateProvider` speaks what llama.cpp serves, and every
+class already picks its own provider and model.
+
+**Tier slots moved.** `Minimal` is now the local model; `appsettings.Mock.json`
+inherited the old all-mock content verbatim, keeping a zero-dependency tier
+for CI and for runs with no server up. A `--Tier=Minimal` that used to cost
+nothing and need nothing now needs a server — that is the one breaking
+change, and `Mock` is the replacement.
+
+**One knob on `ProviderEndpoint`: `MaxConcurrent`** (0 = unlimited, right for
+a vendor API). A single local model serving every class would have the Recall
+fan-out queue inside the server anyway; a `SemaphoreSlim` in the provider
+queues it where a cancelled turn abandons its place in line. It wraps the
+HTTP call and not the circuit check, which must still fail fast. Note that
+`TimeoutMs` is the `HttpClient` timeout and so does not cover the wait —
+correct, since queue time is not the model hanging.
+
+**Two knobs on `SubstrateClassEntry`,** both omitted when null, exactly as
+`Effort` already is: `MaxTokens` → `max_tokens`, because an uncapped local
+model can ramble for minutes; `Thinking` → `chat_template_kwargs:
+{enable_thinking}`, because Qwen3 reasons aloud by default and the picking
+classes must not. Strip a leading `<think>…</think>` from the response
+anyway, and every downstream parser stays unchanged.
+
+The ceiling is per class, not per speed, because `fast-*` holds two
+different jobs (`fast-local`/`slow-local` follow their prefix; no agent maps
+to them):
+
+| class | agent | Thinking | MaxTokens |
+|---|---|---|---|
+| `fast-low` | Recall | false | 512 |
+| `fast-medium` | Librarian | false | 512 |
+| `fast-high` | Intent | false | 512 |
+| `slow-low` | Archivist | true | 1024 |
+| `slow-medium` | Reflection | true | 1024 |
+
+512 everywhere it isn't obviously too little. Recall and Librarian answer
+with a bare index and would fit in 32, but a tight cap only buys latency, and
+the minimal tier is no longer trying to be fast — it is trying to be free.
+Intent needs the room for real: `instructions/intent.txt` sanctions up to
+eight sentences when the person asks for length, call it 250–300 tokens,
+which makes 256 exactly the wrong number — it truncates a story mid-sentence.
+A ceiling is headroom, not permission; the instruction file is what keeps
+replies short. `slow-*` gets double because thinking is on and the trace
+counts against the same budget, and Reflection and Archivist land behind the
+reply anyway.
+
+If a generous cap makes a turn hang, raise `TimeoutMs`; do not claw the
+ceiling back.
+
+The provider entry carries no `ApiKeyEnvironmentVariable` — `Program.cs`
+already reads a missing key as "send no Authorization header" — and no
+`PricePerMtok`, so `CostLedger` reports a free tier while `SubstrateTrace`
+still records real tokens and latency.
+
+**4B is chosen to be too small.** An 8B would hide things. A model this size
+fails wherever an instruction leans on the reader being clever, so every
+garbled pick and rambling reply names a weak instruction file or a real
+bottleneck rather than a shortage of parameters — and the fix lands where it
+belongs, in `instructions/` or in the fan-out, and improves every tier at
+once. Read a bad turn here as a finding, not as a reason to reach for a
+bigger model. Swapping up later is a `llama-server -m` flag and five cosmetic
+`Model` strings; nothing persists a chat-model identity, so the choice costs
+nothing to revisit once the weak spots are known.
+
+**The risk is not the code.** Recall and Librarian ask for a bare index;
+`MockSubstrateProvider` hardcodes `0` because the shape is that rigid. A 4B
+may well answer "The most relevant is 2." If that fails to parse the tier
+degrades everywhere and looks broken, so verification means running a real
+turn and reading the traces, not a green test suite. The fix, if needed, is a
+lenient first-integer parse at the agent's parse site.
+
+```powershell
+./scripts/get-local-model.ps1 -Start
+```
+
+Weights, llama.cpp, and the server. Weights land in `models/local/` — same
+shape as `get-embedding-model.ps1`, outside `bin/` so `dotnet clean` cannot
+take them. No `hf` CLI and no Python: it reads the Hub's REST API to resolve
+the real filename, because quant naming drifts between repos and a 404
+halfway through 2.7GB is a poor way to learn that.
+
+It first stopped short of installing llama.cpp, on the argument that fetching
+weights is one thing and running a system binary on someone's behalf is
+another. That was principled and wrong. winget installs `llama-server.exe`
+into a versioned package directory with no PATH shim, so the script's own
+`Get-Command` check reported "not installed" for a binary sitting on disk —
+it lied to the person who had just run the install it recommended. So it now
+searches the package root, offers the `winget install` itself (`-NoInstall`
+declines), and reports the compute device llama.cpp can actually see.
+
+The launch flags are load-bearing, which is the other half of why printing
+instructions was not enough. `-ngl 99` puts the layers on the GPU; the first
+draft omitted it, which would have run CPU-only next to an idle card and felt
+broken rather than slow. `--jinja` is what lets `chat_template_kwargs` reach
+the template — without it the `Thinking` flag is silently inert.
+
+### What the running model actually did
+
+Measured on an RTX 5060 Ti (8GB) with a Vulkan build, no CUDA:
+
+- **Thinking is on by default**, contrary to the vendor notes for small
+  models. The `Thinking` knob is load-bearing, not belt-and-braces.
+- **Too small a `MaxTokens` returns empty, not truncated.** At 16 tokens the
+  reasoning consumed the whole budget and `content` came back `""`. This is
+  the concrete argument for the 512/1024 ceilings, and for raising
+  `TimeoutMs` rather than clawing a ceiling back.
+- llama.cpp puts reasoning in a separate `reasoning_content` field, so
+  `StripThinking` never fires against this server. It stays for servers that
+  inline the block.
+- Turning thinking off works and is worth it on the picking path: 22 tokens
+  and 2381ms against 34 tokens and 9114ms cold.
+- Warm calls are **44–50ms**. The 4-second first call is one-off Vulkan
+  shader compilation, not the model.
+- **The picking risk landed.** The same picking prompt, warm, three times,
+  returned `0`, `0`, `2`. Whatever parses these must tolerate a 4B changing
+  its mind — and the swarm must tolerate a defensible-but-different pick.
 
 ## Known flaky tests
 

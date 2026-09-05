@@ -428,10 +428,6 @@ child must not pre-colour how it meets the parent an hour later.
 
 ## Long-term goals
 
-**Minimal-tier local LLM.** A free 1.8B–3B model for the `minimal` tier, so
-ECI-CAS runs on-device where connectivity is unreliable. Scope TBD:
-fine-tuning, quantization, latency targets.
-
 **Android native client.** On-device minimal-tier agent running the full
 roster, or a remote-client mode where only Perception and Action cross
 process boundaries. Stretch: iOS via shared business logic.
@@ -442,6 +438,18 @@ process boundaries. Stretch: iOS via shared business logic.
 
 Kept for the reasoning, not as outstanding work. Where one contradicts
 [`architecture.md`](architecture.md), architecture.md wins.
+
+**Minimal tier on a local model.** One Qwen3.5 4B under `llama-server`
+behind all eight substrate classes, so the free tier thinks instead of
+echoing. Two new class knobs (`MaxTokens`, `Thinking`) and one provider knob
+(`MaxConcurrent`, a semaphore so the Recall fan-out queues where a cancelled
+turn can abandon its place); no new provider class, since
+`OpenAiCompatibleSubstrateProvider` already speaks what llama.cpp serves. The
+old all-mock tier moved to `--Tier=Mock`. 4B is deliberately undersized: it
+fails wherever an instruction leans on the reader being clever, which makes
+it a probe for weak instruction files rather than a compromise. Details and
+the tuning table in
+[`appendix.md`](appendix.md#qwen35-4b-on-the-minimal-tier).
 
 **Knowledge-swarm retrieval.** Replaced deterministic retrieval (literal
 ≥5-letter word extraction, exact-string path matching, newest-N truncation)

@@ -38,6 +38,16 @@ public sealed class ProviderEndpoint
     /// Zero disables the breaker.
     /// </summary>
     public int CircuitOpenMs { get; set; } = 5_000;
+
+    /// <summary>
+    /// Ceiling on in-flight calls to this provider; 0 means unlimited, which
+    /// is right for a vendor API that scales on its own. A single local model
+    /// backing every class is the opposite case: the Recall fan-out would
+    /// queue inside the server anyway, so it queues here instead, where a
+    /// cancelled turn abandons its place in line. The wait is deliberately
+    /// outside the HttpClient timeout — queue time is not the model hanging.
+    /// </summary>
+    public int MaxConcurrent { get; set; }
 }
 
 public sealed class SubstrateClassEntry
@@ -55,6 +65,23 @@ public sealed class SubstrateClassEntry
     /// https://developers.openai.com/api/docs/guides/reasoning
     /// </summary>
     public string? Effort { get; set; }
+
+    /// <summary>
+    /// Output ceiling, sent as max_tokens only when set. A vendor API leaves
+    /// this unset and bills what it writes; an uncapped local model can
+    /// ramble for minutes instead. Headroom, not permission — the
+    /// instruction file is what keeps a reply short.
+    /// </summary>
+    public int? MaxTokens { get; set; }
+
+    /// <summary>
+    /// Qwen-style chat_template_kwargs.enable_thinking, sent only when set so
+    /// nothing changes for providers that don't take it. Qwen3 reasons aloud
+    /// by default, which the picking classes must not do; the slow classes
+    /// want it, and land behind the reply anyway. Requires llama-server
+    /// --jinja for the flag to reach the template.
+    /// </summary>
+    public bool? Thinking { get; set; }
 
     /// <summary>Raw $/million-token pricing, pasted straight off the provider's pricing page — no manual per-token conversion needed.</summary>
     public PricePerMillionTokens? PricePerMtok { get; set; }
