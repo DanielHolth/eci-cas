@@ -281,7 +281,15 @@ builder.Services.AddSingleton(new CostLedger(
 
 builder.Services.Configure<PersonaNameOptions>(builder.Configuration.GetSection("Identity"));
 builder.Services.AddSingleton<PersonaName>();
-builder.Services.AddSingleton<RuntimeKnobs>();
+// RecallDepth is a live knob, but its starting value is configuration, not a
+// constant: RecallOptions.MaxPickedPerWorker is the tier's answer to "how many
+// rows may one picking call hand back". Seeding it here is what makes that
+// option mean anything -- until this, every tier ran at the knob's hardcoded 5
+// whatever it configured, and the field was read by nothing at all.
+builder.Services.AddSingleton(sp => new RuntimeKnobs
+{
+    RecallDepth = sp.GetRequiredService<IOptions<RecallOptions>>().Value.MaxPickedPerWorker,
+});
 
 RegisterAgent<PerceptionAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
