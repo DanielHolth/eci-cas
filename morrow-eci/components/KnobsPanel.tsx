@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Knobs, fetchKnobs, setMaxSentences, setRecallDepth, setReflectionEvery, setMood } from "@/lib/api";
+import { Knobs, fetchKnobs, setMaxSentences, setRecallDepth, setReflectionEvery, setMood, setTier } from "@/lib/api";
 
 /**
  * Live session experiments, not configuration: every value here resets to
@@ -15,14 +15,17 @@ export function KnobsPanel() {
     fetchKnobs()
       .then(setKnobs)
       .catch(() =>
-        setKnobs({ maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
+        setKnobs({ tier: "base", tiers: [], maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
       );
   }, []);
 
   async function apply<K extends keyof Knobs>(key: K, value: Knobs[K], write: (v: never) => Promise<Knobs>) {
     setKnobs((prev) => (prev ? { ...prev, [key]: value } : prev));
     try {
-      await write(value as never);
+      // Adopt the host's answer rather than only the optimistic value: a
+      // tier switch re-seeds recallDepth, so the write that moved one
+      // control is what tells us the others moved too.
+      setKnobs(await write(value as never));
     } catch {
       // Host unreachable — the slider still reflects the attempted value;
       // the next successful fetch will correct it if the write never landed.
@@ -40,7 +43,32 @@ export function KnobsPanel() {
         Knobs
       </h3>
 
+      {/* A tier is a preset over everything below it -- which models back
+          which class, how wide Recall fans out, whether Reflection runs at
+          all -- so it sits above them rather than among them. A tier whose
+          keys the host cannot see is listed and disabled: knowing Default
+          exists and why it is unavailable beats it being absent. */}
       <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
+        <span className="flex items-center justify-between">
+          <span>Tier</span>
+          <span className="font-mono text-neutral-800 dark:text-neutral-100">{knobs?.tier ?? "…"}</span>
+        </span>
+        <select
+          value={knobs?.tier ?? ""}
+          disabled={knobs === null}
+          onChange={(e) => apply("tier", e.target.value, setTier)}
+          className="rounded border border-neutral-300 bg-transparent px-1 py-0.5 font-mono text-xs dark:border-neutral-700"
+        >
+          {(knobs?.tiers ?? []).map((t) => (
+            <option key={t.name} value={t.name} disabled={t.missingKeys.length > 0}>
+              {t.name}
+              {t.missingKeys.length > 0 ? ` — needs ${t.missingKeys.join(", ")}` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
           <span>Reply length</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">

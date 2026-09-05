@@ -426,6 +426,13 @@ cheaper and wrong-feeling. Partitioning is probably right, because the cheap
 option contradicts the stated intent that what warms the persona toward one
 child must not pre-colour how it meets the parent an hour later.
 
+**Live tier switching — shipped.** `TierCatalog` binds every tier file at
+boot; the Debug panel's dropdown swaps classes, agent assignments and
+Recall/Librarian sizing on a running host. Comparing Minimal against Default
+no longer costs two restarts and the conversation. It does not close the
+asymmetry noted below: a tier is still validated for shape, never for whether
+its providers answer.
+
 **Two mood vocabularies, unconnected.** The Debug slider sets `Mood`
 (Maleficent..Ecstatic) while Reflection *reports* a mood label Impulse maps
 to drive vectors (`tense`, `curious`, ...) — "ecstatic" is in both and

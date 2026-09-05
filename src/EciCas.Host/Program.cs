@@ -286,6 +286,15 @@ builder.Services.AddSingleton<PersonaName>();
 // rows may one picking call hand back". Seeding it here is what makes that
 // option mean anything -- until this, every tier ran at the knob's hardcoded 5
 // whatever it configured, and the field was read by nothing at all.
+builder.Services.AddSingleton(sp => new TierCatalog(
+    TierCatalogLoader.Load(AppContext.BaseDirectory),
+    sp.GetRequiredService<IOptions<SubstrateOptions>>().Value,
+    sp.GetRequiredService<IOptions<AgentSubstrateManifest>>().Value,
+    sp.GetRequiredService<IOptions<RecallOptions>>().Value,
+    sp.GetRequiredService<IOptions<LibrarianOptions>>().Value,
+    sp.GetRequiredService<RuntimeKnobs>(),
+    string.IsNullOrEmpty(tier) ? TierCatalog.BaseTier : tier));
+
 builder.Services.AddSingleton(sp => new RuntimeKnobs
 {
     RecallDepth = sp.GetRequiredService<IOptions<RecallOptions>>().Value.MaxPickedPerWorker,
@@ -318,6 +327,13 @@ var agentSubstrates = app.Services.GetRequiredService<IOptions<AgentSubstrateMan
 var substrateOptions = app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value;
 AgentSubstrateManifestValidator.Validate(agentSubstrates, substrateOptions, app.Services.GetServices<IAgent>());
 
+// Every tier, bound but not applied — see TierCatalog for why a live switch
+// is a few reference writes rather than a rebuild. Registered against the
+// same singletons validated above, which is the point: switching mutates
+// what every agent already holds.
+var tiers = app.Services.GetRequiredService<TierCatalog>();
+Console.WriteLine($"Tiers loadable live: {string.Join(", ", tiers.Presets.Select(p => p.MissingKeys.Count == 0 ? p.Name : $"{p.Name} (needs {string.Join('+', p.MissingKeys)})"))}");
+
 // A model swap is the one event that can take a note away, and it does it
 // without a log line — so it is checked here, before anything searches.
 var embedder = app.Services.GetRequiredService<IEmbeddingProvider>();
@@ -333,10 +349,17 @@ app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.Lis
 
 // The Debug panel's sliders — live, in-memory, and reset on restart. Read
 // on every Intent prompt, so a drag takes effect on the very next turn.
-app.MapGet("/api/knobs", (RuntimeKnobs knobs) => Results.Json(ToKnobsPayload(knobs), jsonOptions));
+app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers) => Results.Json(ToKnobsPayload(knobs, tiers), jsonOptions));
 
-app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs) =>
+app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers) =>
 {
+    // First, because it re-seeds RecallDepth: a request that sets both
+    // should end with the explicit depth, not with the tier's answer to it.
+    if (request.Tier is { } tierName && !tiers.Switch(tierName))
+    {
+        return Results.BadRequest($"No such tier '{tierName}'.");
+    }
+
     if (request.MaxSentences is { } n)
     {
         knobs.MaxSentences = n;
@@ -357,11 +380,13 @@ app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs) =>
         knobs.Mood = mood;
     }
 
-    return Results.Json(ToKnobsPayload(knobs), jsonOptions);
+    return Results.Json(ToKnobsPayload(knobs, tiers), jsonOptions);
 });
 
-static object ToKnobsPayload(RuntimeKnobs knobs) => new
+static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers) => new
 {
+    tier = tiers.Active,
+    tiers = tiers.Presets.Select(p => new { name = p.Name, missingKeys = p.MissingKeys }),
     maxSentences = knobs.MaxSentences,
     reflectionEvery = knobs.ReflectionEvery,
     recallDepth = knobs.RecallDepth,
@@ -544,6 +569,6 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
 
 internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, string? Mood = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, string? Mood = null, string? Tier = null);
 
 internal sealed record CreateProfileRequest(string DisplayName, string Avatar);

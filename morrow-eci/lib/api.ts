@@ -20,7 +20,15 @@ export async function sendPerceive(text: string, profileId?: string): Promise<vo
   }
 }
 
+export interface Tier {
+  name: string;
+  /** Env vars this tier's live classes need and that the host cannot see. */
+  missingKeys: string[];
+}
+
 export interface Knobs {
+  tier: string;
+  tiers: Tier[];
   maxSentences: number;
   reflectionEvery: number;
   recallDepth: number;
@@ -36,7 +44,7 @@ export async function fetchKnobs(): Promise<Knobs> {
   return response.json();
 }
 
-async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "mood", number | string>>): Promise<Knobs> {
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "mood" | "tier", number | string>>): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -53,3 +61,4 @@ export const setMaxSentences = (maxSentences: number) => postKnobs({ maxSentence
 export const setReflectionEvery = (reflectionEvery: number) => postKnobs({ reflectionEvery });
 export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth });
 export const setMood = (mood: string) => postKnobs({ mood });
+export const setTier = (tier: string) => postKnobs({ tier });

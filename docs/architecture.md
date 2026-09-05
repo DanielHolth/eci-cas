@@ -179,6 +179,12 @@ lifetime total persists (`TurnLog:CostPath`).
 `RuntimeKnobs` holds the handful of numbers the companion's Debug panel
 exposes as sliders — reply length, reflection cadence, recall depth, and a
 five-step mood enum — overriding the corresponding static options live.
+Beside them sits the Tier dropdown, which is not a knob but the whole
+configuration: `TierCatalog` binds every `appsettings.<Tier>.json` at boot and
+a switch replaces `Substrates:Classes` and `AgentSubstrates` by reference,
+which is safe only because nothing in the substrate path caches its config.
+Switching re-seeds recall depth from the new tier, since a hand-dragged depth
+would otherwise run the old tier's fan-out under the new tier's name.
 In-memory only: a restart resets each to a default matching the tier's own
 config, so an untouched slider changes nothing. Deliberately not an
 instruction file, because these are numbers and one closed vocabulary rather
