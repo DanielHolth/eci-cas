@@ -33,14 +33,16 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = AppContext.BaseDirectory,
 });
 
-// Optional tier layer (env var Tier or --Tier=X) — an operator picks a bundle
-// of substrate/vendor choices without editing appsettings.json directly. No
-// default tier: unset Tier means no extra layer, i.e. today's behavior.
-var tier = builder.Configuration["Tier"];
-if (!string.IsNullOrEmpty(tier))
-{
-    builder.Configuration.AddJsonFile($"appsettings.{tier}.json", optional: true, reloadOnChange: false);
-}
+// Tier layer (env var Tier or --Tier=X) — an operator picks a bundle of
+// substrate/vendor choices without editing appsettings.json directly. Unset
+// means Mock, so the host is always running a tier it can name: an unnamed
+// half-configuration is not something anyone asked for, and the live switch
+// would have had to offer it as a destination.
+//
+// Not optional, so --Tier=Minmal stops at boot instead of silently running
+// the base file — the same refusal the live switch gives a bad name.
+var tier = builder.Configuration["Tier"] is { Length: > 0 } named ? named : "Mock";
+builder.Configuration.AddJsonFile($"appsettings.{tier}.json", optional: false, reloadOnChange: false);
 
 // Shorthand for Console:Verbose, same spirit as the bare Tier switch above.
 var verbose = builder.Configuration["Verbose"];
@@ -293,7 +295,7 @@ builder.Services.AddSingleton(sp => new TierCatalog(
     sp.GetRequiredService<IOptions<RecallOptions>>().Value,
     sp.GetRequiredService<IOptions<LibrarianOptions>>().Value,
     sp.GetRequiredService<RuntimeKnobs>(),
-    string.IsNullOrEmpty(tier) ? TierCatalog.BaseTier : tier));
+    tier));
 
 builder.Services.AddSingleton(sp => new RuntimeKnobs
 {

@@ -26,7 +26,7 @@ public class TierCatalogTests
         var librarian = new LibrarianOptions();
         var knobs = new RuntimeKnobs();
         var catalog = new TierCatalog(TierCatalogLoader.Load(TierDirectory), substrates, agents, recall, librarian,
-            knobs, TierCatalog.BaseTier);
+            knobs, "Mock");
         return (catalog, substrates, agents, recall, librarian, knobs);
     }
 
@@ -41,25 +41,36 @@ public class TierCatalogTests
     /// </summary>
     [Fact]
     public void TiersAreOrderedCheapestFirst_NotAlphabetically() =>
-        Assert.Equal(["base", "Mock", "Minimal", "Budget", "Default", "Super"],
+        Assert.Equal(["Mock", "Minimal", "Budget", "Default", "Super"],
             TierCatalogLoader.Load(TierDirectory).Select(p => p.Name));
 
     /// <summary>
-    /// The base entry is what "no --Tier" means, and it has to be
-    /// selectable: a host booted bare that switched to Minimal could
-    /// otherwise never get back to where it started.
+    /// Only tier files are tiers. appsettings.json alone was briefly listed
+    /// as "base", which was an implementation detail wearing a tier's name --
+    /// nobody specified a sixth tier, and an unset --Tier now layers Mock
+    /// rather than leaving that state reachable at all.
     /// </summary>
     [Fact]
-    public void TheBaseConfigurationIsATierYouCanReturnTo()
+    public void TheBareConfigurationIsNotATier() =>
+        Assert.DoesNotContain(TierCatalogLoader.Load(TierDirectory),
+            p => p.Name.Equals("base", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Mock is the tier a host falls back to, so it has to be a destination
+    /// like any other: a host that switched to Minimal and wants out needs
+    /// somewhere free to land.
+    /// </summary>
+    [Fact]
+    public void TheFreeTierIsSomewhereYouCanReturnTo()
     {
         var (catalog, substrates, _, recall, _, _) = Build();
 
         Assert.True(catalog.Switch("Minimal"));
-        Assert.True(catalog.Switch(TierCatalog.BaseTier));
+        Assert.True(catalog.Switch("Mock"));
 
-        Assert.Equal(TierCatalog.BaseTier, catalog.Active);
+        Assert.Equal("Mock", catalog.Active);
         Assert.All(substrates.Classes.Values, c => Assert.Equal("mock", c.Provider));
-        Assert.Equal(50, recall.RowsPerWorker);
+        Assert.Equal(10, recall.RowsPerWorker);
     }
 
     /// <summary>
@@ -96,7 +107,7 @@ public class TierCatalogTests
     public void SwitchingReplacesTheClassTable_RatherThanEditingIt()
     {
         var (catalog, substrates, _, _, _, _) = Build();
-        catalog.Switch(TierCatalog.BaseTier);
+        catalog.Switch("Mock");
         var before = substrates.Classes;
 
         catalog.Switch("Minimal");

@@ -428,7 +428,8 @@ child must not pre-colour how it meets the parent an hour later.
 
 **Live tier switching — shipped.** `TierCatalog` binds every tier file at
 boot; the Debug panel's dropdown swaps classes, agent assignments and
-Recall/Librarian sizing on a running host. Comparing Minimal against Default
+Recall/Librarian sizing on a running host. An unset `--Tier` now layers Mock
+rather than leaving `appsettings.json` showing as a nameless sixth state. Comparing Minimal against Default
 no longer costs two restarts and the conversation. It does not close the
 asymmetry noted below: a tier is still validated for shape, never for whether
 its providers answer.

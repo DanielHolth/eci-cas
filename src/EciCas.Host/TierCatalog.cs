@@ -28,16 +28,13 @@ namespace EciCas.Host;
 /// already mid-fan-out reads one coherent table or the other and never a
 /// half-swapped one.
 ///
-/// Deliberately not applied at boot: an unset Tier leaves appsettings.json
-/// exactly as it was, which is not identical to the Mock preset (base sizes
-/// Recall at 50 rows, Mock at 10). Booting bare and booting --Tier=Mock
-/// differ today, and this is a live switch, not a redefinition of either.
+/// Every entry here is a tier file. appsettings.json is the floor those
+/// overlay and never a destination of its own -- an unset --Tier layers Mock
+/// rather than leaving the floor showing, so there is no half-configured
+/// state for the dropdown to have to name.
 /// </summary>
 public sealed class TierCatalog
 {
-    /// <summary>The synthetic preset standing for "no overlay" -- appsettings.json as it ships.</summary>
-    public const string BaseTier = "base";
-
     private readonly Dictionary<string, TierPreset> _presets;
     private readonly IReadOnlyList<TierPreset> _ordered;
     private readonly SubstrateOptions _substrates;
@@ -61,7 +58,7 @@ public sealed class TierCatalog
         Active = active;
     }
 
-    /// <summary>Name of the tier in force. Starts as whatever <c>--Tier</c> said, or <see cref="BaseTier"/>.</summary>
+    /// <summary>Name of the tier in force. Starts as whatever <c>--Tier</c> said, or Mock.</summary>
     public string Active { get; private set; }
 
     /// <summary>Cheapest first, in the order the loader ranked them -- a list, because Dictionary.Values promises no order.</summary>

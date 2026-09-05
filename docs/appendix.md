@@ -11,7 +11,7 @@ dotnet run --project src/EciCas.Host -- --Tier=Default
 ```
 
 `--Tier=X` layers `appsettings.X.json` over `appsettings.json` — `Default`,
-`Budget`, `Minimal`, `Mock`, `Super`; unset means no extra layer. Also works
+`Budget`, `Minimal`, `Mock`, `Super`; unset means `Mock`, and a name with no file stops the boot. Also works
 as the `Tier` environment variable. `Minimal` wants a local model server
 running (see below); `Mock` is the one that needs nothing.
 

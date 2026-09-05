@@ -15,7 +15,7 @@ export function KnobsPanel() {
     fetchKnobs()
       .then(setKnobs)
       .catch(() =>
-        setKnobs({ tier: "base", tiers: [], maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
+        setKnobs({ tier: "Mock", tiers: [], maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
       );
   }, []);
 

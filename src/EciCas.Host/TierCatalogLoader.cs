@@ -23,7 +23,7 @@ public static class TierCatalogLoader
     public static IReadOnlyList<TierPreset> Load(string directory)
     {
         var basePath = Path.Combine(directory, "appsettings.json");
-        var presets = new List<TierPreset> { Bind(TierCatalog.BaseTier, Layer(basePath)) };
+        var presets = new List<TierPreset>();
 
         foreach (var path in Directory.GetFiles(directory, "appsettings.*.json").OrderBy(p => p, StringComparer.Ordinal))
         {
