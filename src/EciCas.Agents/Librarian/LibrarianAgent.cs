@@ -289,15 +289,14 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     {
         var selected = new List<ArchivePair>();
         var seen = new HashSet<int>();
-        foreach (var token in response.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var i in InstructionFile.Indices(response))
         {
             if (selected.Count >= _options.MaxSelectedPairs)
             {
                 break;
             }
 
-            if (int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)
-                && i >= 0 && i < index.Count && seen.Add(i))
+            if (i >= 0 && i < index.Count && seen.Add(i))
             {
                 selected.Add(index[i]);
             }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace EciCas.Core;
@@ -159,5 +160,43 @@ public static class InstructionFile
         }
 
         return built.ToString();
+    }
+
+    /// <summary>
+    /// Reads the indices out of a picking reply, taking the first run of
+    /// digits in each comma-separated token and ignoring tokens that hold
+    /// none.
+    ///
+    /// A picking instruction asks for bare digits, and a model that obliges
+    /// needs nothing from this. The lenient read is for the model that does
+    /// not: "0." because the row it copied began that way, "0, 2." because a
+    /// sentence ends with a stop, "none" when there was nothing to pick. A
+    /// strict parse drops all three the same way it drops a genuinely empty
+    /// answer -- silently, into an empty list, indistinguishable from the
+    /// model having considered the rows and declined. That is the worst place
+    /// to lose information, so the parse forgives punctuation and the caller
+    /// keeps the range check.
+    ///
+    /// Deliberately not a general number scrape: only the leading digits of a
+    /// token count, so "note 2" yields nothing rather than 2. A model writing
+    /// prose has not answered the question, and guessing at what it meant
+    /// would turn a visible failure into a plausible wrong pick.
+    /// </summary>
+    public static IEnumerable<int> Indices(string response)
+    {
+        foreach (var token in (response ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var end = 0;
+            while (end < token.Length && char.IsAsciiDigit(token[end]))
+            {
+                end++;
+            }
+
+            if (end > 0 && int.TryParse(token[..end], NumberStyles.Integer, CultureInfo.InvariantCulture, out var i))
+            {
+                yield return i;
+            }
+        }
     }
 }

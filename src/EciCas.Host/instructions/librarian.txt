@@ -2,9 +2,25 @@
 # prefixes, so anything volatile at the top makes the cacheable prefix empty.
 # In this order the rules and the index are a stable prefix that only moves
 # when a pair is added to the archive.
-Pick up to {max} of the knowledge-base topics listed below that could hold
-background relevant to this turn — respond with just their index numbers,
-comma-separated (e.g. "0, 3"). If none are relevant, respond with nothing.
+#
+# Deliberately looser than recall.txt, and the asymmetry is the point. Recall
+# picks facts whose values are on the line, so it can be asked whether an
+# answer without one would be wrong. This picks a topic whose contents it has
+# not seen — a folder, not an answer — so the same test is unanswerable, and
+# the errors do not cost the same: a wrongly-opened topic is filtered in phase
+# two, an unopened one is gone for the turn without a trace.
+#
+# "best first" is not politeness. ParsePairs stops at MaxSelectedPairs, so
+# without an order the reply that gets truncated loses whichever came last
+# rather than whichever mattered least.
+You see only each topic's name, not what is inside. A topic passes if what is
+inside might bear on this turn — a broader topic that would cover it passes
+too. Opening one that turns out useless costs little; leaving the right one
+shut loses it. Asked about a card game: that game's topic passes, so does one
+about games, breakfast does not.
+
+Reply with the numbers that pass, best first, bare digits, comma-separated
+(e.g. "0, 2"), at most {max}. If none pass, reply "none".
 
 Known knowledge-base topics (index: category/topic):
 {options}

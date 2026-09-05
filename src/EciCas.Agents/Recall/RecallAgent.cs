@@ -259,12 +259,22 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             ("text", text));
     }
 
-    private static IReadOnlyList<ArchiveRecord> ParsePicked(string response, IReadOnlyList<ArchiveRecord> candidates)
+    private IReadOnlyList<ArchiveRecord> ParsePicked(string response, IReadOnlyList<ArchiveRecord> candidates)
     {
+        // RecallDepth was previously enforced by the prompt alone: a model
+        // that returned more indices than it was asked for got all of them,
+        // and the knob quietly meant nothing. Librarian has always capped in
+        // code; this makes the pair consistent. The instruction asks for the
+        // best first, so a reply over the cap loses its weakest picks.
         var picked = new List<ArchiveRecord>();
-        foreach (var token in response.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var i in InstructionFile.Indices(response))
         {
-            if (int.TryParse(token, out var i) && i >= 0 && i < candidates.Count)
+            if (picked.Count >= _knobs.RecallDepth)
+            {
+                break;
+            }
+
+            if (i >= 0 && i < candidates.Count)
             {
                 picked.Add(candidates[i]);
             }
