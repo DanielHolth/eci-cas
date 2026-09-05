@@ -136,6 +136,35 @@ public class ArchivistAgentTests
         Assert.Equal("benita", record.Value);
     }
 
+    /// <summary>
+    /// A bare "test" came back as interaction/test/action/user/test = none --
+    /// the requested shape filled in with no fact in it. The words that mean
+    /// empty are rejected like empty, and a real value beside them survives.
+    /// </summary>
+    [Theory]
+    [InlineData("category=interaction topic=test subtopic=action subject=user key=test value=none", false)]
+    [InlineData("category=interaction topic=test subtopic=action subject=user key=test value=None.", false)]
+    [InlineData("category=person topic=x subtopic=y subject=user key=k value=nothing", false)]
+    [InlineData("category=person topic=x subtopic=y subject=user key=k value=unknown", false)]
+    [InlineData("category=person topic=x subtopic=y subject=user key=k value=-", false)]
+    [InlineData("category=person topic=x subtopic=y subject=user key=k value=none of your business", true)]
+    [InlineData("category=person topic=x subtopic=y subject=user key=k value=oslo", true)]
+    public async Task AValueThatMeansEmptyIsNotAFact(string line, bool stored)
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(line, TimeSpan.Zero, 10, 0m)));
+
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "test")), CancellationToken.None);
+
+        Assert.Equal(stored, store.IndexFor(null).Count > 0);
+    }
+
     [Fact]
     public async Task WhenTriggeredBySelf_HardSkips_NeverCallsSubstrate()
     {

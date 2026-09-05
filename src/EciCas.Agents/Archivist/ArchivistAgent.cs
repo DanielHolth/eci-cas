@@ -255,6 +255,13 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     private static readonly Regex FieldMarkerPattern = new(
         @"\b(category|topic|subtopic|subject|key|value)=", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>Values that occupy the slot without saying anything.</summary>
+    private static bool IsEmptyWord(string value) => value.Trim().TrimEnd('.').ToLowerInvariant() switch
+    {
+        "none" or "nothing" or "n/a" or "na" or "null" or "unknown" or "unspecified" or "-" => true,
+        _ => false,
+    };
+
     private static (string Category, string Topic, string Subtopic, string Subject, string Key, string Value)? ParseFields(string line)
     {
         // Smaller models don't reliably stick to the requested "key=value"
@@ -298,6 +305,25 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         }
 
         if (values[0]!.Length == 0 || values[3]!.Length == 0 || values[4]!.Length == 0 || values[5]!.Length == 0)
+        {
+            return null;
+        }
+
+        // A model handed a shape will fill it. Told "nothing stated: reply
+        // nothing", a small one still answers a bare "test" with
+        // interaction/test/action/user/test = none -- the form completed,
+        // no fact in it. Empty was already rejected above; this rejects the
+        // words that mean empty.
+        //
+        // Instructing this away was tried and is worse: pressing the model
+        // not to write an empty value pressed it into writing a full one,
+        // and "I live in Trondheim" came back as Trondheim's annual
+        // rainfall. A guard cannot hallucinate.
+        //
+        // The cost is real but small: "allergies = none" is a true fact
+        // this drops. A fact that exists only as an absence is rare, and it
+        // survives being said a second way ("no allergies").
+        if (IsEmptyWord(values[5]!))
         {
             return null;
         }
