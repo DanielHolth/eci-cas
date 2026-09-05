@@ -6,18 +6,24 @@
 # Deliberately looser than recall.txt, and the asymmetry is the point. Recall
 # picks facts whose values are on the line, so it can be asked whether an
 # answer without one would be wrong. This picks a topic whose contents it has
-# not seen — a folder, not an answer — so the same test is unanswerable, and
-# the errors do not cost the same: a wrongly-opened topic is filtered in phase
-# two, an unopened one is gone for the turn without a trace.
+# not seen — a folder, not an answer — so that test is unanswerable, and the
+# errors do not cost the same: a wrongly-opened topic gets filtered in phase
+# two, an unopened one is gone for the turn with nothing to show it existed.
+#
+# That reasoning stays here rather than in the prompt. Two sentences saying it
+# aloud were cut: one told the model it could only see names, which it can see
+# for itself, and one asked it to weigh the cost of a wrong pick against a
+# missed one. A 4B nods at an abstraction like that and acts on the example
+# instead — and the example already pushes the same way, concretely. Where
+# both are present the abstraction is the one to cut. Comments are stripped
+# before the prompt is built, so keeping the argument up here is free.
 #
 # "best first" is not politeness. ParsePairs stops at MaxSelectedPairs, so
 # without an order the reply that gets truncated loses whichever came last
 # rather than whichever mattered least.
-You see only each topic's name, not what is inside. A topic passes if what is
-inside might bear on this turn — a broader topic that would cover it passes
-too. Opening one that turns out useless costs little; leaving the right one
-shut loses it. Asked about a card game: that game's topic passes, so does one
-about games, breakfast does not.
+A topic passes if what is inside might bear on this turn — a broader topic that
+would cover it passes too. Asked about a card game: that game's topic passes,
+so does one about games, breakfast does not.
 
 Reply with the numbers that pass, best first, bare digits, comma-separated
 (e.g. "0, 2"), at most {max}. If none pass, reply "none".
