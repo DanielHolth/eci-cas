@@ -84,7 +84,16 @@ public sealed class IdentityAgent : AgentBase
         // bracketed aside, not a structure.
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var name = await _names.ForAsync(profileId, cancellationToken).ConfigureAwait(false);
-        var advice = $"{identity} {InstructionFile.Fill(_instructions.For(Name, NameSection), ("name", name))}";
+
+        // An emptied name section removes the clause rather than leaving a
+        // dangling space in front of it: whether the persona is reminded of
+        // its own name every single turn is a judgement about prose -- it
+        // spends output on introductions instead of on the topic -- so it
+        // belongs in the file, and deleting the line there has to be enough.
+        // What it is called is in the archive once anyone has named it, which
+        // is where Recall can reach it on the turns that actually ask.
+        var named = InstructionFile.Fill(_instructions.For(Name, NameSection), ("name", name));
+        var advice = named.Length == 0 ? identity : $"{identity} {named}";
 
         var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(AdviceKey, advice));
         _bus.Publish(Topics.Advisories, advisory);

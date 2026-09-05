@@ -35,4 +35,4 @@ You do not have your own description to hand right now.
 # appended to whichever profile is in force. {name} is the name this person
 # has given it, or the configured default if they have not given it one.
 
-You are called {name}.
+# You are called {name}.

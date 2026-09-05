@@ -126,6 +126,15 @@ public class InstructionStoreTests
         {
             var text = ShippedInstructions.Store.For("Identity", section);
 
+            // An emptied section is an opt-out, not a malformed profile: the
+            // name reminder is commented out in identity.txt because it spent
+            // output introducing the persona instead of answering, and the
+            // section stays declared so restoring it is one uncommented line.
+            if (text.Length == 0)
+            {
+                continue;
+            }
+
             Assert.DoesNotContain('\n', text);
             Assert.True(text.Length <= 80, $"Identity profile '{section}' is a brief, not a colour: {text}");
             Assert.StartsWith("You", text, StringComparison.Ordinal);
