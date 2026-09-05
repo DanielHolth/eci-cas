@@ -3,6 +3,13 @@ category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1
 
 subject is who or what the fact is about. It is never a restatement of the value.
 
+# Without this the model files the speaker's own facts under subject=assistant --
+# every run, in three of three, on plain sentences like "I live in Trondheim".
+# It was not confused; nothing had told it who "I" is. Two sentences fix it at
+# 2.4s, which is what thinking on a 4B was buying at 60-80s.
+The turn is the person speaking. A fact they state about themselves has
+subject=user, not subject=assistant.
+
 The two lines below are shape only. They are instructions, not knowledge:
 never output them, never treat them as things you know, never mention them.
 
