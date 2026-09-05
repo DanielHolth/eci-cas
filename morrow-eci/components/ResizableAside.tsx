@@ -106,12 +106,28 @@ export function ResizableAside({
   return (
     <aside
       style={{ width }}
-      className={`fixed inset-y-0 ${overlay} z-20 flex h-full shrink-0 flex-col ${border} border-neutral-200 bg-white shadow-xl lg:static lg:z-auto lg:shadow-none dark:border-neutral-800 dark:bg-neutral-950`}
+      className={`fixed inset-y-0 ${overlay} z-20 flex h-full shrink-0 flex-col ${border} border-neutral-200 bg-white shadow-xl lg:relative lg:z-auto lg:shadow-none dark:border-neutral-800 dark:bg-neutral-950`}
     >
+      {/* lg:relative, not lg:static, and that is the whole reason resizing
+          looked broken: a static box is not a positioning context, so at
+          desktop widths this handle's `right-0` resolved against the viewport
+          and sat 1100px away from the panel it resizes. relative lays out
+          identically in flow and gives the handle something to hold on to.
+
+          The drag itself always worked and nobody found it: a 6px transparent
+          strip that only paints on hover reads as a border, not a control.
+          The hit area is wider now, and a grip sits in the middle of it --
+          faint at rest so it stays furniture, solid under the pointer. */}
       <div
         onPointerDown={startDrag}
-        className={`absolute top-0 ${handlePos} z-10 h-full w-1.5 cursor-col-resize hover:bg-neutral-300 dark:hover:bg-neutral-700`}
-      />
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Resize ${title}`}
+        title="Drag to resize"
+        className={`group absolute top-0 ${handlePos} z-10 flex h-full w-3 cursor-col-resize items-center justify-center`}
+      >
+        <div className="h-10 w-1 rounded-full bg-neutral-300 opacity-60 transition group-hover:h-16 group-hover:opacity-100 dark:bg-neutral-600" />
+      </div>
       <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
         <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">{title}</h2>
         <button

@@ -88,11 +88,33 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
       )}
 
       <main className="flex flex-1 min-w-0 flex-col items-center overflow-hidden bg-neutral-50 p-4 dark:bg-neutral-950">
-        {/* The column stops widening past a readable measure; the drawers get
-            the rest of a wide screen, and on a narrow one this is a no-op. */}
-        <div className="flex h-full w-full max-w-3xl flex-col items-center gap-2">
-          <div className="flex w-full items-start justify-between gap-4">
-            <div className="flex-1 text-center">
+        {/* Full width of main, not of the reading column: "far left" means
+            beside the drawer that opens there, and inside a centred max-w-3xl
+            it would have meant a couple of hundred pixels short of it.
+
+            Three grid tracks rather than absolute positioning. The side
+            tracks are equal fractions, so the auto-sized middle one lands on
+            main's centre -- the same centre the avatar below it uses -- and
+            the title cannot overlap a cluster however wide the profile name
+            grows, because a grid track will not let it. */}
+        <div className="grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-4 pb-2">
+          <div className="flex items-center justify-self-start">
+            <button
+              type="button"
+              onClick={toggleThoughts}
+              aria-pressed={thoughtsOpen}
+              className="relative rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              Thoughts
+              {unseenReflections > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                  {unseenReflections}
+                </span>
+              )}
+            </button>
+          </div>
+
+            <div className="text-center">
               <h1 className="text-base font-semibold text-neutral-800 dark:text-neutral-100">
                 {persona.name || "ECI-CAS"}
               </h1>
@@ -103,33 +125,24 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
                 {turn?.impulse?.reflex ?? "At rest."}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleThoughts}
-                aria-pressed={thoughtsOpen}
-                className="relative rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              >
-                Thoughts
-                {unseenReflections > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
-                    {unseenReflections}
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLogOpen((v) => !v)}
-                aria-pressed={logOpen}
-                className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              >
-                Debug
-              </button>
-              <ProfileChip profile={profile} onSwitch={onSwitch} />
-              <ThemeToggle />
-            </div>
-          </div>
 
+          <div className="flex items-center gap-2 justify-self-end">
+            <button
+              type="button"
+              onClick={() => setLogOpen((v) => !v)}
+              aria-pressed={logOpen}
+              className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              Debug
+            </button>
+            <ProfileChip profile={profile} onSwitch={onSwitch} />
+            <ThemeToggle />
+          </div>
+        </div>
+
+        {/* The column stops widening past a readable measure; the drawers get
+            the rest of a wide screen, and on a narrow one this is a no-op. */}
+        <div className="flex h-full w-full max-w-3xl flex-col items-center gap-2">
           <Avatar
             expression={turn?.impulse?.expression ?? "neutral"}
             speaking={speaking}
