@@ -426,6 +426,12 @@ cheaper and wrong-feeling. Partitioning is probably right, because the cheap
 option contradicts the stated intent that what warms the persona toward one
 child must not pre-colour how it meets the parent an hour later.
 
+**Two mood vocabularies, unconnected.** The Debug slider sets `Mood`
+(Maleficent..Ecstatic) while Reflection *reports* a mood label Impulse maps
+to drive vectors (`tense`, `curious`, ...) — "ecstatic" is in both and
+recognised by neither side of the other, so a detected mood can never reach
+the dial that names it.
+
 ## Long-term goals
 
 **Android native client.** On-device minimal-tier agent running the full
