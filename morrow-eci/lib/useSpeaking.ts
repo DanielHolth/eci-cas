@@ -18,15 +18,22 @@ const MAX_MS = 12_000;
  * the thing the surface actually has.
  */
 export function useSpeaking(text: string | undefined): boolean {
-  const [finished, setFinished] = useState<string | undefined>(undefined);
+  // A boolean rather than "which text has finished": two consecutive turns
+  // can carry the identical string, and comparing against it left the mouth
+  // still marked finished from the previous one.
+  const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
-    if (!text) return;
+    if (!text) {
+      setSpeaking(false);
+      return;
+    }
 
+    setSpeaking(true);
     const ms = Math.min(MAX_MS, Math.max(MIN_MS, (text.length / CHARS_PER_SECOND) * 1000));
-    const timer = setTimeout(() => setFinished(text), ms);
+    const timer = setTimeout(() => setSpeaking(false), ms);
     return () => clearTimeout(timer);
   }, [text]);
 
-  return !!text && finished !== text;
+  return !!text && speaking;
 }

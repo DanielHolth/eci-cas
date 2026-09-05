@@ -1,71 +1,63 @@
 # Agent instructions
 
-Keep responses terse and to the point. Try to spend less tokens whenever
-possible. Less is more. No preamble, no restating the request, no trailing
-summary unless asked. Prefer diffs/snippets over full file dumps.
+Terse. No preamble, no restating the request, no trailing summary unless
+asked. Diffs and snippets over full file dumps.
 
 Write the least code/tests/docs that fully satisfies the requirement — no
-speculative abstractions, no redundant test variants for the same claim,
-no comments or docs restating what the code already says; when in doubt,
-cut.
+speculative abstractions, no redundant tests for the same claim, no comments
+restating the code. When in doubt, cut.
+
+Spawn every subagent on **sonnet, low reasoning effort** — pass the model
+explicitly on each `Agent` call rather than inheriting this session's.
 
 ## Where to work
 
 **`main` in the one checkout, always.** One developer, no branches, no
-worktrees — commit to `main` and push. If a worktree or a second clone
-exists, it is leftover plumbing, not somewhere to work.
+worktrees — commit and push. A worktree or second clone is leftover
+plumbing, not somewhere to work.
 
-Not only a preference: each checkout carries its own `bin/`, and the
-archive lives in the build output
-(`src/EciCas.Host/bin/<config>/net10.0/archive`), so a host started from
-the wrong folder gets a *different persona with an empty memory*. That
-reads exactly like a retrieval bug and has already been debugged as one.
-If Librarian reports an index of one pair, check the folder first.
+Each checkout carries its own `bin/`, and the archive lives in the build
+output (`src/EciCas.Host/bin/<config>/net10.0/archive`), so a host started
+from the wrong folder gets a *different persona with an empty memory*. That
+reads exactly like a retrieval bug and has been debugged as one. If
+Librarian reports an index of one pair, check the folder first.
 
 ## Architecture
 
-Always use loose coupling and async processes for transactions between
-agents on the service bus. A `Publish()` must never block on a
-subscriber finishing its own handling, and no agent's correctness may
-depend on another agent's message arriving before or after it —
-concurrent, message-passing, independently-listening agents, not a
-shared call stack wearing a pub-sub API. See `docs/architecture.md` for
-the full design. Don't reintroduce that coupling here.
+Loose coupling, async, message-passing. A `Publish()` must never block on a
+subscriber, and no agent's correctness may depend on another's message
+arriving before or after it — independently-listening agents, not a shared
+call stack wearing a pub-sub API. Full design in `docs/architecture.md`.
 
 ## Instructions are prose, not code
 
-Anything that colours how an agent behaves or answers belongs in
-`src/EciCas.Host/instructions/*.txt`, never in a C# string constant — a
-prompt, a persona, a canned reply, a notice the user reads. The test is not
-"does a model see it" but "is this a writing decision". If it is, a rebuild
-should not be the way to revise it.
+Anything that colours how an agent behaves or answers goes in
+`src/EciCas.Host/instructions/*.txt`, never a C# string constant — prompt,
+persona, canned reply, a notice the user reads. The test is not "does a
+model see it" but "is this a writing decision". If it is, a rebuild should
+not be the way to revise it.
 
-Surface interiority only where something actually happened to cause it.
-Governance's *"(Thinking without Recall just now, so this is less grounded
-than usual.)"* is the template: true, caused, and silent otherwise. A
-persona narrating a mood it has no grounds for is the failure this avoids,
-which is also why the drive window reaches Reflection as words and never as
-numbers.
+Surface interiority only where something actually caused it. Governance's
+*"(Thinking without Recall just now, so this is less grounded than
+usual.)"* is the template: true, caused, silent otherwise. A persona
+narrating an ungrounded mood is the failure this avoids — also why the
+drive window reaches Reflection as words, never numbers.
 
 ## Commands
 
-"Reset parquet" — see `docs/appendix.md` § Resetting the archive
-(`dotnet run --project src/EciCas.ArchiveTool -- <dir>`, then `reset`).
+"Reset parquet" — `docs/appendix.md` § Resetting the archive.
 
 ## Docs
 
-`docs/` holds:
-
-- `docs/architecture.md` — system design: agent roster, bus mechanics, storage, verification
+- `docs/architecture.md` — agent roster, bus mechanics, storage, verification
 - `docs/roadmap.md` — what's ahead, open design questions
-- `docs/appendix.md` — operational notes: running the host, reading its
-  output, and traps that cost someone an afternoon. Add to it whenever a
-  debugging session turns up something worth not rediscovering.
+- `docs/appendix.md` — running the host, reading its output, traps that cost
+  someone an afternoon. Add to it whenever debugging turns up something
+  worth not rediscovering.
 
 A review that lands as its own document is a worklist, not a changelog:
-delete an entry when it is fixed rather than marking it done, move
-anything that survives into `docs/roadmap.md`, and delete the document
-once nothing is left in it.
+delete an entry when fixed, move survivors into `docs/roadmap.md`, delete
+the document once empty.
 
-The Python prototype this replaced lives in the sibling folder
-`eci-cas-python-prototype` — reference only, not part of this repo.
+The Python prototype this replaced lives in `eci-cas-python-prototype`
+(sibling folder) — reference only, not part of this repo.

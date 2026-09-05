@@ -15,7 +15,7 @@ export function KnobsPanel() {
     fetchKnobs()
       .then(setKnobs)
       .catch(() =>
-        setKnobs({ tier: "Mock", tiers: [], maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
+        setKnobs({ tier: "Mock", tiers: [{ name: "Mock", missingKeys: [] }], maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
       );
   }, []);
 
@@ -57,10 +57,20 @@ export function KnobsPanel() {
           value={knobs?.tier ?? ""}
           disabled={knobs === null}
           onChange={(e) => apply("tier", e.target.value, setTier)}
-          className="rounded border border-neutral-300 bg-transparent px-1 py-0.5 font-mono text-xs dark:border-neutral-700"
+          // The popup list is drawn by the browser, not by this panel, and a
+          // transparent select left it lit by the platform default beside a
+          // near-black aside. color-scheme is what actually moves the popup's
+          // own chrome -- its scrollbar and its selection highlight -- while
+          // the background on select and option covers the rows themselves.
+          className="rounded border border-neutral-300 bg-white px-1 py-0.5 font-mono text-xs text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:[color-scheme:dark]"
         >
           {(knobs?.tiers ?? []).map((t) => (
-            <option key={t.name} value={t.name} disabled={t.missingKeys.length > 0}>
+            <option
+              key={t.name}
+              value={t.name}
+              disabled={t.missingKeys.length > 0}
+              className="bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100"
+            >
               {t.name}
               {t.missingKeys.length > 0 ? ` — needs ${t.missingKeys.join(", ")}` : ""}
             </option>
