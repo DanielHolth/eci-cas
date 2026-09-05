@@ -255,25 +255,35 @@ to them):
 
 | class | agent | Thinking | MaxTokens |
 |---|---|---|---|
-| `fast-low` | Recall | false | 512 |
-| `fast-medium` | Librarian | false | 512 |
-| `fast-high` | Intent | false | 512 |
-| `slow-low` | Archivist | true | 1024 |
-| `slow-medium` | Reflection | true | 1024 |
+| `fast-low` | Recall | false | 2048 |
+| `fast-medium` | Librarian | false | 2048 |
+| `fast-high` | Intent | false | 2048 |
+| `slow-low` | Archivist | true | 4096 |
+| `slow-medium` | Reflection | true | 4096 |
 
-512 everywhere it isn't obviously too little. Recall and Librarian answer
-with a bare index and would fit in 32, but a tight cap only buys latency, and
-the minimal tier is no longer trying to be fast — it is trying to be free.
-Intent needs the room for real: `instructions/intent.txt` sanctions up to
-eight sentences when the person asks for length, call it 250–300 tokens,
-which makes 256 exactly the wrong number — it truncates a story mid-sentence.
-A ceiling is headroom, not permission; the instruction file is what keeps
-replies short. `slow-*` gets double because thinking is on and the trace
-counts against the same budget, and Reflection and Archivist land behind the
-reply anyway.
+Generous everywhere it isn't obviously too little. Recall and Librarian
+answer with a bare index and would fit in 32, but a tight cap only buys
+latency, and the minimal tier is no longer trying to be fast -- it is trying
+to be free. Intent needs the room for real: `instructions/intent.txt`
+sanctions up to eight sentences when the person asks for length, call it
+250-300 tokens, which makes 256 exactly the wrong number -- it truncates a
+story mid-sentence. A ceiling is headroom, not permission; the instruction
+file is what keeps replies short. `slow-*` gets double because thinking is on
+and the trace counts against the same budget, and Reflection and Archivist
+land behind the reply anyway.
+
+These started at 512/1024 and were doubled twice, because the first live turn
+showed Archivist generating exactly 1355 tokens against a 1024 ceiling -- it
+did not run long, it was cut off, and a truncated archive entry is worse than
+a slow one. Truncation is the failure mode worth engineering against here: it
+is silent, it looks like output, and nothing downstream can tell a finished
+thought from a severed one.
 
 If a generous cap makes a turn hang, raise `TimeoutMs`; do not claw the
-ceiling back.
+ceiling back. That is not rhetorical -- 4096 tokens at the ~56 tok/s this
+model generates is over a minute, so the `local` provider's timeout went to
+300s in the same change. The ceiling and the timeout have to move together or
+raising one just relocates the failure.
 
 The provider entry carries no `ApiKeyEnvironmentVariable` — `Program.cs`
 already reads a missing key as "send no Authorization header" — and no
@@ -330,7 +340,7 @@ Measured on an RTX 5060 Ti (8GB) with a Vulkan build, no CUDA:
   models. The `Thinking` knob is load-bearing, not belt-and-braces.
 - **Too small a `MaxTokens` returns empty, not truncated.** At 16 tokens the
   reasoning consumed the whole budget and `content` came back `""`. This is
-  the concrete argument for the 512/1024 ceilings, and for raising
+  the concrete argument for generous ceilings, and for raising
   `TimeoutMs` rather than clawing a ceiling back.
 - llama.cpp puts reasoning in a separate `reasoning_content` field, so
   `StripThinking` never fires against this server. It stays for servers that
