@@ -109,9 +109,15 @@ lifetime figure; nothing else reads it.
 Usually not where you think. In order of how often it has fooled someone:
 
 **Identity injects the persona on every turn.** Published as advice on every
-`events.perception`, reaching Intent as `[Identity: Your tone is warm,
-unhurried, plain-spoken. You are called Morrow.]` — tone and name in one
-aside, because one aside is what Intent reads. No log line, every turn.
+`events.perception`, reaching Intent as `[Identity: You are warm, unhurried,
+plain-spoken.]` — no log line, every turn. The name clause that used to
+follow it is commented out in `identity.txt`; uncomment it and the same aside
+carries `You are called Morrow.` too, because one aside is what Intent reads.
+
+It says "you are", not "your tone is", and that is not cosmetic: the Debug
+panel's mood slider puts a live `[Mood: Sarcastic.]` beside it, and when both
+asides claimed the word "tone" the model had to guess which one was standing
+and which was passing. Identity is who it is; Mood is how it feels today.
 
 Keep it to a few keywords. A paragraph there competes with the person's own
 sentence instead of colouring the answer to it.

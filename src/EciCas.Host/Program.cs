@@ -352,9 +352,9 @@ app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs) =>
         knobs.RecallDepth = d;
     }
 
-    if (request.Tone is { } toneName && Enum.TryParse<Tone>(toneName, ignoreCase: true, out var tone))
+    if (request.Mood is { } moodName && Enum.TryParse<Mood>(moodName, ignoreCase: true, out var mood))
     {
-        knobs.Tone = tone;
+        knobs.Mood = mood;
     }
 
     return Results.Json(ToKnobsPayload(knobs), jsonOptions);
@@ -365,8 +365,8 @@ static object ToKnobsPayload(RuntimeKnobs knobs) => new
     maxSentences = knobs.MaxSentences,
     reflectionEvery = knobs.ReflectionEvery,
     recallDepth = knobs.RecallDepth,
-    tone = knobs.Tone.ToString(),
-    tones = Enum.GetNames<Tone>(),
+    mood = knobs.Mood.ToString(),
+    moods = Enum.GetNames<Mood>(),
 };
 
 // The persona's own card, read-only. Without this the personality is the one
@@ -544,6 +544,6 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
 
 internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, string? Tone = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, string? Mood = null);
 
 internal sealed record CreateProfileRequest(string DisplayName, string Avatar);

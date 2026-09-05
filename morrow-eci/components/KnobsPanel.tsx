@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Knobs, fetchKnobs, setMaxSentences, setRecallDepth, setReflectionEvery, setTone } from "@/lib/api";
+import { Knobs, fetchKnobs, setMaxSentences, setRecallDepth, setReflectionEvery, setMood } from "@/lib/api";
 
 /**
  * Live session experiments, not configuration: every value here resets to
@@ -15,7 +15,7 @@ export function KnobsPanel() {
     fetchKnobs()
       .then(setKnobs)
       .catch(() =>
-        setKnobs({ maxSentences: 2, reflectionEvery: 5, recallDepth: 5, tone: "Neutral", tones: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
+        setKnobs({ maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
       );
   }, []);
 
@@ -29,8 +29,10 @@ export function KnobsPanel() {
     }
   }
 
-  const toneIndex = knobs ? Math.max(0, knobs.tones.indexOf(knobs.tone)) : 2;
-  const toneMax = (knobs?.tones.length ?? 5) - 1;
+  // Mood, not tone: the slider sets how the persona feels this turn, where
+  // Identity's profile says who it standingly is. Both used to say "tone".
+  const moodIndex = knobs ? Math.max(0, knobs.moods.indexOf(knobs.mood)) : 2;
+  const moodMax = (knobs?.moods.length ?? 5) - 1;
 
   return (
     <div className="border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
@@ -59,17 +61,17 @@ export function KnobsPanel() {
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Tone</span>
-          <span className="font-mono text-neutral-800 dark:text-neutral-100">{knobs?.tone ?? "…"}</span>
+          <span>Mood</span>
+          <span className="font-mono text-neutral-800 dark:text-neutral-100">{knobs?.mood ?? "…"}</span>
         </span>
         <input
           type="range"
           min={0}
-          max={toneMax}
+          max={moodMax}
           step={1}
-          value={toneIndex}
+          value={moodIndex}
           disabled={knobs === null}
-          onChange={(e) => apply("tone", knobs!.tones[Number(e.target.value)], setTone)}
+          onChange={(e) => apply("mood", knobs!.moods[Number(e.target.value)], setMood)}
           className="accent-neutral-700 dark:accent-neutral-300"
         />
       </label>

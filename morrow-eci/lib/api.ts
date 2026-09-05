@@ -24,8 +24,8 @@ export interface Knobs {
   maxSentences: number;
   reflectionEvery: number;
   recallDepth: number;
-  tone: string;
-  tones: string[];
+  mood: string;
+  moods: string[];
 }
 
 export async function fetchKnobs(): Promise<Knobs> {
@@ -36,7 +36,7 @@ export async function fetchKnobs(): Promise<Knobs> {
   return response.json();
 }
 
-async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "tone", number | string>>): Promise<Knobs> {
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "mood", number | string>>): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,4 +52,4 @@ async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery"
 export const setMaxSentences = (maxSentences: number) => postKnobs({ maxSentences });
 export const setReflectionEvery = (reflectionEvery: number) => postKnobs({ reflectionEvery });
 export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth });
-export const setTone = (tone: string) => postKnobs({ tone });
+export const setMood = (mood: string) => postKnobs({ mood });

@@ -15,7 +15,7 @@ public sealed class RuntimeKnobs
     private int _maxSentences = 2;
     private int _reflectionEvery = 5;
     private int _recallDepth = 5;
-    private Tone _tone = Tone.Neutral;
+    private Mood _mood = Mood.Neutral;
 
     /// <summary>Upper bound Intent is told to keep replies within, clamped
     /// to the slider's own range so a bad request can't ask for zero or a
@@ -42,21 +42,28 @@ public sealed class RuntimeKnobs
         set => _recallDepth = Math.Clamp(value, 1, 20);
     }
 
-    /// <summary>The voice Intent is told to answer in, on top of whatever
-    /// Identity's own advisory already says.</summary>
-    public Tone Tone
+    /// <summary>How the persona feels this turn, on top of whatever
+    /// Identity's own advisory already says about who it is.
+    ///
+    /// Mood, not tone: tone is a property of the prose, so "answer in a
+    /// maleficent tone" asks for a register. These five are states of the
+    /// speaker, and a speaker in a state chooses different words, volunteers
+    /// different things and declines to soften different ones -- which is
+    /// what the slider was always reaching for. It also stops this aside
+    /// contradicting Identity's, which describes standing character.</summary>
+    public Mood Mood
     {
-        get => _tone;
-        set => _tone = value;
+        get => _mood;
+        set => _mood = value;
     }
 }
 
 /// <summary>
 /// Five-step dial from cruel to effusive. A closed enum rather than free
 /// text: the slider has five positions and the prompt bracket it produces
-/// (see IntentAgent.AppendTone) has to be one of exactly these words.
+/// (see IntentAgent.AppendMood) has to be one of exactly these words.
 /// </summary>
-public enum Tone
+public enum Mood
 {
     Maleficent,
     Sarcastic,

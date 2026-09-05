@@ -178,7 +178,7 @@ lifetime total persists (`TurnLog:CostPath`).
 
 `RuntimeKnobs` holds the handful of numbers the companion's Debug panel
 exposes as sliders — reply length, reflection cadence, recall depth, and a
-five-step tone enum — overriding the corresponding static options live.
+five-step mood enum — overriding the corresponding static options live.
 In-memory only: a restart resets each to a default matching the tier's own
 config, so an untouched slider changes nothing. Deliberately not an
 instruction file, because these are numbers and one closed vocabulary rather
@@ -233,8 +233,8 @@ green.
 from then on, so a persona meant to grow is not silently overwritten by a
 `git pull`. The boot log says which happened.
 
-**It is a colour, not a brief.** The seed is a handful of keywords — "Your
-tone is warm, unhurried, plain-spoken" — because it reaches Intent as one
+**It is a colour, not a brief.** The seed is a handful of keywords — "You
+are warm, unhurried, plain-spoken" — because it reaches Intent as one
 bracketed aside beside the turn. Written as a paragraph of rules it stopped
 colouring and started competing, standing description outweighing the
 sentence the person typed. What the persona is *made of* is the
@@ -274,7 +274,12 @@ worse than a redundant Parquet read.
 
 **How it hears its own name.** `identity.txt` has a `name` section holding
 one sentence with a `{name}` placeholder, appended to whichever profile is in
-force so Intent receives tone and name as the single aside it already reads.
+force so Intent receives character and name as the single aside it already
+reads. That sentence currently ships commented out — a persona reminded of
+its own name every turn spends output introducing itself, and what it is
+called is a row in the archive for Recall to fetch on the turns that ask.
+Emptying the section drops the clause entirely rather than leaving a dangling
+space, so restoring it is one uncommented line.
 `archivist.txt` names the address a name goes to and stops there — it says
 *when the person names you*, not *always write this*, so Archivist still
 decides. That is the difference between a persona that was told its name and
