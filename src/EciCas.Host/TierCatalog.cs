@@ -39,6 +39,7 @@ public sealed class TierCatalog
     public const string BaseTier = "base";
 
     private readonly Dictionary<string, TierPreset> _presets;
+    private readonly IReadOnlyList<TierPreset> _ordered;
     private readonly SubstrateOptions _substrates;
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly RecallOptions _recall;
@@ -50,7 +51,8 @@ public sealed class TierCatalog
         AgentSubstrateManifest agentSubstrates, RecallOptions recall, LibrarianOptions librarian,
         RuntimeKnobs knobs, string active)
     {
-        _presets = presets.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+        _ordered = presets.ToList();
+        _presets = _ordered.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         _substrates = substrates;
         _agentSubstrates = agentSubstrates;
         _recall = recall;
@@ -62,7 +64,8 @@ public sealed class TierCatalog
     /// <summary>Name of the tier in force. Starts as whatever <c>--Tier</c> said, or <see cref="BaseTier"/>.</summary>
     public string Active { get; private set; }
 
-    public IReadOnlyCollection<TierPreset> Presets => _presets.Values;
+    /// <summary>Cheapest first, in the order the loader ranked them -- a list, because Dictionary.Values promises no order.</summary>
+    public IReadOnlyList<TierPreset> Presets => _ordered;
 
     /// <summary>
     /// Swaps the running configuration to <paramref name="name"/>, taking
@@ -125,6 +128,15 @@ public sealed class TierPreset
     public required Dictionary<string, AgentSubstrateEntry> Agents { get; init; }
     public required RecallOptions Recall { get; init; }
     public required LibrarianOptions Librarian { get; init; }
+
+    /// <summary>
+    /// Where this tier sits on the one axis tiers actually have: base 0
+    /// (unconfigured), Mock 1, up to Super 5. Cost and capability move
+    /// together across the set, so one number orders both -- and it is a
+    /// number in the tier file rather than a C# enum, because the whole point
+    /// of a tier is that adding one is a config change.
+    /// </summary>
+    public required int Rank { get; init; }
 
     /// <summary>
     /// Environment variables this tier's live classes need and that are not

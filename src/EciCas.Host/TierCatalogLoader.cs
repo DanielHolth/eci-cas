@@ -35,7 +35,11 @@ public static class TierCatalogLoader
             }
         }
 
-        return presets;
+        // Ordered by what a tier costs and can do, not by filename: the
+        // dropdown is a dial from cheapest to best, and Ordinal on the file
+        // name put Budget above Minimal. Rank lives in the tier file so a
+        // sixth tier still needs no code change to place itself.
+        return presets.OrderBy(p => p.Rank).ThenBy(p => p.Name, StringComparer.Ordinal).ToList();
     }
 
     private static IConfigurationRoot Layer(string basePath, string? overlay = null)
@@ -103,6 +107,7 @@ public static class TierCatalogLoader
             Agents = agents.Agents,
             Recall = recall,
             Librarian = librarian,
+            Rank = configuration.GetValue<int>("Tier:Rank"),
             MissingKeys = missing,
         };
     }

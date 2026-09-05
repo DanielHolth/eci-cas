@@ -91,7 +91,8 @@ The Debug panel's **Tier** dropdown switches between the same presets on a
 running host, without a restart or a lost conversation: every tier file is
 bound at boot and selecting one swaps the substrate table, the agent
 assignments, and the Recall/Librarian sizing together. Tiers whose API keys
-are unset are listed but greyed out. `--Tier` still decides what you boot
+are unset are listed but greyed out, and the list runs cheapest to best --
+`Tier:Rank` in each tier file, not a filename sort and not a C# enum. `--Tier` still decides what you boot
 into; `base` in the dropdown is "no overlay", which is not quite `Mock`.
 
 Minimal expects an OpenAI-compatible server on `http://localhost:8080/v1/`.

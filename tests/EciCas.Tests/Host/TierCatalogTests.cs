@@ -35,6 +35,16 @@ public class TierCatalogTests
         Assert.Contains(TierCatalogLoader.Load(TierDirectory), p => p.Name == "Minimal");
 
     /// <summary>
+    /// Tiers have one axis -- Mock is the worst, Super is the best -- and the
+    /// dropdown is a dial along it. Ordering by file name put Budget above
+    /// Minimal, which reads as a claim about cost that is not true.
+    /// </summary>
+    [Fact]
+    public void TiersAreOrderedCheapestFirst_NotAlphabetically() =>
+        Assert.Equal(["base", "Mock", "Minimal", "Budget", "Default", "Super"],
+            TierCatalogLoader.Load(TierDirectory).Select(p => p.Name));
+
+    /// <summary>
     /// The base entry is what "no --Tier" means, and it has to be
     /// selectable: a host booted bare that switched to Minimal could
     /// otherwise never get back to where it started.
