@@ -7,8 +7,8 @@ scope, and compact design records for what shipped.
 
 **Next up.** Nothing is outstanding against the Python prototype's business
 logic. The live work comes from the September 2026 external review, below.
-Two things lead it: giving the persona a sense of elapsed time, and
-streaming Intent's tokens once the first sentence has cleared Security.
+Leading it: streaming Intent's tokens once the first sentence has cleared
+Security.
 
 ---
 
@@ -68,14 +68,6 @@ actually happened to cause it.** Every item is an event the system already
 detects and throws away. Nothing here makes the persona talk about itself
 more; that is the failure mode, not the goal.
 
-**Elapsed time — first.** Nothing knows whether the last turn was ninety
-seconds or three weeks ago. The largest gap between this and a mind that
-feels continuous, and nearly free: Perception knows `UtcNow` and the store
-knows the last conclusion's timestamp. Stamp the gap on the perception
-envelope, let Impulse map it to a drive nudge, and pass it to Intent as
-words like `DriveTrend` is — *"[Since: three weeks]"*. Then "it's been a
-while" is a claim about something measurable.
-
 **Notice when a fact changes.** `ParquetArchiveStore.Merged` already detects
 the collision and silently replaces. That is the persona changing its mind
 about the world. Carrying the superseded value forward — as a prior, or a
@@ -93,9 +85,9 @@ cares what surfaces. They are allowed to differ.
 silence so it **thinks** rather than speaks — coming back after a week to a
 persona that has had thoughts is a different thing from one resuming
 mid-sentence. Speaking unprompted needs the parked platform decision;
-thinking unprompted does not. Sequenced after elapsed time: this is the one
-item that acts with no person in the loop, so it wants the generation cap
-honoured and a hard ceiling on notes per idle period.
+thinking unprompted does not. This is the one item that acts with no person
+in the loop, so it wants the generation cap honoured and a hard ceiling on
+notes per idle period.
 
 **Make the echo depth do something.** Hindsight computes `EchoDepth` and
 nothing reads it. It detects the persona resonating with its own past
@@ -886,6 +878,13 @@ feature rather than visible bloat.
 
 Real gaps against the Python prototype's `current-spec.md`, deliberately not
 being worked. Revisit when the named condition holds, not before.
+
+**Elapsed time.** Stamping the gap since the last conclusion onto the
+perception envelope, so the persona can say "it's been a while" about
+something measured rather than guessed. Parked: the debug latency readout
+already covers the diagnostic half, and the interiority half did not earn
+its place — nothing downstream was asking for it. Revisit if a concrete
+behaviour wants the gap, not because it is cheap to compute.
 
 **§6.1 Watchdog.** No liveness ladder, no idle-musing timer. Parked until
 the destination platform is known, or until the running system proves flaky
