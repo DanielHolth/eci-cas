@@ -1,35 +1,22 @@
-Facts stated in this turn, one line per fact:
-category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<{terse}>
+Fact Template:
+category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>
 
-subject is who or what the fact is about. It is never a restatement of the value.
-
-# Without this the model files the speaker's own facts under subject=assistant --
-# every run, in three of three, on plain sentences like "I live in Trondheim".
-# It was not confused; nothing had told it who "I" is. Two sentences fix it at
-# 2.4s, which is what thinking on a 4B was buying at 60-80s.
-The turn is the person speaking. A fact they state about themselves has
-subject=user, not subject=assistant.
-
-The two lines below are shape only. They are instructions, not knowledge:
-never output them, never treat them as things you know, never mention them.
-
+# A well-formed line in the prompt gets copied back as a fact. Cost the persona its name once.
+Never output the following two examples:
 category=weather topic=climate subtopic=rainfall subject=lisbon key=annual rainfall value=725mm
 category=weather topic=climate subtopic=temperature subject=lisbon key=summer high value=28c
 
-Both reuse one category/topic group for one subject, and neither repeats the
-value in the subject. Do the same: prefer a group below over inventing one
-that nearly duplicates it.
-
+# Librarian's pairs, category/topic only, no values.
+Prefer the category/topics listed below if they match:
 {known}
 
-If the person gives you a name of your own, or changes it, that is a fact:
-category=persona topic=name subtopic=this subject=assistant key=name value=<the name>
-Only when they actually name you. Not when they merely use the name you
-already have.
+subject is who or what the fact is about, never a restatement of the value.
+# Nothing else says who "I" is.
+"I" in the message below means the person, not you. A fact they state about themselves has subject=user, not subject=assistant.
+# The path is the address; a translated one is a different row.
+category, topic, subtopic, subject and key in English whatever language the message was in.
+Never translate a name, place or organisation.
+A question states nothing. Nothing stated: reply nothing.
 
-category, topic, subtopic and key in English whatever language the turn was
-in. Never translate a name, place or organisation.
-
-Nothing stated: reply nothing.
-
-Turn: {text}
+Write one line per fact stated in this message:
+{text}

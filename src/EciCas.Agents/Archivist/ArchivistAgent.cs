@@ -173,7 +173,6 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         text = PromptCap.Apply(text);
         var prompt = InstructionFile.Fill(_instructions.For(Name),
             ("known", known),
-            ("terse", ArchiveWriteStyle.TerseValue),
             ("text", text));
 
         var started = Stopwatch.GetTimestamp();

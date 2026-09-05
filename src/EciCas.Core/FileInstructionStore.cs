@@ -36,7 +36,7 @@ public sealed class FileInstructionStore : IInstructionStore
             ["Intent"] = [],
             ["Librarian"] = ["options", "max", "text"],
             ["Recall"] = ["rows", "max", "text"],
-            ["Archivist"] = ["known", "terse", "text"],
+            ["Archivist"] = ["known", "text"],
             ["Reflection"] = ["turns", "revisit", "moods", "terse", "previous", "topics", "drive"],
             ["Identity"] = ["name"],
             ["Impulse"] = [],
