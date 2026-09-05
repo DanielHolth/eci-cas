@@ -6,6 +6,16 @@
 # The one-line contrast does more than the rule above it: a small model
 # imitates a worked example where it only nods at a criterion.
 #
+# The zero case needs a worked line too, for the same reason the positive one
+# does. "Most turns need zero" alone left greetings picking the top two rows in
+# three of five runs; with the line below, false positives went 3/4/1 -> 0/0/0
+# over 150 turns and the hit rate 90% -> 98%.
+#
+# Both halves are load-bearing. A variant naming only the general case ("asks
+# nothing about the person") did not fix greetings at all -- 92%, the baseline.
+# The concrete instance and the category each carry turns the other misses,
+# which is the same narrow-example effect librarian.txt measured.
+#
 # "bare digits" earns its place. Rows render as "0. ..." and ParsePicked
 # reads whole tokens, so a literal "0." parsed to nothing and the pick
 # vanished silently. RecallAgent now takes the leading integer, but the
@@ -19,6 +29,7 @@
 A fact is worth picking only if answering without its value would produce a
 wrong or empty answer — not because it names the same subject. Most turns need
 zero. Asked where someone lives: their city passes, their job does not.
+Greeted, or asked something these rows say nothing about: reply none.
 
 Reply with the numbers of the facts that pass, best first, bare digits,
 comma-separated (e.g. "0, 2"), at most {max}. If none pass, reply "none".
