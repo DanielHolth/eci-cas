@@ -14,10 +14,17 @@ improves one and wrecks the other is not an improvement:
   drawer  is the category defensible for the statement          (filing_key.py)
   nulls   rows produced from messages that state nothing        (fabrication)
 
+RESULT: property shipped -- value 81% -> 91%, better or equal in 5 of 5 and
+better in 4, drawer unchanged, and fabrication on the NULLs 0.4 rows per rep
+down to 0.0. literal was not shipped: it wins three reps, loses one and ties
+one, which is what the noise floor produces on its own. The arms below are
+therefore read the other way round -- "property" is what archivist.txt now
+says, and "bare" is the old line reconstructed to keep this re-runnable.
+
 Arms:
-  shipped   src/EciCas.Host/instructions/archivist.txt as it stands
-  property  + variant_b's rule that key is a property of subject, and a fact
-            about another person is filed under that person's name
+  bare      archivist.txt with the property rule taken back out
+  property  shipped: key is a property of subject, and a fact about another
+            person is filed under that person's name
   literal   property, plus: the key names what was stated, not what it means.
             The untested half of the original diagnosis -- "food preference"
             for a medical restriction is the model interpreting, and the
@@ -46,10 +53,9 @@ CATS = {stmt: {p.split("/")[0] for p in pairs} for stmt, pairs in KEY.items()}
 
 
 def arms():
-    main = bench.load("archivist.txt")["main"]
-    prop = variant_b.apply(main)
+    prop = bench.load("archivist.txt")["main"]
     return {
-        "shipped": main,
+        "bare": variant_b.apply(prop),
         "property": prop,
         "literal": prop.replace(variant_b.PROPERTY.split("\n\n")[1], LITERAL),
     }

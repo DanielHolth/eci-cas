@@ -116,7 +116,20 @@ before any drawer is chosen. Run-to-run extraction variance on the 4B is the
 largest single source of error on the write side and nothing currently
 measures it directly.
 
-One rule was fixed on the strength of that bench. "A person goes in
+Two rules were fixed on the strength of that bench.
+
+`archivist.txt` now says that **key is a property of subject** — the colour of
+a car has `subject=car`, not `subject=user` — and that a fact about another
+person is filed **under that person's name, not under the relation**. Value
+sufficiency 81% → 91%, better or equal in 5 reps of 5 and better in 4; drawer
+accuracy unchanged; and fabrication on the eight null messages fell from 0.4
+rows per rep to 0.0, which is the opposite of the usual trade — a rule that
+makes extraction more complete normally makes it more inventive too. Tested
+alongside it and *not* shipped: "the key names what was stated, not what it
+means", which wins three reps, loses one and ties one. That is what the noise
+floor produces unaided.
+
+The second is a tie rule in `cataloger.txt`. "A person goes in
 relations. A fact about the job goes in work." was already in `cataloger.txt`,
 already read, and already losing: "My manager is called Petter Aas" went to
 work in nearly every rep, and to a different folder there each time. The line

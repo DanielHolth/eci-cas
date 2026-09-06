@@ -26,6 +26,11 @@ they were given, not under the relation:
 subtopic=<1-2 words> subject=<their name> key=<1-3 words> value=<1-4 keywords>"""
 
 
+# RESULT 2026-09-06: value sufficiency 81% -> 91%, better or equal in 5 reps
+# of 5 and better in 4; drawer accuracy unchanged (91 -> 92); fabrication on
+# the NULL messages 0.4 rows per rep -> 0.0. PROPERTY is now the shipped text,
+# so apply() runs the replacement the other way and the arms in extract_ab.py
+# read accordingly.
 def apply(main):
-    assert ANCHOR in main, "shipped archivist.txt no longer has the subject line"
-    return main.replace(ANCHOR, PROPERTY)
+    assert PROPERTY in main, "shipped archivist.txt no longer has the property rule"
+    return main.replace(PROPERTY, ANCHOR)

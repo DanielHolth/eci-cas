@@ -52,8 +52,13 @@ makes it more fabricating too, and that trade is invisible on the other axes.
 - `cat_tie.py` — the person-vs-job tie rule. **Shipped**: 88% → 96%, better
   or equal in 5 of 5. Arms are flipped so it still re-runs against the new
   shipped line.
-- `extract_ab.py` — extraction rules on all three axes at once.
-- `variant_b.py` — the property rule, a candidate for `archivist.txt`.
+- `extract_ab.py` — extraction rules on all three axes at once. **Shipped**
+  the property rule: value 81% → 91%, better or equal in 5 of 5, drawer
+  unchanged, and fabrication on the nulls 0.4 rows per rep → 0.0. Not shipped:
+  "the key names what was stated, not what it means" — three reps up, one
+  down, one level.
+- `variant_b.py` — that property rule, now the shipped text; `apply()` runs
+  the replacement backwards so the comparison still re-runs.
 - `review_other.py` — the second pass over `other`. **Dead end**: it removes
   `other` as designed and buys no accuracy, because `x/other` was never the
   loss it looks like — the read path opens `other` alongside its parent

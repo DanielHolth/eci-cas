@@ -13,6 +13,14 @@ subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>
 # Left out, the value gets restated as the subject.
 subject is who or what the fact is about. It is never a restatement of the value.
 
+key is a property of subject. When the key names something that belongs to
+some other thing, that thing is the subject: the colour of a car has
+subject=car, not subject=user.
+
+A fact about another person has that person as the subject, under the name
+they were given, not under the relation:
+subtopic=<1-2 words> subject=<their name> key=<1-3 words> value=<1-4 keywords>
+
 # Nothing else says who "I" is; without it the speaker's own facts land on subject=assistant.
 # The worked line stays templated: only a literal one can be copied out as a fact.
 The message is the person speaking. A fact they state about themselves has
