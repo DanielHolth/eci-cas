@@ -125,9 +125,13 @@ worse than the flat list they were meant to beat:
 What has not been tried: embeddings over the index rather than a picked pair,
 and asking the question of a *sample of values* rather than of file names.
 
-Also needed before any of this is trusted: the `HELD` corpus is burned as a
-holdout — every remaining number came off it. A genuinely new corpus is the
-prerequisite for the next honest comparison.
+Also needed before any of this is trusted: a corpus nobody has tuned against.
+The fixture behind every number above is
+[`tests/corpora/retrieval_v2.py`](../tests/corpora/retrieval_v2.py) — 12
+statements to iterate on, 12 held back, 8 that state nothing so a fabrication
+shows up as one. The held half is burned: it was scored repeatedly as the
+design moved, so it no longer measures what a holdout measures. Writing a
+fresh one is the prerequisite for the next honest comparison, not an extra.
 
 ## Companion & knowledge extensions (not started)
 
