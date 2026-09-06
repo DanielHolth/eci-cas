@@ -107,6 +107,18 @@ foreach (var providerSection in builder.Configuration.GetSection("Substrates:Pro
         {
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         }
+    })
+    // The factory rotates handlers every two minutes by default, to pick up
+    // DNS changes. That also throws away the connection SubstrateWarmup just
+    // paid for, so a persona idle for three minutes pays the handshake again
+    // on the turn someone finally types. PooledConnectionLifetime is the
+    // supported way to keep the DNS refresh without the rotation: the pool
+    // retires a connection on its own schedule, and the handler stays.
+    .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
     });
 
     builder.Services.AddKeyedSingleton<ISubstrateProvider>(providerName, (sp, key) =>

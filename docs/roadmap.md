@@ -56,10 +56,15 @@ and the index quietly became the answer whenever it fit. This skips picking
 *after* selection, so no judgment is bypassed — only a filter with nothing
 to filter. Config knob, measured by `RetrievalProbe`.
 
-**Pre-warm the HTTP connections at boot.** Each named `HttpClient` pays DNS,
-TCP and TLS on its first call, which lands on the first turn a person types.
-A throwaway request per provider at startup moves it where nobody waits.
-Pair with an explicit `PooledConnectionLifetime`.
+**Pre-warm the HTTP connections at boot.** *Done* — `SubstrateWarmup` sends
+one throwaway completion per distinct provider+model before the REPL prompt
+appears, so DNS, TCP, TLS and (locally) the weights coming off disk are paid
+where nobody is waiting. Deduplicated by provider+model, not by substrate
+class: the minimal tier points all eight classes at one 4B. Bounded by
+`Substrates:WarmupMs`, 0 disables, and it cannot fail a boot.
+Paired with an explicit `PooledConnectionLifetime`: the factory otherwise
+rotates handlers every two minutes and throws the warmed connection away, so
+a persona idle for three minutes paid the handshake again anyway.
 
 ### Interiority that is actually grounded
 
