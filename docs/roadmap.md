@@ -116,6 +116,16 @@ before any drawer is chosen. Run-to-run extraction variance on the 4B is the
 largest single source of error on the write side and nothing currently
 measures it directly.
 
+One rule was fixed on the strength of that bench. "A person goes in
+relations. A fact about the job goes in work." was already in `cataloger.txt`,
+already read, and already losing: "My manager is called Petter Aas" went to
+work in nearly every rep, and to a different folder there each time. The line
+decides the tie without naming the case it has to decide — a person the user
+knows *only* through the job. Naming it took drawer accuracy from 88% to 96%,
+better or equal in 5 reps of 5. The lesson generalises past this one line: a
+tie rule that states the distinction but not the case it applies to is a
+comment.
+
 Note also what the 58% below does *not* include. It scores pair-hit alone —
 no value is ever inspected — so end-to-end recall is 58% times whatever
 fraction of rows still contain the answer, and that second number had never

@@ -72,7 +72,10 @@ admin      documents and agreements: passport, licence, insurance, contracts,
            accounts, renewals
 
 Ties, decided once so they are decided the same way every time:
-- A person goes in relations. A fact about the job goes in work.
+- A person goes in relations, including a person the user only knows
+  through the job: a manager's or a colleague's name is relations, not work.
+  What goes in work is the job itself -- the role, the duties, the hours,
+  the workplace.
 - What is paid goes in money. The paper proving it goes in admin.
 - A vehicle goes in household. A journey made in it goes in travel.
 - A skill already held goes in identity. A skill being learned goes in learning.
