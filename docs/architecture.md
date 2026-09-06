@@ -344,9 +344,15 @@ is what lets one subtopic be discussed at length without earning an index
 entry.
 
 Both Archivist (turn facts) and Reflection (ideas) extract records in this
-shape. The one rule that must hold for *every* write lives once, as a prompt
-fragment on `ArchiveWriteStyle` interpolated into both prompts so they cannot
-drift: `TerseValue`, so a later lookup actually intersects what got written.
+shape. The one rule that must hold for *every* write — keep the value short
+enough that a later lookup actually intersects what got written — is
+`ArchiveWriteStyle.TerseValue`, and it does **not** currently live once.
+Reflection interpolates it (`ReflectionAgent.cs:415`); Archivist does not,
+and `archivist.txt` states its own tighter version of the rule in prose
+(`value=<1-4 keywords>`, with no escape to the terse sentence `TerseValue`
+allows). So the two writers can drift and one of them has. Either Archivist
+takes the fragment or the constant stops claiming to be shared; until then
+this paragraph is the warning.
 The companion rule — structural fields in English, proper nouns never
 translated, since lookup is by pair and the same fact in two languages would
 never dedup — is a sentence in each instruction file rather than a C#
