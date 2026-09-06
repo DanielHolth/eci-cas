@@ -103,11 +103,25 @@ does across real sessions before letting it change a reply.
 
 ## Reading the archive back — the half not solved
 
-The write side is settled: Archivist extracts `subtopic/subject/key=value`,
-Cataloger picks a drawer then a folder from a closed vocabulary, and code
-joins them into the path. Filing is no longer where retrieval fails.
+The write side works, but "settled" was too strong. Archivist extracts
+`subtopic/subject/key=value`, Cataloger picks a drawer then a folder from a
+closed vocabulary, and code joins them into the path — and measured against a
+key of defensible pairs
+([`tools/retrieval-bench/`](../tools/retrieval-bench/)) that lands at 82% of
+rows filed somewhere reasonable, over four interleaved reps. The spread is
+the story: 67, 100, 92, 69 on the *same twelve statements*. Almost all of it
+is extraction, not filing — a rep that turns "My brother Lars lives in Tromso"
+into `user living situation = travels with brother` has already lost the fact
+before any drawer is chosen. Run-to-run extraction variance on the 4B is the
+largest single source of error on the write side and nothing currently
+measures it directly.
 
-**Retrieval is.** Librarian is shown the flat index and picks pairs to open.
+Note also what the 58% below does *not* include. It scores pair-hit alone —
+no value is ever inspected — so end-to-end recall is 58% times whatever
+fraction of rows still contain the answer, and that second number had never
+been measured until `tools/retrieval-bench/`. Read the two separately.
+
+**Retrieval is where the bigger loss is.** Librarian is shown the flat index and picks pairs to open.
 That holds at 75% on an 11-file archive and falls to 58% at the ~170 the
 vocabulary allows — and 58% is an *upper bound*, because the padding files in
 that measurement were empty. No fix is known. It is the single biggest lever
@@ -126,9 +140,26 @@ worse than the flat list they were meant to beat:
   statement mostly buys stale ghosts on the next update.
 - **Handing the vocabulary to the bundled agent as `{known}`** — 0 for 4,
   −15%. A model given a field it was not asked for fills it anyway.
+- **A second pass over `other`** (write side, but the same shape). When the
+  topic call answers `other`, ask again with `other` removed; if the reviewer
+  says `none`, code puts it back. It does what it was built to do — `other`
+  falls from 1.0 to 0.2 rows per rep — and buys nothing: 82% filed either way,
+  better in 1 rep of 4. Re-asking the *category* instead, on the theory that
+  `other` is really evidence the drawer was wrong, scored 80%. The reason is
+  visible in the misses: the rescued rows land in a plausible sibling folder
+  rather than the right one, and `x/other` was never the disaster it looks
+  like — the read path opens `other` alongside its parent category in code, so
+  a fact in `relations/other` is *more* retrievable than the same fact forced
+  into `relations/neighbour`. `other` is doing its job. Left in
+  `tools/retrieval-bench/review_other.py`; not shipped.
 
 What has not been tried: embeddings over the index rather than a picked pair,
 and asking the question of a *sample of values* rather than of file names.
+
+And the caveat that outranks all four: with 12 statements against a 10pp
+noise floor, "identical", "+0%" and "0 for 4" are *undetectable*, not
+disproven. Only the 35pp hierarchical loss clears the floor. Three of those
+four dead ends are unmeasured, not dead.
 
 Also needed before any of this is trusted: a corpus nobody has tuned against.
 The fixture behind every number above is
