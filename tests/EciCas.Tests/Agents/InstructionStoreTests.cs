@@ -1,4 +1,4 @@
-using EciCas.Core;
+﻿using EciCas.Core;
 
 namespace EciCas.Tests.Agents;
 
@@ -57,21 +57,121 @@ public class InstructionStoreTests
     /// would otherwise reach the substrate as the literal word, and the only
     /// symptom would be worse notes.
     /// </summary>
-    [Fact]
-    public void APlaceholderNoAgentFillsIsAStartupFailure()
+    /// <summary>
+    /// A directory every check passes, so a test that breaks one thing
+    /// breaks only that thing. Written from the two rosters rather than
+    /// by hand: adding a required placeholder should not quietly stop
+    /// these tests exercising what they claim to.
+    /// </summary>
+    private static string ValidDirectory()
     {
         var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(directory);
         foreach (var (agent, _) in FileInstructionStore.KnownPlaceholders)
         {
-            File.WriteAllText(Path.Combine(directory, agent.ToLowerInvariant() + ".txt"), "fine");
+            FileInstructionStore.RequiredPlaceholders.TryGetValue(agent, out var required);
+            var text = new System.Text.StringBuilder(Body(required, InstructionFile.MainSection));
+            foreach (var (section, names) in required ?? new Dictionary<string, string[]>())
+            {
+                if (section != InstructionFile.MainSection)
+                {
+                    text.Append("\n\n## ").Append(section).Append("\n\n")
+                        .Append("fine ").Append(string.Join(" ", names.Select(n => "{" + n + "}")));
+                }
+            }
+
+            File.WriteAllText(Path.Combine(directory, agent.ToLowerInvariant() + ".txt"), text.ToString());
         }
 
-        File.WriteAllText(Path.Combine(directory, "reflection.txt"), "read the {turn} closely");
+        return directory;
+    }
+
+    private static string Body(IReadOnlyDictionary<string, string[]>? required, string section) =>
+        required is not null && required.TryGetValue(section, out var names)
+            ? "fine " + string.Join(" ", names.Select(n => "{" + n + "}"))
+            : "fine";
+
+    [Fact]
+    public void APlaceholderNoAgentFillsIsAStartupFailure()
+    {
+        var directory = ValidDirectory();
+        File.WriteAllText(Path.Combine(directory, "reflection.txt"),
+            "read the {turn} closely {turns}\n\n## revisit\n\n{previous} {topics}");
 
         var ex = Assert.Throws<InvalidOperationException>(() => new FileInstructionStore(directory));
         Assert.Contains("{turn}", ex.Message);
         Assert.Contains("{turns}", ex.Message);
+    }
+
+    /// <summary>
+    /// The quiet half of the same failure. A file that drops {text} still
+    /// parses, still validates against the allowed roster, and still boots
+    /// -- and then Archivist runs every turn against a prompt with no
+    /// message in it and writes nothing. Nothing throws, so without this
+    /// the symptom is an archive that just stays empty.
+    /// </summary>
+    [Fact]
+    public void AnInputTheAgentFillsGoingMissingIsAStartupFailure()
+    {
+        var directory = ValidDirectory();
+        File.WriteAllText(Path.Combine(directory, "archivist.txt"), "write one line per fact in {known}");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new FileInstructionStore(directory));
+        Assert.Contains("archivist.txt", ex.Message);
+        Assert.Contains("{text}", ex.Message);
+    }
+
+    /// <summary>
+    /// Sections are read by name from code, so losing one is the same class
+    /// of bug caught at the same moment rather than on the first turn that
+    /// happens to need it. Only blocked-with-reason is dropped here: a file
+    /// missing all four would report whichever came first and the assertion
+    /// would not be saying anything.
+    /// </summary>
+    [Fact]
+    public void ASectionTheCodeReadsByNameGoingMissingIsAStartupFailure()
+    {
+        var directory = ValidDirectory();
+        File.WriteAllText(Path.Combine(directory, "governance.txt"),
+            "fine\n\n## reasoning-down\n\n{cause}\n\n## less-grounded\n\n{impaired}\n\n## blocked\n\nno.");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new FileInstructionStore(directory));
+        Assert.Contains("governance.txt", ex.Message);
+        Assert.Contains("blocked-with-reason", ex.Message);
+    }
+
+    /// <summary>
+    /// Required is a subset of allowed by construction: a placeholder the
+    /// file must name and the agent never fills could not be satisfied.
+    /// </summary>
+    [Fact]
+    public void EveryRequiredPlaceholderIsAlsoAllowed()
+    {
+        foreach (var (agent, required) in FileInstructionStore.RequiredPlaceholders)
+        {
+            var allowed = FileInstructionStore.KnownPlaceholders[agent];
+            foreach (var (section, names) in required)
+            {
+                Assert.Empty(names.Except(allowed));
+                Assert.NotNull(section);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Not every allowed placeholder is required, and this is the case that
+    /// proves the two rosters have to be written separately. Identity's name
+    /// section ships with its only line commented out, which IdentityAgent
+    /// reads as "drop the clause" -- a deliberate configuration a stricter
+    /// rule would refuse to boot on.
+    /// </summary>
+    [Fact]
+    public void TheShippedNameSectionIsAllowedToBeEmpty()
+    {
+        var section = ShippedInstructions.Store.For("Identity", "name");
+
+        Assert.Empty(section);
+        Assert.Contains("name", FileInstructionStore.KnownPlaceholders["Identity"]);
     }
 
     [Fact]
