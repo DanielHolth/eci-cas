@@ -56,6 +56,15 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     private readonly object _pendingLock = new();
     private int _bundlesSinceFlush;
 
+    // The worked examples are well-formed "category=..." lines sitting in
+    // the prompt, and on a message that states no fact at all the model
+    // reaches for the nearest one and files it: measured at roughly half of
+    // greetings and questions. The prompt already forbids this twice in
+    // words and it holds only while a real fact is competing, so the rule
+    // is enforced here instead. Derived from the instruction text rather
+    // than hardcoded, so editing the examples moves the filter with them.
+    private readonly Lazy<HashSet<string>> _exampleRows;
+
     public ArchivistAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ArchivistAgent> logger, IArchiveStore store,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ArchivistOptions> options,
         IInstructionStore instructions)
@@ -68,6 +77,8 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
         _logger = logger;
+        _exampleRows = new Lazy<HashSet<string>>(() =>
+            [.. ParseFacts(_instructions.For(Name), DateTimeOffset.MinValue).Select(Signature)]);
     }
 
     public override string Name => "Archivist";
@@ -156,6 +167,22 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         _bus.Publish(Topics.SystemControl, announcement);
     }
 
+    /// <summary>
+    /// Whole row, not just the address: a copied example matches every
+    /// field, while a real message about Lisbon rainfall would carry its own
+    /// value and still be archived. Dropping on address alone would be a
+    /// stronger filter that can discard a genuine fact.
+    /// </summary>
+    private static string Signature(ArchiveRecord r) => string.Join(Separator,
+        new[] { r.Category, r.Topic, r.Subtopic, r.Subject, r.Key, r.Value }
+            .Select(f => WhitespaceRun.Replace(f.Trim().ToLowerInvariant(), " ")));
+
+    // A unit separator cannot appear in a field, so no combination of
+    // field values can collide with a different row's signature.
+    private const char Separator = '\u001f';
+
+    private static readonly Regex WhitespaceRun = new(@"\s+", RegexOptions.Compiled);
+
     private static string Describe(ArchiveRecord r) =>
         $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}";
 
@@ -194,7 +221,15 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
                 return ([], result);
             }
 
-            return (ParseFacts(result.Text, envelope.Timestamp), result);
+            var parsed = ParseFacts(result.Text, envelope.Timestamp);
+            var facts = parsed.Where(r => !_exampleRows.Value.Contains(Signature(r))).ToList();
+            if (facts.Count < parsed.Count)
+            {
+                _logger.LogDebug("{Agent} discarded {Count} row(s) copied verbatim from the prompt's own examples",
+                    Name, parsed.Count - facts.Count);
+            }
+
+            return (facts, result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -296,4 +296,61 @@ public class ArchivistAgentTests
         Assert.NotEmpty(lines);
         Assert.All(lines, l => Assert.Contains("subject=lisbon", l, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The example lines are well-formed facts sitting in the prompt, and on
+    /// a message stating nothing the model copies one out: measured at
+    /// roughly half of greetings and questions on the 4B. Taken from the
+    /// shipped file rather than written out here, so an edit to the examples
+    /// cannot leave this passing against a line the prompt no longer holds.
+    /// </summary>
+    [Fact]
+    public async Task AnExampleCopiedBackOutOfThePromptIsNotAFact()
+    {
+        var example = ShippedExampleLines().First();
+
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(example, TimeSpan.Zero, 10, 0m)));
+
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "hello there")), CancellationToken.None);
+
+        Assert.Empty(store.All);
+    }
+
+    /// <summary>
+    /// The filter matches the whole row, not the address: a turn that really
+    /// does state something about the example's subject still gets archived.
+    /// </summary>
+    [Fact]
+    public async Task TheSameAddressWithADifferentValueIsStillAFact()
+    {
+        var altered = ShippedExampleLines().First();
+        altered = altered[..altered.LastIndexOf("value=", StringComparison.Ordinal)] + "value=812mm";
+
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(altered, TimeSpan.Zero, 10, 0m)));
+
+        var agent = new ArchivistAgent(bus, activity, NullLogger<ArchivistAgent>.Instance, store,
+            substrate, Manifest(), Options.Create(new ArchivistOptions { BatchSize = 1 }), ShippedInstructions.Store);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "Lisbon gets 812mm of rain")), CancellationToken.None);
+
+        Assert.Equal("812mm", Assert.Single(store.All).Value);
+    }
+
+    /// <summary>Literal example rows in the shipped prompt: templated ones carry "&lt;" and cannot be copied out as facts.</summary>
+    private static IEnumerable<string> ShippedExampleLines() =>
+        ShippedInstructions.Store.For("Archivist")
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.StartsWith("category=", StringComparison.Ordinal) && !l.Contains('<'));
 }
