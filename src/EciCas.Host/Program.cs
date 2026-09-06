@@ -533,6 +533,21 @@ app.MapGet("/api/log/stream", async (HttpContext context, TurnLogSubscriber log,
 
 await app.StartAsync();
 
+// Before the REPL prompt, not after: the point is that the first thing a
+// person types does not pay for the model load. Configurable because a
+// mock-only or vendor-only tier wants far less of a budget than a local 4B
+// reading weights off disk; 0 turns it off.
+var warmupMs = int.TryParse(builder.Configuration["Substrates:WarmupMs"], out var w) ? w : 60_000;
+if (warmupMs > 0)
+{
+    await SubstrateWarmup.RunAsync(
+        app.Services.GetRequiredService<ISubstrateProvider>(),
+        substrateOptions,
+        TimeSpan.FromMilliseconds(warmupMs),
+        Console.WriteLine,
+        CancellationToken.None);
+}
+
 var perception = app.Services.GetRequiredService<PerceptionAgent>();
 var activity = app.Services.GetRequiredService<BusActivityTracker>();
 
