@@ -1,4 +1,4 @@
-using EciCas.Agents.Archivist;
+﻿using EciCas.Agents.Archivist;
 using EciCas.Agents.Cataloger;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
@@ -215,5 +215,31 @@ public class CatalogerAgentTests
         // 15-20 folders a drawer: fewer and the near-misses pile up in other,
         // more and the pick stops fitting in one short prompt.
         Assert.All(vocabulary.Categories, c => Assert.InRange(vocabulary.TopicsIn(c).Count, 15, 20));
+    }
+
+    /// <summary>
+    /// The "category" section describes ten drawers in prose and the
+    /// "vocabulary" section lists them; only the second one is parsed. A hand
+    /// edit that renames a drawer in the prose leaves the model answering a
+    /// name MatchCategory has never heard of, and a fact with no category is
+    /// dropped rather than guessed at — silently, one fact at a time. The two
+    /// sections are in the same file precisely so they can be checked against
+    /// each other, which is what this does.
+    /// </summary>
+    [Fact]
+    public void ShippedScopeLines_DescribeExactlyTheCategoriesTheParserKnows()
+    {
+        var vocabulary = ClosedVocabulary.Parse(ShippedInstructions.Store.For("Cataloger", "vocabulary"));
+        var section = ShippedInstructions.Store.For("Cataloger", "category");
+
+        // A scope line is "name" followed by the gap that lines the prose up;
+        // continuations are indented past it and are not names.
+        var described = section.Split('\n')
+            .Select(l => System.Text.RegularExpressions.Regex.Match(l, @"^(\w+) {2,}\S"))
+            .Where(m => m.Success)
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet();
+
+        Assert.Equal(vocabulary.Categories.ToHashSet(), described);
     }
 }
