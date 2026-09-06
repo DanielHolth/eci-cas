@@ -1,0 +1,219 @@
+using EciCas.Agents.Archivist;
+using EciCas.Agents.Cataloger;
+using EciCas.Agents.Perception;
+using EciCas.Bus;
+using EciCas.Core;
+using EciCas.Substrates;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+
+namespace EciCas.Tests.Agents;
+
+public class CatalogerAgentTests
+{
+    private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
+    {
+        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+    }
+
+    private static IOptions<AgentSubstrateManifest> Manifest() =>
+        Options.Create(new AgentSubstrateManifest { Agents = { ["Cataloger"] = new AgentSubstrateEntry { Class = "slow-low" } } });
+
+    /// <summary>
+    /// Two calls per fact, and only the second one is shown a folder list —
+    /// which is how a stub tells them apart without knowing the prompt text.
+    /// </summary>
+    private static ISubstrateProvider Answers(string category, string topic) =>
+        new StubSubstrate(prompt => Task.FromResult(new SubstrateResult(
+            prompt.Contains("folders inside", StringComparison.Ordinal) ? topic : category, TimeSpan.Zero, 5, 0m)));
+
+    private static CatalogerAgent Agent(IMessageBus bus, BusActivityTracker activity, IArchiveStore store,
+        ISubstrateProvider substrate, int batchSize = 1) =>
+        new(bus, activity, NullLogger<CatalogerAgent>.Instance, store, substrate, Manifest(),
+            Options.Create(new CatalogerOptions { BatchSize = batchSize }), ShippedInstructions.Store);
+
+    private static ArchiveRecord Unfiled(string subject = "user", string key = "name", string value = "daniel") =>
+        new(string.Empty, string.Empty, "self", subject, key, value, DateTimeOffset.UtcNow);
+
+    private static Envelope Facts(string text, IReadOnlyList<ArchiveRecord> facts, string? profileId = null)
+    {
+        var meta = MetaBag.Empty.With(ArchivistAgent.FactsKey, facts).With(PerceptionAgent.TextKey, text);
+        if (profileId is not null)
+        {
+            meta = meta.With(PerceptionAgent.ProfileKey, profileId);
+        }
+
+        return Envelope.Create(Topics.Facts, "Archivist", Severity.Neutral, meta);
+    }
+
+    [Fact]
+    public async Task FilesTheFactAtThePairTheTwoCallsChose()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
+        var store = new InMemoryArchiveStore();
+
+        await Agent(bus, activity, store, Answers("identity", "name"))
+            .HandleAsync(Facts("my name is daniel", [Unfiled()]), CancellationToken.None);
+
+        var records = await store.LookupAsync(new ArchivePair("identity", "name"), null, CancellationToken.None);
+        var record = Assert.Single(records);
+        Assert.Equal("daniel", record.Value);
+        Assert.Equal("self", record.Subtopic);
+
+        Assert.True(control.TryRead(out var written));
+        Assert.Equal(ArchivistAgent.WrittenKind, written!.Meta.Get<string>(ArchivistAgent.ControlKindKey));
+        Assert.Single(written.Meta.Get<IReadOnlyList<string>>(ArchivistAgent.WrittenRecordsKey)!);
+    }
+
+    /// <summary>
+    /// The point of the closed list: a name nobody offered is a parquet file
+    /// nobody ever opens, so an unlisted answer becomes "other" rather than a
+    /// new folder. The drawer was already decided by then, and a fact in the
+    /// right drawer is still reachable — Librarian opens category/other in
+    /// code whenever it opens that category.
+    /// </summary>
+    [Fact]
+    public async Task AnInventedTopicBecomesOther()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+
+        await Agent(bus, activity, store, Answers("household", "conservatory"))
+            .HandleAsync(Facts("the conservatory leaks", [Unfiled("house", "conservatory", "leaks")]), CancellationToken.None);
+
+        Assert.Equal(new ArchivePair("household", "other"), Assert.Single(store.IndexFor(null)));
+    }
+
+    /// <summary>
+    /// Topic lists hold "name" and "nationality", and a containment test would
+    /// read the first out of the second — filing a nationality under name.
+    /// </summary>
+    [Fact]
+    public async Task ATopicIsMatchedAsAWholeWord()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+
+        await Agent(bus, activity, store, Answers("identity", "nationality"))
+            .HandleAsync(Facts("I am norwegian", [Unfiled("user", "nationality", "norwegian")]), CancellationToken.None);
+
+        Assert.Equal(new ArchivePair("identity", "nationality"), Assert.Single(store.IndexFor(null)));
+    }
+
+    /// <summary>
+    /// A 4B answers "identity" about as often as it answers a sentence with
+    /// "identity" somewhere in it.
+    /// </summary>
+    [Fact]
+    public async Task TheCategoryIsFoundInsideASentence()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+
+        await Agent(bus, activity, store, Answers("The drawer is identity.", "The folder is name."))
+            .HandleAsync(Facts("my name is daniel", [Unfiled()]), CancellationToken.None);
+
+        Assert.Equal(new ArchivePair("identity", "name"), Assert.Single(store.IndexFor(null)));
+    }
+
+    /// <summary>
+    /// No drawer, no address, and no invented one either: the file name is the
+    /// whole index in this store, so a guess would be a file nobody opens.
+    /// </summary>
+    [Fact]
+    public async Task AFactWithNoCategoryIsDroppedRatherThanGuessedAt()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
+        var store = new InMemoryArchiveStore();
+
+        await Agent(bus, activity, store, Answers("nonsense", "name"))
+            .HandleAsync(Facts("...", [Unfiled()]), CancellationToken.None);
+
+        Assert.Empty(store.IndexFor(null));
+        Assert.False(control.TryRead(out _));
+    }
+
+    /// <summary>
+    /// A failed topic call still has a drawer. Losing the fact over the
+    /// cheaper of the two decisions would be the worse trade.
+    /// </summary>
+    [Fact]
+    public async Task WhenTheTopicCallFails_TheFactStillLandsInItsDrawer()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var substrate = new StubSubstrate(prompt => prompt.Contains("folders inside", StringComparison.Ordinal)
+            ? throw new InvalidOperationException("down")
+            : Task.FromResult(new SubstrateResult("identity", TimeSpan.Zero, 5, 0m)));
+
+        await Agent(bus, activity, store, substrate)
+            .HandleAsync(Facts("my name is daniel", [Unfiled()]), CancellationToken.None);
+
+        Assert.Equal(new ArchivePair("identity", "other"), Assert.Single(store.IndexFor(null)));
+    }
+
+    /// <summary>Turns, not facts: a lone just-stated name must not wait for other facts to arrive.</summary>
+    [Fact]
+    public async Task FlushesEveryBatchSizeTurns_IncludingTheEmptyOnes()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var control = bus.Subscribe(Topics.SystemControl);
+        var store = new InMemoryArchiveStore();
+        var agent = Agent(bus, activity, store, Answers("identity", "name"), batchSize: 2);
+
+        await agent.HandleAsync(Facts("my name is daniel", [Unfiled()]), CancellationToken.None);
+        Assert.False(control.TryRead(out _));
+
+        await agent.HandleAsync(Facts("hello there", []), CancellationToken.None);
+
+        Assert.True(control.TryRead(out var written));
+        Assert.Single(written!.Meta.Get<IReadOnlyList<string>>(ArchivistAgent.WrittenRecordsKey)!);
+    }
+
+    /// <summary>
+    /// A batch spans turns and speakers, so the profile is kept per record
+    /// rather than read off whichever envelope happens to trigger the flush.
+    /// </summary>
+    [Fact]
+    public async Task BatchedFactsKeepTheProfileThatStatedThem()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var store = new InMemoryArchiveStore();
+        var agent = Agent(bus, activity, store, Answers("identity", "name"), batchSize: 2);
+
+        foreach (var profileId in new[] { "daniel", "ada" })
+        {
+            await agent.HandleAsync(Facts("a turn", [Unfiled()], profileId), CancellationToken.None);
+        }
+
+        Assert.Equal(["ada", "daniel"], store.Scoped.Select(r => r.ProfileId).Order());
+    }
+
+    /// <summary>
+    /// Every category needs somewhere to put a fact no folder fits, or the
+    /// fact is dropped instead — and the parser is the only place that can
+    /// notice a hand edit removing one.
+    /// </summary>
+    [Fact]
+    public void ShippedVocabulary_GivesEveryCategoryAnOtherTopic()
+    {
+        var vocabulary = ClosedVocabulary.Parse(ShippedInstructions.Store.For("Cataloger", "vocabulary"));
+
+        Assert.Equal(10, vocabulary.Categories.Count);
+        Assert.All(vocabulary.Categories, c => Assert.Contains("other", vocabulary.TopicsIn(c)));
+
+        // 15-20 folders a drawer: fewer and the near-misses pile up in other,
+        // more and the pick stops fitting in one short prompt.
+        Assert.All(vocabulary.Categories, c => Assert.InRange(vocabulary.TopicsIn(c).Count, 15, 20));
+    }
+}

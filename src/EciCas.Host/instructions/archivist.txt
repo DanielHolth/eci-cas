@@ -1,5 +1,14 @@
+# Extraction only. This file used to ask for the whole six-field address,
+# including category and topic, and the model invented both from nothing --
+# which is how the archive grew "hobby/music/food" and two near-synonymous
+# categories for the same drawer. Category and topic are now picked by the
+# Cataloger from a closed list it is shown, so nothing here should mention
+# them: a model given a field it is not asked for fills it anyway.
+#
+# What is left is the part only a reader of this message can do: notice that
+# something was stated, and say what about whom.
 Facts stated in this message, one line per fact:
-category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>
+subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>
 
 # Left out, the value gets restated as the subject.
 subject is who or what the fact is about. It is never a restatement of the value.
@@ -8,7 +17,7 @@ subject is who or what the fact is about. It is never a restatement of the value
 # The worked line stays templated: only a literal one can be copied out as a fact.
 The message is the person speaking. A fact they state about themselves has
 subject=user, not subject=assistant:
-category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=user key=<1-3 words> value=<1-4 keywords>
+subtopic=<1-2 words> subject=user key=<1-3 words> value=<1-4 keywords>
 
 # Three, not two: at two the malformed rate doubles. They are shape anchors, not naming rules.
 # All three keep subject=lisbon: no message produces that, so a copied example is visible in the archive.
@@ -16,20 +25,15 @@ category=<1 word> topic=<1 word> subtopic=<1-2 words> subject=user key=<1-3 word
 The three lines below are shape only. They are instructions, not knowledge:
 never output them, never treat them as things you know, never mention them.
 
-category=weather topic=climate subtopic=rainfall subject=lisbon key=annual rainfall value=725mm
-category=weather topic=climate subtopic=temperature subject=lisbon key=summer high value=28c
-category=transport topic=metro subtopic=lines subject=lisbon key=line count value=four
+subtopic=rainfall subject=lisbon key=annual rainfall value=725mm
+subtopic=temperature subject=lisbon key=summer high value=28c
+subtopic=lines subject=lisbon key=line count value=four
 
-The first two reuse one category/topic group for one subject, and none repeats
-the value in the subject. Do the same: prefer a group below over inventing one
-that nearly duplicates it.
-
-# Librarian's pairs, category/topic only, no values.
-{known}
+None of them repeats the value in the subject. Do the same.
 
 # The path is the address; a translated one is a different row.
-category, topic, subtopic and key in English whatever language the message was
-in. Never translate a name, place or organisation.
+subtopic and key in English whatever language the message was in. Never
+translate a name, place or organisation.
 
 A question states nothing. Nothing stated: reply nothing.
 

@@ -1,0 +1,100 @@
+# Where a fact goes, decided in two calls against a list that never grows.
+#
+# The whole point is the closed list. An archive whose addresses are invented
+# per turn drifts into synonyms -- home/ and household/, person/ and people/ --
+# and once it has, a correction months later ("the new dog, the old one died")
+# lands in a different file from the fact it corrects, and both are served.
+# The file name IS the index here: ParquetArchiveStore names one file per
+# category/topic pair and there is no index beside it. So category/topic is
+# the only routing decision in the system, and it is the one worth pinning.
+#
+# Two calls, not one. Asked for both at once a 4B picks a plausible-sounding
+# pair rather than a listed one; asked for the drawer first and then shown
+# only that drawer's folders, it picks from what it can see. Measured against
+# the previous free-form Archivist over paired interleaved runs: better in
+# 6 of 6, about +17 points of retrievable facts.
+#
+# Subtopic is deliberately NOT promoted into topic. It is the facet that
+# survives inside the file, and collapsing it into the address loses it.
+# A near-miss at topic level is cheap because subtopic/subject/key are still
+# on the row for Recall to match on; a wrong category is not recoverable.
+
+## vocabulary
+# category: topic topic ... -- parsed by the Cataloger, not sent as prose.
+# "other" ends every line on purpose. It is the pressure valve: a fact with
+# no good folder goes there instead of being forced into a loose fit, and a
+# later cleanup pass can redistribute it. It is write-side only -- Librarian
+# is never shown an "other" pair to pick, the read path opens it in code
+# whenever it opens its parent category. Shown as an option it swallowed
+# everything: 71% retrievable with it visible, 82% with it hidden.
+identity: name age birth origin nationality language appearance personality
+  belief religion politics value fear preference allegiance habit humour other
+body: condition injury allergy medication diet sleep fitness weight vision
+  hearing dental mental practitioner appointment treatment vaccination symptom other
+household: property room garden furniture appliance electronics vehicle tool
+  maintenance repair cleaning utility pet plant storage decor address other
+relations: family parent sibling child partner friend colleague neighbour
+  birthday anniversary contact conflict care gift visit history other
+work: employer role duty project schedule location commute meeting client
+  performance promotion leave career workplace tool history other
+money: income salary payday expense bill subscription debt loan mortgage
+  saving investment pension budget purchase price tax benefit other
+learning: school university course subject qualification exam skill language
+  teacher study book certification plan progress other
+leisure: hobby sport team music instrument game reading film television
+  cooking outdoor craft club event routine social collection other
+travel: trip destination accommodation flight transport booking plan visit
+  holiday luggage companion experience preference frequency other
+admin: passport licence insurance contract account membership registration
+  warranty certificate renewal deadline provider will document reference other
+
+## category
+# The scope lines earn their length: without them "an appointment" split
+# evenly between body and admin from turn to turn, and a pair that moves is
+# a pair that is written twice and found once.
+Ten drawers of a filing cabinet, and a fact someone stated. Reply with one
+drawer name and nothing else.
+
+identity   who the user is: name, age, origin, languages, beliefs, values,
+           allegiances, fears, tastes and preferences
+body       health, conditions, injuries, medication, diet restrictions,
+           practitioners and their appointments
+household  the home and everything in it: property, rooms, garden, maintenance,
+           repairs, possessions, vehicles, pets
+relations  people the user knows as people: family, partner, friends,
+           colleagues by name, and the dates that belong to a relationship
+work       the job itself: employer, role, duties, workplace, working hours
+money      income, payments, subscriptions, debts, ownership, prices
+learning   education, courses, study, qualifications, skills being acquired
+leisure    hobbies, sport, music, games, entertainment, weekly routines
+travel     trips, journeys, places visited or planned, accommodation
+admin      documents and agreements: passport, licence, insurance, contracts,
+           accounts, renewals
+
+Ties, decided once so they are decided the same way every time:
+- A person goes in relations. A fact about the job goes in work.
+- What is paid goes in money. The paper proving it goes in admin.
+- A vehicle goes in household. A journey made in it goes in travel.
+- A skill already held goes in identity. A skill being learned goes in learning.
+- An appointment goes with what it is for, never with when it is.
+- A pet goes in household. A pet's illness goes in body only if it is the
+  user's own illness; otherwise it stays in household.
+
+The message it was said in: {text}
+The fact: {fact}
+
+## topic
+# "Every folder that exists is listed" is doing work: without it the model
+# proposes a new folder name roughly a third of the time, and a proposed name
+# is a new parquet file nobody will look in.
+A fact, and the folders inside the "{cat}" drawer. Every folder that exists is
+listed. Reply with one folder name from the list and nothing else.
+
+{topics}
+
+Pick the folder someone would open months later to find this fact again. If
+none of them is really about it, answer "other" -- that is a folder too, and a
+loose fit filed in the wrong place is worse than one filed in other.
+
+The message it was said in: {text}
+The fact: {fact}

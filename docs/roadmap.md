@@ -96,6 +96,39 @@ system that feeds its own notes back. Last of the five: the damper can
 suppress genuine continuity as easily as an echo, so log what it actually
 does across real sessions before letting it change a reply.
 
+## Reading the archive back — the half not solved
+
+The write side is settled: Archivist extracts `subtopic/subject/key=value`,
+Cataloger picks a drawer then a folder from a closed vocabulary, and code
+joins them into the path. Filing is no longer where retrieval fails.
+
+**Retrieval is.** Librarian is shown the flat index and picks pairs to open.
+That holds at 75% on an 11-file archive and falls to 58% at the ~170 the
+vocabulary allows — and 58% is an *upper bound*, because the padding files in
+that measurement were empty. No fix is known. It is the single biggest lever
+left on whether the system remembers anything.
+
+Dead ends, so nobody spends the week twice — all measured on the 4B, all
+worse than the flat list they were meant to beat:
+
+- **Hierarchical read** (pick a category, then a topic inside it) — the same
+  two-step that won +17pp on the *write* side loses 35pp on the read side
+  (58/67/58 flat vs 25/17/25). Reading is a recall problem, not a
+  classification one: the right drawer is not guessable from the question.
+- **Wider fan-out** — opening 2, 3 or 5 files scored identically. The misses
+  are wrong picks, not too few picks, and paying for more files buys nothing.
+- **Two archives merged / redundant filing** — +0%. 1.83 addresses per
+  statement mostly buys stale ghosts on the next update.
+- **Handing the vocabulary to the bundled agent as `{known}`** — 0 for 4,
+  −15%. A model given a field it was not asked for fills it anyway.
+
+What has not been tried: embeddings over the index rather than a picked pair,
+and asking the question of a *sample of values* rather than of file names.
+
+Also needed before any of this is trusted: the `HELD` corpus is burned as a
+holdout — every remaining number came off it. A genuinely new corpus is the
+prerequisite for the next honest comparison.
+
 ## Companion & knowledge extensions (not started)
 
 **Speech-to-text input.** Dictation only — push-to-talk filling the existing

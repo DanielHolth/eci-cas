@@ -14,6 +14,15 @@ public static class Topics
     public const string Proposal = "events.proposal";
     public const string SelectedPairs = "events.selected-pairs";
     public const string Bundle = "events.bundle";
+
+    /// <summary>
+    /// Facts the Archivist pulled out of a turn, before they have an address.
+    /// Extraction and filing are two different judgements — what was stated,
+    /// and where it belongs — so they are two agents on two calls, and this
+    /// is the seam. Published on every turn, including the ones that stated
+    /// nothing, because the write batch counts turns rather than facts.
+    /// </summary>
+    public const string Facts = "events.facts";
     public const string Action = "events.action";
     public const string Conclusion = "events.conclusion";
     public const string Verdict = "events.verdict";

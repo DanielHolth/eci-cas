@@ -165,7 +165,18 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             return;
         }
 
-        var prompt = BuildSelectionPrompt(text, index);
+        // What the selector is offered is not the whole index: see Shown.
+        var shown = Shown(index);
+        if (shown.Count == 0)
+        {
+            // An archive holding nothing but "other" pairs has nothing to
+            // offer a selector, and an empty options list makes the prompt a
+            // question with no answers.
+            Publish(envelope, remembered, degraded: null);
+            return;
+        }
+
+        var prompt = BuildSelectionPrompt(text, shown);
         _logger.LogDebug("{Agent} selection prompt >>>\n{Prompt}", Name, prompt);
 
         var started = Stopwatch.GetTimestamp();
@@ -176,7 +187,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
                 Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             _logger.LogDebug("{Agent} selection response <<<\n{Response}", Name, result.Text);
             SubstrateTrace.Publish(_bus, envelope, Name, entry.Class, result);
-            Publish(envelope, Merge(ParsePairs(result.Text, index), remembered), degraded: null);
+            Publish(envelope, Merge(WithOverflow(ParsePairs(result.Text, shown), index), remembered), degraded: null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -263,6 +274,39 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// <summary>Selection first, passage leads after, no duplicates — the LLM saw the whole index, a passage saw one past turn.</summary>
     private static IReadOnlyList<ArchivePair> Merge(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> remembered) =>
         [.. selected, .. remembered.Where(p => !selected.Contains(p))];
+
+    /// <summary>
+    /// Every pair except the "other" ones. Each category has an "other" topic
+    /// on the write side — Cataloger's pressure valve for a fact no folder
+    /// fits — and offering those here was measurably bad: shown as an option,
+    /// "other" reads as "maybe" and gets picked over the topic that actually
+    /// holds the answer. Same filing code, 71% of facts retrievable with them
+    /// visible against 82% with them hidden. Hidden, they are still read: see
+    /// WithOverflow.
+    /// </summary>
+    private static IReadOnlyList<ArchivePair> Shown(IReadOnlyList<ArchivePair> index) =>
+        [.. index.Where(p => !string.Equals(p.Topic, OtherTopic, StringComparison.OrdinalIgnoreCase))];
+
+    /// <summary>
+    /// Opens "category/other" whenever that category is opened. A fact ends
+    /// up there because no folder fit it, not because it is unimportant — so
+    /// the decision to read it is made in code from the category the selector
+    /// already chose, rather than asked of a model that has only a folder name
+    /// to go on. Appended after the selection, so it never displaces a pair
+    /// the selector named within MaxSelectedPairs.
+    /// </summary>
+    private static IReadOnlyList<ArchivePair> WithOverflow(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> index)
+    {
+        var overflow = selected
+            .Select(p => new ArchivePair(p.Category, OtherTopic))
+            .Distinct()
+            .Where(p => index.Contains(p) && !selected.Contains(p));
+
+        return [.. selected, .. overflow];
+    }
+
+    /// <summary>Mirrors ClosedVocabulary.OtherTopic — the read side is not allowed to depend on the write side's assembly.</summary>
+    private const string OtherTopic = "other";
 
     private string BuildSelectionPrompt(string? text, IReadOnlyList<ArchivePair> index)
     {

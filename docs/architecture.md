@@ -19,7 +19,8 @@ on a subscriber.** A slow or failing agent can never stall another's turn.
 | Intent | `events.bundle` | `events.proposal` | cognitive |
 | Security | `events.proposal` | `events.verdict` | deterministic |
 | Action | `events.action` | — | deterministic |
-| Archivist | `events.bundle` | `system.control` (`Written`) | cognitive |
+| Archivist | `events.bundle` | `events.facts` | cognitive |
+| Cataloger | `events.facts` | `system.control` (`Written`) | cognitive |
 | Reflection | `events.conclusion` | `events.perception` (ideas), `system.control` | cognitive |
 | ArchiveLogger | `Topics.All` | — | deterministic |
 | ConsoleSubscriber | `Topics.All` | — | display |
@@ -42,8 +43,8 @@ Recall's. Librarian narrows correctly — it knows the catalogue, points at a
 shelf, and never opens the book. **Identity** was Personality, then Self; the
 name shrank toward the code, a thin cached lookup. **Archivist** was
 Consolidator, which named a process where its neighbours name roles;
-Archivist writes what Librarian later catalogues, and the pair explains
-itself.
+Archivist extracts what **Cataloger** then files and Librarian later
+reads, and the trio explains itself.
 
 Two are known to be imperfect and kept. **Governance** is a fossil — accurate
 when it was present at every handshake, a pattern since dropped; renaming
@@ -113,9 +114,10 @@ publishes next. That makes this table the whole contract.
 | `governance.expression` | Governance | SSE clients |
 | `governance.security_alert` | Governance | SSE clients |
 | `governance.degraded` | Governance | SSE clients |
-| `control.kind` | Archivist, Governance, Reflection | Identity, Impulse |
+| `control.kind` | Cataloger, Governance, Reflection | Identity, Impulse |
 | `reflection.mood` | Reflection | Impulse |
-| `archivist.written` | Archivist (on `Written`) | TurnLog |
+| `archivist.facts` | Archivist | Cataloger |
+| `archivist.written` | Cataloger (on `Written`) | TurnLog |
 | `reflection.passages` | Reflection (on `Reflected`) | TurnLog |
 | `reflection.idea` | Reflection (on `Reflected`) | TurnLog |
 | `substrate.agent` / `.class` / `.latency_ms` / `.tokens` / `.cost` | every substrate caller, via `SubstrateTrace` | TurnLog |
@@ -144,13 +146,13 @@ rule, paid visibly rather than by a bag that quietly accumulates forever.
 `system.telemetry`, derived from the triggering envelope so `CorrelationId`
 files it under the turn. A topic rather than keys on the caller's envelope
 because the two are not one-to-one — Recall fans out a call per pair behind a
-single advisory, Reflection's call spans a batch, Archivist publishes only on
-flush. No trace when an agent runs `UseSubstrate: false`: a configured
-deterministic answer is not a call.
+single advisory, Reflection's call spans a batch, Cataloger makes two calls
+per fact and writes only on flush. No trace when an agent runs
+`UseSubstrate: false`: a configured deterministic answer is not a call.
 
 `TurnLog` is a wildcard subscriber folding every envelope of a turn into one
 `TurnRecord` — perception, impulse, what Librarian and Recall read, what
-Archivist wrote, the reply, a non-green verdict, Reflection's passages and
+Cataloger wrote, the reply, a non-green verdict, Reflection's passages and
 idea, and every substrate call. The reduction is `TurnProjection`, a pure
 function over `(record, envelope)`, so display code holds none of it and
 arrival order does not matter: envelopes fill named slots rather than
@@ -159,9 +161,9 @@ appending.
 Three consumers read the same records: SSE clients on `/api/log/stream`,
 `/api/log` for what a client missed, and any `ITurnLogSink` (one ships —
 `JsonlTurnLogSink`, off unless `TurnLog:Path` is set). A record reaches the
-sinks once, after `TurnLog:SettleMs` of quiet, because Archivist and
-Reflection land behind the reply and an event is not over when the person has
-been answered.
+sinks once, after `TurnLog:SettleMs` of quiet, because Archivist,
+Cataloger and Reflection land behind the reply and an event is not over when
+the person has been answered.
 
 Profile scoping mirrors `SseBroadcaster`: a client naming a profile sees its
 own turns plus the ones nobody owns.
@@ -307,9 +309,10 @@ index cannot drift from the data, so there is nothing to rebuild after a
 manual edit; deleting a pair's last row deletes its file, which is how the
 pair leaves the index.
 
-Names are percent-escaped down to `[A-Za-z0-9._-]` over UTF-8 bytes. Topics
-are LLM-written free text, so a slash, colon or space is a matter of time;
-escaping `~` inside each half is what makes the single-character separator
+Names are percent-escaped down to `[A-Za-z0-9._-]` over UTF-8 bytes. Turn
+facts now come from a closed vocabulary, but Reflection's ideas do not, so a
+slash, colon or space in a topic is still a matter of time; escaping `~`
+inside each half is what makes the single-character separator
 unambiguous. The encoding is reversible because decoding it is how the index
 is read.
 
@@ -331,8 +334,12 @@ tier alone, which is the pre-profile behaviour exactly.
 
 Records are addressed by a five-part LLM-extracted schema —
 `category/topic/subtopic/subject/key=value` — not deterministic
-keyword-derived paths. **Subtopic is data, not an address**: every record
-carries it and the picking model reads it, but nothing looks up by it. That
+keyword-derived paths. Archivist extracts the last three; the
+`category/topic` half is Cataloger's, chosen from a closed list (see
+`instructions/cataloger.txt`) and joined into a path in code, because the
+file name *is* the index here and an invented one is a file nobody opens.
+**Subtopic is data, not an address**: every record carries it and the picking
+model reads it, but nothing looks up by it. That
 is what lets one subtopic be discussed at length without earning an index
 entry.
 
@@ -525,7 +532,7 @@ Two speeds, deliberately far apart:
   Governance's block nudge.
 - **Slow colouring** (±0.01–0.03, once per Reflection batch) — the tone of a
   whole batch of concluded turns. Reflection owns this because it already
-  reasons across a batch; Archivist stays a dumb per-turn fact writer.
+  reasons across a batch; Archivist stays a dumb per-turn fact extractor.
 
 The magnitude gap *is* the distinction between the two mechanisms — a test
 asserts every slow delta stays under every instant one, comparing the tables

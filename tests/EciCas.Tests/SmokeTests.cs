@@ -1,6 +1,7 @@
-using System.Reflection;
+﻿using System.Reflection;
 using EciCas.Agents.Action;
 using EciCas.Agents.Archivist;
+using EciCas.Agents.Cataloger;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Identity;
@@ -263,11 +264,12 @@ public class SmokeTests
                     ["Recall"] = new AgentSubstrateEntry { Class = "fast-low" },
                     ["Reflection"] = new AgentSubstrateEntry { Class = "fast-medium" },
                     ["Archivist"] = new AgentSubstrateEntry { Class = "fast-low" },
+                    ["Cataloger"] = new AgentSubstrateEntry { Class = "fast-low" },
                 },
             }));
             services.AddSingleton(Options.Create(new RecallOptions()));
             services.AddSingleton(Options.Create(new LibrarianOptions()));
-            services.AddSingleton(Options.Create(new ArchivistOptions()));
+            services.AddSingleton(Options.Create(new CatalogerOptions()));
             services.AddSingleton(Options.Create(new ReflectionOptions()));
             services.AddSingleton(Options.Create(new PassageOptions()));
 

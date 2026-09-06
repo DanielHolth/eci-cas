@@ -51,7 +51,8 @@ public sealed class FileInstructionStore : IInstructionStore
             ["Intent"] = [],
             ["Librarian"] = ["options", "max", "text"],
             ["Recall"] = ["rows", "max", "text"],
-            ["Archivist"] = ["known", "text"],
+            ["Archivist"] = ["text"],
+            ["Cataloger"] = ["cat", "topics", "fact", "text"],
             ["Reflection"] = ["turns", "revisit", "moods", "terse", "previous", "topics", "drive"],
             ["Identity"] = ["name"],
             ["Impulse"] = [],
@@ -78,6 +79,10 @@ public sealed class FileInstructionStore : IInstructionStore
             ["Librarian"] = Sections((InstructionFile.MainSection, ["options", "text"])),
             ["Recall"] = Sections((InstructionFile.MainSection, ["rows", "text"])),
             ["Archivist"] = Sections((InstructionFile.MainSection, ["text"])),
+            ["Cataloger"] = Sections(
+                ("vocabulary", []),
+                ("category", ["fact", "text"]),
+                ("topic", ["cat", "topics", "fact", "text"])),
             ["Reflection"] = Sections(
                 (InstructionFile.MainSection, ["turns"]),
                 ("revisit", ["previous", "topics"])),

@@ -136,4 +136,44 @@ public class LibrarianAgentTests
         var selected = selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!;
         Assert.Equal("topic0", Assert.Single(selected).Topic);
     }
+
+    /// <summary>
+    /// Cataloger puts a fact in "category/other" when no folder fits it, and
+    /// offering those pairs to the selector was measurably bad — shown as an
+    /// option, "other" reads as "maybe" and gets picked over the topic that
+    /// holds the answer (71% of facts retrievable against 82% with it
+    /// hidden). Hidden, not unread: the overflow of a chosen category is
+    /// opened in code, after the selection, so it cannot displace a pair the
+    /// selector actually named.
+    /// </summary>
+    [Fact]
+    public async Task OtherIsHiddenFromTheSelector_AndOpenedInCodeWithItsCategory()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var selections = bus.Subscribe(Topics.SelectedPairs);
+        var store = new InMemoryArchiveStore();
+        await store.WriteAsync([
+            new ArchiveRecord("identity", "name", "self", "user", "name", "daniel", DateTimeOffset.UtcNow),
+            new ArchiveRecord("identity", "other", "self", "user", "quirk", "hums", DateTimeOffset.UtcNow),
+            new ArchiveRecord("work", "other", "desk", "user", "note", "loud", DateTimeOffset.UtcNow),
+            .. Enumerable.Range(0, 3).Select(i =>
+                new ArchiveRecord("world", $"topic{i}", "misc", "misc", "key", "value", DateTimeOffset.UtcNow))],
+            null, CancellationToken.None);
+
+        var prompt = "";
+        var substrate = new StubSubstrate(p => { prompt = p; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
+        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
+            Manifest(), Options.Create(new LibrarianOptions { MaxSelectedPairs = 3 }),
+            new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()), ShippedInstructions.Store);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "what is my name?")), CancellationToken.None);
+
+        Assert.DoesNotContain("/other", prompt);
+
+        Assert.True(selections.TryRead(out var selection));
+        var pairs = selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!;
+        Assert.Equal([new ArchivePair("identity", "name"), new ArchivePair("identity", "other")], pairs);
+    }
 }
