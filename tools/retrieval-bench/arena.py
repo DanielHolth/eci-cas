@@ -18,9 +18,11 @@ What keeps it honest anyway:
     folder where the value gets mangled should be charged for that, and a
     vocabulary whose extraction happened to go badly should not be credited
     with a read win.
-  * Category is scored alongside select. The ten categories are the same in
-    every vocabulary here on purpose: it is the one number that stays
-    comparable when everything else moves.
+  * Category is scored alongside select. It was comparable across shelves
+    while full and lean shared their ten categories; the terse shelf has
+    eight and renames one, so `category` is now a within-shelf number like
+    the rest. Nothing survives as a cross-shelf constant, which is why an
+    arm is only ever read against arms on its own shelf in the same batch.
 
 Judge on sign consistency across reps against a 10pp floor. With 35
 questions a rep, 10pp is three or four questions -- so a single rep proves
@@ -36,6 +38,7 @@ import retrieval_v3 as corpus
 from answers_v3 import ANSWERS
 from topic_gloss import GLOSS
 from lean_vocab import LEAN, LEAN_GLOSS
+from terse_vocab import TERSE, TERSE_GLOSS
 
 # recall.txt is tuned hard against false positives -- its header records
 # greetings picking rows 3/4/1 times out of five until the "reply none" line
@@ -357,6 +360,16 @@ ARMS = [
         select=whole_category(LEAN_GLOSS), gate=True),
     Arm("full+wc+gate", ".archive_v3.json", select=whole_category(GLOSS), gate=True),
     Arm("full+gloss+gate", ".archive_v3.json", gloss=GLOSS, gate=True),
+    # The terse shelf, end to end. Filed by its own writer and read by its
+    # own selector, so a move here is the shelf and the gloss together --
+    # which is what write_gloss_ab.py separates and this cannot.
+    Arm("terse", ".archive_v3_terse.json", vocab=TERSE),
+    Arm("terse+gloss", ".archive_v3_terse.json", vocab=TERSE, gloss=TERSE_GLOSS),
+    Arm("terse+wc", ".archive_v3_terse.json", vocab=TERSE,
+        select=whole_category(TERSE_GLOSS)),
+    Arm("terse+wc+lenient", ".archive_v3_terse.json", vocab=TERSE,
+        select=whole_category(TERSE_GLOSS), rec=LENIENT),
+    Arm("terse+oracle", ".archive_v3_terse.json", vocab=TERSE, oracle=True),
 ]
 
 
