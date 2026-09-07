@@ -98,3 +98,54 @@ not as another prompt.
 
 lenient stands as the quiet arm: 87% here, 78%-81% across batches 5 and 6,
 the only thing measured that raises quiet without gutting answer.
+
+## Batch 8 — the gloss on the WRITE side, 170 pairs, four reps
+
+Not an arena batch. `write_gloss_ab.py`, scored against filing_key.KEY.
+Extraction runs once per rep and the category call once per row, both shared
+by the arms, so the topic call is the only difference.
+
+  arm     pair  category  other   rows
+  plain    83%       96%     5%     56
+  gloss    87%       96%     0%     56
+
+  per-rep pair delta (gloss - plain):  +2  +1   0  -1
+
+`category` identical at 96% is the harness check, not a result: the two arms
+were handed the same drawer by construction, and a split there would have
+meant the control was broken.
+
+The verdict is no effect. 4pp on the mean with the sign changing across reps
+is exactly what the repo's own floor is set to reject, and one rep going the
+other way is the thing sign consistency exists to catch. The gloss does not
+help the writer at 170 pairs, and it does not hurt it either.
+
+That is close to what the shelf predicts. At 170 pairs the folder names are
+already concrete -- passport, renewal, allergy -- and a gloss adds little to
+a name that is already the word the fact uses. The claim was never about
+concrete names; it was about ABSTRACT merged ones, thing and upkeep and
+history, which say nothing on their own. This shelf cannot test that claim,
+because it has no abstract names in it.
+
+There is also a ceiling. plain files 83% of rows into a defensible drawer
+against a key that is deliberately generous, so there are roughly nine wrong
+rows in 56 for any arm to win back.
+
+`other` fell 5% -> 0% and never went the other way, which is the direction
+the shared-dictionary idea predicts most directly -- other is what the writer
+reaches for when no folder looks like it is about the fact. But it is three
+events in 56 rows. Directionally right, far too small to bank.
+
+What this batch is for is the baseline. The gloss's effect on filing is zero
+at 170 concrete pairs, measured before consolidation moved anything. When
+the merged shelf is filed both ways, a gain there cannot be the gloss being
+generally useful, because here it was not. It would be the merged names
+needing a definition, which is the actual claim.
+
+Correction recorded with it: `writable` was cited earlier as evidence that
+consolidation damages the writer, lean 29/35 against full 30/35. It is not.
+read_bench.gold_index defines gold as the pairs a statement's rows were
+ACTUALLY filed to, so wherever the writer puts a fact becomes gold and
+`writable` measures extraction alone. That 1-fact gap is rebuild noise
+between two archive builds. The claim that consolidation hurts filing is
+untested, not supported -- which is the whole reason this scorer exists.
