@@ -18,6 +18,7 @@ form first measured here, and not for the reason first claimed.
     name-only          1           45%
     sample-3           3           63%
     centroid           1           72%
+    cat->file/3      1 + 1/cat      65%      category gate, then file
     sample-10         10           79%
     all-rows       1 per row       87%
     flat           1 per row        --      no files at all
@@ -59,6 +60,29 @@ name-only, centroid and sample-n are sublinear in the archive, and they cost
 10-30pp against flat. That trade is the real finding, and which side of it to
 take is a tier decision rather than a correctness one.
 
+**Staging the pick as category-then-file only costs.** Daniel's idea 2 --
+match a category first, then the topic within it -- was measured with derived
+centroids at both levels, so the summary method is held constant and the gap
+is the staging alone. Keeping the top c categories:
+
+    c        1     2     3     5     8    all(=flat centroid)
+    strict  54%   62%   65%   72%   72%   72%
+
+Monotone up to the flat arm and never past it. A category gate can only
+discard files the second stage would otherwise have ranked, and a category
+centroid -- the mean of a whole category's rows -- is a blurrier vector than
+any file centroid inside it, so the discarding is not well informed. A written
+gloss could sharpen stage one, but it cannot beat not having stage one: the
+ceiling of the whole two-stage design here is the flat arm it is staged in
+front of.
+
+This is a statement about 171 files, not about the idea. Staging exists to
+avoid scoring every file, and at 171 there is nothing to avoid -- the flat arm
+scores all of them for free. At 100k it is the only option, and this table is
+then the price list rather than a refutation: 7pp at c=3 for a 14x smaller
+second stage. The write side is a different question again, since filing
+already stages two LLM calls; see file_v4.
+
 The comparison is deliberately unfair to every arm here in one way: `files` is
 fixed, so each opens the same number of files whether or not it is confident,
 and none can decline. That matches how `cosine` and `flat` are scored and
@@ -75,6 +99,9 @@ from answers_v4 import ANSWERS
 from embed import Embedder
 from arms_v4 import CACHE, answered, gold_index, shape
 from cosine_v4 import answered_row
+
+
+CATS_KEPT = (1, 2, 3, 5, 8)
 
 
 def main(k=5, files=3):
@@ -112,6 +139,17 @@ def main(k=5, files=3):
                       for ix in per_file])
     cent /= np.maximum(np.linalg.norm(cent, axis=1, keepdims=True), 1e-9)
 
+    # Two-stage: rank the ~12 categories, then rank files inside the winners.
+    # Daniel's idea 2, with derived centroids standing in for written glosses.
+    # Using centroids for both stages is the point: the flat `centroid` arm
+    # above ranks all 171 files at once from exactly these vectors, so any gap
+    # between them is the staging and not the summary. A written gloss can
+    # only be tested once the staging is known to be worth having.
+    cats = sorted(set(p.split("/")[0] for p in index))
+    cat_of = np.array([cats.index(p.split("/")[0]) for p in index])
+    ccent = np.vstack([cent[cat_of == i].mean(0) for i in range(len(cats))])
+    ccent /= np.maximum(np.linalg.norm(ccent, axis=1, keepdims=True), 1e-9)
+
     names = e.encode([p.replace("/", " / ") for p in index], kind="passage")
     qs = sorted(ANSWERS)
     turns = qs + list(corpus.NULLS)
@@ -119,7 +157,8 @@ def main(k=5, files=3):
     print("embedded. %d turns\n" % len(turns), flush=True)
 
     samples = (1, 3, 10)
-    arms = ["name-only", "centroid"] + ["sample-%d" % s for s in samples] + ["all-rows"]
+    arms = (["name-only", "centroid"] + ["cat->file/%d" % c for c in CATS_KEPT]
+            + ["sample-%d" % s for s in samples] + ["all-rows"])
     tally = collections.Counter()
 
     for turn, v in zip(turns, qv):
@@ -143,6 +182,15 @@ def main(k=5, files=3):
         # And the Librarian's own information, as a floor: the file name and
         # nothing else, scored the same way.
         picks["name-only"] = np.argsort(-(names @ v))[:files]
+        # Top 3 categories, then the best files within them by the same
+        # centroid score the flat arm uses. A file in a losing category cannot
+        # be reached at all -- that is what staging costs, and what a gloss
+        # would have to earn back.
+        cs = cent @ v
+        for c in CATS_KEPT:
+            keep = np.argsort(-(ccent @ v))[:c]
+            allowed = np.flatnonzero(np.isin(cat_of, list(keep)))
+            picks["cat->file/%d" % c] = allowed[np.argsort(-cs[allowed])[:files]]
 
         for name in arms:
             chosen = picks[name]
