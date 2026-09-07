@@ -172,17 +172,56 @@ coarse symbolic cut, cosine as the fine cut inside it, and `nopick` over
 what survives -- the winning arm, at a candidate-set size that is constant
 rather than linear in the archive.
 
-Three constraints on building it, each from a failure already in this log.
+Five constraints on building it, each from a failure already in this log.
 
-The vector column is **non-nullable, with a startup check** -- not `= ""`,
-not backfilled lazily. A nullable vector means a silent mix of embedded and
-unembedded rows, a cosine sweep that quietly skips half the archive, and a
-plausible answer either way. That is the same failure shape as
-`unfiled/unfiled` (batch 9, void: 18 of 31 rows misfiled, full table
-printed) and the silently dropped arm name (batch 12's first launch). Both
-were runs that looked complete and were not. It should refuse to start.
+**Never sweep a partial file** -- a pair narrows by cosine only if every row
+in it carries a vector from the current `ModelId`. Otherwise that pair falls
+back to the whole-file path for this turn. A mix of embedded and unembedded
+rows in one file means a cosine sweep that quietly skips half of it and a
+plausible answer either way, which is the failure shape of `unfiled/unfiled`
+(batch 9, void: 18 of 31 rows misfiled, full table printed) and of the
+silently dropped arm name (batch 12's first launch). Both were runs that
+looked complete and were not.
 
-The pair keeps its job. There is a class of question no embedding reaches
+This paragraph said "non-nullable, with a startup check, it should refuse to
+start", and that was wrong twice over. It conflicts with a posture the repo
+already holds: `IEmbeddingProvider` states that unavailability is normal, not
+exceptional -- the model file may simply not be downloaded -- and callers
+check `Available` and fall back rather than catch. And it confuses two
+conditions that have nothing to do with each other. An unavailable embedder
+is a runtime condition; today's whole-file path is the fallback and nothing
+should refuse to start. A partially embedded pair is the real hazard, and
+strictness against it lives at read, per pair, where it can be enforced
+against the file actually being swept. Old archives then need no migration:
+they are uncovered until something rewrites them, and a pair heals on its
+next write. `ArchiveTool` gets an explicit backfill for the impatient.
+
+**The vector stays nullable through to `ArchiveRecord`** -- the one field
+that does not get a friendly default. The reason is on disk already:
+`ParquetArchiveStore.cs:432` writes `Sentence = r.Sentence` from a record
+whose `Sentence` is non-nullable and defaults to `""`, so the null the row
+class deliberately preserves survives exactly until the first rewrite of
+that pair and is `""` forever after. For the sentence that collapse is
+harmless -- both mean "no sentence" and `Rendered` treats them identically.
+For a vector it is fatal in the quietest way: "no vector" and "empty vector"
+are not the same thing, the coverage rule above keys off exactly that
+distinction, and a `float[]` defaulted to `[]` at the record level makes
+every unembedded row look embedded-and-empty to the read path.
+
+**The hash of the embedded text sits beside the vector**, and a mismatch
+counts as a missing vector. `Merged` replaces a row at an existing
+subtopic/subject/key outright, so "lives in Oslo" followed by "lives in
+Bergen" keeps the address and swaps the value. A vector inherited across
+that swap points at Oslo forever and scores confidently, and nothing looks
+wrong -- worse than partial coverage, which is at least detectable. It is
+safe today only because nothing upstream sets the field, which is a property
+of code that does not exist yet rather than an invariant. Deriving the
+check from the text makes a restated fact self-invalidate whether or not the
+writer remembered to clear it, and covers a hand-edited row and an
+`ArchiveTool` import by the same rule. Same argument as `ModelId`: a vector
+that outlives its source must be detectable, not merely improbable.
+
+**The pair keeps its job.** There is a class of question no embedding reaches
 -- inference over facts rather than similarity to them, the "am I old
 enough to rent" case below -- so the symbolic cut is not replaced by the
 arithmetic one. This is also the argument against growing the shelf past
@@ -190,7 +229,7 @@ arithmetic one. This is also the argument against growing the shelf past
 nothing, and every one of them is a curation decision on a schema that
 cannot be migrated after rows point at it.
 
-Fatness has never been measured. The bench corpus is 24 statements and 35
+**Fatness has never been measured.** The bench corpus is 24 statements and 35
 rows, three orders of magnitude too small to see what a fat file does. No
 claim that "170 pairs is enough" is supported by anything here. Proving the
 embedding needs a larger corpus first -- one grown until files hold 20+
