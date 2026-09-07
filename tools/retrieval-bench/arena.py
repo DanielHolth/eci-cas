@@ -37,16 +37,37 @@ from answers_v3 import ANSWERS
 from topic_gloss import GLOSS
 from lean_vocab import LEAN, LEAN_GLOSS
 
+# recall.txt is tuned hard against false positives -- its header records
+# greetings picking rows 3/4/1 times out of five until the "reply none" line
+# went in. The oracle arms say that tuning now costs 16pp on real questions
+# with the right pair already open, so this is the other side of the dial:
+# same shape, same parser contract, a bar of "might help" instead of
+# "answering without it would be wrong". It is only a candidate if it keeps
+# the NULLS clean, which is why they are scored here and were not before.
+LENIENT = '''Pick any fact that might help answer the turn. Prefer keeping a
+fact over dropping it: a fact that turns out not to help costs little, a fact
+that is dropped cannot be recovered. If the turn asks nothing about the person
+-- a greeting, an acknowledgement, small talk -- reply none.
+
+Reply with the numbers of the facts to keep, best first, bare digits,
+comma-separated (e.g. "0, 2"), at most {max}. If none, reply "none".
+
+Candidate facts (index: subtopic / subject key = value), most important first:
+{rows}
+
+Turn: {text}'''
+
 BASE = ROOT + "tools/retrieval-bench/"
 
 
 class Arm:
     """One shelf and one way of showing it."""
 
-    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False, pick=True):
+    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False, pick=True, rec=None):
         self.name = name
         self.oracle = oracle
         self.pick = pick
+        self.rec = rec
         self.cache = BASE + cache
         self.vocab = vocab
         self.gloss = gloss
@@ -76,7 +97,7 @@ class Arm:
         # lean shelf whole-category opens ten rows, which is a smaller prompt
         # than the one Recall is given to sift it with. If the numbers match,
         # the stage is paying a call to subtract nothing.
-        got = rb.pick(q, rows) if self.pick else rows
+        got = rb.pick(q, rows, self.rec) if self.pick else rows
         t = self.t
         t["n"] += 1
         t["select"] += bool(self.gold[q] & set(opened))
@@ -86,6 +107,18 @@ class Arm:
         t["opened"] += len(opened)
         t["rows"] += sum(len(self.rows[p]) for p in opened)
         return opened, got
+
+    def ask_null(self, q):
+        """A turn that must come back empty. Scored because dropping Recall
+        means every greeting hands the answerer whatever the selector opened,
+        and an arm that wins on answers by leaking rows into small talk has
+        not won."""
+        opened = self.select(q, self.index, self.rows)
+        rows = [r for p in opened for r in self.rows[p]]
+        got = rb.pick(q, rows, self.rec) if self.pick else rows
+        self.t["null_n"] += 1
+        self.t["null_ok"] += not got
+        return got
 
     def delta(self):
         d = " ".join("%s %2d" % (k, self.t[k] - self.prev[k]) for k in ("cat", "select", "answer"))
@@ -276,6 +309,10 @@ ARMS = [
         oracle=True, pick=False),
     Arm("lean+val+wc", ".archive_v3_lean.json", vocab=LEAN,
         select=values_category()),
+    Arm("lean+wc+lenient", ".archive_v3_lean.json", vocab=LEAN,
+        select=whole_category(LEAN_GLOSS), rec=LENIENT),
+    Arm("lean+or+lenient", ".archive_v3_lean.json", vocab=LEAN,
+        oracle=True, rec=LENIENT),
 ]
 
 
@@ -289,15 +326,19 @@ def run(reps, arms):
         for q in sorted(ANSWERS):
             for arm in arms:
                 arm.ask(q)
+        for q in corpus.NULLS:
+            for arm in arms:
+                arm.ask_null(q)
         print("rep%d  " % (rep + 1) + "   ".join(
             "%-11s %s" % (a.name, a.delta()) for a in arms), flush=True)
 
     print("\n%-12s %8s %8s %8s %8s %8s" % ("arm", "category", "select", "answer", "files", "rows"))
     for arm in arms:
         t, n = arm.t, arm.t["n"]
-        print("%-12s %7d%% %7d%% %7d%% %8.1f %8.1f" % (
+        nn = max(t["null_n"], 1)
+        print("%-14s %7d%% %7d%% %7d%% %5d%% %8.1f %8.1f" % (
             arm.name, 100 * t["cat"] // n, 100 * t["select"] // n, 100 * t["answer"] // n,
-            t["opened"] / n, t["rows"] / n))
+            100 * t["null_ok"] // nn, t["opened"] / n, t["rows"] / n))
 
 
 if __name__ == "__main__":

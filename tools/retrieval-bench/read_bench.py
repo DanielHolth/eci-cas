@@ -147,14 +147,17 @@ def line(r):
     return "%s %s %s = %s" % (r.get("subtopic", "-"), r["subject"], r["key"], r["value"])
 
 
-def pick(question, rows):
-    """RecallAgent: chunk by RowsPerWorker, keep at most MaxPickedPerWorker."""
+def pick(question, rows, prompt=None):
+    """RecallAgent: chunk by RowsPerWorker, keep at most MaxPickedPerWorker.
+
+    `prompt` is an arm: a replacement for recall.txt with the same three
+    placeholders. Default is the shipped one."""
     kept = []
     for i in range(0, len(rows), ROWS_PER_WORKER):
         chunk = rows[i:i + ROWS_PER_WORKER]
         listing = "\n".join("%d. %s" % (j, line(r)) for j, r in enumerate(chunk))
         reply = bench.strip(bench.call(
-            REC.replace("{rows}", listing).replace("{text}", question)
+            (prompt or REC).replace("{rows}", listing).replace("{text}", question)
                .replace("{max}", str(MAX_PICKED)), 40))
         kept += [chunk[j] for j in numbers(reply, len(chunk))][:MAX_PICKED]
     return kept
