@@ -2,42 +2,56 @@
 
     python shelf_v4.py [k] [files]      # default k=5 rows, 3 files
 
-Two ways to summarise a file so it can be ranked as a unit:
+Ways to summarise a file so it can be ranked as a unit, cheapest first:
 
-    centroid    the mean of its row vectors, one vector per file
-    sample-n    n of its row vectors kept; the file scores as its single
-                best-matching row
+    name-only   the file's own name, embedded. One vector, no content.
+    centroid    the mean of its row vectors. One vector.
+    sample-n    n rows drawn at random; the file scores as its best of them.
+    all-rows    every row votes; the file scores as its single best row.
 
-This is the architecture the earlier arms skipped past. `cosine` narrows with
-an LLM reading file names and `flat` does not narrow at all; both were
-measured, and neither is what a retrieval system normally does. The normal
-thing is a coarse pass over file summaries and a fine pass over the rows in
-the few files that survive -- and it keeps the shelf. Categories, topics,
-Merged() addressing and human-legible file names all survive here. What gets
-deleted is the Librarian *call*, not the vocabulary, which is a much smaller
-claim than "drop the pairs" and worth testing before the larger one.
+Daniel's idea, and the reason this file exists: give the picker samples of
+what is in each file rather than only the name. It works -- but not in the
+form first measured here, and not for the reason first claimed.
 
-It is also the only arm here that answers the scale objection. `flat` beat
-everything on 1559 rows, but a flat sweep is linear in the archive and the
-regime that matters is a hundred thousand rows with near-duplicates
-accumulating. This arm sweeps 170 file vectors and then a few hundred rows,
-which is the shape that survives growth. If it matches flat at this size,
-that is the interesting result, because only one of the two keeps matching it
-later.
+    method        vectors/file   strict     (3 files opened, k=5, of 87)
+    librarian          0           40%      LLM reading the name
+    name-only          1           50%
+    sample-3           3           63%
+    centroid           1           70%
+    sample-10         10           75%
+    all-rows       1 per row       80%
+    flat           1 per row       78%      no files at all
 
-centroid versus sample-n is not a tuning choice, it is the fat-file question.
-Averaging seventy-four unrelated rows lands near nothing in particular, so a
-centroid should degrade exactly where v4 put its fat files -- and v4 put gold
-in them on purpose. sample-n scores a file by its best row, so a fat file is
-found by whichever of its rows actually matches. If centroid loses to
-sample-n, the reason is legible and the fix is not a bigger model.
+Three things to keep straight.
 
-The comparison is deliberately unfair to this arm in one way: `files` is
-fixed, so it opens the same number of files whether or not it is confident,
-and cannot decline. That matches how `cosine` and `flat` are scored and keeps
-the three readable in one table.
+**A summary vector beats an LLM reading the name, and the cheapest one is
+best.** centroid at one vector a file scores 70% against the Librarian's 40%,
+and beats a three-row sample costing three times as much. Even the file name
+embedded rather than read by a model is worth 10pp. The Librarian call is not
+losing because names are uninformative; it is losing because a 4B model
+ranking 170 names is worse than arithmetic on the same information.
+
+**centroid was written off here on the first pass and that was wrong.** The
+sample arms took the first n rows in stored order, justified as "arbitrary
+with respect to the questions". It is not: build() appends gold before
+padding, so 95% of gold sits at index 0-2 and "the first three rows" is a
+pointer to the answer. That arm read 88%; blind sampling reads 63%. The
+sample must be blind to what is being retrieved or it is not a sample.
+
+**all-rows does not answer the scale objection**, though an earlier version of
+this docstring claimed it did. Scoring a file by its best row requires a
+vector per row and a similarity against every one of them -- the same sweep
+flat does. What it saves is what reaches Intent, not what gets scanned. Only
+name-only, centroid and sample-n are sublinear in the archive, and they cost
+10-30pp against flat. That trade is the real finding, and which side of it to
+take is a tier decision rather than a correctness one.
+
+The comparison is deliberately unfair to every arm here in one way: `files` is
+fixed, so each opens the same number of files whether or not it is confident,
+and none can decline. That matches how `cosine` and `flat` are scored and
+keeps them readable in one table.
 """
-import sys, collections
+import sys, collections, random
 import numpy as np
 
 ROOT = __file__.rsplit("tools", 1)[0]
@@ -67,23 +81,32 @@ def main(k=5, files=3):
     print("embedding %d rows ..." % len(flat_rows), flush=True)
     matrix = e.encode([rb.line(r) for r in flat_rows])
 
-    # One centroid per file, and a fixed sample of each file's rows. The
-    # sample is the first n in stored order rather than a random draw: the
-    # archive order is the order the padding was generated in, which is
-    # arbitrary with respect to the questions, and a seeded draw would add a
-    # knob without adding independence.
+    # One centroid per file, and a sample of each file's rows.
+    #
+    # The sample is a seeded random draw, NOT the first n. The first version
+    # of this arm took the first n "because stored order is arbitrary with
+    # respect to the questions". It is not: build() appends gold rows before
+    # padding, so 95% of gold sits at index 0-2 and "the first three rows" is
+    # a pointer to the answer rather than a sample of the file. That arm read
+    # 88% and the honest number is 63%. Sampling has to be blind to the thing
+    # being retrieved or it is not sampling.
     per_file = [np.flatnonzero(owner == i) for i in range(len(index))]
+    draw = random.Random(4)
+    sampled = {s: [np.array(draw.sample(list(ix), min(s, len(ix))), dtype=int)
+                   if len(ix) else np.array([], int) for ix in per_file]
+               for s in (1, 3, 10)}
     cent = np.vstack([matrix[ix].mean(0) if len(ix) else np.zeros(matrix.shape[1])
                       for ix in per_file])
     cent /= np.maximum(np.linalg.norm(cent, axis=1, keepdims=True), 1e-9)
 
+    names = e.encode([p.replace("/", " / ") for p in index])
     qs = sorted(ANSWERS)
     turns = qs + list(corpus.NULLS)
     qv = e.encode(turns)
     print("embedded. %d turns\n" % len(turns), flush=True)
 
     samples = (1, 3, 10)
-    arms = ["centroid"] + ["sample-%d" % s for s in samples]
+    arms = ["name-only", "centroid"] + ["sample-%d" % s for s in samples] + ["all-rows"]
     tally = collections.Counter()
 
     for turn, v in zip(turns, qv):
@@ -92,11 +115,21 @@ def main(k=5, files=3):
 
         picks = {"centroid": np.argsort(-(cent @ v))[:files]}
         for s in samples:
-            # A file's score is its best row among the n kept. -inf for an
+            # A file's score is its best row among the n sampled. -inf for an
             # empty file so it never wins a slot by default.
-            best = np.array([float(scores[ix[:s]].max()) if len(ix) else -1e9
-                             for ix in per_file])
+            best = np.array([float(scores[ix].max()) if len(ix) else -1e9
+                             for ix in sampled[s]])
             picks["sample-%d" % s] = np.argsort(-best)[:files]
+        # No sampling at all: every row votes for its file. This is the
+        # ceiling the samples are approximating, and it costs one vector per
+        # row -- the same vectors flat already needs, so it saves nothing on
+        # the sweep. It saves on what reaches Intent, not on what is scanned.
+        allbest = np.array([float(scores[ix].max()) if len(ix) else -1e9
+                            for ix in per_file])
+        picks["all-rows"] = np.argsort(-allbest)[:files]
+        # And the Librarian's own information, as a floor: the file name and
+        # nothing else, scored the same way.
+        picks["name-only"] = np.argsort(-(names @ v))[:files]
 
         for name in arms:
             chosen = picks[name]
