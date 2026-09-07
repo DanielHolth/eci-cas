@@ -63,11 +63,12 @@ BASE = ROOT + "tools/retrieval-bench/"
 class Arm:
     """One shelf and one way of showing it."""
 
-    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False, pick=True, rec=None):
+    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False, pick=True, rec=None, gate=False):
         self.name = name
         self.oracle = oracle
         self.pick = pick
         self.rec = rec
+        self.gate = gate
         self.cache = BASE + cache
         self.vocab = vocab
         self.gloss = gloss
@@ -97,7 +98,7 @@ class Arm:
         # lean shelf whole-category opens ten rows, which is a smaller prompt
         # than the one Recall is given to sift it with. If the numbers match,
         # the stage is paying a call to subtract nothing.
-        got = rb.pick(q, rows, self.rec) if self.pick else rows
+        got = self.recall(q, rows)
         t = self.t
         t["n"] += 1
         t["select"] += bool(self.gold[q] & set(opened))
@@ -108,6 +109,31 @@ class Arm:
         t["rows"] += sum(len(self.rows[p]) for p in opened)
         return opened, got
 
+    def recall(self, q, rows):
+        """Recall does two jobs and they measure differently.
+
+        The gate -- "does this turn need stored facts at all" -- is the half
+        recall.txt's "reply none" line was really doing, and dropping the
+        stage costs `quiet` 37% because it drops the gate with it. The filter
+        -- rank and cut to five -- is the half the oracle arm shows is
+        destructive, and the half Daniel's argument says to spend rows on:
+        what a 4B reads as clutter, a stronger model may read as the context
+        that makes two facts mean something together.
+
+        So gate=True keeps the first and drops the second. Same call count as
+        today. It is a tier knob, not a verdict -- Minimal cuts to five
+        because it drowns, Default and Super take the rows.
+        """
+        if self.gate:
+            reply = bench.strip(bench.call(
+                "Does answering this turn need anything the person has told you "
+                "before -- a stored fact about them, their things, or their "
+                "plans? A greeting, an acknowledgement or small talk does not. "
+                "Reply yes or no, one word." + chr(10) + chr(10) +
+                "Turn: %s" % q, 8))
+            return rows if reply.lower().startswith("y") else []
+        return rb.pick(q, rows, self.rec) if self.pick else rows
+
     def ask_null(self, q):
         """A turn that must come back empty. Scored because dropping Recall
         means every greeting hands the answerer whatever the selector opened,
@@ -115,7 +141,7 @@ class Arm:
         not won."""
         opened = self.select(q, self.index, self.rows)
         rows = [r for p in opened for r in self.rows[p]]
-        got = rb.pick(q, rows, self.rec) if self.pick else rows
+        got = self.recall(q, rows)
         self.t["null_n"] += 1
         self.t["null_ok"] += not got
         return got
@@ -318,6 +344,10 @@ ARMS = [
     # consolidation lost what the read side gained.
     Arm("full+gloss+len", ".archive_v3.json", gloss=GLOSS, rec=LENIENT),
     Arm("full+len", ".archive_v3.json", rec=LENIENT),
+    Arm("lean+wc+gate", ".archive_v3_lean.json", vocab=LEAN,
+        select=whole_category(LEAN_GLOSS), gate=True),
+    Arm("full+wc+gate", ".archive_v3.json", select=whole_category(GLOSS), gate=True),
+    Arm("full+gloss+gate", ".archive_v3.json", gloss=GLOSS, gate=True),
 ]
 
 
