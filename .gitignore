@@ -16,3 +16,4 @@ archive.jsonl
 models/
 __pycache__/
 *.pyc
+tools/retrieval-bench/.archive_v3.json

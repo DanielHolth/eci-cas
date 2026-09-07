@@ -73,9 +73,44 @@ makes it more fabricating too, and that trade is invisible on the other axes.
   loss it looks like — the read path opens `other` alongside its parent
   category in code. Kept so nobody builds it twice.
 
+## The read side
+
+`read_bench.py` is the read instrument, and it exists because every read
+number in the roadmap except the -35pp hierarchical loss is smaller than the
+noise floor of the thing that produced it.
+
+Two fixes over the old measurement, both aimed at resolution rather than at
+any idea:
+
+- **`tests/corpora/retrieval_v3.py`** -- 24 statements, 35 direct questions
+  against v2's 17, written before anything was run and not revised against a
+  score. When it is spent, write v4 rather than editing it.
+- **Populated distractors.** The 58% in the roadmap was measured with the
+  padding pairs as empty files, so a wrong pick returned nothing. Here all
+  170 pairs hold rows, generated once and cached, so a wrong pick returns
+  something plausible and can mislead the picker downstream.
+
+It reports three numbers and refuses to collapse them, because the read path
+has three places to lose a fact and only the first was ever measured:
+`select` (did Librarian open the right pair), `pick` (did Recall keep the row
+out of what it opened), `answer` (were the answer's tokens in what came
+back). It also reports `writable` -- how many questions the write side had
+already lost before Librarian saw anything -- so a read arm is never credited
+or charged for extraction variance.
+
+The archive is frozen to `.archive_v3.json` (gitignored). Rebuild by deleting
+it; do **not** delete it between two arms you intend to compare, for the same
+reason bench.py extracts once per rep.
+
+`--oblique` scores the bonus tier: questions that do not name the fact they
+need ("who should we visit while we are in Bodo?" wanting a sibling). These
+are not expected to pass and are never folded into the headline. They are the
+cases a subject index would have to earn its keep on.
+
 ## The known limit
 
-`tests/corpora/retrieval_v2.py` is 12 statements and the arms already sit near
-90%. There is almost no headroom left to measure in, and the held-out half is
-burned. A fresh, harder corpus is the prerequisite for the next honest
-comparison here, not an extra.
+`tests/corpora/retrieval_v2.py` is 12 statements and the write-side arms
+already sit near 90%. There is almost no headroom left to measure in, and its
+held-out half is burned. v3 replaces it for read work; the write-side arms
+above still run against v2 and should be re-based on v3 before any of them is
+re-litigated.
