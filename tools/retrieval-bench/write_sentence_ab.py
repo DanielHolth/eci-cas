@@ -32,6 +32,10 @@ Judged on sign consistency across reps against the usual 10pp floor.
 """
 import collections, subprocess, sys
 import bench
+# bench.corpus is retrieval_v2, which has NULLS but no STATEMENTS; the
+# statement corpus the read arms use is v3. Named apart so the two are
+# not confused again -- fabrications() scores v2's NULLS by design.
+import retrieval_v3 as statements
 
 # The commit that added the field. Its parent is the last version of the
 # prompt without it, which is the whole of the "old" arm.
@@ -67,7 +71,7 @@ def run(reps=3):
     per = {n: collections.Counter() for n, _ in arms}
     prev = {n: collections.Counter() for n, _ in arms}
     for rep in range(reps):
-        for stmt, qs in bench.corpus.STATEMENTS:
+        for stmt, qs in statements.STATEMENTS:
             for name, prompt in arms:
                 rows = bench.extract(stmt, prompt)
                 t = per[name]
