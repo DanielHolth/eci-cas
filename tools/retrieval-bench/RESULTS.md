@@ -286,3 +286,40 @@ So the next question is not which shelf. It is whether the narrowing inside
 a category can be done by something other than a model call. That is the
 sentence column and the embedding beside it, and it moves ahead of any
 further vocabulary work.
+
+## Batch 13 — does asking for the sentence damage the extraction, three reps
+
+  arm   value  rows/stmt  with sentence  fabricated on nulls
+  old     84%       1.21             0%                  0/8
+  new     85%       1.06            98%                  0/8
+
+  per rep, value:  old 29 30 30   new 28 31 31
+  per rep, rows:   old 28 32 27   new 26 25 25
+
+The gate before any read arm: a loss here would sit underneath every later
+number and read as a read result.
+
+Sufficiency is flat -- 84% against 85%, signs -1 +1 +1, nothing. Coverage
+is 98%, so optionality did not quietly empty the field and the read arm has
+something real to measure. No fabrication on NULLS either way, so the extra
+shape to fill did not invite filling it.
+
+The one thing that moved is rows per statement: 1.21 to 1.06, down in all
+three reps, 87 rows against 76. That is the failure the arm was watching
+for -- a model spending budget on prose and returning fewer facts -- and it
+is a consistent sign, not noise, even though the old arm's own spread (28,
+32, 27) is wider than the gap.
+
+What that means is bounded by what this bench asks. Sufficiency held with
+12% fewer rows, so the rows that vanished carried no answer to any of the
+35 questions. Whether that is pruning marginal restatements or losing facts
+nobody happens to ask about today, this corpus cannot tell: it scores only
+the questions it has. Recorded as a standing caveat on the sentence column
+rather than settled, and worth re-testing when the corpus grows for the
+fatness work.
+
+Proceeding to the read arm regardless, because it compares two renderings
+of one archive and is internally controlled -- the row cost is a write-side
+fact that sits beside it, not a confound inside it. But it raises the bar
+the sentence has to clear: it must buy more on read than 12% fewer rows
+costs.
