@@ -323,3 +323,55 @@ of one archive and is internally controlled -- the row cost is a write-side
 fact that sits beside it, not a confound inside it. But it raises the bar
 the sentence has to clear: it must buy more on read than 12% fewer rows
 costs.
+
+## Batch 14 — the sentence on the read side, one archive rendered two ways
+
+  select (shared by every arm) 80%, rows carrying a sentence 407/409
+
+  arm            answer   nulls    kept
+  nopick            72%     54%    49.4
+  strict+addr       42%     83%     1.4
+  strict+sent       54%     95%     1.3
+  lenient+addr      59%     79%     1.7
+  lenient+sent      60%     79%     1.4
+
+  per rep, answer:
+    nopick        24  26  26
+    strict+addr   14  17  14
+    strict+sent   18  19  20
+    lenient+addr  21  20  21
+    lenient+sent  21  22  21
+
+The prediction was written down before the run: the sentence lifts the
+filtered arms, barely moves nopick, and the gap closes from below. It is
+half right, and the half that fails is the half that matters.
+
+Strict moves and moves hard: 42% to 54%, positive in all three reps, and
+its null handling goes 83% to 95% -- with more surface to match against, a
+reader that keeps almost nothing stops guessing when it should decline.
+That is the mechanism working exactly as described.
+
+Lenient does not move: 59% to 60%, signs +0 +2 +0, nothing. And lenient is
+the arm that would ship. So on the configuration we would actually run, the
+sentence buys approximately nothing on read, while costing 12% of extracted
+rows (batch 13).
+
+The kept column says why the two differ. Lenient already keeps 1.7 rows
+against strict's 1.4, and gold rows sit in files holding a couple of rows
+each. There is nearly nothing to discriminate between: the sentence adds
+surface for a decision that is barely being made. Strict is the only arm
+here that simulates scarcity, and scarcity is the condition the sentence
+was designed for.
+
+So this is a third result the corpus is too small to settle, alongside file
+fatness and the row cost. The claim "the sentence helps Recall keep the
+right row" is supported only where rows are scarce, and this archive is not
+that archive. nopick's 72% over lenient's 60% is the same 12pp shape as
+batch 12 and unchanged by any of this.
+
+What the batch does establish: the column is written (98% coverage, 407 of
+409 rows), it costs nothing in sufficiency or fabrication, it demonstrably
+helps a reader under pressure, and its read-side value at this scale is
+unproven rather than disproven. The case for keeping it now rests on what
+it was always the prerequisite for -- a vector over the sentence rather
+than over the address form -- not on a read-side win it has not shown.
