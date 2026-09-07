@@ -545,6 +545,20 @@ express a cheap read at all — batch 12's facts-per-file mechanism again, and
 now for a vector reader rather than a weak model, which is the one thing the
 earlier batches could not say.
 
-Coverage flaw, affecting both arms: `TERSE_GLOSS` covers 26 of 34 pairs and
-the shipped gloss 160 of 170, so both shelves have pairs no row can be filed
-into. Worth fixing before either number is quoted again.
+Coverage looks like a flaw and is not: `TERSE_GLOSS` covers 26 of 34 pairs and
+the shipped gloss 160 of 170, but every missing pair on both shelves is
+`x/other`. `other` is the valve, defined by matching nothing, so a vector filer
+has no direction to point at and correctly never files into it.
+
+**Batch 16b — the written gloss as a filer.** Re-run inside `file_v4` beside
+the two Cataloger calls it would replace:
+
+    filing       agree   select   strict   spread
+    llm           100%      74%      72%       54
+    by-gloss       11%      77%      73%       31
+    written        38%      75%      73%       60
+
+Ties llm on the bootstrap (+1.1pp, P 53%) exactly as the derived gloss does,
+and wins on both caveats carried against it: agreement triples and spread goes
+to 60 pairs, wider than the Cataloger's 54, so the concentration worry inverts
+rather than shrinking. This is the arm to ship.
