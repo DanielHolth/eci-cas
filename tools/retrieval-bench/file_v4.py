@@ -89,6 +89,16 @@ a legibility cost -- 11% agreement means an archive filed somewhere a person
 would not look, which is a real loss for a store meant to be human-readable
 even if retrieval does not care.
 
+What the gloss maps to in the product. Here it is the mean of ten padding
+rows, and padding is LLM-written examples of what belongs under a pair -- so
+this arm is not a bootstrap off an archive that already exists, it is exactly
+Daniel's proposal: ship a handful of sample facts per file alongside the
+vocabulary, embed them once, and file against them. That distinction matters
+because the cold-start version, deriving a gloss from whatever rows have
+landed so far, is the gloss-1 and gloss-3 rows of the table -- 12pp and 11pp
+below the Cataloger, with P(better) of 1% and 3%. A young archive cannot
+summarise itself. The examples have to be written.
+
 The circularity worth naming, because it is not the one it looks like. Filing
 by vector and then retrieving by vector share a metric, which sounds like an
 arm agreeing with itself. It is not: filing scores the *fact* against a file,
