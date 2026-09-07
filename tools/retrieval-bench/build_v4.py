@@ -78,9 +78,13 @@ def main():
         print("\nplan only. re-run with --build to generate %s"
               % os.path.basename(CACHE))
         return
-    if os.path.exists(CACHE):
+    if os.path.exists(CACHE) and os.path.getsize(CACHE) > 0:
         print("\n%s exists; delete it to rebuild." % os.path.basename(CACHE))
         return
+    if os.path.exists(CACHE):
+        # Left by an older build that opened the file before it succeeded.
+        print("\nremoving zero-byte %s from a failed build" % os.path.basename(CACHE))
+        os.remove(CACHE)
 
     print("\nbuilding %s ..." % os.path.basename(CACHE), flush=True)
     a, rows = rb.archive(CACHE, sizes=sizes, src=corpus)

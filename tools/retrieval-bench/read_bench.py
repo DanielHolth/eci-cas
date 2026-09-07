@@ -144,12 +144,25 @@ def build(vocab=None, cat_prompt=None, sizes=None, src=None):
     # everything to unfiled/unfiled and still produces a table. That is how
     # the terse shelf's first batch was read as a shelf result when it was a
     # harness bug, so it is an error now rather than a footnote.
-    bad = sum(g["pair"].startswith("unfiled") for g in gold)
-    if bad:
+    #
+    # Proportional, not absolute. The failure this catches is systematic --
+    # a prompt naming drawers the vocabulary does not have sends every row
+    # to unfiled and still produces a table. A couple of rows going there is
+    # a different thing entirely: it is the Cataloger missing, which is a
+    # write-side result the bench exists to measure, and aborting on it
+    # would refuse to run whenever the model is imperfect. Named rows are
+    # printed either way so the number is never silent.
+    stray = [g for g in gold if g["pair"].startswith("unfiled")]
+    if stray:
+        print("  %d of %d rows filed to unfiled/unfiled:" % (len(stray), len(gold)))
+        for g in stray[:8]:
+            print("    %s | %s" % (g.get("stmt", "?")[:40], g.get("key", "?")))
+    if len(gold) and len(stray) > 0.2 * len(gold):
         raise SystemExit(
-            "%d of %d rows filed to unfiled/unfiled: the category prompt and "
-            "the vocabulary disagree. Pass cat_prompt for a shelf that renames "
-            "a category." % (bad, len(gold)))
+            "%d of %d rows filed to unfiled/unfiled: that is systematic, not "
+            "model error -- the category prompt and the vocabulary disagree. "
+            "Pass cat_prompt for a shelf that renames a category."
+            % (len(stray), len(gold)))
 
     landed = set(g["pair"] for g in gold)
     todo = [p for p in all_pairs(vocab) if p not in landed]
@@ -166,8 +179,16 @@ def archive(cache=CACHE, vocab=None, cat_prompt=None, sizes=None, src=None):
     in vocabulary are two archives, not two views of one."""
     if not os.path.exists(cache):
         print("building archive (once): %s" % os.path.basename(cache), flush=True)
+        # Built before the file is opened, not into it. Opening first means
+        # a build that raises -- the unfiled guard, a dead model server --
+        # leaves a zero-byte cache behind, which then satisfies the "exists,
+        # delete to rebuild" check above and turns the next run into a
+        # silent no-op over an empty archive. That reports a total collapse
+        # indistinguishable from a result, which is the failure this whole
+        # harness keeps having.
+        built = build(vocab, cat_prompt, sizes, src)
         with open(cache, "w", encoding="utf-8") as f:
-            json.dump(build(vocab, cat_prompt, sizes, src), f, indent=1)
+            json.dump(built, f, indent=1)
     with open(cache, encoding="utf-8") as f:
         a = json.load(f)
     rows = collections.defaultdict(list)
