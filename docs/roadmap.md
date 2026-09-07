@@ -1281,6 +1281,30 @@ filer degrading faster, which downgrades that worry without closing it -- and
 real cost for a store meant to be browsable and which no retrieval number will
 ever show.
 
+**Batch 16 closes the cold start, and it does not need an archive.** The gloss
+above is derived from ten rows already in the file, which a day-one archive
+does not have -- that is why gloss-1 and gloss-3 lose 12pp. Both shelves
+already ship a *written* gloss per pair, and neither had ever been embedded.
+Filing by the written line reads 70% strict at three files against 70% for the
+derived centroid. So the shippable version of idea 2's write half is: embed
+the lines already in `bench.CAT["gloss"]` once, at build time, and file against
+them. No sampling, no bootstrap off a young archive, no calls per row.
+
+The same run answered Daniel's other question -- 34 terse pairs with one gloss
+each -- and consolidation is not reversed. Terse leads at equal file count
+(75% vs 70%) only because three files of 34 hands it 214 rows where three of
+171 hands the shipped shelf 63. Matched on rows reached, the shipped shelf
+wins: -18.4pp for terse at the cheap end (CI [-32.2, -4.6], P 0%) and a tie at
+the expensive end bought with 38 extra rows. Terse's smallest openable unit is
+80 rows, so it cannot express a cheap read at all. That is batch 12's
+facts-per-file mechanism arriving for a *vector* reader, which the earlier
+batches could not show, since they only ever had a weak model doing the picking.
+
+Carried as a defect rather than a result: `TERSE_GLOSS` covers 26 of 34 pairs
+and the shipped gloss 160 of 170, so both shelves have pairs no row can be
+filed into. If the written gloss becomes the filer, that coverage has to be
+completed before it ships.
+
 One measurement changed underneath all of this and is worth carrying: the
 bench scorer had been matching answer keys against the address line only,
 never the sentence field the Archivist writes and the embedder reads. Fixing
