@@ -61,11 +61,18 @@ def pad_rows(pair):
     an empty file cannot mislead the picker and cannot supply a wrong answer.
     Generated once and cached -- these are distractors, and a distractor that
     changed between arms would be an uncontrolled variable.
+
+    Padding carries a sentence for the same reason it carries content at all.
+    An archive where only the gold rows have one would let a sentence-aware
+    reader find them by the presence of the field rather than by what it
+    says, and the arm would measure the marking, not the mechanism. Archives
+    cached before this only ever get read address-only, so they are unharmed.
     """
     cat, topic = pair.split("/")
     prompt = ("Three short facts a person might have on file under '"
               + cat + " / " + topic + "'. One per line, no numbering, in the form:\n"
-              "subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>\n"
+              "subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>"
+              " sentence=<the same fact as one plain sentence>\n"
               "Do not mention " + cat + " or " + topic + " as the subject.")
     rows = []
     for part in bench.ROWSPLIT.split(bench.strip(bench.call(prompt, 200))):

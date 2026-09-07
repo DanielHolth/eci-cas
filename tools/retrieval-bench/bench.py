@@ -53,10 +53,14 @@ def strip(t):
     return re.sub(r"<think>.*?</think>", "", t, flags=re.S).strip()
 
 
+# `sentence` is in the marker list because it has to be, not because every
+# script wants it: archivist.txt asks for it now, so a splitter that did not
+# know the marker would leave the whole sentence sitting inside `value` and
+# quietly change what every other bench here measures.
 def fields(line):
-    """One 'subtopic=.. subject=.. key=.. value=..' line -> dict."""
+    """One 'subtopic=.. subject=.. key=.. value=.. sentence=..' line -> dict."""
     d = {}
-    for m in re.finditer(r"\b(subtopic|subject|key|value)\s*[:=]\s*(.*?)(?=\s+\b(?:subtopic|subject|key|value)\s*[:=]|$)",
+    for m in re.finditer(r"\b(subtopic|subject|key|value|sentence)\s*[:=]\s*(.*?)(?=\s+\b(?:subtopic|subject|key|value|sentence)\s*[:=]|$)",
                          line, re.I):
         d[m.group(1).lower()] = m.group(2).strip().strip('"').strip()
     return d if {"subject", "key", "value"} <= d.keys() else None
@@ -73,9 +77,16 @@ def extract(text, prompt):
     return [r for r in rows if not COPIED.search(" ".join(r.values()))]
 
 
+# The sentence restates the fact in full words, so a blob that included it
+# would answer nearly every question by construction -- the scorer reading
+# the model's own paraphrase back and calling it retrieval. Sufficiency stays
+# on the address fields, the same four it has always been scored on.
+SCORED = ("subtopic", "subject", "key", "value")
+
+
 def sufficient(rows, question):
     """(a): is every token of some alternative present across the rows?"""
-    blob = " ".join(" ".join(v for v in r.values()) for r in rows).lower()
+    blob = " ".join(" ".join(r.get(k, "") for k in SCORED) for r in rows).lower()
     return any(all(tok in blob for tok in alt) for alt in ANSWERS[question])
 
 

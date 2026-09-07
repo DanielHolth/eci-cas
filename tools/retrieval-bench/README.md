@@ -107,6 +107,28 @@ need ("who should we visit while we are in Bodo?" wanting a sibling). These
 are not expected to pass and are never folded into the headline. They are the
 cases a subject index would have to earn its keep on.
 
+## The sentence column
+
+Two arms, run in this order, because the second is meaningless if the first
+moves:
+
+- `write_sentence_ab.py` -- does asking for the sentence damage the
+  extraction it rides on. The old arm is `archivist.txt` read out of git at
+  the commit before the field, not a copy kept here. Scored on the address
+  fields only: the sentence restates the fact in full words, so a scorer that
+  saw it would report the model's own paraphrase back as a win.
+- `sentence_ab.py` -- does the sentence stop Recall discarding the row. One
+  extraction, one archive (`.archive_v3_sent.json`), one selection per
+  question, five arms that differ only in how a row is rendered to Recall.
+
+**Pre-registered**: the sentence should lift the filtered arms and barely
+move `nopick`, since `nopick` keeps everything and cannot use more surface.
+The gap closing from below is the mechanism; a uniform lift on both is not,
+and means the story is wrong. `select` cannot move -- Librarian reads file
+names, never row text -- so it is printed once as a harness check.
+
+Written down before the run, which is what batches 3-7 did not have.
+
 ## The known limit
 
 `tests/corpora/retrieval_v2.py` is 12 statements and the write-side arms
