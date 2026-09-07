@@ -1,0 +1,3580 @@
+{
+ "gold": [
+  {
+   "subtopic": "age",
+   "subject": "Ingrid",
+   "key": "birthday",
+   "value": "seven months November",
+   "sentence": "Ingrid's birthday is in November.",
+   "pair": "relations/birthday",
+   "stmt": "My daughter Ingrid turns seven in November"
+  },
+  {
+   "subtopic": "vehicle",
+   "subject": "user",
+   "key": "colour",
+   "value": "silver",
+   "sentence": "User drives a silver Skoda Octavia.",
+   "pair": "household/vehicle",
+   "stmt": "We drive a silver Skoda Octavia"
+  },
+  {
+   "subtopic": "health",
+   "subject": "user",
+   "key": "allergy",
+   "value": "penicillin",
+   "sentence": "User is allergic to penicillin.",
+   "pair": "body/allergy",
+   "stmt": "I am allergic to penicillin"
+  },
+  {
+   "subtopic": "location",
+   "subject": "cabin",
+   "key": "location",
+   "value": "Senja",
+   "sentence": "Our cabin is located on Senja.",
+   "pair": "travel/destination",
+   "stmt": "Our cabin is on Senja, about an hour from Finnsnes"
+  },
+  {
+   "subtopic": "travel",
+   "subject": "cabin",
+   "key": "distance",
+   "value": "one hour",
+   "sentence": "Our cabin is about an hour from Finnsnes.",
+   "pair": "travel/trip",
+   "stmt": "Our cabin is on Senja, about an hour from Finnsnes"
+  },
+  {
+   "subtopic": "choral singing",
+   "subject": "user",
+   "key": "role",
+   "value": "tenor",
+   "sentence": "User sings tenor in the church choir on Wednesdays.",
+   "pair": "leisure/music",
+   "stmt": "I sing tenor in the church choir on Wednesdays"
+  },
+  {
+   "subtopic": "invoices",
+   "subject": "Ingviild",
+   "key": "handles",
+   "value": "invoices",
+   "sentence": "My colleague Ingvild handles the invoices.",
+   "pair": "money/income",
+   "stmt": "My colleague Ingvild handles the invoices"
+  },
+  {
+   "subtopic": "installation date",
+   "subject": "heat pump",
+   "key": "year installed",
+   "value": "2021",
+   "sentence": "The heat pump was installed in 2021.",
+   "pair": "household/maintenance",
+   "stmt": "The heat pump was installed in 2021"
+  },
+  {
+   "subtopic": "education",
+   "subject": "user",
+   "key": "masters degree",
+   "value": "marine biology at UiT",
+   "sentence": "The user did their masters in marine biology at UiT.",
+   "pair": "learning/university",
+   "stmt": "I did my masters in marine biology at UiT"
+  },
+  {
+   "subtopic": "driving licence",
+   "subject": "user",
+   "key": "expiry year",
+   "value": "2028",
+   "sentence": "My driving licence needs to be renewed in 2028.",
+   "pair": "admin/renewal",
+   "stmt": "My driving licence needs renewing in 2028"
+  },
+  {
+   "subtopic": "activity",
+   "subject": "user",
+   "key": "pre-breakfast dog walk",
+   "value": "dog",
+   "sentence": "The user walks the dog before breakfast.",
+   "pair": "household/pet",
+   "stmt": "We walk the dog before breakfast"
+  },
+  {
+   "subtopic": "seasickness",
+   "subject": "user",
+   "key": "triggers",
+   "value": "anything smaller than a ferry",
+   "sentence": "I get seasick on anything smaller than a ferry",
+   "pair": "identity/preference",
+   "stmt": "I get seasick on anything smaller than a ferry"
+  },
+  {
+   "subtopic": "family",
+   "subject": "Marit",
+   "key": "location",
+   "value": "Bodo",
+   "sentence": "Marit lives in Bodo.",
+   "pair": "relations/family",
+   "stmt": "My sister Marit lives in Bodo with her husband"
+  },
+  {
+   "subtopic": "employment",
+   "subject": "user",
+   "key": "tenure",
+   "value": "eleven years",
+   "sentence": "I have been at Statkraft for eleven years.",
+   "pair": "work/history",
+   "stmt": "I have been at Statkraft for eleven years"
+  },
+  {
+   "subtopic": "goal",
+   "subject": "user",
+   "key": "financing",
+   "value": "renovation",
+   "sentence": "We are saving money for a kitchen renovation.",
+   "pair": "money/saving",
+   "stmt": "We are saving for a kitchen renovation"
+  },
+  {
+   "subtopic": "phobia",
+   "subject": "Ingrid",
+   "key": "thunder",
+   "value": "scared",
+   "sentence": "Ingrid is scared of thunder.",
+   "pair": "identity/fear",
+   "stmt": "Ingrid is scared of thunder"
+  },
+  {
+   "subtopic": "hobbies",
+   "subject": "user",
+   "key": "reading",
+   "value": "crime novels",
+   "sentence": "The user reads crime novels.",
+   "pair": "leisure/reading",
+   "stmt": "I read crime novels, mostly Nesbo"
+  },
+  {
+   "subtopic": "reading preferences",
+   "subject": "user",
+   "key": "favorite author",
+   "value": "Nesbo",
+   "sentence": "The user mostly reads books by Nesbo.",
+   "pair": "leisure/reading",
+   "stmt": "I read crime novels, mostly Nesbo"
+  },
+  {
+   "subtopic": "household",
+   "subject": "bjorn",
+   "key": "sparing key",
+   "value": "kept",
+   "sentence": "Bjorn keeps the spare key.",
+   "pair": "household/address",
+   "stmt": "Our neighbour Bjorn keeps the spare key"
+  },
+  {
+   "subtopic": "transport",
+   "subject": "user",
+   "key": "departure time",
+   "value": "07:20",
+   "sentence": "User takes the 07:20 bus into town.",
+   "pair": "travel/transport",
+   "stmt": "I take the 07:20 bus into town"
+  },
+  {
+   "subtopic": "death",
+   "subject": "father",
+   "key": "year",
+   "value": "2019",
+   "sentence": "My father passed away in 2019.",
+   "pair": "relations/history",
+   "stmt": "My father passed away in 2019"
+  },
+  {
+   "subtopic": "destination",
+   "subject": "Lofoten",
+   "key": "booking status",
+   "value": "summer holiday",
+   "sentence": "We booked Lofoten for the summer holiday.",
+   "pair": "travel/destination",
+   "stmt": "We booked Lofoten for the summer holiday"
+  },
+  {
+   "subtopic": "hobby",
+   "subject": "user",
+   "key": "smoking status",
+   "value": "gave up four years ago",
+   "sentence": "User gave up smoking four years ago.",
+   "pair": "leisure/hobby",
+   "stmt": "I gave up smoking four years ago"
+  },
+  {
+   "subtopic": "leaks",
+   "subject": "dishwasher",
+   "key": "overloading",
+   "value": "leaks",
+   "sentence": "The dishwasher leaks if you overload it.",
+   "pair": "leisure/other",
+   "stmt": "The dishwasher leaks if you overload it"
+  },
+  {
+   "subtopic": "education",
+   "subject": "user",
+   "key": "language studied",
+   "value": "German",
+   "sentence": "I studied German at school.",
+   "pair": "learning/school",
+   "stmt": "I studied German at school but have forgotten most of it"
+  },
+  {
+   "subtopic": "education",
+   "subject": "user",
+   "key": "language remembered",
+   "value": "German",
+   "sentence": "I have forgotten most of the German I studied.",
+   "pair": "learning/subject",
+   "stmt": "I studied German at school but have forgotten most of it"
+  },
+  {
+   "subtopic": "tenancy",
+   "subject": "basement flat",
+   "key": "renter",
+   "value": "student",
+   "sentence": "The basement flat is rented to a student.",
+   "pair": "household/address",
+   "stmt": "We rent out the basement flat to a student"
+  }
+ ],
+ "pad": {
+  "identity/name": [
+   {
+    "subject": "the client",
+    "key": "preferred display name",
+    "value": "Jane Doe",
+    "sentence": "Jane Doe is the preferred name used for business correspondence.",
+    "pair": "identity/name"
+   }
+  ],
+  "identity/age": [
+   {
+    "subtopic": "license",
+    "subject": "driver",
+    "key": "expiry date",
+    "value": "2024",
+    "sentence": "This driver's license expires in December.",
+    "pair": "identity/age"
+   },
+   {
+    "subtopic": "record",
+    "subject": "applicant",
+    "key": "verification status",
+    "value": "confirmed",
+    "sentence": "The background check verification is confirmed.",
+    "pair": "identity/age"
+   },
+   {
+    "subtopic": "birth",
+    "subject": "record",
+    "key": "year of birth",
+    "value": "1990",
+    "sentence": "The birth year recorded is 1990.",
+    "pair": "identity/age"
+   }
+  ],
+  "identity/birth": [
+   {
+    "subtopic": "place of origin",
+    "subject": "person",
+    "key": "location",
+    "value": "city name",
+    "sentence": "was born in the capital city of the region",
+    "pair": "identity/birth"
+   },
+   {
+    "subtopic": "daily habits",
+    "subject": "routine",
+    "key": "morning activity",
+    "value": "runs in park",
+    "sentence": "commutes to work by jogging",
+    "pair": "identity/birth"
+   },
+   {
+    "subtopic": "medical history",
+    "subject": "individual",
+    "key": "condition",
+    "value": "has allergies",
+    "sentence": "is allergic to peanuts and tree nuts",
+    "pair": "identity/birth"
+   }
+  ],
+  "identity/origin": [
+   {
+    "subtopic": "birthplace",
+    "subject": "city",
+    "key": "location",
+    "value": "verona, italy",
+    "sentence": "born in verona",
+    "pair": "identity/origin"
+   },
+   {
+    "subtopic": "parents",
+    "subject": "mother",
+    "key": "occupation",
+    "value": "primary school teacher",
+    "sentence": "lived with mother",
+    "pair": "identity/origin"
+   },
+   {
+    "subtopic": "education",
+    "subject": "university",
+    "key": "degree",
+    "value": "bachelor in computer science",
+    "sentence": "graduated from university",
+    "pair": "identity/origin"
+   }
+  ],
+  "identity/nationality": [
+   {
+    "subtopic": "legal status",
+    "subject": "passports",
+    "key": "validity period",
+    "value": "five years",
+    "sentence": "Passports issued in this country are valid for five years.",
+    "pair": "identity/nationality"
+   },
+   {
+    "subtopic": "citizenship origin",
+    "subject": "ancestry",
+    "key": "dual status",
+    "value": "British and Irish",
+    "sentence": "This family holds both British and Irish citizenship through their ancestors.",
+    "pair": "identity/nationality"
+   },
+   {
+    "subtopic": "travel documents",
+    "subject": "vizas",
+    "key": "entry requirement",
+    "value": "schengen area",
+    "sentence": "A visa is required for entry into the Schengen area.",
+    "pair": "identity/nationality"
+   }
+  ],
+  "identity/language": [
+   {
+    "subtopic": "preferred subtopic",
+    "subject": "first language",
+    "key": "spoken native",
+    "value": "English Spanish",
+    "sentence": "She speaks both English and Spanish fluently at home.",
+    "pair": "identity/language"
+   },
+   {
+    "subtopic": "reading habit",
+    "subject": "favorite genre",
+    "key": "science fiction",
+    "value": "books movies",
+    "sentence": "He prefers reading science fiction novels over watching related films.",
+    "pair": "identity/language"
+   },
+   {
+    "subtopic": "professional title",
+    "subject": "job role",
+    "key": "software engineer",
+    "value": "developer coder",
+    "sentence": "Her daily work involves debugging code as a senior developer.",
+    "pair": "identity/language"
+   }
+  ],
+  "identity/appearance": [
+   {
+    "subtopic": "physical characteristics",
+    "subject": "hair color",
+    "key": "texture",
+    "value": "curly thick",
+    "sentence": "Her hair is curly and thick.",
+    "pair": "identity/appearance"
+   },
+   {
+    "subtopic": "distinguishing feature",
+    "subject": "scar location",
+    "key": "shape",
+    "value": "thin vertical line",
+    "sentence": "A thin vertical line scar runs down her cheek.",
+    "pair": "identity/appearance"
+   }
+  ],
+  "identity/personality": [
+   {
+    "subtopic": "hobbies",
+    "subject": "person",
+    "key": "interests",
+    "value": "rock climbing, hiking, photography",
+    "sentence": "They love spending weekends hiking and taking photos.",
+    "pair": "identity/personality"
+   },
+   {
+    "subtopic": "habits",
+    "subject": "person",
+    "key": "characteristics",
+    "value": "always punctual, thorough, organized",
+    "sentence": "She always arrives on time and keeps everything very tidy.",
+    "pair": "identity/personality"
+   },
+   {
+    "subtopic": "values",
+    "subject": "person",
+    "key": "beliefs",
+    "value": "fairness, transparency, respect",
+    "sentence": "He believes honesty and fairness should guide all decisions.",
+    "pair": "identity/personality"
+   }
+  ],
+  "identity/belief": [
+   {
+    "subtopic": "hobbies",
+    "subject": "person",
+    "key": "likes reading",
+    "value": "history books",
+    "sentence": "She enjoys spending weekends exploring historical novels.",
+    "pair": "identity/belief"
+   },
+   {
+    "subtopic": "dietary preference",
+    "subject": "person",
+    "key": "avoids meat",
+    "value": "vegetarian lifestyle",
+    "sentence": "He has chosen to follow a plant-based diet.",
+    "pair": "identity/belief"
+   },
+   {
+    "subtopic": "religious view",
+    "subject": "person",
+    "key": "practices meditation",
+    "value": "spiritual growth",
+    "sentence": "She attends daily mindfulness sessions for inner peace.",
+    "pair": "identity/belief"
+   }
+  ],
+  "identity/religion": [
+   {
+    "subtopic": "spiritual practice",
+    "subject": "individual",
+    "key": "regular habit",
+    "value": "meditates daily",
+    "sentence": "This person meditates daily.",
+    "pair": "identity/religion"
+   },
+   {
+    "subtopic": "celebration",
+    "subject": "community",
+    "key": "annual event",
+    "value": "attends festival",
+    "sentence": "They attend the annual festival.",
+    "pair": "identity/religion"
+   },
+   {
+    "subtopic": "belief system",
+    "subject": "philosophy",
+    "key": "personal stance",
+    "value": "values kindness",
+    "sentence": "They value kindness above all else.",
+    "pair": "identity/religion"
+   }
+  ],
+  "identity/politics": [
+   {
+    "subtopic": "affiliation",
+    "subject": "party",
+    "key": "membership",
+    "value": "voted yes",
+    "sentence": "Registered as a Democrat",
+    "pair": "identity/politics"
+   },
+   {
+    "subtopic": "stance",
+    "subject": "abortion",
+    "key": "legal",
+    "value": "pro-choice",
+    "sentence": "Believes states should regulate reproductive care",
+    "pair": "identity/politics"
+   },
+   {
+    "subtopic": "interest",
+    "subject": "history",
+    "key": "enthusiast",
+    "value": "reads books",
+    "sentence": "Collects rare first editions",
+    "pair": "identity/politics"
+   }
+  ],
+  "identity/value": [
+   {
+    "subtopic": "occupation",
+    "subject": "John",
+    "key": "job title",
+    "value": "software engineer",
+    "sentence": "John works as a software engineer.",
+    "pair": "identity/value"
+   },
+   {
+    "subtopic": "location",
+    "subject": "Sarah",
+    "key": "current address",
+    "value": "lives in Seattle",
+    "sentence": "Sarah currently resides in Seattle.",
+    "pair": "identity/value"
+   },
+   {
+    "subtopic": "financial",
+    "subject": "Mike",
+    "key": "net worth",
+    "value": "owns three houses",
+    "sentence": "Mike owns three houses.",
+    "pair": "identity/value"
+   }
+  ],
+  "identity/allegiance": [
+   {
+    "subtopic": "nationality",
+    "subject": "person",
+    "key": "citizenship",
+    "value": "resident country",
+    "sentence": "The individual holds permanent residency status in their host nation.",
+    "pair": "identity/allegiance"
+   },
+   {
+    "subtopic": "legal status",
+    "subject": "individual",
+    "key": "background",
+    "value": "former citizen",
+    "sentence": "They previously held citizenship before relocating abroad.",
+    "pair": "identity/allegiance"
+   },
+   {
+    "subtopic": "security clearance",
+    "subject": "applicant",
+    "key": "eligibility",
+    "value": "standard approval",
+    "sentence": "The record shows a routine background check clearance.",
+    "pair": "identity/allegiance"
+   }
+  ],
+  "identity/habit": [
+   {
+    "subtopic": "preference",
+    "subject": "coffee",
+    "key": "brewing method",
+    "value": "manual pour",
+    "sentence": "He insists on using a manual pour-over for his morning brew.",
+    "pair": "identity/habit"
+   },
+   {
+    "subtopic": "habit",
+    "subject": "commute",
+    "key": "entertainment",
+    "value": "podcasts",
+    "sentence": "She listens to educational podcasts during her daily train ride.",
+    "pair": "identity/habit"
+   },
+   {
+    "subtopic": "interest",
+    "subject": "gardening",
+    "key": "technique",
+    "value": "companion planting",
+    "sentence": "They practice companion planting to maximize pest control and yield.",
+    "pair": "identity/habit"
+   }
+  ],
+  "identity/humour": [],
+  "identity/other": [
+   {
+    "subtopic": "emergency contact",
+    "subject": "friend",
+    "key": "phone number",
+    "value": "5550199887",
+    "sentence": "John calls her mother whenever he gets into trouble.",
+    "pair": "identity/other"
+   },
+   {
+    "subtopic": "travel history",
+    "subject": "destination",
+    "key": "last trip",
+    "value": "Paris France",
+    "sentence": "She visited the Louvre museum for three days last summer.",
+    "pair": "identity/other"
+   },
+   {
+    "subtopic": "hobbies",
+    "subject": "activity",
+    "key": "interests",
+    "value": "gardening cooking",
+    "sentence": "He spends his weekends tending to the vegetable garden.",
+    "pair": "identity/other"
+   }
+  ],
+  "body/condition": [
+   {
+    "subtopic": "allergies",
+    "subject": "child",
+    "key": "to shellfish",
+    "value": "prominent reaction",
+    "sentence": "The child experiences an immediate and severe reaction upon consuming shellfish.",
+    "pair": "body/condition"
+   },
+   {
+    "subtopic": "rehab",
+    "subject": "injured athlete",
+    "key": "chronic pain=limit movement",
+    "value": "requires daily physical therapy sessions to manage pain and restore mobility.",
+    "pair": "body/condition"
+   },
+   {
+    "subtopic": "sleep",
+    "subject": "elderly person",
+    "key": "restless sleep=nightly wakefulness",
+    "value": "experiences frequent awakenings and difficulty returning to deep sleep.",
+    "pair": "body/condition"
+   }
+  ],
+  "body/injury": [
+   {
+    "subtopic": "fall",
+    "subject": "runner",
+    "key": "impact zone",
+    "value": "left ankle",
+    "sentence": "The runner sustained a sprained left ankle during the race.",
+    "pair": "body/injury"
+   },
+   {
+    "subtopic": "accident",
+    "subject": "driver",
+    "key": "vehicle collision",
+    "value": "front bumper",
+    "sentence": "The driver reported a minor scratch on the front bumper after the collision.",
+    "pair": "body/injury"
+   },
+   {
+    "subtopic": "trauma",
+    "subject": "athlete",
+    "key": "concussion symptoms",
+    "value": "headache nausea",
+    "sentence": "The athlete experienced persistent headaches and nausea following the head impact.",
+    "pair": "body/injury"
+   }
+  ],
+  "body/medication": [
+   {
+    "subtopic": "allergies",
+    "subject": "patient",
+    "key": "penicillin",
+    "value": "severe rash",
+    "sentence": "The patient experienced a severe allergic reaction to penicillin.",
+    "pair": "body/medication"
+   },
+   {
+    "subtopic": "prescription",
+    "subject": "patient",
+    "key": "aspirin",
+    "value": "500mg daily",
+    "sentence": "She is currently taking 500mg of aspirin every day for pain relief.",
+    "pair": "body/medication"
+   },
+   {
+    "subtopic": "contraindications",
+    "subject": "patient",
+    "key": "alcohol",
+    "value": "liver damage",
+    "sentence": "Drinking alcohol while on this medication may cause liver damage.",
+    "pair": "body/medication"
+   }
+  ],
+  "body/diet": [
+   {
+    "subtopic": "preference",
+    "subject": "food",
+    "key": "vegetarian",
+    "value": "milk eggs",
+    "sentence": "They eat only plants but consume dairy and eggs.",
+    "pair": "body/diet"
+   },
+   {
+    "subtopic": "restriction",
+    "subject": "health",
+    "key": "lactose",
+    "value": "no dairy",
+    "sentence": "They cannot tolerate milk and avoid all dairy products.",
+    "pair": "body/diet"
+   },
+   {
+    "subtopic": "habit",
+    "subject": "social",
+    "key": "caffeine",
+    "value": "no coffee",
+    "sentence": "They do not drink coffee or any other caffeinated beverages.",
+    "pair": "body/diet"
+   }
+  ],
+  "body/sleep": [
+   {
+    "subtopic": "duration",
+    "subject": "person",
+    "key": "habit",
+    "value": "7 hours",
+    "sentence": "He consistently falls asleep at 10 PM and wakes up at 5 AM.",
+    "pair": "body/sleep"
+   },
+   {
+    "subtopic": "quality",
+    "subject": "person",
+    "key": "pattern",
+    "value": "deep cycles",
+    "sentence": "She reports feeling refreshed after getting through four full sleep cycles last night.",
+    "pair": "body/sleep"
+   },
+   {
+    "subtopic": "disruption",
+    "subject": "person",
+    "key": "sensation",
+    "value": "light noise",
+    "sentence": "He frequently wakes up startled by the hum of the refrigerator next door.",
+    "pair": "body/sleep"
+   }
+  ],
+  "body/fitness": [
+   {
+    "subtopic": "height",
+    "subject": "person",
+    "key": "height",
+    "value": "185cm",
+    "sentence": "The individual stands at a height of 185 centimeters.",
+    "pair": "body/fitness"
+   },
+   {
+    "subtopic": "fitness",
+    "subject": "athlete",
+    "key": "marathon",
+    "value": "42km",
+    "sentence": "This athlete successfully completed a 42-kilometer marathon run.",
+    "pair": "body/fitness"
+   },
+   {
+    "subtopic": "weight",
+    "subject": "trainer",
+    "key": "lift",
+    "value": "200kg",
+    "sentence": "The trainer is currently lifting a weight of 200 kilograms.",
+    "pair": "body/fitness"
+   }
+  ],
+  "body/weight": [
+   {
+    "subtopic": "mass",
+    "subject": "patient",
+    "key": "current weight",
+    "value": "180 pounds",
+    "sentence": "The patient currently weighs 180 pounds.",
+    "pair": "body/weight"
+   },
+   {
+    "subtopic": "history",
+    "subject": "individual",
+    "key": "previous mass",
+    "value": "lost twenty pounds",
+    "sentence": "They have lost twenty pounds since last year.",
+    "pair": "body/weight"
+   },
+   {
+    "subtopic": "trend",
+    "subject": "subject",
+    "key": "fluctuation rate",
+    "value": "varies daily",
+    "sentence": "Their weight fluctuates daily due to fluid retention.",
+    "pair": "body/weight"
+   }
+  ],
+  "body/vision": [
+   {
+    "subtopic": "eyesight",
+    "subject": "eyes",
+    "key": "acuity",
+    "value": "20/20",
+    "sentence": "The person has perfect visual acuity in both eyes.",
+    "pair": "body/vision"
+   },
+   {
+    "subtopic": "correction",
+    "subject": "lenses",
+    "key": "prescription",
+    "value": "minus 2.5",
+    "sentence": "They wear standard single-vision lenses for distance.",
+    "pair": "body/vision"
+   },
+   {
+    "subtopic": "health",
+    "subject": "lens",
+    "key": "clarity",
+    "value": "good",
+    "sentence": "There are no reported issues with visual clarity.",
+    "pair": "body/vision"
+   }
+  ],
+  "body/hearing": [
+   {
+    "subtopic": "deafness",
+    "subject": "client",
+    "key": "hearing loss",
+    "value": "noted in chart",
+    "sentence": "The patient reports significant hearing loss in the left ear.",
+    "pair": "body/hearing"
+   },
+   {
+    "subtopic": "sensory aid",
+    "subject": "patient",
+    "key": "hearing aid",
+    "value": "approved by doctor",
+    "sentence": "A new hearing aid was prescribed for better sound clarity.",
+    "pair": "body/hearing"
+   },
+   {
+    "subtopic": "medical record",
+    "subject": "employee",
+    "key": "auditory health",
+    "value": "annual checkup done",
+    "sentence": "Routine hearing tests are included in the yearly physical exam.",
+    "pair": "body/hearing"
+   }
+  ],
+  "body/dental": [
+   {
+    "subtopic": "restoration",
+    "subject": "teeth",
+    "key": "material",
+    "value": "composite",
+    "sentence": "The patient received a white composite filling for a cavity.",
+    "pair": "body/dental"
+   },
+   {
+    "subtopic": "alignment",
+    "subject": "jaw",
+    "key": "surgery",
+    "value": "orthognathic procedure",
+    "sentence": "Her jaw misalignment was corrected with a standard orthognathic procedure.",
+    "pair": "body/dental"
+   },
+   {
+    "subtopic": "prosthesis",
+    "subject": "edentulous",
+    "key": "implant",
+    "value": "dental support",
+    "sentence": "He was fitted with a fixed prosthesis supported by two implants.",
+    "pair": "body/dental"
+   }
+  ],
+  "body/mental": [
+   {
+    "subtopic": "anxiety",
+    "subject": "individual",
+    "key": "stress level",
+    "value": "mild concerns",
+    "sentence": "Reports occasional worry about upcoming deadlines.",
+    "pair": "body/mental"
+   },
+   {
+    "subtopic": "mood",
+    "subject": "colleague",
+    "key": "happiness index",
+    "value": "high energy",
+    "sentence": "Shows great enthusiasm during team meetings.",
+    "pair": "body/mental"
+   },
+   {
+    "subtopic": "memory",
+    "subject": "student",
+    "key": "recall ability",
+    "value": "superior facts",
+    "sentence": "Recites historical dates without any difficulty.",
+    "pair": "body/mental"
+   }
+  ],
+  "body/practitioner": [
+   {
+    "subtopic": "experience",
+    "subject": "doctor",
+    "key": "tenure",
+    "value": "25 years",
+    "sentence": "She has practiced medicine for over two decades.",
+    "pair": "body/practitioner"
+   },
+   {
+    "subtopic": "interest",
+    "subject": "patient",
+    "key": "focus",
+    "value": "chronic pain",
+    "sentence": "He specializes in treating long-term discomfort.",
+    "pair": "body/practitioner"
+   },
+   {
+    "subtopic": "credential",
+    "subject": "doctor",
+    "key": "degree",
+    "value": "medical school",
+    "sentence": "She graduated from the city university of medicine.",
+    "pair": "body/practitioner"
+   }
+  ],
+  "body/appointment": [
+   {
+    "subtopic": "medical history",
+    "subject": "patient",
+    "key": "infection type",
+    "value": "bacterial pneumonia",
+    "sentence": "The patient was diagnosed with bacterial pneumonia last year.",
+    "pair": "body/appointment"
+   },
+   {
+    "subtopic": "next visit",
+    "subject": "doctor",
+    "key": "checkup date",
+    "value": "October 15th",
+    "sentence": "The next scheduled checkup is set for October 15th.",
+    "pair": "body/appointment"
+   },
+   {
+    "subtopic": "medication",
+    "subject": "prescription",
+    "key": "dosage amount",
+    "value": "two tablets",
+    "sentence": "Take two tablets of the medication every morning.",
+    "pair": "body/appointment"
+   }
+  ],
+  "body/treatment": [
+   {
+    "subtopic": "allergies",
+    "subject": "patient",
+    "key": "history",
+    "value": "peanuts",
+    "sentence": "Patient has a severe allergy to peanuts.",
+    "pair": "body/treatment"
+   },
+   {
+    "subtopic": "medication",
+    "subject": "patient",
+    "key": "current",
+    "value": "antihistamines",
+    "sentence": "Patient is currently prescribed antihistamines for seasonal rhinitis.",
+    "pair": "body/treatment"
+   },
+   {
+    "subtopic": "surgery",
+    "subject": "patient",
+    "key": "procedure",
+    "value": "appendectomy",
+    "sentence": "Patient underwent an appendectomy three years ago.",
+    "pair": "body/treatment"
+   }
+  ],
+  "body/vaccination": [
+   {
+    "subtopic": "cholera prevention",
+    "subject": "child",
+    "key": "dose schedule",
+    "value": "two shots",
+    "sentence": "She received two shots as part of the child's routine immunization.",
+    "pair": "body/vaccination"
+   },
+   {
+    "subtopic": "dengue immunity",
+    "subject": "teenager",
+    "key": "booster shot",
+    "value": "required annually",
+    "sentence": "Her doctor advised a booster shot because she lives in an endemic area.",
+    "pair": "body/vaccination"
+   },
+   {
+    "subtopic": "tetanus status",
+    "subject": "elderly man",
+    "key": "last update",
+    "value": "ten years ago",
+    "sentence": "His last tetanus injection was given ten years ago during a dental procedure.",
+    "pair": "body/vaccination"
+   }
+  ],
+  "body/symptom": [
+   {
+    "subtopic": "chronic pain",
+    "subject": "lower back",
+    "key": "throbbing intensity",
+    "value": "constant mild",
+    "sentence": "She experiences a constant, mild throbbing in her lower back.",
+    "pair": "body/symptom"
+   },
+   {
+    "subtopic": "movement limitation",
+    "subject": "ankle",
+    "key": "swelling stiffness",
+    "value": "limited range",
+    "sentence": "Swelling and stiffness in her ankle have limited her range of motion.",
+    "pair": "body/symptom"
+   },
+   {
+    "subtopic": "fatigue",
+    "subject": "energy level",
+    "key": "extreme tiredness",
+    "value": "wakes early",
+    "sentence": "Extreme tiredness causes her to wake up before her alarm.",
+    "pair": "body/symptom"
+   }
+  ],
+  "body/other": [
+   {
+    "subtopic": "hobbies",
+    "subject": "jane",
+    "key": "frequent reader",
+    "value": "library visits",
+    "sentence": "Jane loves visiting the local library every weekend.",
+    "pair": "body/other"
+   },
+   {
+    "subtopic": "allergies",
+    "subject": "tom",
+    "key": "potato sensitivity",
+    "value": "severe reaction",
+    "sentence": "Tom must avoid potatoes due to his severe reaction.",
+    "pair": "body/other"
+   },
+   {
+    "subtopic": "languages",
+    "subject": "maria",
+    "key": "speaks fluent",
+    "value": "spans three",
+    "sentence": "Maria speaks fluent Spanish, French, and Italian.",
+    "pair": "body/other"
+   }
+  ],
+  "household/property": [
+   {
+    "subtopic": "ownership",
+    "subject": "neighborland",
+    "key": "boundary marker",
+    "value": "wooden post",
+    "sentence": "The neighbor's fence ends at that old wooden post.",
+    "pair": "household/property"
+   },
+   {
+    "subtopic": "utilities",
+    "subject": "mainline",
+    "key": "water leak",
+    "value": "serviced by city",
+    "sentence": "A pipe behind the garage is now serviced by the city.",
+    "pair": "household/property"
+   },
+   {
+    "subtopic": "sales",
+    "subject": "renovated home",
+    "key": "listing price",
+    "value": "$450000",
+    "sentence": "The renovated home is listed for $450000.",
+    "pair": "household/property"
+   }
+  ],
+  "household/room": [
+   {
+    "subtopic": "occupancy",
+    "subject": "guest",
+    "key": "arranged",
+    "value": "for visit",
+    "sentence": "The extra mattress was set up for the overnight guest.",
+    "pair": "household/room"
+   },
+   {
+    "subtopic": "decoration",
+    "subject": "living room",
+    "key": "style",
+    "value": "modern minimal",
+    "sentence": "A white sofa anchors the living room with a modern minimal aesthetic.",
+    "pair": "household/room"
+   },
+   {
+    "subtopic": "storage",
+    "subject": "draft room",
+    "key": "supplies",
+    "value": "emergency stock",
+    "sentence": "The draft room holds a complete stock of emergency supplies.",
+    "pair": "household/room"
+   }
+  ],
+  "household/garden": [
+   {
+    "subtopic": "planting",
+    "subject": "rosebed",
+    "key": "pruning schedule",
+    "value": "summer trim",
+    "sentence": "The rosebushes require a hard cut back in early summer to encourage new growth.",
+    "pair": "household/garden"
+   },
+   {
+    "subtopic": "watering",
+    "subject": "orchard",
+    "key": "drought tolerance",
+    "value": "low maintenance",
+    "sentence": "These fruit trees are resilient and can survive long dry spells with minimal supplemental irrigation.",
+    "pair": "household/garden"
+   },
+   {
+    "subtopic": "soil",
+    "subject": "garden bed",
+    "key": "organic amendment",
+    "value": "compost mix",
+    "sentence": "A layer of decomposed compost is spread over the beds each spring to improve drainage.",
+    "pair": "household/garden"
+   }
+  ],
+  "household/furniture": [
+   {
+    "subtopic": "storage",
+    "subject": "wardrobe",
+    "key": "seasonal clothes",
+    "value": "folded neatly",
+    "sentence": "All winter coats are stacked in the corner.",
+    "pair": "household/furniture"
+   },
+   {
+    "subtopic": "entertainment",
+    "subject": "sofa",
+    "key": "coffee table",
+    "value": "wooden surface",
+    "sentence": "A glass vase sits on the table.",
+    "pair": "household/furniture"
+   },
+   {
+    "subtopic": "security",
+    "subject": "window",
+    "key": "curtain",
+    "value": "drawn tight",
+    "sentence": "Heavy drapes block the view completely.",
+    "pair": "household/furniture"
+   }
+  ],
+  "household/appliance": [
+   {
+    "subtopic": "washer settings",
+    "subject": "dishwasher",
+    "key": "cycle duration",
+    "value": "30 minutes",
+    "sentence": "The dishwasher runs for half an hour on standard mode.",
+    "pair": "household/appliance"
+   },
+   {
+    "subtopic": "power usage",
+    "subject": "refrigerator",
+    "key": "monthly cost",
+    "value": "$45.20",
+    "sentence": "My fridge costs about forty-five dollars to run this month.",
+    "pair": "household/appliance"
+   },
+   {
+    "subtopic": "storage capacity",
+    "subject": "oven",
+    "key": "maximum load",
+    "value": "three pans",
+    "sentence": "You can fit three baking trays inside the oven at once.",
+    "pair": "household/appliance"
+   }
+  ],
+  "household/electronics": [
+   {
+    "subtopic": "storage capacity",
+    "subject": "hard drive",
+    "key": "total space",
+    "value": "2 terabytes",
+    "sentence": "The internal drive holds 2 terabytes of data.",
+    "pair": "household/electronics"
+   },
+   {
+    "subtopic": "power source",
+    "subject": "laptop",
+    "key": "battery life",
+    "value": "6 hours",
+    "sentence": "This device runs for 6 hours on a single charge.",
+    "pair": "household/electronics"
+   },
+   {
+    "subtopic": "connection type",
+    "subject": "router",
+    "key": "speed limit",
+    "value": "500 mbps",
+    "sentence": "The network modem provides a maximum speed of 500 mbps.",
+    "pair": "household/electronics"
+   }
+  ],
+  "household/tool": [
+   {
+    "subtopic": "shovels",
+    "subject": "clay",
+    "key": "used",
+    "value": "digging dirt",
+    "sentence": "The clay shovel was used to dig the garden dirt.",
+    "pair": "household/tool"
+   }
+  ],
+  "household/repair": [],
+  "household/cleaning": [
+   {
+    "subtopic": "laundry routine",
+    "subject": "weekly schedule",
+    "key": "messy dishes",
+    "value": "wash after dinner",
+    "sentence": "I must wash the dishes after dinner before the next meal.",
+    "pair": "household/cleaning"
+   },
+   {
+    "subtopic": "pet care",
+    "subject": "dog needs",
+    "key": "leash outside",
+    "value": "walk two times daily",
+    "sentence": "My dog needs a two-mile walk twice every day.",
+    "pair": "household/cleaning"
+   },
+   {
+    "subtopic": "storage habit",
+    "subject": "seasonal items",
+    "key": "garage shed",
+    "value": "organize by category",
+    "sentence": "All seasonal items should be organized by category in the garage.",
+    "pair": "household/cleaning"
+   }
+  ],
+  "household/utility": [],
+  "household/plant": [
+   {
+    "subtopic": "irrigation",
+    "subject": "geranium",
+    "key": "water needs",
+    "value": "once weekly",
+    "sentence": "The plant requires watering every week during summer.",
+    "pair": "household/plant"
+   },
+   {
+    "subtopic": "pot size",
+    "subject": "bonsai",
+    "key": "drainage holes",
+    "value": "avoid waterlogging",
+    "sentence": "Proper drainage is essential for preventing root rot.",
+    "pair": "household/plant"
+   },
+   {
+    "subtopic": "lighting",
+    "subject": "succulent",
+    "key": "direct sun",
+    "value": "6 hours daily",
+    "sentence": "This species thrives with six hours of direct sunlight.",
+    "pair": "household/plant"
+   }
+  ],
+  "household/storage": [
+   {
+    "subtopic": "organization",
+    "subject": "attic",
+    "key": "seasonal gear",
+    "value": "old winter coats",
+    "sentence": "Stacking old winter coats in the attic keeps them warm during the next cold season.",
+    "pair": "household/storage"
+   },
+   {
+    "subtopic": "inventory",
+    "subject": "pantry",
+    "key": "spare parts",
+    "value": "emergency batteries",
+    "sentence": "A box of emergency batteries in the pantry ensures power stays available during sudden outages.",
+    "pair": "household/storage"
+   },
+   {
+    "subtopic": "planning",
+    "subject": "garage",
+    "key": "future projects",
+    "value": "wood scraps",
+    "sentence": "Keeping wood scraps in the garage makes finishing a future DIY project much faster.",
+    "pair": "household/storage"
+   }
+  ],
+  "household/decor": [
+   {
+    "subtopic": "lighting",
+    "subject": "ceiling",
+    "key": "ambient",
+    "value": "cold white",
+    "sentence": "Recessed LED fixtures provide bright illumination.",
+    "pair": "household/decor"
+   },
+   {
+    "subtopic": "plants",
+    "subject": "living room",
+    "key": "low light",
+    "value": "snake plant",
+    "sentence": "A sturdy snake plant thrives in the corner.",
+    "pair": "household/decor"
+   },
+   {
+    "subtopic": "furniture",
+    "subject": "sofa",
+    "key": "leather",
+    "value": "navy blue",
+    "sentence": "The worn leather sofa needs repair.",
+    "pair": "household/decor"
+   }
+  ],
+  "household/other": [
+   {
+    "subtopic": "ownership",
+    "subject": "owner",
+    "key": "property",
+    "value": "home",
+    "sentence": "They own a house in the suburbs.",
+    "pair": "household/other"
+   },
+   {
+    "subtopic": "pet",
+    "subject": "owner",
+    "key": "breed",
+    "value": "dog",
+    "sentence": "Their pet is a golden retriever.",
+    "pair": "household/other"
+   },
+   {
+    "subtopic": "interest",
+    "subject": "hobby",
+    "key": "game",
+    "value": "chess",
+    "sentence": "They enjoy playing chess every weekend.",
+    "pair": "household/other"
+   }
+  ],
+  "relations/parent": [
+   {
+    "subtopic": "parental status",
+    "subject": "child",
+    "key": "biological relation",
+    "value": "mother",
+    "sentence": "Her mother is the woman who gave birth to her.",
+    "pair": "relations/parent"
+   },
+   {
+    "subtopic": "parental status",
+    "subject": "child",
+    "key": "biological relation",
+    "value": "father",
+    "sentence": "Her father is the man who provided genetic material.",
+    "pair": "relations/parent"
+   },
+   {
+    "subtopic": "parental status",
+    "subject": "child",
+    "key": "legal relation",
+    "value": "adoptive mother",
+    "sentence": "Her adoptive mother is the woman who legally adopted her.",
+    "pair": "relations/parent"
+   }
+  ],
+  "relations/sibling": [
+   {
+    "subtopic": "age",
+    "subject": "younger brother",
+    "key": "birth year",
+    "value": "1995",
+    "sentence": "His younger brother was born in 1995.",
+    "pair": "relations/sibling"
+   },
+   {
+    "subtopic": "occupation",
+    "subject": "older sister",
+    "key": "job title",
+    "value": "teacher",
+    "sentence": "My older sister works as a teacher.",
+    "pair": "relations/sibling"
+   },
+   {
+    "subtopic": "location",
+    "subject": "cousin",
+    "key": "lives now",
+    "value": "London",
+    "sentence": "One of my cousins currently lives in London.",
+    "pair": "relations/sibling"
+   }
+  ],
+  "relations/child": [
+   {
+    "subtopic": "relationship",
+    "subject": "parent",
+    "key": "age",
+    "value": "17 years",
+    "sentence": "My child turned seventeen last month.",
+    "pair": "relations/child"
+   },
+   {
+    "subtopic": "relationship",
+    "subject": "parent",
+    "key": "occupation",
+    "value": "teacher",
+    "sentence": "She works as a math teacher at a local school.",
+    "pair": "relations/child"
+   },
+   {
+    "subtopic": "living situation",
+    "subject": "parent",
+    "key": "location",
+    "value": "next door",
+    "sentence": "They live in the house right next to ours.",
+    "pair": "relations/child"
+   }
+  ],
+  "relations/partner": [
+   {
+    "subtopic": "living arrangement",
+    "subject": "partner",
+    "key": "cohabitation",
+    "value": "yes",
+    "sentence": "They live together in the same household.",
+    "pair": "relations/partner"
+   },
+   {
+    "subtopic": "shared history",
+    "subject": "partner",
+    "key": "marriage duration",
+    "value": "ten years",
+    "sentence": "They have been married for ten years.",
+    "pair": "relations/partner"
+   },
+   {
+    "subtopic": "financial status",
+    "subject": "partner",
+    "key": "income level",
+    "value": "middle class",
+    "sentence": "Their combined income places them in the middle class.",
+    "pair": "relations/partner"
+   }
+  ],
+  "relations/friend": [
+   {
+    "subtopic": "shared interest",
+    "subject": "hiking",
+    "key": "favorite trails",
+    "value": "map app",
+    "sentence": "She loves exploring the mountain trails with me.",
+    "pair": "relations/friend"
+   },
+   {
+    "subtopic": "shared hobby",
+    "subject": "cooking",
+    "key": "secret recipes",
+    "value": "family dinner",
+    "sentence": "We often gather to try out new dishes together.",
+    "pair": "relations/friend"
+   },
+   {
+    "subtopic": "mutual friend",
+    "subject": "teacher",
+    "key": "graduation gift",
+    "value": "photo album",
+    "sentence": "He gave us a scrapbook from their class reunion.",
+    "pair": "relations/friend"
+   }
+  ],
+  "relations/colleague": [],
+  "relations/neighbour": [],
+  "relations/anniversary": [
+   {
+    "subtopic": "spouse",
+    "subject": "marriage date",
+    "key": "celebration",
+    "value": "50 years",
+    "sentence": "The couple celebrated 50 years of marriage on Sunday.",
+    "pair": "relations/anniversary"
+   },
+   {
+    "subtopic": "partner",
+    "subject": "engagement date",
+    "key": "proposal",
+    "value": "first kiss",
+    "sentence": "They exchanged their first kiss during their proposal.",
+    "pair": "relations/anniversary"
+   },
+   {
+    "subtopic": "child",
+    "subject": "birthday date",
+    "key": "anniversary",
+    "value": "first step",
+    "sentence": "Her first step happened on her third birthday.",
+    "pair": "relations/anniversary"
+   }
+  ],
+  "relations/contact": [
+   {
+    "subtopic": "spouse",
+    "subject": "partner",
+    "key": "married year",
+    "value": "2015",
+    "sentence": "The partner and spouse married in 2015.",
+    "pair": "relations/contact"
+   },
+   {
+    "subtopic": "address",
+    "subject": "home",
+    "key": "street address",
+    "value": "124 Oak avenue",
+    "sentence": "The home address is on 124 Oak avenue.",
+    "pair": "relations/contact"
+   },
+   {
+    "subtopic": "phone",
+    "subject": "mobile",
+    "key": "cell number",
+    "value": "555-0198",
+    "sentence": "The cell number is 555-0198.",
+    "pair": "relations/contact"
+   }
+  ],
+  "relations/conflict": [
+   {
+    "subtopic": "child",
+    "subject": "elder sister",
+    "key": "frequent argument",
+    "value": "over money",
+    "sentence": "They often argued about money.",
+    "pair": "relations/conflict"
+   },
+   {
+    "subtopic": "tenant",
+    "subject": "young neighbor",
+    "key": "loud parties",
+    "value": "noise complaints",
+    "sentence": "He made noise complaints about the parties.",
+    "pair": "relations/conflict"
+   },
+   {
+    "subtopic": "boss",
+    "subject": "senior partner",
+    "key": "micromanagement",
+    "value": "strict control",
+    "sentence": "She had strict control over his work.",
+    "pair": "relations/conflict"
+   }
+  ],
+  "relations/care": [
+   {
+    "subtopic": "medical support",
+    "subject": "doctor",
+    "key": "regular checkups",
+    "value": "every six months",
+    "sentence": "He requires an annual physical examination to monitor his blood pressure.",
+    "pair": "relations/care"
+   },
+   {
+    "subtopic": "financial aid",
+    "subject": "employer",
+    "key": "paid leave",
+    "value": "ten working days",
+    "sentence": "She is entitled to two weeks of vacation time each year.",
+    "pair": "relations/care"
+   },
+   {
+    "subtopic": "housing support",
+    "subject": "social worker",
+    "key": "rent assistance",
+    "value": "partial subsidy",
+    "sentence": "They receive monthly payments to help cover the rent for their apartment.",
+    "pair": "relations/care"
+   }
+  ],
+  "relations/gift": [
+   {
+    "subtopic": "recipients",
+    "subject": "friend",
+    "key": "gift received",
+    "value": "handmade bracelet",
+    "sentence": "She gave me a handmade bracelet for my birthday.",
+    "pair": "relations/gift"
+   },
+   {
+    "subtopic": "donors",
+    "subject": "colleague",
+    "key": "gift given",
+    "value": "office supplies",
+    "sentence": "He brought a box of office supplies as a thank you.",
+    "pair": "relations/gift"
+   },
+   {
+    "subtopic": "history",
+    "subject": "family member",
+    "key": "annual gift",
+    "value": "monogrammed scarf",
+    "sentence": "They have given her a monogrammed scarf every Christmas for years.",
+    "pair": "relations/gift"
+   }
+  ],
+  "relations/visit": [
+   {
+    "subtopic": "destination",
+    "subject": "location",
+    "key": "beach",
+    "value": "relaxing",
+    "sentence": "We visited a relaxing beach for a weekend getaway.",
+    "pair": "relations/visit"
+   },
+   {
+    "subtopic": "friendship",
+    "subject": "colleague",
+    "key": "celebration",
+    "value": "birthday party",
+    "sentence": "Our colleague organized a fun birthday party with many guests.",
+    "pair": "relations/visit"
+   },
+   {
+    "subtopic": "activity",
+    "subject": "neighbor",
+    "key": "garden",
+    "value": "workshop",
+    "sentence": "Our neighbor taught us how to build a vegetable garden.",
+    "pair": "relations/visit"
+   }
+  ],
+  "relations/other": [
+   {
+    "subtopic": "career",
+    "subject": "company",
+    "key": "position",
+    "value": "manager role",
+    "sentence": "She has served as a department manager for five years.",
+    "pair": "relations/other"
+   },
+   {
+    "subtopic": "hobbies",
+    "subject": "family member",
+    "key": "activity",
+    "value": "go hiking",
+    "sentence": "They enjoy taking weekend trips to local hiking trails.",
+    "pair": "relations/other"
+   },
+   {
+    "subtopic": "interests",
+    "subject": "neighbor",
+    "key": "interest",
+    "value": "collect vintage cars",
+    "sentence": "He spends his weekends restoring classic automobiles in the garage.",
+    "pair": "relations/other"
+   }
+  ],
+  "work/employer": [
+   {
+    "subtopic": "tenure",
+    "subject": "years",
+    "key": "start",
+    "value": "2018",
+    "sentence": "Joined the company in 2018",
+    "pair": "work/employer"
+   },
+   {
+    "subtopic": "role",
+    "subject": "position",
+    "key": "lead",
+    "value": "project manager",
+    "sentence": "Serves as the lead project manager",
+    "pair": "work/employer"
+   },
+   {
+    "subtopic": "location",
+    "subject": "office",
+    "key": "base",
+    "value": "Seattle headquarters",
+    "sentence": "Based at the Seattle headquarters",
+    "pair": "work/employer"
+   }
+  ],
+  "work/role": [
+   {
+    "subtopic": "current position",
+    "subject": "team lead",
+    "key": "project coordinator",
+    "value": "software engineering",
+    "sentence": "Lead the software engineering team as a project coordinator.",
+    "pair": "work/role"
+   },
+   {
+    "subtopic": "industry expertise",
+    "subject": "data scientist",
+    "key": "machine learning",
+    "value": "neural networks",
+    "sentence": "Specializes in neural networks within the field of data science.",
+    "pair": "work/role"
+   },
+   {
+    "subtopic": "certification",
+    "subject": "it professional",
+    "key": "cybersecurity",
+    "value": "compliance training",
+    "sentence": "Completed advanced cybersecurity compliance training for the IT professional.",
+    "pair": "work/role"
+   }
+  ],
+  "work/duty": [
+   {
+    "subtopic": "Project Lead",
+    "subject": "Sarah Chen",
+    "key": "Q3 milestone",
+    "value": "delivered on time",
+    "sentence": "She oversaw the successful launch of the new software module ahead of schedule.",
+    "pair": "work/duty"
+   },
+   {
+    "subtopic": "Travel log",
+    "subject": "James Rossi",
+    "key": "conference visit",
+    "value": "attended in Tokyo",
+    "sentence": "He traveled to Japan last month to present findings at the global tech summit.",
+    "pair": "work/duty"
+   },
+   {
+    "subtopic": "Shift duty",
+    "subject": "Elena Gomez",
+    "key": "night patrol",
+    "value": "completed two weeks",
+    "sentence": "She has maintained continuous security coverage throughout the warehouse during all night shifts.",
+    "pair": "work/duty"
+   }
+  ],
+  "work/project": [
+   {
+    "subtopic": "collaboration",
+    "subject": "team",
+    "key": "deadline",
+    "value": "milestone reached",
+    "sentence": "The agile squad delivered the final milestone ahead of schedule.",
+    "pair": "work/project"
+   },
+   {
+    "subtopic": "resources",
+    "subject": "software",
+    "key": "license type",
+    "value": "enterprise plan",
+    "sentence": "Our organization secured the enterprise software license for all staff.",
+    "pair": "work/project"
+   },
+   {
+    "subtopic": "deliverables",
+    "subject": "prototype",
+    "key": "feedback",
+    "value": "user testing",
+    "sentence": "The initial prototype passed early user testing with high approval.",
+    "pair": "work/project"
+   }
+  ],
+  "work/schedule": [
+   {
+    "subtopic": "shifts",
+    "subject": "crew",
+    "key": "rotation pattern",
+    "value": "6-day cycle",
+    "sentence": "The team works a 6-day cycle followed by one rest day.",
+    "pair": "work/schedule"
+   },
+   {
+    "subtopic": "start",
+    "subject": "shifts",
+    "key": "location",
+    "value": "remote office",
+    "sentence": "Shifts begin at the main remote office location.",
+    "pair": "work/schedule"
+   },
+   {
+    "subtopic": "breaks",
+    "subject": "staff",
+    "key": "lunch duration",
+    "value": "30 minutes",
+    "sentence": "Each staff member is allotted 30 minutes for lunch.",
+    "pair": "work/schedule"
+   }
+  ],
+  "work/location": [
+   {
+    "subtopic": "industry",
+    "subject": "role",
+    "key": "experience",
+    "value": "software developer",
+    "sentence": "Worked as a full-stack engineer for eight years",
+    "pair": "work/location"
+   },
+   {
+    "subtopic": "office",
+    "subject": "address",
+    "key": "address",
+    "value": "123 Market Street, Seattle, WA",
+    "sentence": "Lived and worked in the Pike Place Market district",
+    "pair": "work/location"
+   },
+   {
+    "subtopic": "travel",
+    "subject": "destination",
+    "key": "vacation",
+    "value": "Paris, France",
+    "sentence": "Taken the train to Lyon to meet the family",
+    "pair": "work/location"
+   }
+  ],
+  "work/commute": [
+   {
+    "subtopic": "travel_time",
+    "subject": "morning_routine",
+    "key": "duration",
+    "value": "45_minutes",
+    "sentence": "The morning drive to the city center takes about forty-five minutes.",
+    "pair": "work/commute"
+   },
+   {
+    "subtopic": "public_transport",
+    "subject": "weekly_schedule",
+    "key": "frequency",
+    "value": "2_days_a_week",
+    "sentence": "I take the train home only two days each week.",
+    "pair": "work/commute"
+   },
+   {
+    "subtopic": "traffic_patterns",
+    "subject": "rush_hour",
+    "key": "congestion",
+    "value": "heavy_rainy_days",
+    "sentence": "Traffic is particularly bad during rainy mornings and evenings.",
+    "pair": "work/commute"
+   }
+  ],
+  "work/meeting": [
+   {
+    "subtopic": "project_status",
+    "subject": "deadline",
+    "key": "impact",
+    "value": "urgent",
+    "sentence": "The project launch is scheduled for next Friday.",
+    "pair": "work/meeting"
+   },
+   {
+    "subtopic": "attendance record",
+    "subject": "quarterly review",
+    "key": "notes",
+    "value": "completed",
+    "sentence": "I attended the quarterly review meeting on Monday.",
+    "pair": "work/meeting"
+   },
+   {
+    "subtopic": "resource allocation",
+    "subject": "budget",
+    "key": "limits",
+    "value": "approved",
+    "sentence": "Additional funds were approved for the marketing department.",
+    "pair": "work/meeting"
+   }
+  ],
+  "work/client": [
+   {
+    "subtopic": "account",
+    "subject": "account",
+    "key": "key key key key",
+    "value": "value value value value",
+    "sentence": "The client signed the contract in 2023.",
+    "pair": "work/client"
+   }
+  ],
+  "work/performance": [
+   {
+    "subtopic": "project lead",
+    "subject": "client satisfaction",
+    "key": "exceeds expectations",
+    "value": "top rated",
+    "sentence": "Received highest client satisfaction rating during the Q3 renewal.",
+    "pair": "work/performance"
+   },
+   {
+    "subtopic": "team leader",
+    "subject": "collaboration style",
+    "key": "drives synergy",
+    "value": "high efficiency",
+    "sentence": "Known for driving rapid team synergy and consistent output growth.",
+    "pair": "work/performance"
+   },
+   {
+    "subtopic": "innovation",
+    "subject": "product development",
+    "key": "high impact",
+    "value": "award winner",
+    "sentence": "Recognized with a design innovation award for the new dashboard feature.",
+    "pair": "work/performance"
+   }
+  ],
+  "work/promotion": [
+   {
+    "subtopic": "career milestone",
+    "subject": "colleague",
+    "key": "achievement",
+    "value": "project lead",
+    "sentence": "She successfully managed the team to deliver the project ahead of schedule.",
+    "pair": "work/promotion"
+   },
+   {
+    "subtopic": "compensation change",
+    "subject": "company",
+    "key": "bonus",
+    "value": "year-end payout",
+    "sentence": "He received a significant bonus at the end of the fiscal year.",
+    "pair": "work/promotion"
+   },
+   {
+    "subtopic": "internal transfer",
+    "subject": "office",
+    "key": "location change",
+    "value": "downtown hub",
+    "sentence": "The marketing team moved their offices to the new downtown headquarters.",
+    "pair": "work/promotion"
+   }
+  ],
+  "work/leave": [
+   {
+    "subtopic": "hours",
+    "subject": "manager",
+    "key": "approved",
+    "value": "ten extra",
+    "sentence": "The manager approved ten extra hours for the project.",
+    "pair": "work/leave"
+   },
+   {
+    "subtopic": "dates",
+    "subject": "team",
+    "key": "planned",
+    "value": "next Friday",
+    "sentence": "The team planned the meeting for next Friday.",
+    "pair": "work/leave"
+   },
+   {
+    "subtopic": "budget",
+    "subject": "accountant",
+    "key": "allocated",
+    "value": "five thousand",
+    "sentence": "The accountant allocated five thousand dollars for new software.",
+    "pair": "work/leave"
+   }
+  ],
+  "work/career": [
+   {
+    "subtopic": "tenure",
+    "subject": "role",
+    "key": "start date",
+    "value": "2018",
+    "sentence": "Joined the team as a junior analyst in early 2018.",
+    "pair": "work/career"
+   },
+   {
+    "subtopic": "skills",
+    "subject": "position",
+    "key": "certification",
+    "value": "google cloud",
+    "sentence": "Obtained a professional certification for cloud infrastructure management.",
+    "pair": "work/career"
+   },
+   {
+    "subtopic": "achievements",
+    "subject": "project",
+    "key": "outcome",
+    "value": "revenue growth",
+    "sentence": "Led a marketing initiative that increased annual sales by fifteen percent.",
+    "pair": "work/career"
+   }
+  ],
+  "work/workplace": [
+   {
+    "subtopic": "company history",
+    "subject": "firm name",
+    "key": "est year",
+    "value": "1985",
+    "sentence": "The company was established in 1985.",
+    "pair": "work/workplace"
+   },
+   {
+    "subtopic": "office location",
+    "subject": "building name",
+    "key": "address",
+    "value": "4th street",
+    "sentence": "The office is located at 4th street.",
+    "pair": "work/workplace"
+   },
+   {
+    "subtopic": "team structure",
+    "subject": "department head",
+    "key": "roles",
+    "value": "three members",
+    "sentence": "The department head manages three members.",
+    "pair": "work/workplace"
+   }
+  ],
+  "work/tool": [
+   {
+    "subtopic": "equipment",
+    "subject": "laptop",
+    "key": "brand model",
+    "value": "MacBook Pro",
+    "sentence": "The device has been used for years.",
+    "pair": "work/tool"
+   },
+   {
+    "subtopic": "software",
+    "subject": "keyboard",
+    "key": "layout type",
+    "value": "mechanical switches",
+    "sentence": "The keys provide a tactile feel.",
+    "pair": "work/tool"
+   }
+  ],
+  "work/other": [
+   {
+    "subtopic": "certification",
+    "subject": "developer",
+    "key": "security",
+    "value": "CIOWA certificate",
+    "sentence": "He holds a CIOWA security certification.",
+    "pair": "work/other"
+   },
+   {
+    "subtopic": "goal",
+    "subject": "career",
+    "key": "promotion",
+    "value": "lead engineer",
+    "sentence": "He plans to become a lead engineer this year.",
+    "pair": "work/other"
+   }
+  ],
+  "money/salary": [
+   {
+    "subtopic": "bonus",
+    "subject": "quarterly",
+    "key": "performance",
+    "value": "10000 dollars",
+    "sentence": "He received a one-thousand-dollar bonus for exceeding his quarterly targets.",
+    "pair": "money/salary"
+   },
+   {
+    "subtopic": "deduction",
+    "subject": "tax rate",
+    "key": "federal",
+    "value": "twenty-two percent",
+    "sentence": "The federal tax deduction from his paycheck was set at twenty-two percent.",
+    "pair": "money/salary"
+   }
+  ],
+  "money/payday": [
+   {
+    "subtopic": "installments",
+    "subject": "auto loan",
+    "key": "monthly payment",
+    "value": "150 dollars",
+    "sentence": "The car loan requires a monthly payment of 150 dollars.",
+    "pair": "money/payday"
+   },
+   {
+    "subtopic": "overdraft",
+    "subject": "credit card",
+    "key": "interest rate",
+    "value": "18 percent",
+    "sentence": "My credit card charges 18 percent interest on any overdrafts.",
+    "pair": "money/payday"
+   },
+   {
+    "subtopic": "savings",
+    "subject": "emergency fund",
+    "key": "goal amount",
+    "value": "5000 dollars",
+    "sentence": "I need to save up to 5000 dollars for an emergency fund.",
+    "pair": "money/payday"
+   }
+  ],
+  "money/expense": [],
+  "money/bill": [
+   {
+    "subtopic": "payment method",
+    "subject": "credit card",
+    "key": "last four digits",
+    "value": "4829",
+    "sentence": "The Visa card ending in 4829 was used for the recent purchase.",
+    "pair": "money/bill"
+   },
+   {
+    "subtopic": "invoice status",
+    "subject": "electricity bill",
+    "key": "outstanding amount",
+    "value": "125 dollars",
+    "sentence": "There is a remaining balance of $125 on the current utility invoice.",
+    "pair": "money/bill"
+   },
+   {
+    "subtopic": "transaction record",
+    "subject": "online transfer",
+    "key": "confirmation number",
+    "value": "TR-998231",
+    "sentence": "Please keep the confirmation number TR-998231 for your records regarding the wire transfer.",
+    "pair": "money/bill"
+   }
+  ],
+  "money/subscription": [
+   {
+    "subtopic": "streaming service",
+    "subject": "Netflix",
+    "key": "annual plan",
+    "value": "19.99/month",
+    "sentence": "Renewed automatically every June for twelve months",
+    "pair": "money/subscription"
+   },
+   {
+    "subtopic": "software license",
+    "subject": "Adobe",
+    "key": "monthly renewal",
+    "value": "39.99",
+    "sentence": "Charges credit card on the 15th of each month",
+    "pair": "money/subscription"
+   },
+   {
+    "subtopic": "gym membership",
+    "subject": "Equinox",
+    "key": "monthly fee",
+    "value": "299.00",
+    "sentence": "Includes unlimited access to all locations",
+    "pair": "money/subscription"
+   }
+  ],
+  "money/debt": [
+   {
+    "subtopic": "loans",
+    "subject": "automobile",
+    "key": "interest rate",
+    "value": "8.5 percent",
+    "sentence": "The auto loan carries an interest rate of 8.5 percent.",
+    "pair": "money/debt"
+   },
+   {
+    "subtopic": "installments",
+    "subject": "credit card",
+    "key": "minimum payment",
+    "value": "double digits",
+    "sentence": "The minimum payment on the credit card often requires double digits.",
+    "pair": "money/debt"
+   },
+   {
+    "subtopic": "overdraft",
+    "subject": "checking account",
+    "key": "fraudulent charge",
+    "value": "false transaction",
+    "sentence": "The checking account has a fraudulent charge that was never authorized.",
+    "pair": "money/debt"
+   }
+  ],
+  "money/loan": [
+   {
+    "subtopic": "repayment schedule",
+    "subject": "customer",
+    "key": "due date",
+    "value": "next month",
+    "sentence": "The loan payment is due next month.",
+    "pair": "money/loan"
+   },
+   {
+    "subtopic": "interest rate",
+    "subject": "borrower",
+    "key": "annual percentage",
+    "value": "5.25 percent",
+    "sentence": "Your interest rate is set at 5.25 percent.",
+    "pair": "money/loan"
+   },
+   {
+    "subtopic": "collateral status",
+    "subject": "asset",
+    "key": "secured by",
+    "value": "vehicle title",
+    "sentence": "This loan is secured by the vehicle title.",
+    "pair": "money/loan"
+   }
+  ],
+  "money/mortgage": [
+   {
+    "subtopic": "debt status",
+    "subject": "loan balance",
+    "key": "remaining amount",
+    "value": "$42,500",
+    "sentence": "The outstanding principal on the property loan is currently forty-two thousand five hundred dollars.",
+    "pair": "money/mortgage"
+   },
+   {
+    "subtopic": "payment schedule",
+    "subject": "monthly obligation",
+    "key": "due date",
+    "value": "first of month",
+    "sentence": "All required principal and interest payments are automatically deducted on the first day of each calendar month.",
+    "pair": "money/mortgage"
+   },
+   {
+    "subtopic": "equity growth",
+    "subject": "home value",
+    "key": "appreciation rate",
+    "value": "5.2 percent",
+    "sentence": "Market trends indicate the property value has increased by more than five percent over the last year.",
+    "pair": "money/mortgage"
+   }
+  ],
+  "money/investment": [
+   {
+    "subtopic": "savings",
+    "subject": "emergency fund",
+    "key": "liquidity",
+    "value": "high-yield savings account",
+    "sentence": "The emergency fund currently sits in a high-yield savings account to ensure immediate access during unexpected events.",
+    "pair": "money/investment"
+   },
+   {
+    "subtopic": "retirement",
+    "subject": "401k",
+    "key": "contribution limit",
+    "value": "max annual cap",
+    "sentence": "Contributions to the 401k reached the maximum annual cap allowed by current tax regulations.",
+    "pair": "money/investment"
+   },
+   {
+    "subtopic": "debt",
+    "subject": "student loans",
+    "key": "interest rate",
+    "value": "fixed monthly payment",
+    "sentence": "Student loans carry a fixed interest rate, requiring a consistent monthly payment schedule until the balance is cleared.",
+    "pair": "money/investment"
+   }
+  ],
+  "money/pension": [
+   {
+    "subtopic": "retirement fund status",
+    "subject": "employer plan",
+    "key": "annual contribution",
+    "value": "fully funded",
+    "sentence": "The annual contribution has reached the maximum allowed limit for this year.",
+    "pair": "money/pension"
+   },
+   {
+    "subtopic": "benefit eligibility",
+    "subject": "eligibility date",
+    "key": "retirement age",
+    "value": "eligible",
+    "sentence": "You become eligible to receive monthly payments after reaching retirement age.",
+    "pair": "money/pension"
+   },
+   {
+    "subtopic": "withdrawal restrictions",
+    "subject": "early distribution",
+    "key": "penalty tax",
+    "value": "forbidden",
+    "sentence": "Withdrawals before age sixty are subject to significant penalties and taxes.",
+    "pair": "money/pension"
+   }
+  ],
+  "money/budget": [
+   {
+    "subtopic": "saving",
+    "subject": "emergency fund",
+    "key": "liquid assets",
+    "value": "three months expense",
+    "sentence": "The emergency fund currently holds enough cash to cover three months of living expenses.",
+    "pair": "money/budget"
+   },
+   {
+    "subtopic": "spending",
+    "subject": "monthly limit",
+    "key": "discretionary cost",
+    "value": "under five hundred",
+    "sentence": "Monthly discretionary spending is capped at five hundred dollars for all non-essential items.",
+    "pair": "money/budget"
+   },
+   {
+    "subtopic": "debt",
+    "subject": "minimum payment",
+    "key": "installment plan",
+    "value": "due every tenth",
+    "sentence": "The installment plan requires a minimum payment to be due every tenth of the month.",
+    "pair": "money/budget"
+   }
+  ],
+  "money/purchase": [
+   {
+    "subtopic": "debt",
+    "subject": "grocery store",
+    "key": "remaining balance",
+    "value": "$42.50",
+    "sentence": "The grocery store invoice shows a remaining balance of forty-two dollars fifty cents.",
+    "pair": "money/purchase"
+   },
+   {
+    "subtopic": "payment",
+    "subject": "electronics shop",
+    "key": "final total",
+    "value": "1200 dollars",
+    "sentence": "The electronics shop receipt lists a final total of one thousand two hundred dollars.",
+    "pair": "money/purchase"
+   },
+   {
+    "subtopic": "transfer",
+    "subject": "bank account",
+    "key": "incoming funds",
+    "value": "5000 units",
+    "sentence": "The bank account notification confirms an incoming transfer of five thousand units.",
+    "pair": "money/purchase"
+   }
+  ],
+  "money/price": [
+   {
+    "subtopic": "savings",
+    "subject": "personal",
+    "key": "emergency fund",
+    "value": "$5000",
+    "sentence": "The emergency fund currently holds five thousand dollars.",
+    "pair": "money/price"
+   },
+   {
+    "subtopic": "gifts",
+    "subject": "guest",
+    "key": "birthday present",
+    "value": "watch",
+    "sentence": "The guest brought a new wristwatch as a birthday present.",
+    "pair": "money/price"
+   },
+   {
+    "subtopic": "budget",
+    "subject": "travel",
+    "key": "flight cost",
+    "value": "one hundred",
+    "sentence": "The flight cost one hundred dollars for the trip.",
+    "pair": "money/price"
+   }
+  ],
+  "money/tax": [],
+  "money/benefit": [
+   {
+    "subtopic": "savings",
+    "subject": "John",
+    "key": "emergency fund",
+    "value": "three months expenses",
+    "sentence": "John keeps three months of living expenses in a high-yield savings account.",
+    "pair": "money/benefit"
+   },
+   {
+    "subtopic": "insurance",
+    "subject": "Sarah",
+    "key": "auto coverage",
+    "value": "collision damage clause",
+    "sentence": "Sarah's auto policy includes full collision and comprehensive coverage for her sedan.",
+    "pair": "money/benefit"
+   },
+   {
+    "subtopic": "taxes",
+    "subject": "David",
+    "key": "deductions claimed",
+    "value": "federal income",
+    "sentence": "David successfully claimed the standard deduction and itemized charitable contributions on his federal income tax return.",
+    "pair": "money/benefit"
+   }
+  ],
+  "money/other": [
+   {
+    "subtopic": "credit card",
+    "subject": "guest",
+    "key": "card number",
+    "value": "ending in 4829",
+    "sentence": "This guest has a Visa card ending in 4829.",
+    "pair": "money/other"
+   },
+   {
+    "subtopic": "travel",
+    "subject": "guest",
+    "key": "reservation",
+    "value": "booked for July",
+    "sentence": "The guest has booked a room for July.",
+    "pair": "money/other"
+   },
+   {
+    "subtopic": "preferences",
+    "subject": "guest",
+    "key": "allergens",
+    "value": "peanuts",
+    "sentence": "This guest has a severe allergy to peanuts.",
+    "pair": "money/other"
+   }
+  ],
+  "learning/course": [
+   {
+    "subtopic": "basic arithmetic",
+    "subject": "mathematics",
+    "key": "fluency",
+    "value": "solving equations quickly",
+    "sentence": "I can add and subtract multi-digit numbers without errors",
+    "pair": "learning/course"
+   },
+   {
+    "subtopic": "grammar rules",
+    "subject": "english language",
+    "key": "sentence structure",
+    "value": "identifying clauses and phrases",
+    "sentence": "My essay demonstrates strong command of proper punctuation",
+    "pair": "learning/course"
+   },
+   {
+    "subtopic": "history dates",
+    "subject": "us history",
+    "key": "memorizing dates",
+    "value": "placing events in timeline",
+    "sentence": "I know the specific years of major civil rights acts",
+    "pair": "learning/course"
+   }
+  ],
+  "learning/qualification": [
+   {
+    "subtopic": "certification",
+    "subject": "IT security",
+    "key": "industry standard",
+    "value": "Cisco Certified",
+    "sentence": "He earned the Cisco Certified Network Associate certification in 2021.",
+    "pair": "learning/qualification"
+   },
+   {
+    "subtopic": "training",
+    "subject": "public speaking",
+    "key": "leadership skills",
+    "value": "local conference",
+    "sentence": "She completed a three-day workshop on advanced public speaking techniques.",
+    "pair": "learning/qualification"
+   },
+   {
+    "subtopic": "course",
+    "subject": "Python programming",
+    "key": "web development",
+    "value": "full stack",
+    "sentence": "He finished the advanced Python for web development online course last year.",
+    "pair": "learning/qualification"
+   }
+  ],
+  "learning/exam": [],
+  "learning/skill": [
+   {
+    "subtopic": "programming",
+    "subject": "Python",
+    "key": "frameworks",
+    "value": "flask,django,selenium",
+    "sentence": "Developed web applications using Flask and Django.",
+    "pair": "learning/skill"
+   },
+   {
+    "subtopic": "languages",
+    "subject": "Spanish",
+    "key": "fluency",
+    "value": "speaking,reading,listening",
+    "sentence": "Fluent in Spanish for both reading and speaking.",
+    "pair": "learning/skill"
+   },
+   {
+    "subtopic": "finance",
+    "subject": "budgeting",
+    "key": "planning",
+    "value": "savings,expenses,tracking",
+    "sentence": "Maintained a detailed personal budget tracking savings and expenses.",
+    "pair": "learning/skill"
+   }
+  ],
+  "learning/language": [
+   {
+    "subtopic": "vocabulary",
+    "subject": "esl",
+    "key": "french",
+    "value": "Bonjour comment allez-vous",
+    "sentence": "Hello how are you in French",
+    "pair": "learning/language"
+   },
+   {
+    "subtopic": "pronunciation",
+    "subject": "esl",
+    "key": "sound",
+    "value": "th sound",
+    "sentence": "Say the th sound like this",
+    "pair": "learning/language"
+   },
+   {
+    "subtopic": "grammar",
+    "subject": "esl",
+    "key": "structure",
+    "value": "past tense",
+    "sentence": "Used the past tense form",
+    "pair": "learning/language"
+   }
+  ],
+  "learning/teacher": [
+   {
+    "subtopic": "curriculum design",
+    "subject": "pedagogy",
+    "key": "adaptive method",
+    "value": "inquiry based",
+    "sentence": "She integrates inquiry-based learning into her daily lesson plans.",
+    "pair": "learning/teacher"
+   },
+   {
+    "subtopic": "class management",
+    "subject": "education",
+    "key": "positive reinforcement",
+    "value": "structured routine",
+    "sentence": "He maintains a structured routine that emphasizes positive reinforcement.",
+    "pair": "learning/teacher"
+   },
+   {
+    "subtopic": "special needs",
+    "subject": "instruction",
+    "key": "differentiated approach",
+    "value": "individual goals",
+    "sentence": "She uses a differentiated approach to help students meet individual goals.",
+    "pair": "learning/teacher"
+   }
+  ],
+  "learning/study": [
+   {
+    "subtopic": "grammar rules",
+    "subject": "English grammar",
+    "key": "past tense",
+    "value": "verb conjugation",
+    "sentence": "She walked to the store yesterday.",
+    "pair": "learning/study"
+   },
+   {
+    "subtopic": "capital cities",
+    "subject": "World Geography",
+    "key": "largest city",
+    "value": "population growth",
+    "sentence": "Mumbai is the most populous city in India.",
+    "pair": "learning/study"
+   },
+   {
+    "subtopic": "historical events",
+    "subject": "Modern History",
+    "key": "civil rights",
+    "value": "march movement",
+    "sentence": "The March on Washington demanded voting rights for African Americans.",
+    "pair": "learning/study"
+   }
+  ],
+  "learning/book": [
+   {
+    "subtopic": "calculus",
+    "subject": "math",
+    "key": "derivative",
+    "value": "limit definition",
+    "sentence": "A function's derivative measures instantaneous rate of change at a point.",
+    "pair": "learning/book"
+   },
+   {
+    "subtopic": "philosophy",
+    "subject": "ethics",
+    "key": "utilitarianism",
+    "value": "greatest good",
+    "sentence": "Actions are right if they maximize overall happiness for the majority.",
+    "pair": "learning/book"
+   },
+   {
+    "subtopic": "linguistics",
+    "subject": "grammar",
+    "key": "syntax",
+    "value": "word order",
+    "sentence": "Proper grammar dictates the arrangement of words to form coherent sentences.",
+    "pair": "learning/book"
+   }
+  ],
+  "learning/certification": [],
+  "learning/plan": [
+   {
+    "subtopic": "programming",
+    "subject": "python",
+    "key": "loop syntax",
+    "value": "for in range",
+    "sentence": "Use for loops to iterate over a list of items.",
+    "pair": "learning/plan"
+   },
+   {
+    "subtopic": "nutrition",
+    "subject": "healthy eating",
+    "key": "protein sources",
+    "value": "lean meat fish",
+    "sentence": "Choose lean meats and fish as primary protein sources.",
+    "pair": "learning/plan"
+   },
+   {
+    "subtopic": "history",
+    "subject": "ancient civilizations",
+    "key": "roman empire",
+    "value": "spans three centuries",
+    "sentence": "The roman empire spans three centuries of historical significance.",
+    "pair": "learning/plan"
+   }
+  ],
+  "learning/progress": [
+   {
+    "subtopic": "certification",
+    "subject": "Python",
+    "key": "completion",
+    "value": "advanced data analysis",
+    "sentence": "Completed the advanced data analysis certification with a final grade of 95 percent",
+    "pair": "learning/progress"
+   },
+   {
+    "subtopic": "skill",
+    "subject": "public speaking",
+    "key": "experience",
+    "value": "3 years corporate training",
+    "sentence": "Accumulated over three years of corporate training experience leading team presentations",
+    "pair": "learning/progress"
+   },
+   {
+    "subtopic": "interest",
+    "subject": "astronomy",
+    "key": "hobby",
+    "value": "stargazing telescope maintenance",
+    "sentence": "Maintains a professional telescope for weekly stargazing sessions and observational logging",
+    "pair": "learning/progress"
+   }
+  ],
+  "learning/other": [
+   {
+    "subtopic": "skills",
+    "subject": "writing",
+    "key": "attention detail",
+    "value": "proofread thoroughly",
+    "sentence": "I proofread every manuscript with extreme care.",
+    "pair": "learning/other"
+   },
+   {
+    "subtopic": "interest",
+    "subject": "history",
+    "key": "ancient times",
+    "value": "medieval artifacts",
+    "sentence": "I collect rare medieval artifacts from around the world.",
+    "pair": "learning/other"
+   },
+   {
+    "subtopic": "hobby",
+    "subject": "gardening",
+    "key": "sustainable practices",
+    "value": "organic compost",
+    "sentence": "My garden relies entirely on organic compost for growth.",
+    "pair": "learning/other"
+   }
+  ],
+  "leisure/sport": [
+   {
+    "subtopic": "activities",
+    "subject": "hobby",
+    "key": "enjoyable",
+    "value": "running daily",
+    "sentence": "She enjoys running every morning.",
+    "pair": "leisure/sport"
+   },
+   {
+    "subtopic": "events",
+    "subject": "attendance",
+    "key": "competitive",
+    "value": "wrestling finals",
+    "sentence": "He competed in the regional wrestling finals last year.",
+    "pair": "leisure/sport"
+   },
+   {
+    "subtopic": "hobbies",
+    "subject": "interests",
+    "key": "active",
+    "value": "climbing walls",
+    "sentence": "Her favorite pastime is free climbing on local walls.",
+    "pair": "leisure/sport"
+   }
+  ],
+  "leisure/team": [
+   {
+    "subtopic": "volleyball",
+    "subject": "club",
+    "key": "regular player",
+    "value": "seasons active",
+    "sentence": "Has been playing for the local club since last year.",
+    "pair": "leisure/team"
+   },
+   {
+    "subtopic": "travel",
+    "subject": "destination",
+    "key": "frequent spot",
+    "value": "summer vacation",
+    "sentence": "Loves spending weekends at the coastal resort town.",
+    "pair": "leisure/team"
+   },
+   {
+    "subtopic": "cooking",
+    "subject": "recipe book",
+    "key": "favorite dish",
+    "value": "grilled fish sauce",
+    "sentence": "Often prepares spicy grilled fish for dinner parties.",
+    "pair": "leisure/team"
+   }
+  ],
+  "leisure/instrument": [],
+  "leisure/game": [
+   {
+    "subtopic": "board",
+    "subject": "chess",
+    "key": "master",
+    "value": "grandmaster",
+    "sentence": "She has held the national chess championship three times in a row.",
+    "pair": "leisure/game"
+   },
+   {
+    "subtopic": "video",
+    "subject": "pacman",
+    "key": "fan",
+    "value": "collector",
+    "sentence": "He spent his entire childhood collecting every original arcade cabinet available.",
+    "pair": "leisure/game"
+   },
+   {
+    "subtopic": "reading",
+    "subject": "library",
+    "key": "borrower",
+    "value": "enthusiast",
+    "sentence": "She checks out four new books from the community center every single month.",
+    "pair": "leisure/game"
+   }
+  ],
+  "leisure/film": [
+   {
+    "subtopic": "genre",
+    "subject": "scifi",
+    "key": "space opera",
+    "value": "galaxy far away",
+    "sentence": "She grew up watching epic space operas set in galaxies far away.",
+    "pair": "leisure/film"
+   },
+   {
+    "subtopic": "genre",
+    "subject": "horror",
+    "key": "slasher films",
+    "value": "stuck on them",
+    "sentence": "He spent his entire childhood stuck on slasher films that never ended.",
+    "pair": "leisure/film"
+   },
+   {
+    "subtopic": "role",
+    "subject": "cinema",
+    "key": "movie buff",
+    "value": "collects tickets",
+    "sentence": "As a movie buff, she collects tickets from every film she sees.",
+    "pair": "leisure/film"
+   }
+  ],
+  "leisure/television": [],
+  "leisure/cooking": [
+   {
+    "subtopic": "pasta",
+    "subject": "ingredients",
+    "key": "olive oil",
+    "value": "garlic sauce",
+    "sentence": "She adds plenty of fresh garlic to her pasta sauce.",
+    "pair": "leisure/cooking"
+   },
+   {
+    "subtopic": "baking",
+    "subject": "oven temperature",
+    "key": "preheat high",
+    "value": "350 degrees",
+    "sentence": "Remember to preheat the oven to 350 degrees before baking.",
+    "pair": "leisure/cooking"
+   },
+   {
+    "subtopic": "spices",
+    "subject": "fresh herbs",
+    "key": "taste better",
+    "value": "sliced basil",
+    "sentence": "Freshly sliced basil makes the dish taste much better.",
+    "pair": "leisure/cooking"
+   }
+  ],
+  "leisure/outdoor": [
+   {
+    "subtopic": "cycling",
+    "subject": "local park",
+    "key": "race",
+    "value": "every sunday",
+    "sentence": "She races every sunday in the local park.",
+    "pair": "leisure/outdoor"
+   }
+  ],
+  "leisure/craft": [
+   {
+    "subtopic": "woodworking",
+    "subject": "wooden chair",
+    "key": "hand-carved",
+    "value": "red oak",
+    "sentence": "The wooden chair was hand-carved from red oak.",
+    "pair": "leisure/craft"
+   },
+   {
+    "subtopic": "knitting",
+    "subject": "scarf",
+    "key": "soft wool",
+    "value": "cream white",
+    "sentence": "A soft wool scarf in cream white is currently being knitted.",
+    "pair": "leisure/craft"
+   },
+   {
+    "subtopic": "baking",
+    "subject": "cookies",
+    "key": "chocolate chip",
+    "value": "warm oven",
+    "sentence": "Baking chocolate chip cookies in a warm oven produces a delightful smell.",
+    "pair": "leisure/craft"
+   }
+  ],
+  "leisure/club": [
+   {
+    "subtopic": "membership",
+    "subject": "gym",
+    "key": "annual fee",
+    "value": "subscription active",
+    "sentence": "The gym membership requires an annual fee but is currently active.",
+    "pair": "leisure/club"
+   },
+   {
+    "subtopic": "interest",
+    "subject": "photography club",
+    "key": "local chapter",
+    "value": "weekly meetup",
+    "sentence": "He attends the local photography club for their weekly meetup.",
+    "pair": "leisure/club"
+   },
+   {
+    "subtopic": "hobby",
+    "subject": "book club",
+    "key": "literary society",
+    "value": "monthly reading",
+    "sentence": "She joined the literary society book club to discuss the monthly reading.",
+    "pair": "leisure/club"
+   }
+  ],
+  "leisure/event": [
+   {
+    "subtopic": "concert",
+    "subject": "venue",
+    "key": "location",
+    "value": "book tickets",
+    "sentence": "Check the venue website to book tickets.",
+    "pair": "leisure/event"
+   },
+   {
+    "subtopic": "workshop",
+    "subject": "topic",
+    "key": "attend date",
+    "value": "join us",
+    "sentence": "Join us for the upcoming technology workshop.",
+    "pair": "leisure/event"
+   },
+   {
+    "subtopic": "movie",
+    "subject": "genre",
+    "key": "watch streaming",
+    "value": "order delivery",
+    "sentence": "Order delivery for your favorite movie genre.",
+    "pair": "leisure/event"
+   }
+  ],
+  "leisure/routine": [
+   {
+    "subtopic": "habitual hobby",
+    "subject": "hobbyist",
+    "key": "weekly schedule",
+    "value": "painting at dawn",
+    "sentence": "She always starts her week by painting at first light.",
+    "pair": "leisure/routine"
+   },
+   {
+    "subtopic": "travel pattern",
+    "subject": "traveler",
+    "key": "favorite route",
+    "value": "coastal highway",
+    "sentence": "He prefers driving the scenic coastal highway on every vacation.",
+    "pair": "leisure/routine"
+   },
+   {
+    "subtopic": "meal routine",
+    "subject": "cook",
+    "key": "dinner time",
+    "value": "seven pm",
+    "sentence": "The family always gathers for dinner at seven in the evening.",
+    "pair": "leisure/routine"
+   }
+  ],
+  "leisure/social": [
+   {
+    "subtopic": "hobbies",
+    "subject": "gardening",
+    "key": "plot",
+    "value": "tomatoes roses",
+    "sentence": "Every spring I plant the vegetable garden.",
+    "pair": "leisure/social"
+   },
+   {
+    "subtopic": "events",
+    "subject": "community",
+    "key": "festival",
+    "value": "local park",
+    "sentence": "We attend the yearly music festival downtown.",
+    "pair": "leisure/social"
+   },
+   {
+    "subtopic": "transport",
+    "subject": "train",
+    "key": "trip",
+    "value": "coastal route",
+    "sentence": "She takes the train to visit her sister.",
+    "pair": "leisure/social"
+   }
+  ],
+  "leisure/collection": [
+   {
+    "subtopic": "hobbies",
+    "subject": "gardening",
+    "key": "annual blooms",
+    "value": "sun-drenched patio",
+    "sentence": "She tends a vibrant sun-drenched patio filled with annual blooms.",
+    "pair": "leisure/collection"
+   },
+   {
+    "subtopic": "collectibles",
+    "subject": "vintage coins",
+    "key": "rare mint",
+    "value": "1945 pennies",
+    "sentence": "His collection features rare mint 1945 pennies from the early era.",
+    "pair": "leisure/collection"
+   },
+   {
+    "subtopic": "reading",
+    "subject": "mystery novels",
+    "key": "classic authors",
+    "value": "murder mysteries",
+    "sentence": "He devours classic author murder mysteries late into the night.",
+    "pair": "leisure/collection"
+   }
+  ],
+  "travel/accommodation": [],
+  "travel/flight": [
+   {
+    "subtopic": "booking",
+    "subject": "airline",
+    "key": "departure time",
+    "value": "14:30",
+    "sentence": "The flight leaves at 2:30 PM.",
+    "pair": "travel/flight"
+   }
+  ],
+  "travel/booking": [
+   {
+    "subtopic": "domestic flight",
+    "subject": "departure airport",
+    "key": "final destination",
+    "value": "arrival city",
+    "sentence": "The flight leaves from Seattle and lands in Denver.",
+    "pair": "travel/booking"
+   },
+   {
+    "subtopic": "hotel reservation",
+    "subject": "guest name",
+    "key": "check-out date",
+    "value": "property name",
+    "sentence": "Mr. Smith's stay ends on the 14th at the Grand Plaza.",
+    "pair": "travel/booking"
+   },
+   {
+    "subtopic": "car rental",
+    "subject": "license plate",
+    "key": "return location",
+    "value": "rental depot",
+    "sentence": "Vehicle license ABC123 must be dropped off at the Springfield branch.",
+    "pair": "travel/booking"
+   }
+  ],
+  "travel/plan": [
+   {
+    "subtopic": "destination",
+    "subject": "city",
+    "key": "beach resort",
+    "value": "sunset views",
+    "sentence": "We booked a luxury villa on the coast.",
+    "pair": "travel/plan"
+   },
+   {
+    "subtopic": "transport",
+    "subject": "flight",
+    "key": "direct route",
+    "value": "non-stop ticket",
+    "sentence": "Our airplane departed at noon from the terminal.",
+    "pair": "travel/plan"
+   },
+   {
+    "subtopic": "itinerary",
+    "subject": "schedule",
+    "key": "meeting point",
+    "value": "hotel lobby",
+    "sentence": "We will meet our guide in the main hall.",
+    "pair": "travel/plan"
+   }
+  ],
+  "travel/visit": [
+   {
+    "subtopic": "destination",
+    "subject": "city",
+    "key": "main attraction",
+    "value": "big ben",
+    "sentence": "They walked past the famous clock tower near parliament.",
+    "pair": "travel/visit"
+   },
+   {
+    "subtopic": "accommodation",
+    "subject": "hotel",
+    "key": "booking status",
+    "value": "confirmed reservation",
+    "sentence": "The stay was booked through the official travel agency website.",
+    "pair": "travel/visit"
+   },
+   {
+    "subtopic": "transport",
+    "subject": "flight",
+    "key": "departure time",
+    "value": "1400 hours",
+    "sentence": "The plane left the terminal after a brief security check.",
+    "pair": "travel/visit"
+   }
+  ],
+  "travel/holiday": [],
+  "travel/luggage": [
+   {
+    "subtopic": "packing restrictions",
+    "subject": "airline",
+    "key": "overhead bin",
+    "value": "forbidden",
+    "sentence": "Large suitcases must be checked in instead of carried overhead.",
+    "pair": "travel/luggage"
+   },
+   {
+    "subtopic": "carry-on limit",
+    "subject": "passenger",
+    "key": "single item",
+    "value": "one bag",
+    "sentence": "Each traveler is allowed exactly one piece of carry-on luggage.",
+    "pair": "travel/luggage"
+   },
+   {
+    "subtopic": "weight limit",
+    "subject": "golf bag",
+    "key": "carry-on",
+    "value": "22 pounds",
+    "sentence": "The maximum weight for a carry-on golf bag is 22 pounds.",
+    "pair": "travel/luggage"
+   }
+  ],
+  "travel/companion": [
+   {
+    "subtopic": "flight partner",
+    "subject": "colleague",
+    "key": "spontaneous",
+    "value": "booked together",
+    "sentence": "We decided to fly on the same flight last week.",
+    "pair": "travel/companion"
+   },
+   {
+    "subtopic": "hotel guest",
+    "subject": "friend",
+    "key": "last minute",
+    "value": "found suite",
+    "sentence": "Our friend surprised us by checking into the suite last night.",
+    "pair": "travel/companion"
+   },
+   {
+    "subtopic": "car driver",
+    "subject": "neighbor",
+    "key": "emergency",
+    "value": "offered help",
+    "sentence": "The neighbor volunteered to drive us to the airport when our car broke down.",
+    "pair": "travel/companion"
+   }
+  ],
+  "travel/experience": [
+   {
+    "subtopic": "accommodation",
+    "subject": "hotel",
+    "key": "location",
+    "value": "city center",
+    "sentence": "Stayed at a downtown hotel for the conference.",
+    "pair": "travel/experience"
+   },
+   {
+    "subtopic": "activities",
+    "subject": "visitor",
+    "key": "site",
+    "value": "museum tour",
+    "sentence": "Visited the local art museum in the afternoon.",
+    "pair": "travel/experience"
+   },
+   {
+    "subtopic": "transport",
+    "subject": "flight",
+    "key": "duration",
+    "value": "ten hours",
+    "sentence": "Flew a ten-hour route to reach the destination.",
+    "pair": "travel/experience"
+   }
+  ],
+  "travel/preference": [
+   {
+    "subtopic": "flights",
+    "subject": "travel",
+    "key": "carrier",
+    "value": "Delta",
+    "sentence": "He prefers flying with Delta Air Lines.",
+    "pair": "travel/preference"
+   },
+   {
+    "subtopic": "seats",
+    "subject": "travel",
+    "key": "style",
+    "value": "aisle access",
+    "sentence": "She always chooses an aisle seat for easier movement.",
+    "pair": "travel/preference"
+   },
+   {
+    "subtopic": "accommodation",
+    "subject": "preference",
+    "key": "location",
+    "value": "beachfront resort",
+    "sentence": "They prefer staying at beachfront resorts during summer vacations.",
+    "pair": "travel/preference"
+   }
+  ],
+  "travel/frequency": [
+   {
+    "subtopic": "habit",
+    "subject": "luggage",
+    "key": "lightweight",
+    "value": "carry-on only",
+    "sentence": "She insists on keeping her suitcase under twenty pounds.",
+    "pair": "travel/frequency"
+   },
+   {
+    "subtopic": "habit",
+    "subject": "flights",
+    "key": "short-haul",
+    "value": "non-stop preferred",
+    "sentence": "He avoids connecting flights whenever possible to save time.",
+    "pair": "travel/frequency"
+   },
+   {
+    "subtopic": "habit",
+    "subject": "destinations",
+    "key": "seasonal",
+    "value": "sunseeker",
+    "sentence": "They only visit warm climates during the summer months.",
+    "pair": "travel/frequency"
+   }
+  ],
+  "travel/other": [
+   {
+    "subtopic": "visas",
+    "subject": "passport",
+    "key": "validity period",
+    "value": "expires soon",
+    "sentence": "The passport requires a new visa renewal before the current one expires.",
+    "pair": "travel/other"
+   },
+   {
+    "subtopic": "destinations",
+    "subject": "trip",
+    "key": "favorite spot",
+    "value": "quiet village",
+    "sentence": "She often returns to the quiet village for its peaceful atmosphere.",
+    "pair": "travel/other"
+   },
+   {
+    "subtopic": "transport",
+    "subject": "flight",
+    "key": "seat selection",
+    "value": "window seat",
+    "sentence": "The flight booking included a preference for a window seat.",
+    "pair": "travel/other"
+   }
+  ],
+  "admin/passport": [
+   {
+    "subtopic": "travel history",
+    "subject": "citizen",
+    "key": "issued date",
+    "value": "2019-05-12",
+    "sentence": "The passport was issued on May 12, 2019.",
+    "pair": "admin/passport"
+   },
+   {
+    "subtopic": "security clearance",
+    "subject": "applicant",
+    "key": "background check",
+    "value": "cleared",
+    "sentence": "The background check resulted in a clearance status.",
+    "pair": "admin/passport"
+   },
+   {
+    "subtopic": "vacation record",
+    "subject": "traveler",
+    "key": "destination city",
+    "value": "Tokyo",
+    "sentence": "This trip was a vacation to Tokyo.",
+    "pair": "admin/passport"
+   }
+  ],
+  "admin/licence": [
+   {
+    "subtopic": "expiring date",
+    "subject": "driver name",
+    "key": "renewal reminder",
+    "value": "notify soon",
+    "sentence": "The driver must renew their license before the expiration date.",
+    "pair": "admin/licence"
+   },
+   {
+    "subtopic": "restrictions",
+    "subject": "vehicle class",
+    "key": "no alcohol",
+    "value": "zero tolerance",
+    "sentence": "There is a zero alcohol tolerance for this vehicle class.",
+    "pair": "admin/licence"
+   },
+   {
+    "subtopic": "violations",
+    "subject": "accident report",
+    "key": "traffic stop",
+    "value": "issued ticket",
+    "sentence": "A ticket was issued after the traffic stop.",
+    "pair": "admin/licence"
+   }
+  ],
+  "admin/insurance": [
+   {
+    "subtopic": "coverage",
+    "subject": "patient",
+    "key": "type",
+    "value": "premium plan",
+    "sentence": "The patient enrolled in a standard premium plan.",
+    "pair": "admin/insurance"
+   },
+   {
+    "subtopic": "history",
+    "subject": "patient",
+    "key": "condition",
+    "value": "diabetes management",
+    "sentence": "The patient manages their diabetes with regular medication.",
+    "pair": "admin/insurance"
+   },
+   {
+    "subtopic": "claims",
+    "subject": "patient",
+    "key": "status",
+    "value": "paid claim",
+    "sentence": "The insurance claim for surgery has been fully paid.",
+    "pair": "admin/insurance"
+   }
+  ],
+  "admin/contract": [
+   {
+    "subtopic": "employment status",
+    "subject": "full-time worker",
+    "key": "salary rate",
+    "value": "quarterly payment",
+    "sentence": "The employee receives a quarterly payment for their services.",
+    "pair": "admin/contract"
+   },
+   {
+    "subtopic": "benefit eligibility",
+    "subject": "insurance plan",
+    "key": "premium cost",
+    "value": "tax deduction",
+    "sentence": "The plan offers a tax deduction for premium costs.",
+    "pair": "admin/contract"
+   },
+   {
+    "subtopic": "termination clause",
+    "subject": "employment contract",
+    "key": "notice period",
+    "value": "two weeks",
+    "sentence": "The contract requires a two weeks notice period for termination.",
+    "pair": "admin/contract"
+   }
+  ],
+  "admin/account": [
+   {
+    "subtopic": "location",
+    "subject": "city",
+    "key": "zip code",
+    "value": "90210",
+    "sentence": "This person lives in the zip code 90210.",
+    "pair": "admin/account"
+   },
+   {
+    "subtopic": "employment",
+    "subject": "job title",
+    "key": "current role",
+    "value": "software engineer",
+    "sentence": "Their current job title is software engineer.",
+    "pair": "admin/account"
+   },
+   {
+    "subtopic": "contact",
+    "subject": "email",
+    "key": "address",
+    "value": "user@example.com",
+    "sentence": "They use the email address user@example.com for correspondence.",
+    "pair": "admin/account"
+   }
+  ],
+  "admin/membership": [
+   {
+    "subtopic": "role",
+    "subject": "person",
+    "key": "member status",
+    "value": "active",
+    "sentence": "This person holds an active membership status.",
+    "pair": "admin/membership"
+   },
+   {
+    "subtopic": "access",
+    "subject": "person",
+    "key": "log level",
+    "value": "full access",
+    "sentence": "They are granted full access to system logs.",
+    "pair": "admin/membership"
+   },
+   {
+    "subtopic": "terms",
+    "subject": "person",
+    "key": "agreement status",
+    "value": "signed",
+    "sentence": "The terms of service have been signed by this person.",
+    "pair": "admin/membership"
+   }
+  ],
+  "admin/registration": [
+   {
+    "subtopic": "security",
+    "subject": "user",
+    "key": "access code",
+    "value": "expired immediately",
+    "sentence": "The access code has expired and cannot be used.",
+    "pair": "admin/registration"
+   },
+   {
+    "subtopic": "profile",
+    "subject": "user",
+    "key": "last login",
+    "value": "was yesterday",
+    "sentence": "Your last login timestamp was recorded yesterday.",
+    "pair": "admin/registration"
+   },
+   {
+    "subtopic": "preferences",
+    "subject": "user",
+    "key": "notification email",
+    "value": "enabled daily",
+    "sentence": "Daily notifications are currently enabled for your email address.",
+    "pair": "admin/registration"
+   }
+  ],
+  "admin/warranty": [
+   {
+    "subtopic": "coverage period",
+    "subject": "vehicle",
+    "key": "registration year",
+    "value": "2024",
+    "sentence": "The warranty covers the entire registration year.",
+    "pair": "admin/warranty"
+   },
+   {
+    "subtopic": "transferability",
+    "subject": "owner",
+    "key": "transferable status",
+    "value": "no limit",
+    "sentence": "This warranty is non-transferable to future owners.",
+    "pair": "admin/warranty"
+   },
+   {
+    "subtopic": "claim limit",
+    "subject": "repair",
+    "key": "dollar amount",
+    "value": "5000",
+    "sentence": "The maximum claim limit is five thousand dollars.",
+    "pair": "admin/warranty"
+   }
+  ],
+  "admin/certificate": [
+   {
+    "subtopic": "education",
+    "subject": "student",
+    "key": "grade",
+    "value": "A+",
+    "sentence": "She received an A+ in her final exam.",
+    "pair": "admin/certificate"
+   },
+   {
+    "subtopic": "travel",
+    "subject": "traveler",
+    "key": "destination",
+    "value": "Paris",
+    "sentence": "He visited Paris last summer for business.",
+    "pair": "admin/certificate"
+   },
+   {
+    "subtopic": "certification",
+    "subject": "engineer",
+    "key": "license",
+    "value": "valid",
+    "sentence": "Her engineering license remains valid until next year.",
+    "pair": "admin/certificate"
+   }
+  ],
+  "admin/deadline": [
+   {
+    "subtopic": "project due",
+    "subject": "accountant",
+    "key": "quarterly report",
+    "value": "submit by friday",
+    "sentence": "The quarterly report must be submitted by friday.",
+    "pair": "admin/deadline"
+   },
+   {
+    "subtopic": "meeting end",
+    "subject": "manager",
+    "key": "team sync",
+    "value": "close at noon",
+    "sentence": "The team sync meeting will close at noon.",
+    "pair": "admin/deadline"
+   },
+   {
+    "subtopic": "payment limit",
+    "subject": "finance",
+    "key": "credit card",
+    "value": "max charge fifty",
+    "sentence": "The maximum charge allowed on the credit card is fifty.",
+    "pair": "admin/deadline"
+   }
+  ],
+  "admin/provider": [
+   {
+    "subtopic": "contact",
+    "subject": "primary",
+    "key": "phone number",
+    "value": "5550123456",
+    "sentence": "The patient can reach their main doctor at five five five zero one two three four five six.",
+    "pair": "admin/provider"
+   },
+   {
+    "subtopic": "allergies",
+    "subject": "history",
+    "key": "pensicillin",
+    "value": "severe reaction",
+    "sentence": "Records indicate a severe allergic reaction to penicillin during the last hospital stay.",
+    "pair": "admin/provider"
+   },
+   {
+    "subtopic": "insurance",
+    "subject": "plan",
+    "key": "provider network",
+    "value": "in-network status",
+    "sentence": "This account is fully covered by an in-network insurance plan with no copays.",
+    "pair": "admin/provider"
+   }
+  ],
+  "admin/will": [
+   {
+    "subtopic": "birth",
+    "subject": "child",
+    "key": "location",
+    "value": "city state",
+    "sentence": "The child was born in a specific city and state.",
+    "pair": "admin/will"
+   },
+   {
+    "subtopic": "education",
+    "subject": "child",
+    "key": "grade",
+    "value": "school name",
+    "sentence": "The child currently attends the named school in local grades.",
+    "pair": "admin/will"
+   },
+   {
+    "subtopic": "legal",
+    "subject": "child",
+    "key": "guardian",
+    "value": "relative name",
+    "sentence": "Legal guardianship for the child is assigned to the specified relative.",
+    "pair": "admin/will"
+   }
+  ],
+  "admin/document": [],
+  "admin/reference": [
+   {
+    "subtopic": "hobbies",
+    "subject": "jane",
+    "key": "gardening",
+    "value": "weekly flowers",
+    "sentence": "jane loves growing roses in her backyard",
+    "pair": "admin/reference"
+   },
+   {
+    "subtopic": "travel destination",
+    "subject": "mike",
+    "key": "japan",
+    "value": "visiting in spring",
+    "sentence": "mike plans to visit japan next year",
+    "pair": "admin/reference"
+   },
+   {
+    "subtopic": "pet type",
+    "subject": "brownie",
+    "key": "golden retriever",
+    "value": "very friendly",
+    "sentence": "brownie is a large and very friendly golden retriever",
+    "pair": "admin/reference"
+   }
+  ],
+  "admin/other": [
+   {
+    "subtopic": "hobbies",
+    "subject": "gardening",
+    "key": "potted plants",
+    "value": "indoor ferns",
+    "sentence": "keeps three ferns alive on windowsill",
+    "pair": "admin/other"
+   },
+   {
+    "subtopic": "travel",
+    "subject": "japan",
+    "key": "visiting cities",
+    "value": "tokyo osaka",
+    "sentence": "visited tokyo and osaka last summer",
+    "pair": "admin/other"
+   },
+   {
+    "subtopic": "skills",
+    "subject": "cooking",
+    "key": "knife skills",
+    "value": "chopping onions",
+    "sentence": "mastered chopping onions quickly",
+    "pair": "admin/other"
+   }
+  ]
+ }
+}
