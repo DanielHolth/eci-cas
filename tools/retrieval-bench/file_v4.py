@@ -56,6 +56,26 @@ So the concentration into 31 pairs is not costing anything here -- a filer
 that collapsed usefully-distinct facts together would lose at files=1 first,
 and by-gloss is ahead there too.
 
+**The written gloss is the arm to ship.** `written` files by the line
+`bench.CAT["gloss"]` already carries for each pair -- no archive, no sampling,
+one embedding per file at build time. It ties the Cataloger on retrieval like
+by-gloss does, and it removes both caveats carried against by-gloss:
+
+    filing       agree   select   strict   spread
+    llm           100%      74%      72%       54
+    by-gloss       11%      77%      73%       31
+    written        38%      75%      73%       60
+
+Agreement triples, so the archive lands much closer to where a person would
+look, and spread goes from 31 pairs to 60 -- wider than the Cataloger's own
+54, so the concentration worry inverts rather than merely shrinking. Same
++1.1pp on the bootstrap, P(better) 53%. A tie on the number that matters and a
+clear win on the two that were being held against the idea.
+
+Its own limit is coverage, not quality: 10 of 170 pairs ship no gloss line and
+get a zero vector, so nothing can be filed into them. That is a gap in the
+prompt, cheap to close, and it should be closed before this arm ships.
+
 **by-gloss ties two LLM calls per row while agreeing with them 11% of the
 time.** A paired bootstrap over the 87 questions says +1.1pp strict, 95% CI
 [-9.2, +12.6], P(better) 53% -- a coin flip, and the right word is "ties", not
@@ -174,12 +194,24 @@ def main(k=5, files=3):
         small[m] = v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-9)
     names = e.encode([p.replace("/", " / ") for p in index], kind="passage")
 
+    # The shipped written gloss as a filer. batch 16 showed it works as a
+    # reader; this is the arm that would actually replace the two Cataloger
+    # calls, and it is the only gloss here that exists before any row does.
+    # A pair with no shipped gloss gets a zero vector and can never be chosen,
+    # same rule as an empty file above -- 10 of 170 pairs are in that state.
+    import gloss_v4
+    shipped = gloss_v4.shipped_gloss()
+    written = e.encode([gloss_v4.gloss_text(p, shipped[p]) if p in shipped
+                        else "" for p in index], kind="passage")
+    written = np.where(np.array([[p in shipped] for p in index]), written, 0.0)
+
     gv = e.encode([fact_text(r) for r in gold_rows], kind="query")
     filings = {"llm": [index.index(r["pair"]) for r in gold_rows],
                "by-name": list(np.argmax(gv @ names.T, axis=1)),
                "by-gloss": list(np.argmax(gv @ gloss.T, axis=1))}
     for m in (1, 3, 10):
         filings["gloss-%d" % m] = list(np.argmax(gv @ small[m].T, axis=1))
+    filings["written"] = list(np.argmax(gv @ written.T, axis=1))
 
     qs = sorted(ANSWERS)
     qv = e.encode(qs, kind="query")
