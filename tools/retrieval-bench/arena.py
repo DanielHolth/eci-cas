@@ -166,6 +166,60 @@ def sampled_values(n=2):
     return go
 
 
+def two_stage(gloss=None, cats=2):
+    """Categories first, then topics inside the ones chosen.
+
+    The hierarchical read is a recorded dead end (-35pp, the only read result
+    that ever cleared its floor) and it is being re-run because the reason
+    given for it turned out to be false. It was written off as "the right
+    drawer is not guessable from the question"; the drawer is guessable 79%
+    of the time. If the two-step still loses with that known, the cause is
+    the commitment itself -- one category chosen means the second-best drawer
+    is gone -- which is why this takes two categories rather than one.
+    """
+    def go(q, index, rows):
+        cat_list = sorted(set(p.split("/")[0] for p in index))
+        options = "\n".join("%d. %s" % (i, c) for i, c in enumerate(cat_list))
+        reply = bench.strip(bench.call(
+            rb.LIB.replace("{options}", options).replace("{text}", q)
+                  .replace("{max}", str(cats)), 40))
+        chosen = [cat_list[i] for i in rb.numbers(reply, len(cat_list))][:cats]
+        if not chosen:
+            return rb.select(q, index, gloss)
+        inner = [p for p in index if p.split("/")[0] in chosen]
+        return rb.select(q, inner, gloss)
+    return go
+
+
+def subject_llm(gloss=None, cap=3):
+    """Daniel's design as he framed it: a second weak model, on subjects only.
+
+    The lexical arm cannot resolve "my sister" to Marit, and that is the whole
+    class of oblique question the bonus tier exists for. This asks a model
+    which of the archive's known subjects the turn is about, then unions the
+    pairs holding them. A curated index, not an enumerated one -- only
+    subjects that appear in more than a padding row would survive at scale,
+    and this list is already only what the archive holds.
+
+    Union and cap as in subject_union: it may add a file the selector missed,
+    never displace one it named.
+    """
+    def go(q, index, rows):
+        picked = rb.select(q, index, gloss)
+        subs = sorted(set(r["subject"].lower() for p in index for r in rows[p]
+                          if r.get("stmt")))
+        options = "\n".join("%d. %s" % (i, s) for i, s in enumerate(subs))
+        reply = bench.strip(bench.call(
+            "Which of these does the turn ask about? Reply with the numbers, "
+            "bare digits, comma-separated, at most %d. If none, reply \"none\".\n\n"
+            "Known subjects:\n%s\n\nTurn: %s" % (cap, options, q), 40))
+        want = set(subs[i] for i in rb.numbers(reply, len(subs)))
+        extra = [p for p in index
+                 if any(r["subject"].lower() in want for r in rows[p])]
+        return picked + [p for p in extra if p not in picked][:cap]
+    return go
+
+
 ARMS = [
     Arm("full", ".archive_v3.json"),
     Arm("full+gloss", ".archive_v3.json", gloss=GLOSS),
@@ -179,6 +233,10 @@ ARMS = [
         select=sampled_values()),
     Arm("full+wholecat", ".archive_v3.json", select=whole_category(GLOSS)),
     Arm("full+subject", ".archive_v3.json", select=subject_union(GLOSS)),
+    Arm("lean+2stage", ".archive_v3_lean.json", vocab=LEAN,
+        select=two_stage(LEAN_GLOSS)),
+    Arm("lean+subjllm", ".archive_v3_lean.json", vocab=LEAN,
+        select=subject_llm(LEAN_GLOSS)),
 ]
 
 
@@ -186,8 +244,8 @@ def run(reps, arms):
     for arm in arms:
         arm.load()
         print("%-12s %3d pairs   writable %d/%d" % (
-            arm.name, len(arm.index), len(arm.writable), len(ANSWERS)))
-    print()
+            arm.name, len(arm.index), len(arm.writable), len(ANSWERS)), flush=True)
+    print(flush=True)
     for rep in range(reps):
         for q in sorted(ANSWERS):
             for arm in arms:
