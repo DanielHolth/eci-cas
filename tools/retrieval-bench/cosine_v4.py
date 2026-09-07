@@ -41,6 +41,23 @@ from embed import Embedder
 from arms_v4 import CACHE, answered, gold_index, shape
 
 
+def answered_row(rows, question):
+    """Strict: one row carries the whole key.
+
+    `answered` joins the candidate set into a single blob, which is right for
+    the LLM arms -- Intent sees every row at once and can compose across them.
+    It is wrong as a retrieval measure: a two-token key can be satisfied by
+    one token in the first row and the other in the fifth, and the chance of
+    that rises with k, so the joint score flatters whichever arm returns more
+    rows. Flat always returns k; cosine often returns fewer, having been
+    handed a small pair. Both numbers are printed rather than one replacing
+    the other, because they answer different questions: joint is what Intent
+    would get away with, strict is whether the fact was actually found.
+    """
+    return any(any(all(t in rb.line(r).lower() for t in alt) for alt in ANSWERS[question])
+               for r in rows)
+
+
 def main(k=5):
     a, rows = rb.archive(CACHE)
     index = sorted(rows)
@@ -85,31 +102,54 @@ def main(k=5):
         for name, idx in (("flat", top), ("cosine", ctop)):
             got = [flat_rows[i] for i in idx]
             tally[name + ".rows"] += len(got)
-            if is_null:
+            if is_null and len(idx):
                 # A null turn states no fact, so there is nothing correct to
                 # return. top-k always returns k rows, so a fixed-k vector arm
                 # cannot score on the nulls column the LLM arms are graded on;
                 # what it can report is how confident it was while being wrong.
-                tally[name + ".null_top"] += float(scores[idx[0]]) if len(idx) else 0.0
-            else:
+                tally[name + ".null_top"] += float(scores[idx[0]])
+                tally[name + ".null_n"] += 1
+            elif not is_null:
                 tally[name + ".answer"] += answered(got, turn)
+                tally[name + ".strict"] += answered_row(got, turn)
                 tally[name + ".top"] += float(scores[idx[0]]) if len(idx) else 0.0
         if not is_null:
-            tally["select"] += bool(gold[turn] & set(opened))
+            hit = bool(gold[turn] & set(opened))
+            tally["select"] += hit
+            # Cosine can only rank what the Librarian handed it, so its score
+            # is two stages multiplied. Conditioning on the questions where
+            # selection actually opened the right pair separates them: this is
+            # how good the vector ranking is *inside* a correct selection, and
+            # it is the only number here comparable to flat's.
+            if hit:
+                tally["cosine.answer_sel"] += answered(
+                    [flat_rows[i] for i in ctop], turn)
 
     n, nn = len(qs), len(corpus.NULLS)
     print("questions %d   nulls %d   k %d" % (n, nn, k))
     print("  select %d/%d = %d%%   (librarian, shared with arms_v4)"
           % (tally["select"], n, 100 * tally["select"] // n))
-    print("\n  %-8s %8s %8s %10s %10s" % ("arm", "answer", "rows", "top sim", "null sim"))
+    print("")
+    print("  %-8s %8s %8s %8s %10s %10s"
+          % ("arm", "joint", "strict", "rows", "top sim", "null sim"))
     for name in ("cosine", "flat"):
-        print("  %-8s %7d%% %8.1f %10.3f %10.3f" % (
+        print("  %-8s %7d%% %7d%% %8.1f %10.3f %10.3f" % (
             name,
             100 * tally[name + ".answer"] // n,
+            100 * tally[name + ".strict"] // n,
             tally[name + ".rows"] / float(n + nn),
             tally[name + ".top"] / float(n),
-            tally[name + ".null_top"] / float(max(nn, 1))))
-    print("\n  answer   = of %d answerable questions, key found in the k rows" % n)
+            tally[name + ".null_top"] / float(max(tally[name + ".null_n"], 1))))
+    print("")
+    print("  cosine, counting only the %d questions where selection opened the"
+          % tally["select"])
+    print("  right pair: %d%%  -- the ranking inside a correct narrowing."
+          % (100 * tally["cosine.answer_sel"] // max(tally["select"], 1)))
+    print("")
+    print("  joint    = of %d questions, key found across the k rows together" % n)
+    print("  strict   = same, but one row had to carry the whole key")
+    print("  null sim is over turns the arm returned anything for (cosine: %d of %d)."
+          % (tally["cosine.null_n"], nn))
     print("  rows     = mean handed on; fixed at k by construction")
     print("  top sim  = mean best similarity on a real question")
     print("  null sim = same on a turn stating no fact. The gap between these")
