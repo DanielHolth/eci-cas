@@ -17,3 +17,4 @@ models/
 __pycache__/
 *.pyc
 tools/retrieval-bench/.archive_v3.json
+tools/retrieval-bench/.archive_v3_lean.json

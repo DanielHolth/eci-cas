@@ -49,8 +49,9 @@ REC = bench.load("recall.txt")["main"]
 
 # --- the archive ------------------------------------------------------------
 
-def all_pairs():
-    return [c + "/" + t for c, ts in bench.VOCAB.items() for t in ts]
+def all_pairs(vocab=None):
+    v = vocab or bench.VOCAB
+    return [c + "/" + t for c, ts in v.items() for t in ts]
 
 
 def pad_rows(pair):
@@ -74,28 +75,31 @@ def pad_rows(pair):
     return rows[:3]
 
 
-def build():
+def build(vocab=None):
     """Real write path over the corpus, then padding everywhere else."""
     gold, pad = [], {}
     prompt = bench.load("archivist.txt")["main"]
     for i, (stmt, _) in enumerate(corpus.STATEMENTS, 1):
         print("  write %d/%d: %s" % (i, len(corpus.STATEMENTS), stmt[:44]), flush=True)
-        for pair, row in bench.write(stmt, prompt):
+        for pair, row in bench.write(stmt, prompt, vocab):
             gold.append(dict(row, pair=pair, stmt=stmt))
     landed = set(g["pair"] for g in gold)
-    todo = [p for p in all_pairs() if p not in landed]
+    todo = [p for p in all_pairs(vocab) if p not in landed]
     for i, pair in enumerate(todo, 1):
         print("  pad %d/%d: %s" % (i, len(todo), pair), flush=True)
         pad[pair] = pad_rows(pair)
     return {"gold": gold, "pad": pad}
 
 
-def archive():
-    if not os.path.exists(CACHE):
-        print("building archive (once) ...", flush=True)
-        with open(CACHE, "w", encoding="utf-8") as f:
-            json.dump(build(), f, indent=1)
-    with open(CACHE, encoding="utf-8") as f:
+def archive(cache=CACHE, vocab=None):
+    """The frozen archive for one vocabulary. One cache file per vocabulary:
+    a merged shelf has to be filed as well as read, so two arms that differ
+    in vocabulary are two archives, not two views of one."""
+    if not os.path.exists(cache):
+        print("building archive (once): %s" % os.path.basename(cache), flush=True)
+        with open(cache, "w", encoding="utf-8") as f:
+            json.dump(build(vocab), f, indent=1)
+    with open(cache, encoding="utf-8") as f:
         a = json.load(f)
     rows = collections.defaultdict(list)
     for g in a["gold"]:
@@ -113,10 +117,24 @@ def numbers(reply, ceiling):
     return [int(n) for n in re.findall(r"\d+", reply) if int(n) < ceiling]
 
 
-def select(question, index):
-    """LibrarianAgent: hide 'other', ask, then re-add category/other in code."""
+def select(question, index, gloss=None):
+    """LibrarianAgent: hide 'other', ask, then re-add category/other in code.
+
+    `gloss` is an arm, not a feature: {category: {topic: "a few words"}},
+    appended to each option line. Nothing downstream sees it -- the pairs
+    returned are the same strings either way, so an arm cannot accidentally
+    change what gets opened or how a hit is scored.
+    """
     shown = [p for p in index if not p.endswith("/other")]
-    options = "\n".join("%d. %s" % (i, p) for i, p in enumerate(shown))
+
+    def label(p):
+        if not gloss:
+            return p
+        c, t = p.split("/", 1)
+        words = gloss.get(c, {}).get(t)
+        return "%s (%s)" % (p, words) if words else p
+
+    options = "\n".join("%d. %s" % (i, label(p)) for i, p in enumerate(shown))
     reply = bench.strip(bench.call(
         LIB.replace("{options}", options).replace("{text}", question)
            .replace("{max}", str(MAX_SELECTED)), 40))

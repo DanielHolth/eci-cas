@@ -110,8 +110,15 @@ def norm(s):
     return re.sub(r"[^a-z0-9 ]", " ", s.lower())
 
 
-def file_fact(row, text):
-    """Two calls against the closed list, as CatalogerAgent does."""
+def file_fact(row, text, vocab=None):
+    """Two calls against the closed list, as CatalogerAgent does.
+
+    `vocab` overrides the shipped one so a consolidated vocabulary can be
+    filed and read as its own archive -- merging topics changes filing as
+    well as selection, so an arm that changed only the read side would be
+    measuring a shelf the writer never used.
+    """
+    VOCAB = vocab or globals()["VOCAB"]
     fact = " ".join([row.get("subtopic", ""), row["subject"], row["key"], "=", row["value"]])
     raw = norm(strip(call(CAT["category"].replace("{text}", text).replace("{fact}", fact), 24)))
     cat = next((c for c in VOCAB if c in raw), None)
@@ -124,6 +131,6 @@ def file_fact(row, text):
     return f"{cat}/{topic}"
 
 
-def write(text, prompt):
+def write(text, prompt, vocab=None):
     """Full write path: one extraction call, then two filing calls per row."""
-    return [(file_fact(r, text), r) for r in extract(text, prompt)]
+    return [(file_fact(r, text, vocab), r) for r in extract(text, prompt)]
