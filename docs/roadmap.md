@@ -1234,3 +1234,25 @@ that changes how I should read it" — an inference question. Tension:
 archive-lookup's own principle is "report what the records say, never invent
 one", and pushing toward inference risks turning Recall into a second
 Librarian.
+
+**Does the vocabulary earn its two calls?** Cataloger on write and Librarian
+on read cost one model call each, to produce a cut that a cosine sweep may do
+better and for free. Selection sits at 80%, and the dominant failure is
+specific -- 14 of 19 misses opened the right category and the wrong topic. A
+flat vector search has no topics and cannot make that mistake. Stated
+plainly because the log does not contain the arm: batches 3-12 compared
+shelves to each other and never to the absence of one, so the pairs have
+never been measured against the null. Three things keep them for now, none
+of them retrieval: `Merged()` addressing (which survives either way -- the
+address is subtopic/subject/key, not the pair), a fallback when no embedder
+is available (`IEmbeddingProvider` holds that unavailability is normal), and
+a person browsing their own archive. The likely landing is vectors as the
+primary index with pairs demoted to a file layout and a degraded path, but
+the arm decides it. See `tools/retrieval-bench/README.md`, v4.
+
+**Two extractors over one message.** Redundant columns cost nothing at rest,
+so the archive could carry facts from a strict field extractor and from a
+looser second pass side by side, and let the reader see both. Attractive
+because the `writable` ceiling (29/35 on v3) is a write-side loss nothing
+downstream can recover, and two methods fail differently. Unmeasured, and it
+wants the v4 corpus before it is worth designing.

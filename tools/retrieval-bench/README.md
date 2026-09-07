@@ -136,3 +136,76 @@ already sit near 90%. There is almost no headroom left to measure in, and its
 held-out half is burned. v3 replaces it for read work; the write-side arms
 above still run against v2 and should be re-based on v3 before any of them is
 re-litigated.
+
+## v4 — the corpus that has to settle four questions
+
+Pre-registered before generation. v3 is spent: it cannot settle file
+fatness, cannot settle whether the sentence column costs facts, and cannot
+settle the question that matters most, which is whether the closed
+vocabulary earns the two model calls it costs.
+
+**The admission that motivates it.** Batches 3-12 compared shelves --
+170-pair against lean, terse, consolidated. Every arm assumed a vocabulary
+and argued about its shape. No arm has ever compared having a vocabulary to
+not having one. The categorizer/librarian path has not been measured against
+its own absence, and all of that work predates vectors being on the table.
+
+Four arms this corpus exists to run, all on one frozen archive, differing
+only in the reader:
+
+    librarian + recall     today
+    librarian + nopick     the batch 12 winner
+    librarian + cosine     pairs as the coarse cut, vectors as the fine one
+    flat cosine            no Librarian at read time at all
+
+The write path is identical in all four. Archivist and Cataloger still file
+to pairs, and every row additionally carries its sentence and its vector, so
+the flat view is a projection of the same rows rather than a second archive.
+Redundant columns cost nothing at rest and keep the comparison free of write
+variance.
+
+### Shape, decided before generating
+
+**Lumpy, not uniform.** Real archives are a few fat pairs and a long tail of
+two-row ones. A corpus where every pair holds twenty rows would flatter both
+readers: the picker gets real discrimination pressure everywhere, and cosine
+gets uniform density with no thin files where a wrong-but-close row wins by
+default. Target distribution across the 170 pairs, checked after generation
+and reported with the archive:
+
+    fat     ~8 pairs    50-80 rows    the regime Recall cannot afford
+    middle  ~40 pairs   10-25 rows    where most turns land
+    thin    the rest     1-4 rows     where a bad vector is unopposed
+
+**Cross-category near-misses are mandatory.** Rows in unrelated pairs that a
+question could plausibly match on surface. Without them the flat arm faces
+no discrimination pressure and wins trivially -- and the entire point of the
+flat arm is that it may win for real.
+
+**The null ratio moves.** v3 is 8 nulls against 35 questions, and nulls are
+scored separately and never folded into the headline. That grades every arm
+on a curve that rewards guessing: an arm keeping everything takes full credit
+for its recall and pays nothing for volunteering facts nobody asked about.
+v4 raises nulls to roughly a third of the question set, because pricing
+lenient against strict is the open question the current instrument cannot
+see.
+
+**Tier-tagged caches from the start.** `.archive_v4_<tier>.json`. The archive
+is written by the tier's own model, so an end-to-end comparison across tiers
+mixes a write difference with a read difference and cannot attribute either.
+Tagging is cheap now and a retrofit later; it is what makes the cross arm
+possible -- Default's readers over Minimal's archive, same rows, only the
+reader changing.
+
+### Cost, so the size is chosen rather than discovered
+
+At ~3000 rows a full Default archive build is roughly 1M input and 250k
+output tokens across Archivist, Cataloger and padding: under a dollar at
+`gpt-5.6-luna` pricing. Minimal is free. Cost does not constrain this corpus,
+which is stated here so nobody later trims it for a reason that was not real.
+
+### What freezes when
+
+The pre-cosine Minimal baseline pins the corpus. A statement added after it
+invalidates every number measured against it. So the shape above is settled
+here, before generation, and v5 is the way to change it.
