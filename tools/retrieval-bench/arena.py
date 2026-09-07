@@ -125,10 +125,19 @@ class Arm:
         because it drowns, Default and Super take the rows.
         """
         if self.gate:
+            # The asymmetry is the whole prompt. Without it -- the first
+            # version said only "does this turn need stored facts, yes or
+            # no" -- quiet went to 100% and answer fell 66% -> 29% with
+            # select untouched: the files opened and the gate binned them.
+            # A model reads a bare yes/no as two equal guesses, and these
+            # are not equal. librarian.txt states its own asymmetry for the
+            # same reason and I failed to copy it.
             reply = bench.strip(bench.call(
-                "Does answering this turn need anything the person has told you "
-                "before -- a stored fact about them, their things, or their "
-                "plans? A greeting, an acknowledgement or small talk does not. "
+                "Should the assistant look at what it knows about this person "
+                "before replying to this turn? Say yes unless you are sure it "
+                "is unnecessary: a greeting, an acknowledgement, or small talk "
+                "that asks nothing. If in any doubt, say yes -- looking and not "
+                "needing it costs little, not looking loses the answer. "
                 "Reply yes or no, one word." + chr(10) + chr(10) +
                 "Turn: %s" % q, 8))
             return rows if reply.lower().startswith("y") else []

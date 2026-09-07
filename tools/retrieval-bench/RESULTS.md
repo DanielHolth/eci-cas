@@ -39,3 +39,28 @@ Consolidation is not the win, it is what makes the win affordable, and it
 charges a writable ceiling of 29/35 against 30/35 for it.
 
 lean+wholecat's 68% quiet is the gap the gate arms exist to close.
+
+## Batch 6 — the gate, four reps
+
+  arm             category select answer quiet files rows
+  lean+wc+nopick       85%    85%    66%   40%   5.0  10.6
+  lean+wc+lenient      85%    85%    58%   78%   4.9  10.6
+  lean+wc+gate         85%    85%    29%  100%   5.0  10.6
+  full+wc+gate         80%    80%    39%  100%  20.6  46.6
+  full+gloss+gate      80%    52%    27%   96%   3.0   6.3
+
+The mechanism works and the calibration is wrong. Small talk went perfectly
+quiet, which is what the gate was for, and `answer` fell 66% -> 29% with
+`select` untouched at 85%: the right files opened and the gate binned their
+rows. It says no to more than half of genuine questions.
+
+That is a prompt fault and a repeat of one this repo already solved.
+librarian.txt states its asymmetry outright -- a wrongly-opened topic is
+filtered in phase two, an unopened one is gone. The gate stated none, so the
+model weighed yes and no as equal guesses when the costs are nothing alike:
+opening and not needing it costs rows in a prompt, not opening loses the
+answer. Rerun with the asymmetry written in.
+
+Also visible here: nopick at 40% quiet is worse than the 37% of batch 3, and
+full+gloss+gate's select of 52% matches full+gloss elsewhere, which is the
+sanity check that a Recall-side arm is not moving selection.
