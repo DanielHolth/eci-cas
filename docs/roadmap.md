@@ -1300,10 +1300,20 @@ the expensive end bought with 38 extra rows. Terse's smallest openable unit is
 facts-per-file mechanism arriving for a *vector* reader, which the earlier
 batches could not show, since they only ever had a weak model doing the picking.
 
-Carried as a defect rather than a result: `TERSE_GLOSS` covers 26 of 34 pairs
-and the shipped gloss 160 of 170, so both shelves have pairs no row can be
-filed into. If the written gloss becomes the filer, that coverage has to be
-completed before it ships.
+And the written gloss is not merely tied on retrieval -- it is the better arm
+on the two caveats carried against the derived one. Re-run as a filer beside
+the Cataloger: agreement 38% against by-gloss's 11%, so the archive lands much
+nearer where a person would look, and spread 60 pairs against 31 -- wider than
+the Cataloger's own 54, so the concentration worry inverts rather than
+shrinks. Same +1.1pp, P(better) 53%.
+
+The coverage gap this looked like it had was withdrawn on inspection: all 10
+unglossed shipped pairs, and all 8 terse ones, are `x/other`. `other` is the
+valve, defined by matching nothing, so there is no direction in the space for
+it and a gloss would invent a meaning it does not have. A vector filer never
+files into `other`, which is correct and consistent with `other` already being
+write-side only. So there is no blocker: the written gloss covers every pair a
+vector could be asked to choose.
 
 One measurement changed underneath all of this and is worth carrying: the
 bench scorer had been matching answer keys against the address line only,
