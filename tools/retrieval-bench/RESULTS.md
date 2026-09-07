@@ -64,3 +64,37 @@ answer. Rerun with the asymmetry written in.
 Also visible here: nopick at 40% quiet is worse than the 37% of batch 3, and
 full+gloss+gate's select of 52% matches full+gloss elsewhere, which is the
 sanity check that a Recall-side arm is not moving selection.
+
+## Batch 7 — the gate with the asymmetry stated, four reps
+
+  arm             category select answer quiet files rows
+  lean+wc+nopick       85%    85%    65%   46%   4.9  10.5
+  lean+wc+lenient      82%    82%    55%   87%   5.0  10.6
+  lean+wc+gate         86%    86%    45%   46%   5.1  11.0
+
+Stating the asymmetry moved the gate from one failure to the opposite one.
+`answer` recovered 29% -> 45%, and `quiet` collapsed 100% -> 46%, which is
+nopick's number to the point. Told that looking costs little and not looking
+loses the answer, the model now says yes to nearly everything, so the gate
+is a no-op on the job it was built for.
+
+It is dominated on both axes at once. Against nopick it gives up 20pp of
+answer and buys no quiet. Against lenient it gives up 10pp of answer and
+41pp of quiet. There is no reading of this table where the gate is the arm
+to ship.
+
+Two prompts, opposite miscalibrations, no middle: the 4B is not holding a
+graded yes/no on this question, it is picking a side and going there. The
+knob is real -- batch 6 proved the two Recall jobs separate cleanly, 100%
+quiet with select untouched -- but this model cannot be talked onto the
+middle of it.
+
+Parked, and parked on its own terms rather than deferred. The standing rule
+is to retest inconclusive results against a smaller pool after the write
+work; the gate is the one exception, because its prompt is shown the turn
+and nothing else. Pool size cannot reach it. It comes back only as code --
+a confidence threshold, or the gate asked once with both costs priced --
+not as another prompt.
+
+lenient stands as the quiet arm: 87% here, 78%-81% across batches 5 and 6,
+the only thing measured that raises quiet without gutting answer.
