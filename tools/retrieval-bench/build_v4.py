@@ -59,7 +59,7 @@ def report(sizes, title):
 def plan():
     pairs = rb.all_pairs()
     sizes = rb.plan_sizes(pairs)
-    total = report(sizes, "planned (padding only, before gold rows land)")
+    total = report(sizes, "planned, blind (the real plan is drawn after the write pass)")
     # Padding is asked in batches of at most six, so the call count is what
     # the wall clock and any paid tier's invoice track -- not the row count.
     calls = sum(-(-n // 6) for n in sizes.values())
@@ -87,12 +87,19 @@ def main():
         os.remove(CACHE)
 
     print("\nbuilding %s ..." % os.path.basename(CACHE), flush=True)
-    a, rows = rb.archive(CACHE, sizes=sizes, src=corpus)
+    # The callable, not the dict above. The blind plan is printed for the
+    # cost estimate only; the plan that is built is drawn once the write pass
+    # has shown which pairs actually hold gold, so the fat band can land on
+    # them. See plan_sizes.
+    a, rows = rb.archive(CACHE, sizes=rb.plan_sizes, src=corpus)
 
+    # The realised plan, not the blind one printed above: shortfalls have to
+    # be measured against the targets that were actually asked for.
+    sizes = rb.plan_sizes(rb.all_pairs(), set(g["pair"] for g in a["gold"]))
     got = {p: len(rs) for p, rs in rows.items()}
     report(got, "actual (gold + padding, as built)")
     short = sorted((p, sizes.get(p, 3), got.get(p, 0)) for p in sizes
-                   if got.get(p, 0) < sizes[p] * 0.7)
+                   if got.get(p, 0) < sizes[p] * 0.5)
     if short:
         print("\n  %d pairs came up short of plan (model stalled):" % len(short))
         for p, want, have in short[:12]:

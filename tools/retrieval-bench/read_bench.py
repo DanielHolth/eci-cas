@@ -54,7 +54,7 @@ def all_pairs(vocab=None):
     return [c + "/" + t for c, ts in v.items() for t in ts]
 
 
-def plan_sizes(pairs, seed=4):
+def plan_sizes(pairs, gold=None, seed=4):
     """How many rows each unpopulated pair should get. Lumpy, not uniform.
 
     Uniform padding is what v3 had -- three rows everywhere -- and it
@@ -68,16 +68,42 @@ def plan_sizes(pairs, seed=4):
     The bands are the pre-registered ones (README, v4). Seeded so the
     archive is reproducible: two arms that disagree about which pairs are
     fat are not two views of one archive.
+
+    `gold` is the set of pairs a statement actually landed in, and passing it
+    is what makes the fat band mean anything. Drawn blind, the bands land on
+    gold pairs at their population rate -- 8 fat files over 170 pairs put two
+    of them on gold, four rows out of eighty-two -- so the case the lumpiness
+    exists to create, an answer buried among sixty distractors, would be
+    measured on almost no questions and read as noise either way. Half of each
+    fat and middle slot is therefore drawn from gold-bearing pairs, which is a
+    statement about what the instrument must be able to see, not about what
+    real archives look like. The thin tail keeps whatever is left, so most
+    answers still sit in small files and the easy case stays the common one.
     """
     r = random.Random(seed)
-    shuffled = sorted(pairs)
-    r.shuffle(shuffled)
-    sizes, i = {}, 0
+    gold = sorted(set(gold or ()) & set(pairs))
+    rest = sorted(set(pairs) - set(gold))
+    r.shuffle(gold)
+    r.shuffle(rest)
+
+    def take(n):
+        # Half from gold where there is gold left, remainder from the rest,
+        # and back to whichever list still has entries when one runs out.
+        out = []
+        for _ in range(n):
+            src = gold if (gold and (len(out) % 2 == 0 or not rest)) else rest
+            if not src:
+                src = gold or rest
+            if not src:
+                break
+            out.append(src.pop())
+        return out
+
+    sizes = {}
     for count, lo, hi in ((8, 50, 80), (40, 10, 25)):
-        for p in shuffled[i:i + count]:
+        for p in take(count):
             sizes[p] = r.randint(lo, hi)
-        i += count
-    for p in shuffled[i:]:
+    for p in gold + rest:
         sizes[p] = r.randint(1, 4)
     return sizes
 
@@ -164,11 +190,31 @@ def build(vocab=None, cat_prompt=None, sizes=None, src=None):
             "Pass cat_prompt for a shelf that renames a category."
             % (len(stray), len(gold)))
 
-    landed = set(g["pair"] for g in gold)
-    todo = [p for p in all_pairs(vocab) if p not in landed]
+    landed = collections.Counter(g["pair"] for g in gold)
+    # `sizes` may be a callable, and for v4 it is. Which pairs hold gold is
+    # not knowable until the write pass has run -- the Cataloger decides it,
+    # and it is allowed to surprise us -- so a size plan fixed beforehand
+    # cannot put fat files where the answers are. Planning here costs nothing
+    # and is still seeded, so the archive stays reproducible given the same
+    # write pass.
+    if callable(sizes):
+        sizes = sizes(all_pairs(vocab), set(landed))
+    # With a flat target, a pair holding gold is already about the right size
+    # and v3 skips it -- 1.7 rows against a target of 3 is not a difference
+    # worth 170 extra calls. With `sizes` that reasoning inverts and becomes a
+    # bug: every gold row would sit alone in a file of one to three while all
+    # the fat files were pure distractor, so the answer could never be hiding
+    # inside a fat file and the lumpy distribution would measure nothing. The
+    # gold rows are what a fat file has to bury. So pairs holding gold are
+    # topped up to their planned size, counting the gold rows they already
+    # have. Scoped to `sizes` so every v3 archive keeps its exact semantics.
+    todo = [p for p in all_pairs(vocab) if sizes or p not in landed]
     for i, pair in enumerate(todo, 1):
-        n = sizes.get(pair, 3) if sizes else 3
-        print("  pad %d/%d (%d rows): %s" % (i, len(todo), n, pair), flush=True)
+        n = (sizes.get(pair, 3) - landed[pair]) if sizes else 3
+        if n <= 0:
+            continue
+        print("  pad %d/%d (%d rows, %d gold): %s"
+              % (i, len(todo), n, landed[pair], pair), flush=True)
         pad[pair] = pad_rows(pair, n)
     return {"gold": gold, "pad": pad}
 
