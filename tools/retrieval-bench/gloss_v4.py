@@ -47,7 +47,16 @@ shipped shelf gets 63. Matched on rows reached instead:
        100            78%  (5 files)     51%  (1 file, 80 rows)
        220            80%  (8 files)     75%  (3 files, 214 rows)
 
-The shipped shelf wins at every budget, by 19pp in the middle of the range.
+A paired bootstrap over the 87 questions, which is what separated the gloss
+sizes in `file_v4` and is owed here too:
+
+    shipped@3 vs terse@1   63 vs 80 rows    -18.4pp   CI [-32.2, -4.6]   P 0%
+    shipped@8 vs terse@3  176 vs 214 rows    -4.6pp   CI [-13.8, +4.6]   P 13%
+
+So the cheap end is a real loss and not a table artifact -- the interval
+excludes zero and terse never wins a resample. The expensive end is a tie, and
+a tie bought with 38 extra rows per question, which is the same shape as
+`file_v4`'s by-gloss result: read it as "no better", not as "close".
 Terse's problem is granularity, not glosses: its smallest openable unit is 80
 rows, so it cannot express a cheap read at all, and three of its rows in four
 are unreachable at any budget the shipped shelf would use. That is the
@@ -123,6 +132,7 @@ def evaluate(e, rowsv, rows_flat, gold_stmt, shelf, qv, qs, k, files):
              for stmt, questions in corpus.STATEMENTS for q in questions}
 
     out = collections.Counter()
+    perq = {"gloss": [], "centroid": []}
     for q, v in zip(qs, qv):
         for how, M in (("gloss", G), ("centroid", cent)):
             chosen = np.argsort(-(M @ v))[:files]
@@ -130,9 +140,11 @@ def evaluate(e, rowsv, rows_flat, gold_stmt, shelf, qv, qs, k, files):
             out[how + ".reach"] += len(pool)
             out[how + ".select"] += bool(per_q[q] & set(int(c) for c in chosen))
             top = pool[np.argsort(-(rowsv[pool] @ v))[:k]] if len(pool) else []
-            out[how + ".strict"] += answered_row([rows_flat[i] for i in top], q)
+            s_ = answered_row([rows_flat[i] for i in top], q)
+            out[how + ".strict"] += s_
+            perq[how].append(s_)
     out["pairs_used"] = len(set(owner.tolist()))
-    return out
+    return out, {how: np.array(perq[how], float) for how in perq}
 
 
 def main(k=5):
@@ -155,11 +167,12 @@ def main(k=5):
 
     print("\n  %-12s %4s %-9s %7s %7s %7s %6s"
           % ("shelf", "open", "pick by", "select", "strict", "reach", "used"))
-    swept = []
+    swept, PERQ = [], {}
     for files in (1, 2, 3, 5, 8):
         for name, shelf in shelves:
-            t = evaluate(e, rowsv, flat, None, shelf, qv, qs, k, files)
+            t, pq = evaluate(e, rowsv, flat, None, shelf, qv, qs, k, files)
             for how in ("gloss", "centroid"):
+                PERQ[(name, files, how)] = pq[how]
                 reach = t[how + ".reach"] / float(n)
                 strict = 100 * t[how + ".strict"] // n
                 swept.append((name, files, how, reach, strict))
@@ -174,14 +187,29 @@ def main(k=5):
     # being handed four times as many rows to rank has not shown that its
     # folders are better, it has shown that a bigger slice is easier.
     print("\n  matched on rows reached, centroid pick, nearest sweep point:")
-    print("    %8s   %-16s %-16s" % ("~rows", "shipped/170", "terse/34"))
+    print("    %8s   %-22s %-22s" % ("~rows", "shipped/170", "terse/34"))
     for target in (20, 60, 100, 220):
         cells = []
         for nm, _ in shelves:
             cand = [r for r in swept if r[2] == "centroid" and r[0] == nm]
             b = min(cand, key=lambda r: abs(r[3] - target))
-            cells.append("%3d%%  (%d files, %.0f)" % (b[4], b[1], b[3]))
-        print("    %8d   %-16s %-16s" % (target, cells[0], cells[1]))
+            cells.append("%3d%% (%d files, %3.0f rows)" % (b[4], b[1], b[3]))
+        print("    %8d   %-22s %-22s" % (target, cells[0], cells[1]))
+
+    # 87 questions makes a 5pp gap four questions wide, so the file-count
+    # table cannot be read as a win for either shelf on its own. Paired over
+    # questions -- both shelves answer the same ones -- at the two points
+    # where their reach is closest. Positive means terse is ahead.
+    rng = np.random.default_rng(4)
+    print("")
+    print("  paired bootstrap, terse minus shipped, 5000 resamples of %d questions:" % n)
+    for lo, hi, why in ((3, 1, "63 vs 80 rows"), (8, 3, "176 vs 214 rows")):
+        d = PERQ[("terse/34", hi, "centroid")] - PERQ[("shipped/170", lo, "centroid")]
+        boot = d[rng.integers(0, len(d), (5000, len(d)))].mean(1)
+        print("    shipped@%d vs terse@%d (%s)  %+5.1fpp  95%% CI [%+5.1f, %+5.1f]"
+              "  P(terse better) %3d%%" % (
+                  lo, hi, why, 100 * d.mean(), 100 * np.percentile(boot, 2.5),
+                  100 * np.percentile(boot, 97.5), 100 * (boot > 0).mean()))
 
     print("\n  select = an opened file holds the answer. Not comparable across")
     print("           shelves: 3 of 34 is 9% of the shelf, 3 of 171 is 1.8%.")
