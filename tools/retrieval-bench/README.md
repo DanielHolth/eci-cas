@@ -63,6 +63,11 @@ makes it more fabricating too, and that trade is invisible on the other axes.
   Counts subjects on two sentences, which is the one thing the sufficiency
   score cannot see: `subject=brother key=location value=Tromso` has every word
   the answer needs and is still an address Librarian will not look at.
+- `full_path.py` — no score, just the whole address as written, several runs
+  per statement, so drift and settlement are visible side by side. Reading it
+  is what showed that category is effectively deterministic while
+  subtopic/subject/key change on nearly every run — and that this is fine,
+  because only the first two route.
 - `review_other.py` — the second pass over `other`. **Dead end**: it removes
   `other` as designed and buys no accuracy, because `x/other` was never the
   loss it looks like — the read path opens `other` alongside its parent
