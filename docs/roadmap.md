@@ -144,19 +144,58 @@ no value is ever inspected — so end-to-end recall is 58% times whatever
 fraction of rows still contain the answer, and that second number had never
 been measured until `tools/retrieval-bench/`. Read the two separately.
 
-**Retrieval is where the bigger loss is.** Librarian is shown the flat index and picks pairs to open.
-That holds at 75% on an 11-file archive and falls to 58% at the ~170 the
-vocabulary allows — and 58% is an *upper bound*, because the padding files in
-that measurement were empty. No fix is known. It is the single biggest lever
-left on whether the system remembers anything.
+**Retrieval is where the bigger loss is, and it is worse than 58%.** That
+number was selection alone, over 17 questions, with the padding pairs as
+empty files. Re-measured on
+[`tools/retrieval-bench/read_bench.py`](../tools/retrieval-bench/read_bench.py)
+— 35 questions, all 170 pairs populated so a wrong pick returns something
+plausible — the read path scores:
+
+    category 79%   select 36%   pick 76%   answer 25%
+
+Three reps, and rep 1 alone gave 34/83/31, so the shape is stable. Nothing
+regressed; the instrument got honest.
+
+**The loss is one stage and one level.** `pick` at 76% says Recall keeps the
+row once the file is open, so the second stage is not where facts go. And of
+19 selection misses in the first rep, **14 opened the right category and the
+wrong folder** — the licence filed at `admin/renewal` while the reader opened
+`admin/licence`; the cabin at `household/address` while the reader opened
+`household/property`; the degree at `learning/university` while the reader
+opened `learning/course`. Counting category-level hits the reader is right
+79% of the time.
+
+So the reading recorded below for the hierarchical dead end — "the right
+drawer is not guessable from the question" — does not survive this. The
+drawer is guessable. The folder inside it is not, because 15–17 one-word
+topics per category contain two or three that mean the same thing to a 4B.
+
+**First fix measured: synonyms beside the topic names.** A few words per
+topic in the *question's* vocabulary rather than the folder's
+(`admin/renewal (expires, expiry, renew, runs out, valid until)`), shown to
+the selector only, so filing stays byte-identical and a moved number has one
+possible parent. Over 3 interleaved reps: select 40% → 51%, answer 32% →
+43%, better in 3 of 3 on both. Category flat at 80% — the gloss does not help
+the reader find the drawer, which is right, because the drawer was never the
+problem.
+
+Four of the five *real* category misses were the write side, not the read
+side: "I gave up smoking" filed to `leisure/hobby`, the 07:20 bus to
+`travel/trip`, the spare key to `household/address`. v2 never showed this
+because v2's statements were tidier than a person is.
 
 Dead ends, so nobody spends the week twice — all measured on the 4B, all
 worse than the flat list they were meant to beat:
 
 - **Hierarchical read** (pick a category, then a topic inside it) — the same
   two-step that won +17pp on the *write* side loses 35pp on the read side
-  (58/67/58 flat vs 25/17/25). Reading is a recall problem, not a
-  classification one: the right drawer is not guessable from the question.
+  (58/67/58 flat vs 25/17/25). Still the only read result that clears its
+  noise floor. The reason recorded here was "the right drawer is not
+  guessable from the question", and that reason is now known to be wrong —
+  the drawer is guessable 79% of the time. Why the two-step loses anyway is
+  open; a plausible reading is that committing to one category discards the
+  second-best drawer, and the fix for a folder-level problem was applied a
+  level too high.
 - **Wider fan-out** — opening 2, 3 or 5 files scored identically. The misses
   are wrong picks, not too few picks, and paying for more files buys nothing.
 - **Two archives merged / redundant filing** — +0%. 1.83 addresses per
@@ -176,13 +215,28 @@ worse than the flat list they were meant to beat:
   into `relations/neighbour`. `other` is doing its job. Left in
   `tools/retrieval-bench/review_other.py`; not shipped.
 
-What has not been tried: embeddings over the index rather than a picked pair,
-and asking the question of a *sample of values* rather than of file names.
+Untried when this was written and now in the arena
+([`tools/retrieval-bench/arena.py`](../tools/retrieval-bench/arena.py)):
+asking the question of a *sample of values* rather than of file names;
+opening every topic in the category the selector chose, which spends the 79%
+directly and is the honest re-test of the fan-out dead end; a lexical union
+on row subjects, which is Daniel's two-model idea with the second model
+removed; and a consolidated 40-pair vocabulary. Still untried: embeddings
+over the index, blocked on `models/embedding/` not existing.
 
 And the caveat that outranks all four: with 12 statements against a 10pp
 noise floor, "identical", "+0%" and "0 for 4" are *undetectable*, not
 disproven. Only the 35pp hierarchical loss clears the floor. Three of those
 four dead ends are unmeasured, not dead.
+
+**A corpus nobody has tuned against — now written.**
+[`tests/corpora/retrieval_v3.py`](../tests/corpora/retrieval_v3.py) is 24
+statements and 35 direct questions, written before anything was run, plus 8
+oblique questions that do not name the fact they need ("who should we drop by
+and visit while we are staying in Bodo?" wanting a sister filed under
+`relations/partner`). The oblique tier is scored separately and never folded
+into the headline; it sits at 2/8. Everything above is measured on v3. What
+follows is the old note, kept because it still describes v2:
 
 Also needed before any of this is trusted: a corpus nobody has tuned against.
 The fixture behind every number above is
