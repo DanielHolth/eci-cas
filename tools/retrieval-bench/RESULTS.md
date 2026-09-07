@@ -241,3 +241,48 @@ the shipped shelf at 21 files and 48 rows. It was dismissed on cost. This
 batch says the shipped archive is genuinely the best written one, so that
 75% may not be a fluke of its batch. Cross-batch, so it proves nothing --
 the next batch runs whole-category on all three shelves together.
+
+## Batch 12 — whole-category on all three shelves, one batch, three reps
+
+  arm               category  select  answer  files  rows
+  full+wc+nopick         85%     85%     78%   20.6  46.4
+  full+wc+lenient        82%     82%     60%   21.4  48.4
+  lean+wc+lenient        82%     82%     54%    5.2  11.1
+  terse+wc+lenient       73%     73%     48%    5.5  11.2
+
+  answer, per rep:
+    full+wc+nopick   27  27  28
+    full+wc+lenient  21  24  18
+    lean+wc+lenient  18  19  20
+    terse+wc+lenient 19  15  17
+
+The comparison batch 11 asked for, and it settles the shelf question. The
+shipped 170-pair shelf beats both consolidated shelves end-to-end, not only
+at oracle, and full+wc+nopick wins every rep by a margin no noise floor
+covers -- 78% against 60% for the same shelf with the lenient bar, and 24pp
+over terse.
+
+Batch 3's 75% was not a fluke of its batch. It reproduces at 78% here with
+everything else held constant.
+
+Consolidation is now negative on every measurement that exists. It never
+improved filing (batch 8), it never improved the archive (batch 11), and it
+loses end-to-end even with the selector handicap removed by fan-out (here).
+The lean and terse shelves are withdrawn as candidates.
+
+Two things the terse work produced that survive it. The gloss result is
+real and portable: no effect on 170 concrete pairs (batch 8), ~10pp on 34
+abstract ones (batch 10) -- a gloss is what makes an abstract folder name
+workable, not a general improvement. And the rows column, which explains
+every shelf result in this log once you stop reading it as a cost line.
+
+The cost is the honest caveat and it is large: 21 files and 48 rows a turn,
+against 5 and 11. On a 24-statement corpus that is affordable. It does not
+scale -- Recall chunks by RowsPerWorker, so rows a turn is LLM calls a
+turn, and the whole-category arms are buying accuracy with prompt volume
+that grows linearly with the archive.
+
+So the next question is not which shelf. It is whether the narrowing inside
+a category can be done by something other than a model call. That is the
+sentence column and the embedding beside it, and it moves ahead of any
+further vocabulary work.
