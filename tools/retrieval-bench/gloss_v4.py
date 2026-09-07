@@ -64,10 +64,13 @@ facts-per-file mechanism from batch 12 arriving again by a different road --
 and it now holds for a vector reader, which was the one thing the earlier
 batches could not say, since they only ever had a weak model doing the picking.
 
-Coverage, which flatters neither arm and should be fixed before either number
-is quoted again: `TERSE_GLOSS` covers 26 of 34 pairs and the shipped gloss 160
-of 170, so both shelves have unglossed pairs that no row can ever be filed
-into. terse ran on 26 files and the shipped shelf used 148.
+Coverage looks like a flaw and is not. `TERSE_GLOSS` covers 26 of 34 pairs and
+the shipped gloss 160 of 170, but every missing pair on both shelves is
+`x/other` -- one per category, no exceptions. `other` is the valve: it is
+defined by matching nothing, so there is no direction in the space for it and
+a gloss would invent a meaning it does not have. A vector filer never files
+into `other`, which is right, and consistent with `other` being write-side
+only and opened in code anyway.
 
 Reading `select` across shelves needs care and the table prints what it needs.
 Three files of 34 is 9% of the shelf; three of 171 is 1.8%. Opening the same

@@ -72,9 +72,14 @@ look, and spread goes from 31 pairs to 60 -- wider than the Cataloger's own
 +1.1pp on the bootstrap, P(better) 53%. A tie on the number that matters and a
 clear win on the two that were being held against the idea.
 
-Its own limit is coverage, not quality: 10 of 170 pairs ship no gloss line and
-get a zero vector, so nothing can be filed into them. That is a gap in the
-prompt, cheap to close, and it should be closed before this arm ships.
+The coverage gap first recorded here was withdrawn on inspection. All 10
+unglossed pairs are `x/other`, one per category, and all 8 on the terse shelf
+are the same. That is not a hole in the prompt: `other` is the valve, defined
+by not matching anything, and a nearest-vector filer has no "none of the
+above" direction to point at -- writing a gloss for it would invent a meaning
+it does not have. A vector filer therefore never files into `other`, which is
+the correct behaviour and matches the existing finding that `x/other` is
+write-side only and opened in code regardless.
 
 **by-gloss ties two LLM calls per row while agreeing with them 11% of the
 time.** A paired bootstrap over the 87 questions says +1.1pp strict, 95% CI
