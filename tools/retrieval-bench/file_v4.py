@@ -31,6 +31,18 @@ Result:
     by-name        32%      66%      65%       55
     by-gloss       11%      77%      73%       31
 
+It holds at every width, and the gap widens as more files are opened
+(select / strict, k=5):
+
+    files opened      1          3          5
+    llm            49 / 49    74 / 72    82 / 79
+    by-name        54 / 51    66 / 65    80 / 78
+    by-gloss       55 / 52    77 / 73    89 / 81
+
+So the concentration into 31 pairs is not costing anything here -- a filer
+that collapsed usefully-distinct facts together would lose at files=1 first,
+and by-gloss is ahead there too.
+
 **by-gloss matches two LLM calls per row while agreeing with them 11% of the
 time.** The Cataloger's specific choices are very nearly irrelevant to whether
 the fact is found again: what matters is that filing and retrieval agree with
