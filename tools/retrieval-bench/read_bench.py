@@ -306,11 +306,18 @@ def pick(question, rows, prompt=None, show=None):
 
     `show` is how one row is rendered into the listing, defaulting to the
     address line -- which is what ships, and is a bug rather than a choice.
-    Every row carries a sentence saying the fact in plain words, the embedder
-    has read it since a7096f4, and Recall never saw it: it has been deciding
-    what to keep from category/topic/subject/key/value alone. `raw_v4` shows
-    that line drops 6pp of facts the sentence holds, so Recall was being asked
-    to filter partly blind. Pass embed_text to show it what the vectors see.
+    Every row carries a sentence saying the fact in plain words, and the
+    shipped listing does not include it, so Recall decides what to keep from
+    category/topic/subject/key/value alone.
+
+    That is a deliberate default, not an oversight, and this parameter is not
+    news: batch 14 measured the same swap on v3 with a forked copy of this
+    function in `sentence_ab.py`, and found it lifts a scarce reader (strict,
+    42% -> 54%) while doing nothing for the lenient arm that would actually
+    ship (59% -> 60%). The parameter exists here so that fork can go away and
+    so v4 -- which has the fat files v3 lacked, and so the scarcity the
+    sentence was designed for -- can ask the question again on an archive that
+    can answer it.
     """
     show = show or line
     kept = []
