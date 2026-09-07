@@ -43,8 +43,9 @@ BASE = ROOT + "tools/retrieval-bench/"
 class Arm:
     """One shelf and one way of showing it."""
 
-    def __init__(self, name, cache, vocab=None, gloss=None, select=None):
+    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False):
         self.name = name
+        self.oracle = oracle
         self.cache = BASE + cache
         self.vocab = vocab
         self.gloss = gloss
@@ -62,7 +63,12 @@ class Arm:
         return self
 
     def ask(self, q):
-        opened = self.select(q, self.index, self.rows)
+        # The oracle opens the pair the writer actually used. It is not a
+        # strategy -- nothing at runtime knows the gold pair -- it is the
+        # ceiling: whatever `answer` it fails to reach is lost by Recall or
+        # by the row itself, and no selector however good can win it back.
+        opened = (sorted(self.gold[q]) if self.oracle
+                  else self.select(q, self.index, self.rows))
         got = rb.pick(q, [r for p in opened for r in self.rows[p]])
         t = self.t
         t["n"] += 1
@@ -237,6 +243,8 @@ ARMS = [
         select=two_stage(LEAN_GLOSS)),
     Arm("lean+subjllm", ".archive_v3_lean.json", vocab=LEAN,
         select=subject_llm(LEAN_GLOSS)),
+    Arm("lean+oracle", ".archive_v3_lean.json", vocab=LEAN, oracle=True),
+    Arm("full+oracle", ".archive_v3.json", oracle=True),
 ]
 
 
