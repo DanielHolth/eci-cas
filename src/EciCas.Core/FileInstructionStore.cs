@@ -81,6 +81,7 @@ public sealed class FileInstructionStore : IInstructionStore
             ["Archivist"] = Sections((InstructionFile.MainSection, ["text"])),
             ["Cataloger"] = Sections(
                 ("vocabulary", []),
+                ("gloss", []),
                 ("category", ["fact", "text"]),
                 ("topic", ["cat", "topics", "fact", "text"])),
             ["Reflection"] = Sections(

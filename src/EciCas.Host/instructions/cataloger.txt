@@ -48,6 +48,190 @@ travel: trip destination accommodation flight transport booking plan visit
 admin: passport licence insurance contract account membership registration
   warranty certificate renewal deadline provider will document reference other
 
+## gloss
+# category/topic: the words a question would use for that folder -- read by
+# Librarian, which appends them to the option lines it shows the selector.
+#
+# Not a description of the folder. A description is written in the folder's
+# own vocabulary and the selector is matching against a person's turn, so
+# "renewal" is glossed "expires, expiry, runs out" and not "the renewal of a
+# document". Nobody asks about their renewals; they ask when something runs
+# out. Every line here should read like the question, not like the shelf.
+#
+# Worth what it costs, measured twice on this vocabulary with filing held
+# byte-identical -- the words are shown to the selector and nothing else, so
+# nothing downstream can move: select 41% -> 53%, answer 30% -> 43%, and
+# small talk got quieter too, 71% -> 84%. Seven reps over two runs, no
+# negative rep on answer.
+#
+# "other" is absent on purpose. It is never shown to a selector, so a gloss
+# for it would be words nobody reads.
+#
+# One line per non-"other" pair in the vocabulary above. Adding a topic there
+# without adding it here costs that option its words; it does not break the
+# turn.
+
+identity/name: called, full name, spelling
+identity/age: how old, birthday year, born
+identity/birth: born, birthplace, date of birth
+identity/origin: from, grew up, hometown
+identity/nationality: citizen, passport country
+identity/language: speaks, fluent, mother tongue
+identity/appearance: looks, height, hair, glasses
+identity/personality: temperament, character, introvert
+identity/belief: thinks, opinion, worldview
+identity/religion: faith, church, practising
+identity/politics: votes, party, political
+identity/value: matters to, principle, cares about
+identity/fear: afraid, scared, phobia, terrified
+identity/preference: likes, prefers, favourite, hates
+identity/allegiance: supports, fan of, team loyalty
+identity/habit: always, usually, tends to
+identity/humour: jokes, finds funny
+body/condition: illness, chronic, suffers from, seasick
+body/injury: broke, sprained, hurt, accident
+body/allergy: allergic, reaction, intolerant
+body/medication: takes, prescription, pills, dose
+body/diet: eats, avoids, vegetarian, cannot eat
+body/sleep: bedtime, insomnia, hours slept
+body/fitness: exercise, training, gym, running
+body/weight: kilos, heavier, lost weight
+body/vision: eyesight, glasses, lenses
+body/hearing: deaf, hearing aid, ears
+body/dental: teeth, dentist, filling
+body/mental: anxiety, stress, therapy, mood
+body/practitioner: doctor, GP, specialist, clinic
+body/appointment: booked, seeing the doctor, scheduled
+body/treatment: surgery, therapy, course of
+body/vaccination: jab, vaccinated, booster
+body/symptom: pain, ache, feels, dizzy
+household/property: house, flat, own, rent, mortgage
+household/room: kitchen, bedroom, upstairs
+household/garden: outside, lawn, plants, shed
+household/furniture: sofa, table, bed, wardrobe
+household/appliance: washing machine, dishwasher, heat pump, boiler, fridge
+household/electronics: tv, laptop, phone, router
+household/vehicle: car, drives, bike, van
+household/tool: drill, ladder, toolbox
+household/maintenance: serviced, installed, checked, upkeep
+household/repair: broken, leaks, fix, fault
+household/cleaning: tidy, hoover, laundry
+household/utility: power, water, heating, broadband
+household/pet: dog, cat, walks, feeds
+household/plant: watering, indoor plants
+household/storage: attic, cellar, boxes, keeps
+household/decor: paint, curtains, pictures
+household/address: lives at, where is, located, nearby, spare key
+relations/family: relatives, household, our family
+relations/parent: mother, father, mum, dad
+relations/sibling: brother, sister
+relations/child: son, daughter, kids
+relations/partner: wife, husband, spouse, girlfriend
+relations/friend: mate, best friend, pal
+relations/colleague: co-worker, workmate, manager, boss
+relations/neighbour: next door, up the road, nearby
+relations/birthday: turns, born in, birthday
+relations/anniversary: wedding, years together
+relations/contact: number, email, how to reach
+relations/conflict: fell out, argument, not speaking
+relations/care: looks after, helps, elderly
+relations/gift: present, bought for, wants
+relations/visit: drop by, staying with, coming over
+relations/history: passed away, used to, back then, died
+work/employer: works at, company, firm
+work/role: job title, position, works as
+work/duty: responsible for, handles, does
+work/project: working on, deadline, deliverable
+work/schedule: shifts, hours, days worked
+work/location: office, site, works from
+work/commute: gets to work, bus, train, drive in
+work/meeting: standup, review, calls
+work/client: customer, account
+work/performance: review, feedback, appraisal
+work/promotion: raise, promoted, step up
+work/leave: holiday days, sick leave, off
+work/career: years at, background, path
+work/workplace: the office itself, desk, building
+work/tool: software, system, uses at work
+work/history: used to work, previous job, how long
+money/income: earns, comes in, revenue
+money/salary: paid, wage, monthly pay
+money/payday: paid on, the 15th, end of month
+money/expense: spends, costs, outgoings
+money/bill: invoice, utility bill, due
+money/subscription: monthly, streaming, membership fee
+money/debt: owes, credit card
+money/loan: borrowed, repayment
+money/mortgage: house loan, interest, term
+money/saving: saving for, put aside, rainy day
+money/investment: shares, fund, stocks
+money/pension: retirement, contributions
+money/budget: affordable, spending plan
+money/purchase: bought, buying, spend on
+money/price: costs, how much
+money/tax: tax return, deduction
+money/benefit: allowance, support payment
+learning/school: at school, pupil, class, taught
+learning/university: degree at, studied at, campus, uit, ntnu
+learning/course: enrolled, module, evening class
+learning/subject: field, discipline, studied what
+learning/qualification: masters, bachelor, degree in, diploma
+learning/exam: test, sat, results
+learning/skill: can do, learned to, good at
+learning/language: speaks, learning, fluent
+learning/teacher: tutor, lecturer, instructor
+learning/study: revising, reading up, learning
+learning/book: textbook, reading for study
+learning/certification: certified, licence to practise
+learning/plan: wants to study, applying
+learning/progress: getting on, halfway through
+leisure/hobby: does for fun, pastime, gave up
+leisure/sport: plays, runs, skis, swims
+leisure/team: supports, plays for, club side
+leisure/music: listens, sings, choir, band
+leisure/instrument: plays bass, guitar, piano
+leisure/game: board games, video games, chess
+leisure/reading: reads, novels, author, books
+leisure/film: watches, cinema, movies
+leisure/television: series, watches, streaming
+leisure/cooking: cooks, bakes, recipes
+leisure/outdoor: hiking, cabin trips, fishing
+leisure/craft: knitting, woodwork, making
+leisure/club: member of, meets, society
+leisure/event: concert, festival, going to
+leisure/routine: every week, on Wednesdays, before breakfast, regularly
+leisure/social: meets up, pub, friends round
+leisure/collection: collects, owns a set of
+travel/trip: went to, going to, journey
+travel/destination: place visited, where to
+travel/accommodation: hotel, cabin, stays at
+travel/flight: flies, airline, airport
+travel/transport: train, ferry, boat, car hire, bus
+travel/booking: booked, reserved, confirmed
+travel/plan: planning to go, itinerary
+travel/visit: visiting, seeing people, dropping in
+travel/holiday: summer holiday, break, vacation
+travel/luggage: packs, suitcase, bag
+travel/companion: travels with, goes with
+travel/experience: loved it, what happened there
+travel/preference: likes travelling by, avoids
+travel/frequency: often, once a year, rarely
+admin/passport: passport, travel document
+admin/licence: driving licence, permit
+admin/insurance: policy, covered, premium
+admin/contract: signed, agreement, terms
+admin/account: login, bank account, profile
+admin/membership: member of, subscription to
+admin/registration: registered, enrolled, on file
+admin/warranty: guarantee, covered until
+admin/certificate: certificate, official document
+admin/renewal: expires, expiry, renew, runs out, valid until, needs renewing
+admin/deadline: due by, must be done by, cut-off
+admin/provider: supplier, company used, switched to
+admin/will: testament, inheritance
+admin/document: papers, forms, filed
+admin/reference: reference number, case id
+
 ## category
 # The scope lines earn their length: without them "an appointment" split
 # evenly between body and admin from turn to turn, and a pair that moves is

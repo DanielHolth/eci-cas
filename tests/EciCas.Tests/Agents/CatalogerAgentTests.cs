@@ -218,6 +218,42 @@ public class CatalogerAgentTests
     }
 
     /// <summary>
+    /// Every folder the selector can be shown has words to be shown with.
+    ///
+    /// The gloss is what took select from 41% to 53% and answer from 30% to
+    /// 43%, and it does that one option line at a time -- a pair with no line
+    /// here is simply offered bare, which costs that folder its share of the
+    /// win and costs nothing else. Silent, in other words, and worth a test
+    /// for the same reason the "other" check is: a hand edit adding a topic
+    /// to the vocabulary is exactly when this gets forgotten.
+    ///
+    /// "other" is excluded on both sides. Librarian never shows it, so a
+    /// gloss for it would be words nobody reads.
+    /// </summary>
+    [Fact]
+    public void ShippedGloss_DefinesEveryFolderTheSelectorIsShown()
+    {
+        var vocabulary = ClosedVocabulary.Parse(ShippedInstructions.Store.For("Cataloger", "vocabulary"));
+        var gloss = TopicGloss.Parse(ShippedInstructions.Store.For("Cataloger", "gloss"));
+
+        var undefined = vocabulary.Categories
+            .SelectMany(c => vocabulary.TopicsIn(c).Select(t => (Category: c, Topic: t)))
+            .Where(p => !string.Equals(p.Topic, "other", StringComparison.OrdinalIgnoreCase))
+            .Where(p => gloss.For(p.Category, p.Topic) is null)
+            .Select(p => p.Category + "/" + p.Topic)
+            .ToList();
+
+        Assert.Empty(undefined);
+
+        // And nothing glossed that is not a folder -- a renamed topic leaves
+        // its old line behind, which reads as a definition of nothing.
+        var pairs = vocabulary.Categories
+            .SelectMany(c => vocabulary.TopicsIn(c).Select(t => c + "/" + t))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(pairs.Count - vocabulary.Categories.Count, gloss.Count);
+    }
+
+    /// <summary>
     /// The "category" section describes ten drawers in prose and the
     /// "vocabulary" section lists them; only the second one is parsed. A hand
     /// edit that renames a drawer in the prose leaves the model answering a

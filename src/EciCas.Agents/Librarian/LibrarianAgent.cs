@@ -48,6 +48,14 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly LibrarianOptions _options;
+
+    /// <summary>
+    /// Null when cataloger.txt has no gloss section, which is a shelf with no
+    /// definitions rather than a fault: every option line simply reads as it
+    /// did before. Lazy because the instruction store is loaded before any
+    /// turn arrives and re-parsing 160 lines per selection would be waste.
+    /// </summary>
+    private readonly Lazy<TopicGloss?> _gloss;
     private readonly IEmbeddingProvider _embeddings;
     private readonly IPassageStore _passages;
     private readonly PassageOptions _passageOptions;
@@ -62,6 +70,17 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         _bus = bus;
         _store = store;
         _instructions = instructions;
+        _gloss = new Lazy<TopicGloss?>(() =>
+        {
+            try
+            {
+                return TopicGloss.Parse(_instructions.For(GlossOwner, GlossSection));
+            }
+            catch (KeyNotFoundException)
+            {
+                return null;
+            }
+        });
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
@@ -308,9 +327,29 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// <summary>Mirrors ClosedVocabulary.OtherTopic — the read side is not allowed to depend on the write side's assembly.</summary>
     private const string OtherTopic = "other";
 
+    /// <summary>
+    /// The gloss lives in cataloger.txt beside the vocabulary it defines, and
+    /// is read from there rather than copied here on purpose: the point of it
+    /// is that the writer and the reader share one definition of what a folder
+    /// holds, and two copies of a dictionary are two dictionaries. This is a
+    /// read of another agent's instruction section, not a dependency on its
+    /// code -- the rule this class keeps is that the read side does not bind
+    /// to the write side's types, and OtherTopic is still mirrored rather
+    /// than imported.
+    /// </summary>
+    private const string GlossOwner = "Cataloger";
+    private const string GlossSection = "gloss";
+
     private string BuildSelectionPrompt(string? text, IReadOnlyList<ArchivePair> index)
     {
-        var options = string.Join("\n", index.Select((t, i) => $"{i}. {t.Category}/{t.Topic}"));
+        var gloss = _gloss.Value;
+        var options = string.Join("\n", index.Select((t, i) =>
+        {
+            var words = gloss?.For(t.Category, t.Topic);
+            return words is null
+                ? $"{i}. {t.Category}/{t.Topic}"
+                : $"{i}. {t.Category}/{t.Topic} ({words})";
+        }));
         return InstructionFile.Fill(_instructions.For(Name),
             ("options", options),
             ("max", _options.MaxSelectedPairs.ToString()),
