@@ -181,8 +181,17 @@ def run(reps=1, verbose=True):
             hit = bool(gold[q] & set(opened))
             got = pick(q, [r for p in opened for r in rows[p]])
             ok = answered(got, q)
+            # Category-level hit, scored separately because the first run
+            # said the two come apart hard: 14 of 19 selection misses had
+            # opened the right category and the wrong topic. "The right
+            # drawer is not guessable from the question" (docs/roadmap.md,
+            # from the hierarchical result) is not what this measures --
+            # the drawer is guessable, the folder inside it is not.
+            gc = set(p.split("/")[0] for p in gold[q])
+            oc = set(p.split("/")[0] for p in opened)
             tally["n"] += 1
             tally["select"] += hit
+            tally["select_cat"] += bool(gc & oc)
             tally["answer"] += ok
             if hit:
                 tally["pick_n"] += 1
@@ -194,6 +203,8 @@ def run(reps=1, verbose=True):
     n = tally["n"]
     pn = max(tally["pick_n"], 1)
     print("\nreps %d   questions %d   writable %d/%d" % (reps, n, len(writable), len(ANSWERS)))
+    print("  category %d/%d = %d%%" % (
+        tally["select_cat"], n, 100 * tally["select_cat"] // n))
     print("  select %d/%d = %d%%   pick %d/%d = %d%%   answer %d/%d = %d%%" % (
         tally["select"], n, 100 * tally["select"] // n,
         tally["pick"], tally["pick_n"], 100 * tally["pick"] // pn,
