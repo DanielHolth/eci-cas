@@ -298,15 +298,25 @@ def embed_text(r):
     return line(r) + ". " + (r.get("sentence") or "")
 
 
-def pick(question, rows, prompt=None):
+def pick(question, rows, prompt=None, show=None):
     """RecallAgent: chunk by RowsPerWorker, keep at most MaxPickedPerWorker.
 
     `prompt` is an arm: a replacement for recall.txt with the same three
-    placeholders. Default is the shipped one."""
+    placeholders. Default is the shipped one.
+
+    `show` is how one row is rendered into the listing, defaulting to the
+    address line -- which is what ships, and is a bug rather than a choice.
+    Every row carries a sentence saying the fact in plain words, the embedder
+    has read it since a7096f4, and Recall never saw it: it has been deciding
+    what to keep from category/topic/subject/key/value alone. `raw_v4` shows
+    that line drops 6pp of facts the sentence holds, so Recall was being asked
+    to filter partly blind. Pass embed_text to show it what the vectors see.
+    """
+    show = show or line
     kept = []
     for i in range(0, len(rows), ROWS_PER_WORKER):
         chunk = rows[i:i + ROWS_PER_WORKER]
-        listing = "\n".join("%d. %s" % (j, line(r)) for j, r in enumerate(chunk))
+        listing = "\n".join("%d. %s" % (j, show(r)) for j, r in enumerate(chunk))
         reply = bench.strip(bench.call(
             (prompt or REC).replace("{rows}", listing).replace("{text}", question)
                .replace("{max}", str(MAX_PICKED)), 40))
@@ -317,7 +327,15 @@ def pick(question, rows, prompt=None):
 # --- scoring ----------------------------------------------------------------
 
 def answered(rows, question):
-    blob = " ".join(line(r).lower() for r in rows)
+    """Was the fact in the candidate set?
+
+    Scores embed_text, not line. It scored line until 2026-09-08, which made
+    every write-side and read-side number in batches 3-13 an understatement:
+    the sentence field is written by the Archivist, stored in the archive and
+    read by the embedder, and the scorer alone ignored it. The measured cost
+    of that was 6pp of ceiling and 10pp of strict retrieval (raw_v4). Numbers
+    from before the fix are not comparable to numbers after it."""
+    blob = " ".join(embed_text(r).lower() for r in rows)
     return any(all(tok in blob for tok in alt) for alt in ANSWERS[question])
 
 

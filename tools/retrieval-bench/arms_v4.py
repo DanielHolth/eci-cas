@@ -49,15 +49,29 @@ from arena import LENIENT
 
 CACHE = ROOT + "tools/retrieval-bench/.archive_v4_minimal.json"
 
+# (name, prompt, how a row is shown to the model). `show` is the new axis:
+# the shipped Recall sees the address line only, so it filters without the
+# sentence that holds the fact. `recall+s` is the same prompt over the same
+# rows with the sentence visible -- the cheapest possible fix if it works,
+# since nothing about the archive or the prompt changes.
 ARMS = [
-    ("recall",  rb.REC),
-    ("nopick",  None),
-    ("lenient", LENIENT),
+    ("recall",   rb.REC,  None),
+    ("recall+s", rb.REC,  rb.embed_text),
+    ("nopick",   None,    None),
+    ("lenient",  LENIENT, None),
 ]
 
 
 def answered(rows, question):
-    blob = " ".join(rb.line(r).lower() for r in rows)
+    """Was the fact in the candidate set? Scores embed_text, not line.
+
+    Same fix as read_bench.answered and for the same reason -- it is a
+    separate function only because that one closes over the v3 answer keys.
+    It scored line() until 2026-09-08, ignoring the sentence field that the
+    Archivist writes, the archive stores and the embedder reads; raw_v4 puts
+    the cost of that at 6pp of ceiling and 10pp of strict retrieval. Numbers
+    from before the fix do not compare to numbers after it."""
+    blob = " ".join(rb.embed_text(r).lower() for r in rows)
     return any(all(tok in blob for tok in alt) for alt in ANSWERS[question])
 
 
@@ -100,15 +114,15 @@ def run(reps=1):
             # comparison that is entirely about picking.
             opened = select_once(q, index, tally, gold)
             pool = [r for p in opened for r in rows[p]]
-            for name, prompt in ARMS:
-                got = pool if prompt is None else rb.pick(q, pool, prompt)
+            for name, prompt, show in ARMS:
+                got = pool if prompt is None else rb.pick(q, pool, prompt, show)
                 tally[name + ".answer"] += answered(got, q)
                 tally[name + ".rows"] += len(got)
         for t in corpus.NULLS:
             opened = rb.select(t, index)
             pool = [r for p in opened for r in rows[p]]
-            for name, prompt in ARMS:
-                got = pool if prompt is None else rb.pick(t, pool, prompt)
+            for name, prompt, show in ARMS:
+                got = pool if prompt is None else rb.pick(t, pool, prompt, show)
                 tally[name + ".null_clean"] += (len(got) == 0)
         print("  rep %d done" % (rep + 1), flush=True)
 
@@ -119,7 +133,7 @@ def run(reps=1):
     print("  select %d/%d = %d%%   (shared by every arm)"
           % (tally["select"], n, 100 * tally["select"] // n))
     print("\n  %-9s %8s %8s %8s" % ("arm", "answer", "nulls", "rows"))
-    for name, _ in ARMS:
+    for name, _, _s in ARMS:
         print("  %-9s %7d%% %7d%% %8.1f" % (
             name,
             100 * tally[name + ".answer"] // n,

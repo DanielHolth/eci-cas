@@ -13,14 +13,20 @@ Daniel's idea, and the reason this file exists: give the picker samples of
 what is in each file rather than only the name. It works -- but not in the
 form first measured here, and not for the reason first claimed.
 
-    method        vectors/file    bge    e5    (3 files, k=5, strict, of 87)
-    librarian          0           40%     -     LLM reading the name
-    name-only          1           54%    42%
-    sample-3           3           65%    58%
-    centroid           1           74%    68%
-    sample-10         10           78%    74%
-    all-rows       1 per row       85%    81%
-    flat           1 per row       78%     -     no files at all
+    method        vectors/file   strict    (3 files, k=5, of 87, e5)
+    librarian          0            --      LLM reading the name
+    name-only          1           45%
+    sample-3           3           63%
+    centroid           1           72%
+    sample-10         10           79%
+    all-rows       1 per row       87%
+    flat           1 per row        --      no files at all
+
+Two things moved these numbers after they were first taken. The ship embedder
+became multilingual-e5-small (lang_v4), costing 4-12pp on this all-English
+corpus, and the scorer stopped ignoring the sentence field (raw_v4), returning
+rather more than that. Both changes preserve the ordering exactly, so nothing
+below depends on which pass produced the column.
 
 Both columns are shown because the ship model changed after these were first
 measured: lang_v4 settled on multilingual-e5-small, which costs 4-12pp on this

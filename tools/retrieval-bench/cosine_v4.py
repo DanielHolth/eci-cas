@@ -44,6 +44,10 @@ from arms_v4 import CACHE, answered, gold_index, shape
 def answered_row(rows, question):
     """Strict: one row carries the whole key.
 
+    Scores embed_text like `answered` does. Both scored line() until
+    2026-09-08, which understated every arm by ~10pp on this measure; see
+    read_bench.answered.
+
     `answered` joins the candidate set into a single blob, which is right for
     the LLM arms -- Intent sees every row at once and can compose across them.
     It is wrong as a retrieval measure: a two-token key can be satisfied by
@@ -54,7 +58,8 @@ def answered_row(rows, question):
     the other, because they answer different questions: joint is what Intent
     would get away with, strict is whether the fact was actually found.
     """
-    return any(any(all(t in rb.line(r).lower() for t in alt) for alt in ANSWERS[question])
+    return any(any(all(t in rb.embed_text(r).lower() for t in alt)
+                   for alt in ANSWERS[question])
                for r in rows)
 
 
