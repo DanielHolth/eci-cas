@@ -75,14 +75,25 @@ def pad_rows(pair):
     return rows[:3]
 
 
-def build(vocab=None):
+def build(vocab=None, cat_prompt=None):
     """Real write path over the corpus, then padding everywhere else."""
     gold, pad = [], {}
     prompt = bench.load("archivist.txt")["main"]
     for i, (stmt, _) in enumerate(corpus.STATEMENTS, 1):
         print("  write %d/%d: %s" % (i, len(corpus.STATEMENTS), stmt[:44]), flush=True)
-        for pair, row in bench.write(stmt, prompt, vocab):
+        for pair, row in bench.write(stmt, prompt, vocab, cat_prompt):
             gold.append(dict(row, pair=pair, stmt=stmt))
+    # A shelf whose category prompt names drawers it does not have files
+    # everything to unfiled/unfiled and still produces a table. That is how
+    # the terse shelf's first batch was read as a shelf result when it was a
+    # harness bug, so it is an error now rather than a footnote.
+    bad = sum(g["pair"].startswith("unfiled") for g in gold)
+    if bad:
+        raise SystemExit(
+            "%d of %d rows filed to unfiled/unfiled: the category prompt and "
+            "the vocabulary disagree. Pass cat_prompt for a shelf that renames "
+            "a category." % (bad, len(gold)))
+
     landed = set(g["pair"] for g in gold)
     todo = [p for p in all_pairs(vocab) if p not in landed]
     for i, pair in enumerate(todo, 1):
@@ -91,14 +102,14 @@ def build(vocab=None):
     return {"gold": gold, "pad": pad}
 
 
-def archive(cache=CACHE, vocab=None):
+def archive(cache=CACHE, vocab=None, cat_prompt=None):
     """The frozen archive for one vocabulary. One cache file per vocabulary:
     a merged shelf has to be filed as well as read, so two arms that differ
     in vocabulary are two archives, not two views of one."""
     if not os.path.exists(cache):
         print("building archive (once): %s" % os.path.basename(cache), flush=True)
         with open(cache, "w", encoding="utf-8") as f:
-            json.dump(build(vocab), f, indent=1)
+            json.dump(build(vocab, cat_prompt), f, indent=1)
     with open(cache, encoding="utf-8") as f:
         a = json.load(f)
     rows = collections.defaultdict(list)

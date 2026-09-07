@@ -38,7 +38,7 @@ import retrieval_v3 as corpus
 from answers_v3 import ANSWERS
 from topic_gloss import GLOSS
 from lean_vocab import LEAN, LEAN_GLOSS
-from terse_vocab import TERSE, TERSE_GLOSS
+from terse_vocab import TERSE, TERSE_GLOSS, category_prompt
 
 # recall.txt is tuned hard against false positives -- its header records
 # greetings picking rows 3/4/1 times out of five until the "reply none" line
@@ -61,12 +61,13 @@ Candidate facts (index: subtopic / subject key = value), most important first:
 Turn: {text}'''
 
 BASE = ROOT + "tools/retrieval-bench/"
+CATP = category_prompt()
 
 
 class Arm:
     """One shelf and one way of showing it."""
 
-    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False, pick=True, rec=None, gate=False):
+    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False, pick=True, rec=None, gate=False, cat_prompt=None):
         self.name = name
         self.oracle = oracle
         self.pick = pick
@@ -74,11 +75,12 @@ class Arm:
         self.gate = gate
         self.cache = BASE + cache
         self.vocab = vocab
+        self.cat_prompt = cat_prompt
         self.gloss = gloss
         self.select = select or (lambda q, index, rows: rb.select(q, index, self.gloss))
 
     def load(self):
-        a, self.rows = rb.archive(self.cache, self.vocab)
+        a, self.rows = rb.archive(self.cache, self.vocab, self.cat_prompt)
         self.index = sorted(self.rows)
         self.gold = rb.gold_index(a)
         self.writable = set(
@@ -363,13 +365,13 @@ ARMS = [
     # The terse shelf, end to end. Filed by its own writer and read by its
     # own selector, so a move here is the shelf and the gloss together --
     # which is what write_gloss_ab.py separates and this cannot.
-    Arm("terse", ".archive_v3_terse.json", vocab=TERSE),
-    Arm("terse+gloss", ".archive_v3_terse.json", vocab=TERSE, gloss=TERSE_GLOSS),
-    Arm("terse+wc", ".archive_v3_terse.json", vocab=TERSE,
+    Arm("terse", ".archive_v3_terse.json", vocab=TERSE, cat_prompt=CATP),
+    Arm("terse+gloss", ".archive_v3_terse.json", vocab=TERSE, cat_prompt=CATP, gloss=TERSE_GLOSS),
+    Arm("terse+wc", ".archive_v3_terse.json", vocab=TERSE, cat_prompt=CATP,
         select=whole_category(TERSE_GLOSS)),
-    Arm("terse+wc+lenient", ".archive_v3_terse.json", vocab=TERSE,
+    Arm("terse+wc+lenient", ".archive_v3_terse.json", vocab=TERSE, cat_prompt=CATP,
         select=whole_category(TERSE_GLOSS), rec=LENIENT),
-    Arm("terse+oracle", ".archive_v3_terse.json", vocab=TERSE, oracle=True),
+    Arm("terse+oracle", ".archive_v3_terse.json", vocab=TERSE, cat_prompt=CATP, oracle=True),
 ]
 
 

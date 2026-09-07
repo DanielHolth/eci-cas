@@ -157,3 +157,51 @@ and other people's, go in relations.
 A place is a value, not a folder. File the fact by what kind of fact it is
 and let the place sit in the row.
 """
+
+
+# One line per drawer, in the same register as cataloger.txt's shipped block.
+# The category call needs prose, not a bare list: the shipped prompt proves it
+# -- the drawer names there carry a sentence each, and the ties below them.
+CATS = {
+    "identity":    "who the user is: name, age, origin, languages, beliefs,\n"
+                   "           values, fears, tastes, personality, and what they used\n"
+                   "           to be or studied to become",
+    "body":        "the body: illness, conditions, allergies, injuries,\n"
+                   "           medication, and how the user is doing -- tired, stressed,\n"
+                   "           recovering -- plus diet, sleep and exercise",
+    "relations":   "people the user knows as people: family, partner,\n"
+                   "           friends, colleagues and professionals by name, the dates\n"
+                   "           that belong to a person, and assistants or companions",
+    "work":        "the job itself: role, duties, employer, workplace,\n"
+                   "           commute, projects, career and what is being studied for it",
+    "resources":   "what the user has: the home and where things are kept,\n"
+                   "           possessions and vehicles and pets, their upkeep and repairs,\n"
+                   "           and money in and out",
+    "leisure":     "time off: trips and holidays, hobbies and sport and\n"
+                   "           clubs, and what is watched, read, listened to or played",
+    "records":     "formal records someone else holds: passport, licence,\n"
+                   "           certificate, insurance, contract, membership, account and\n"
+                   "           reference numbers",
+    "appointment": "what has not happened yet and is committed to: booked\n"
+                   "           slots, deadlines and dates that expire, and events the user\n"
+                   "           is going to",
+}
+
+
+def category_prompt():
+    """The shipped category prompt's shape, built from this shelf.
+
+    bench.file_fact takes a `vocab` override for the topic list but the
+    category prompt was a hardcoded prose block naming the shipped ten
+    drawers. Lean survived that only because it kept those ten names; the
+    first shelf to rename one filed 18 of 31 rows to unfiled/unfiled. So the
+    drawers and their ties are generated here, from the same TIES the docs
+    and cataloger.txt will carry.
+    """
+    drawers = "\n".join("%-10s %s" % (c, CATS[c]) for c in TERSE)
+    ties = "\n".join("- " + " ".join(p.split())
+                     for p in TIES.strip().split("\n\n"))
+    return ("Eight drawers of a filing cabinet, and a fact someone stated. Reply "
+            "with one\ndrawer name and nothing else.\n\n" + drawers +
+            "\n\nTies, decided once so they are decided the same way every time:\n"
+            + ties + "\n\nThe message it was said in: {text}\nThe fact: {fact}")

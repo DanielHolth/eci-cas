@@ -110,17 +110,25 @@ def norm(s):
     return re.sub(r"[^a-z0-9 ]", " ", s.lower())
 
 
-def file_fact(row, text, vocab=None):
+def file_fact(row, text, vocab=None, cat_prompt=None):
     """Two calls against the closed list, as CatalogerAgent does.
 
     `vocab` overrides the shipped one so a consolidated vocabulary can be
     filed and read as its own archive -- merging topics changes filing as
     well as selection, so an arm that changed only the read side would be
     measuring a shelf the writer never used.
+
+    `cat_prompt` overrides the DRAWER prompt, and a shelf that renames a
+    category must pass it. CAT["category"] is a prose block naming the
+    shipped ten by hand: lean survived without this only because it kept
+    those ten names, and the first shelf to rename one filed 18 of 31 rows
+    to unfiled/unfiled before anyone noticed the vocab override reached the
+    topic call alone.
     """
     VOCAB = vocab or globals()["VOCAB"]
+    CATP = cat_prompt or CAT["category"]
     fact = " ".join([row.get("subtopic", ""), row["subject"], row["key"], "=", row["value"]])
-    raw = norm(strip(call(CAT["category"].replace("{text}", text).replace("{fact}", fact), 24)))
+    raw = norm(strip(call(CATP.replace("{text}", text).replace("{fact}", fact), 24)))
     cat = next((c for c in VOCAB if c in raw), None)
     if cat is None:
         return "unfiled/unfiled"
@@ -131,6 +139,7 @@ def file_fact(row, text, vocab=None):
     return f"{cat}/{topic}"
 
 
-def write(text, prompt, vocab=None):
+def write(text, prompt, vocab=None, cat_prompt=None):
     """Full write path: one extraction call, then two filing calls per row."""
-    return [(file_fact(r, text, vocab), r) for r in extract(text, prompt)]
+    return [(file_fact(r, text, vocab, cat_prompt), r)
+            for r in extract(text, prompt)]
