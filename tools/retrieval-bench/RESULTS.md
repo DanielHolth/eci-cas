@@ -510,3 +510,41 @@ Two corpora agreeing is worth more than either, and the question is closed.
 **The whole LLM read path is beaten by arithmetic.** Best LLM arm here is 52%
 answer at 33 rows a turn. Filing by gloss and picking files by centroid, with
 no model call anywhere in either path, is 73% strict at 5 rows a turn.
+
+## Batch 16 — one written gloss per pair, on both shelves
+
+Daniel's question: test the 34-pair terse shelf with a single embedded gloss
+per pair. Both shelves already ship written glosses (`bench.CAT["gloss"]`,
+`terse_vocab.TERSE_GLOSS`) and neither had ever been embedded, so this needed
+no model calls. `gloss_v4.py` re-files all 1559 rows — gold and padding — into
+each shelf by nearest gloss, then reads back.
+
+**A written gloss ties a derived one.** Shipped shelf, 3 files, k=5: picking by
+the written line reads 70% strict, picking by a centroid of what landed there
+reads 70%. This closes the cold start `file_v4` opened — a ten-row gloss works,
+a one-row gloss is 12pp worse, and a young archive has no ten rows. A written
+line is available on day one and costs nothing per row.
+
+**Terse's apparent win is a reach artifact.** At equal file count terse reads
+75% against 70%, but three files of 34 is a tenth of the archive against a
+fiftieth, so terse ranks 214 rows where the shipped shelf ranks 63.
+
+    ~rows reached     shipped/170        terse/34
+        60            70%  (3 files)     51%  (1 file, 80 rows)
+       100            78%  (5 files)     51%  (1 file, 80 rows)
+       220            80%  (8 files)     75%  (3 files, 214 rows)
+
+Paired bootstrap, terse minus shipped, 5000 resamples of 87 questions:
+
+    shipped@3 vs terse@1   63 vs 80 rows    -18.4pp   CI [-32.2, -4.6]   P 0%
+    shipped@8 vs terse@3  176 vs 214 rows    -4.6pp   CI [-13.8, +4.6]   P 13%
+
+The cheap end is a real loss; the expensive end is a tie bought with 38 extra
+rows per question. Terse's smallest openable unit is 80 rows, so it cannot
+express a cheap read at all — batch 12's facts-per-file mechanism again, and
+now for a vector reader rather than a weak model, which is the one thing the
+earlier batches could not say.
+
+Coverage flaw, affecting both arms: `TERSE_GLOSS` covers 26 of 34 pairs and
+the shipped gloss 160 of 170, so both shelves have pairs no row can be filed
+into. Worth fixing before either number is quoted again.
