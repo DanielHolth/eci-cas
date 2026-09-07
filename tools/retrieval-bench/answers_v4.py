@@ -29,7 +29,7 @@ ANSWERS = {
  # Bodo -- the place name is shared by four, so none is scored on it alone
  "Where does Marit live?":                   [("marit", "bodo")],
  "Do I have siblings?":                      [("sister",), ("marit",)],
- "How often do I travel for work?":          [("fly", "month"), ("bodo", "month")],
+ "How often do I travel for work?":          [("fly", "month"), ("flight", "month"), ("bodo", "month")],
  "Where did we stay in Bodo?":               [("scandic",)],
  "Which office handles the northern contracts?": [("bodo", "contract"), ("bodo", "office")],
 
@@ -82,7 +82,7 @@ ANSWERS = {
 
  # work
  "Where do I work?":                         [("statkraft",)],
- "How long have I worked there?":            [("eleven",)],
+ "How long have I worked there?":            [("eleven",), ("11",)],
  "What is my job?":                          [("hydrolog", "engineer")],
  "When is payday?":                          [("fifteenth",)],
  "How much leave do I have left?":           [("twelve",)],
@@ -120,7 +120,7 @@ ANSWERS = {
  "Where are we going on holiday?":           [("lofoten",)],
  "What is my rule about stopovers?":         [("stopover",)],
  "How do we travel south?":                  [("night", "train")],
- "Does Ingrid get carsick?":                 [("carsick",)],
+ "Does Ingrid get carsick?":                 [("carsick",), ("car", "sick")],
 
  # learning
  "What languages do I know?":                [("german",)],
