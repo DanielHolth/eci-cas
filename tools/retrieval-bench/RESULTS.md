@@ -149,3 +149,57 @@ ACTUALLY filed to, so wherever the writer puts a fact becomes gold and
 `writable` measures extraction alone. That 1-fact gap is rebuild noise
 between two archive builds. The claim that consolidation hurts filing is
 untested, not supported -- which is the whole reason this scorer exists.
+
+## Batch 9 — VOID
+
+The terse shelf's first end-to-end run. bench.file_fact's vocab override
+reached the topic call only, so the writer was handed the shipped ten drawer
+names and filed 18 of 31 gold rows to unfiled/unfiled. It produced a full
+table and the table was read as a shelf result. Numbers discarded, archive
+deleted, build() now refuses to cache an archive containing unfiled rows.
+
+The tell was in the table: terse+oracle showed 11.1 rows against
+lean+oracle's 2.0 elsewhere. An oracle opening five times more rows is not
+a shelf, it is a bug.
+
+## Batch 10 — the terse shelf, end to end, three reps
+
+  arm                category select answer quiet files rows
+  full+gloss              81%    49%    38%   83%   3.1   6.5
+  lean+wc+lenient         85%    85%    60%   91%   5.0  10.5
+  terse                   68%    57%    26%   83%   3.5   6.8
+  terse+gloss             75%    57%    36%   87%   2.9   5.5
+  terse+wc+lenient        71%    71%    50%   91%   5.4  10.5
+  terse+oracle           100%   100%    71%   79%   1.1   3.0
+
+  terse -> terse+gloss, per rep:  +6  +2  +2
+  terse+wc+lenient vs lean+wc+lenient, per rep:  -3  -3  -5
+
+writable 30/35, level with the shipped shelf: the terse writer is not damaged.
+
+THE GLOSS CLAIM IS CONFIRMED. 26% -> 36%, three reps, no negative rep, about
+10pp. Batch 8 measured the same gloss at zero on 170 concrete pairs. Taken
+together those two results say the gloss is not generally useful -- it is
+specifically what makes an abstract folder name workable. `passport` does
+not need defining and `document` does. That is the result the whole
+before-and-after ordering existed to produce.
+
+TERSE LOSES END TO END. 50% against lean's 60%, negative in all three reps,
+at the floor rather than inside it.
+
+The loss is at the category stage: 71% against 85%. Fewer categories with a
+WORSE hit rate, which kills the assumption that shrinking the pool would
+raise it -- renaming cost more than shrinking gained. Three names have to be
+mapped from a question that never uses them: resources, records, and
+appointment. appointment is the suspect, because it is the time-cut drawer
+and every dated question must now choose between it and the subject drawer.
+The writer has six tie rules for that choice. The reader has none.
+
+That asymmetry is new and it is the first candidate to test: the ties are in
+the Cataloger's drawer prompt and nowhere in the Librarian's. On the shipped
+shelf that did not matter, because no drawer was cut on a second axis.
+
+Not answerable from this table: whether the terse archive is better WRITTEN.
+terse+oracle at 71% is the highest oracle measured anywhere, but lean+oracle
+is not in this batch and a cross-batch read is the one thing the method
+forbids. Running the three oracles together is the next batch.
