@@ -199,10 +199,20 @@ reader changing.
 
 ### Cost, so the size is chosen rather than discovered
 
-At ~3000 rows a full Default archive build is roughly 1M input and 250k
-output tokens across Archivist, Cataloger and padding: under a dollar at
-`gpt-5.6-luna` pricing. Minimal is free. Cost does not constrain this corpus,
-which is stated here so nobody later trims it for a reason that was not real.
+The bands above plan to 1517 padding rows over 170 pairs -- 342 padding
+calls plus 156 gold calls, since padding is asked in batches of six. Not the
+~3000 rows first written here: that figure was an estimate made before the
+distribution was, and the bands are what is binding, so the estimate is
+corrected rather than the shape adjusted to fit it. At `gpt-5.6-luna` pricing
+a full Default build is roughly half a million input tokens and well under a
+dollar. Minimal is free.
+
+Scale is deliberately not maximised. v4 buys shape -- a fat band at 50-80
+rows a file, thirty times v3's 1.7, which is the regime Recall cannot afford.
+Buying scale beyond that is what the vector is for: a cosine candidate set is
+constant in archive size, so an arm that needs 100k rows to show its value is
+an arm about the vector, not about this corpus. If a later result turns on
+volume, that is v5.
 
 ### What freezes when
 

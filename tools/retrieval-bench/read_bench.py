@@ -30,7 +30,7 @@ the write side again -- the same reason bench.py extracts once per rep and
 files the same rows through every arm. Delete the cache to rebuild; do not
 delete it between two arms you intend to compare.
 """
-import json, os, re, sys, collections
+import json, os, re, sys, random, collections
 
 ROOT = __file__.rsplit("tools", 1)[0]
 sys.path[:0] = [ROOT + "tests/corpora", ROOT + "tools/retrieval-bench"]
@@ -54,8 +54,36 @@ def all_pairs(vocab=None):
     return [c + "/" + t for c, ts in v.items() for t in ts]
 
 
-def pad_rows(pair):
-    """Three plausible rows for a pair no statement landed in.
+def plan_sizes(pairs, seed=4):
+    """How many rows each unpopulated pair should get. Lumpy, not uniform.
+
+    Uniform padding is what v3 had -- three rows everywhere -- and it
+    flatters both readers. The picker gets real discrimination pressure in
+    every file it opens, and a cosine sweep gets uniform density with no
+    thin files where a wrong-but-close row wins because nothing better is
+    present. Real archives are a few fat pairs and a long tail of two-row
+    ones, and the fat end is the regime Recall cannot afford: rows a turn is
+    model calls a turn.
+
+    The bands are the pre-registered ones (README, v4). Seeded so the
+    archive is reproducible: two arms that disagree about which pairs are
+    fat are not two views of one archive.
+    """
+    r = random.Random(seed)
+    shuffled = sorted(pairs)
+    r.shuffle(shuffled)
+    sizes, i = {}, 0
+    for count, lo, hi in ((8, 50, 80), (40, 10, 25)):
+        for p in shuffled[i:i + count]:
+            sizes[p] = r.randint(lo, hi)
+        i += count
+    for p in shuffled[i:]:
+        sizes[p] = r.randint(1, 4)
+    return sizes
+
+
+def pad_rows(pair, n=3):
+    """`n` plausible rows for a pair no statement landed in.
 
     Padding has to have content or `select` is the only stage that can fail:
     an empty file cannot mislead the picker and cannot supply a wrong answer.
@@ -69,25 +97,47 @@ def pad_rows(pair):
     cached before this only ever get read address-only, so they are unharmed.
     """
     cat, topic = pair.split("/")
-    prompt = ("Three short facts a person might have on file under '"
-              + cat + " / " + topic + "'. One per line, no numbering, in the form:\n"
-              "subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>"
-              " sentence=<the same fact as one plain sentence>\n"
-              "Do not mention " + cat + " or " + topic + " as the subject.")
-    rows = []
-    for part in bench.ROWSPLIT.split(bench.strip(bench.call(prompt, 200))):
-        f = bench.fields(part)
-        if f:
+    rows, seen, stall = [], set(), 0
+    # Asked in batches rather than in one call: a small model asked for
+    # sixty facts returns a dozen and then repeats itself. The dedupe below
+    # is what makes a fat pair actually fat -- without it a 60-row target
+    # fills with the same four rows and the file is wide but not varied,
+    # which is the wrong distractor. `stall` gives up rather than looping
+    # forever on a pair the model has run out of ideas about; the pair ends
+    # up smaller than planned and the printed distribution says so.
+    while len(rows) < n and stall < 4:
+        want = min(6, n - len(rows))
+        prompt = (str(want) + " short facts a person might have on file under '"
+                  + cat + " / " + topic + "'. One per line, no numbering, in the form:\n"
+                  "subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>"
+                  " sentence=<the same fact as one plain sentence>\n"
+                  "Do not mention " + cat + " or " + topic + " as the subject.")
+        before = len(rows)
+        for part in bench.ROWSPLIT.split(bench.strip(bench.call(prompt, 60 * want))):
+            f = bench.fields(part)
+            if not f:
+                continue
+            sig = (f.get("subject", ""), f.get("key", ""), f.get("value", ""))
+            if sig in seen:
+                continue
+            seen.add(sig)
             rows.append(dict(f, pair=pair))
-    return rows[:3]
+        stall = 0 if len(rows) > before else stall + 1
+    return rows[:n]
 
 
-def build(vocab=None, cat_prompt=None):
-    """Real write path over the corpus, then padding everywhere else."""
+def build(vocab=None, cat_prompt=None, sizes=None, src=None):
+    """Real write path over the corpus, then padding everywhere else.
+
+    `sizes` is pair -> row count; None keeps v3's flat three everywhere, so
+    every arm written against the old archives is untouched. `src` overrides
+    which corpus module supplies the statements.
+    """
+    src = src or corpus
     gold, pad = [], {}
     prompt = bench.load("archivist.txt")["main"]
-    for i, (stmt, _) in enumerate(corpus.STATEMENTS, 1):
-        print("  write %d/%d: %s" % (i, len(corpus.STATEMENTS), stmt[:44]), flush=True)
+    for i, (stmt, _) in enumerate(src.STATEMENTS, 1):
+        print("  write %d/%d: %s" % (i, len(src.STATEMENTS), stmt[:44]), flush=True)
         for pair, row in bench.write(stmt, prompt, vocab, cat_prompt):
             gold.append(dict(row, pair=pair, stmt=stmt))
     # A shelf whose category prompt names drawers it does not have files
@@ -104,19 +154,20 @@ def build(vocab=None, cat_prompt=None):
     landed = set(g["pair"] for g in gold)
     todo = [p for p in all_pairs(vocab) if p not in landed]
     for i, pair in enumerate(todo, 1):
-        print("  pad %d/%d: %s" % (i, len(todo), pair), flush=True)
-        pad[pair] = pad_rows(pair)
+        n = sizes.get(pair, 3) if sizes else 3
+        print("  pad %d/%d (%d rows): %s" % (i, len(todo), n, pair), flush=True)
+        pad[pair] = pad_rows(pair, n)
     return {"gold": gold, "pad": pad}
 
 
-def archive(cache=CACHE, vocab=None, cat_prompt=None):
+def archive(cache=CACHE, vocab=None, cat_prompt=None, sizes=None, src=None):
     """The frozen archive for one vocabulary. One cache file per vocabulary:
     a merged shelf has to be filed as well as read, so two arms that differ
     in vocabulary are two archives, not two views of one."""
     if not os.path.exists(cache):
         print("building archive (once): %s" % os.path.basename(cache), flush=True)
         with open(cache, "w", encoding="utf-8") as f:
-            json.dump(build(vocab, cat_prompt), f, indent=1)
+            json.dump(build(vocab, cat_prompt, sizes, src), f, indent=1)
     with open(cache, encoding="utf-8") as f:
         a = json.load(f)
     rows = collections.defaultdict(list)
