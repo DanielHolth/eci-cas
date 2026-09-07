@@ -482,3 +482,31 @@ called a product bug. It is a measured default -- `sentence_ab.py` tested the
 same swap in batch 14 and found it lifts a scarce reader 12pp and moves the
 shipping lenient arm not at all. `rb.pick` now takes `show` so that fork can
 go away and v4, which has the fat files v3 lacked, can ask again.
+
+### Batch 15b: the LLM read arms on v4, and the sentence again
+
+Three reps, interleaved, corrected scorer, `writable` 85/87.
+
+    arm         answer    nulls     rows
+    recall         34%      73%      1.2
+    recall+s       34%      79%      1.0
+    nopick         52%      47%     33.0
+    lenient        39%      83%      1.4
+    select 45% -- shared by every arm
+
+**Filtering costs 13-18pp again.** nopick's 52% over lenient's 39% is the same
+shape as batch 12 and survives both the embedder change and the scorer fix.
+Recall discarding rows remains the largest single loss on the LLM read path,
+ahead of selection and ahead of any shelf choice.
+
+**The sentence replicates batch 14 exactly**, on the archive that was supposed
+to settle it. `recall+s` shows Recall the same rows with the sentence visible:
+answer does not move at all (34% to 34%), nulls improve 73% to 79%, and the
+candidate set gets slightly smaller. So the v4 fat files did not create the
+scarcity the sentence was supposed to need -- and the finding is the same one
+v3 gave: more surface makes a reader better at *declining*, not at choosing.
+Two corpora agreeing is worth more than either, and the question is closed.
+
+**The whole LLM read path is beaten by arithmetic.** Best LLM arm here is 52%
+answer at 33 rows a turn. Filing by gloss and picking files by centroid, with
+no model call anywhere in either path, is 73% strict at 5 rows a turn.
