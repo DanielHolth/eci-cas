@@ -103,6 +103,40 @@ does across real sessions before letting it change a reply.
 
 ## Reading the archive back — the half not solved
 
+**A sentence column, and a local embedding beside it.** Recall and the
+Librarian both read rows rendered as `renewal / passport expiry = 2027-03`.
+That is dense, telegraphic, and matches almost nothing a question says. The
+proposal is a second column carrying the same fact as a plain sentence --
+"Daniel's passport expires in March 2027" -- produced by the Archivist call
+that is already happening, so no extra call at write time, and paid once
+rather than on every read. It helps a weak reader and a strong one for the
+same reason: there is more surface to match against.
+
+The sentence is also what makes an embedding worth having. A vector over
+`renewal / passport expiry = 2027-03` embeds badly; a vector over the
+sentence does not. That is the third column: a few hundred numbers nothing
+reads, compared arithmetically, so 100k rows in one pair can be narrowed to
+a candidate set with no LLM call, no chunking, and -- the point Daniel
+raised -- no importance ranking, which is what would otherwise discard a
+low-importance row that happens to hold the answer.
+
+Local, no API. The server at :8080 is llama.cpp and answers `501: does not
+support embeddings, start it with --embeddings`, but the 4B is the wrong
+model for it anyway: a bge-small or all-MiniLM class model is 30-130MB,
+CPU-only, milliseconds a row, and can run in-process via ONNX with no server
+at all. Cheaper than one Archivist call, so this is not a tier feature --
+if anything Minimal needs it most, its reader being the weakest.
+
+Two things this does not fix, stated so the measurement is not misread: it
+cannot recover a fact the Archivist never extracted or a value it mangled
+(the v3 `writable` ceiling, 29/35), and it does nothing for pair selection,
+where whole-category already reaches 83%. It is a within-file narrower.
+
+Ordering: sentence column first -- it is testable on the current bench and
+useful without the vector. Embedding second, since proving it needs a model
+that is not present and an archive far larger than the bench's.
+
+
 The write side works, but "settled" was too strong. Archivist extracts
 `subtopic/subject/key=value`, Cataloger picks a drawer then a folder from a
 closed vocabulary, and code joins them into the path — and measured against a
@@ -548,6 +582,19 @@ Norwegian by someone other than its author, or when Action gains a side
 effect reaching outside the process.
 
 ## Still open on the surface
+
+**`= ""` is doing the work of a null.** Every field on
+`ParquetArchiveStore.RecordRow` is a non-nullable string that initialises to
+`""`, so the type promises never-null and the initialiser keeps that promise
+by handing out a blank. A row written with no subject files happily and reads
+back empty; `Importance` does the same at `0`. It is not purely accidental --
+`Subtopic` really is optional in the Archivist's output and `Domain` is only
+set on some paths -- but the pattern spread to the fields where a blank means
+the system failed rather than the writer had nothing to say. Those two want
+different spellings. Any new column added to this record inherits the hole
+unless it is declared `required` with no initialiser and guarded on the way
+in, because parquet round-trips through this type and can hand back a blank
+whatever the constructor says.
 
 **The picker does not solve attribution.** `localStorage` keeps the last
 person's identity until someone switches, so on a shared device the persona
