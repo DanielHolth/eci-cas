@@ -56,12 +56,22 @@ So the concentration into 31 pairs is not costing anything here -- a filer
 that collapsed usefully-distinct facts together would lose at files=1 first,
 and by-gloss is ahead there too.
 
-**by-gloss matches two LLM calls per row while agreeing with them 11% of the
-time.** The Cataloger's specific choices are very nearly irrelevant to whether
-the fact is found again: what matters is that filing and retrieval agree with
-each other, not that either agrees with a human's sense of where a thing goes.
-Nine times in ten the vector puts the row somewhere else, and the archive
-reads the same or slightly better.
+**by-gloss ties two LLM calls per row while agreeing with them 11% of the
+time.** A paired bootstrap over the 87 questions says +1.1pp strict, 95% CI
+[-9.2, +12.6], P(better) 53% -- a coin flip, and the right word is "ties", not
+"beats". 81 gold rows cannot resolve 3pp and it would be dishonest to read the
+table as if they could.
+
+The tie is the finding. The Cataloger's specific choices are very nearly
+irrelevant to whether the fact is found again: nine times in ten the vector
+puts the row somewhere else and the archive reads the same. What retrieval
+needs is that filing and retrieval agree with each other, not that either
+agrees with a human's sense of where a thing goes.
+
+The same bootstrap does separate the gloss sizes, which is what makes it worth
+running: gloss-1 is -12.6pp with P(better) 1% and gloss-3 -11.5pp at 3%. Ten
+samples versus one or three is a real difference; ten samples versus two LLM
+calls is not.
 
 The gloss is not free, but it is amortised the right way round. It is the mean
 of a file's padding -- LLM-written examples of what belongs under that pair --
@@ -163,6 +173,7 @@ def main(k=5, files=3):
 
     qs = sorted(ANSWERS)
     qv = e.encode(qs, kind="query")
+    PERQ = {}
     print("\n  %-9s %8s %8s %8s %8s" % ("filing", "agree", "select", "strict", "spread"))
     for name, where in filings.items():
         # Rebuild the archive with gold moved and padding untouched.
@@ -188,17 +199,37 @@ def main(k=5, files=3):
                 gold[q] = by_stmt.get(stmt, set())
 
         sel = strict = 0
+        per_q = []
         for q, v in zip(qs, qv):
             chosen = np.argsort(-(cent @ v))[:files]
             sel += bool(gold[q] & set(index[i] for i in chosen))
             pool = np.flatnonzero(np.isin(owner, chosen))
             top = pool[np.argsort(-(M[pool] @ v))[:k]] if len(pool) else []
-            strict += answered_row([flat[i] for i in top], q)
+            s_ = answered_row([flat[i] for i in top], q)
+            strict += s_
+            per_q.append(s_)
+        PERQ[name] = np.array(per_q, float)
         n = len(qs)
         print("  %-9s %7d%% %7d%% %7d%% %8d" % (
             name,
             100 * sum(i == j for i, j in zip(where, filings["llm"])) // len(where),
             100 * sel // n, 100 * strict // n, len(set(where))))
+
+    # 87 questions and an 81-row gold set make a 3pp gap two questions wide.
+    # Paired bootstrap over questions: every arm answers the same questions,
+    # so pairing removes question difficulty from the comparison and what is
+    # left is the filing. Seeded, like everything else here.
+    rng = np.random.default_rng(4)
+    base = PERQ["llm"]
+    print("\n  paired bootstrap against llm, 5000 resamples of %d questions:" % len(qs))
+    for name in PERQ:
+        if name == "llm":
+            continue
+        d = PERQ[name] - base
+        boot = d[rng.integers(0, len(d), (5000, len(d)))].mean(1)
+        print("    %-9s strict %+5.1fpp   95%% CI [%+5.1f, %+5.1f]   P(better) %3d%%" % (
+            name, 100 * d.mean(), 100 * np.percentile(boot, 2.5),
+            100 * np.percentile(boot, 97.5), 100 * (boot > 0).mean()))
 
     print("\n  agree  = share of rows filed where the Cataloger filed them")
     print("  select = a centroid pick of %d files opens one holding the answer" % files)

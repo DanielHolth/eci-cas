@@ -449,10 +449,22 @@ gold row went.
     llm            49 / 49    74 / 72    82 / 79
     by-gloss       55 / 52    77 / 73    89 / 81
 
+    gloss size      1     3    10   whole file
+    strict         59%   60%  73%      73%
+
+Ten samples is the number Daniel proposed and it is the right one: the median
+pair holds 3 rows, so ten samples *is* the whole file for most of them, and
+the 3-to-10 gain comes entirely from the fat pairs where a gloss has any work
+to do. The bootstrap separates these cleanly -- gloss-1 at -12.6pp, P(better)
+1%; gloss-3 at -11.5pp, 3% -- so the instrument can see a real difference when
+there is one, and reports none between by-gloss and the Cataloger.
+
 by-gloss uses the mean of a file's padding as its gloss -- LLM-written
 examples of what belongs under that pair, independent of the gold rows, so it
-is not scoring itself. **It matches or beats two LLM calls per row while
-putting nine rows in ten somewhere else.** What retrieval needs is that filing
+is not scoring itself. **It ties two LLM calls per row while putting nine
+rows in ten somewhere else.** A paired bootstrap over the 87 questions puts
+by-gloss at +1.1pp strict, 95% CI [-9.2, +12.6], P(better) 53%: a coin flip.
+"Beats" would be overreading 81 gold rows. The tie is the point. What retrieval needs is that filing
 and retrieval agree with each other, not that either agrees with a human's
 sense of where a thing goes. And the economics run the right way: a gloss
 costs calls per file, once, against two calls per row forever.
