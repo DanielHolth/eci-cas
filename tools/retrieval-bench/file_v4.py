@@ -31,6 +31,19 @@ Result:
     by-name        32%      66%      65%       55
     by-gloss       11%      77%      73%       31
 
+Ten samples is the number, and the whole file buys nothing over ten:
+
+    gloss size      1     3    10   whole file
+    select         58%   64%  77%      77%
+    strict         59%   60%  73%      73%
+
+The median pair holds 3 rows, so for most files ten samples *is* the whole
+file and the two right-hand columns are the same archive. The gain from 3 to
+10 therefore comes entirely from the fat pairs -- which is where a gloss has
+any work to do, since a three-row file is nearly its own summary. That also
+sets the ceiling on what a hand-written gloss could add: against a fat file it
+is competing with ten real examples, not with a name.
+
 It holds at every width, and the gap widens as more files are opened
 (select / strict, k=5):
 
@@ -117,12 +130,36 @@ def main(k=5, files=3):
         off += n
     gloss = np.vstack(gloss)
     gloss /= np.maximum(np.linalg.norm(gloss, axis=1, keepdims=True), 1e-9)
+
+    # How many samples a gloss needs. Daniel's idea says ten; the arm above
+    # uses the whole file, which for a fat pair is sixty and is not a gloss any
+    # more. Seeded random draw, not the first n -- build() appends gold before
+    # padding, and taking the head is how the shelf_v4 sample arms accidentally
+    # read the answer key.
+    import random as _r
+    draw = _r.Random(4)
+    small = {}
+    for m in (1, 3, 10):
+        vecs, off2 = [], 0
+        for p in index:
+            n = len(pad[p])
+            block = padv[off2:off2 + n]
+            off2 += n
+            if not n:
+                vecs.append(np.zeros(padv.shape[1]))
+                continue
+            take = draw.sample(range(n), min(m, n))
+            vecs.append(block[take].mean(0))
+        v = np.vstack(vecs)
+        small[m] = v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-9)
     names = e.encode([p.replace("/", " / ") for p in index], kind="passage")
 
     gv = e.encode([fact_text(r) for r in gold_rows], kind="query")
     filings = {"llm": [index.index(r["pair"]) for r in gold_rows],
                "by-name": list(np.argmax(gv @ names.T, axis=1)),
                "by-gloss": list(np.argmax(gv @ gloss.T, axis=1))}
+    for m in (1, 3, 10):
+        filings["gloss-%d" % m] = list(np.argmax(gv @ small[m].T, axis=1))
 
     qs = sorted(ANSWERS)
     qv = e.encode(qs, kind="query")
