@@ -136,6 +136,66 @@ Ordering: sentence column first -- it is testable on the current bench and
 useful without the vector. Embedding second, since proving it needs a model
 that is not present and an archive far larger than the bench's.
 
+**Revised after batch 12: this moves ahead of any further vocabulary work,
+and for a second reason.** The ordering above was written when the open
+question was which category/topic shelf to ship. That question is now
+closed -- the shipped 170-pair shelf beats both consolidated shelves
+end-to-end, consolidation is negative on every measurement that exists, and
+the lean and terse shelves are withdrawn (`RESULTS.md` batches 8, 11, 12).
+Two results from that work carry into this one.
+
+The first is the rows column. Every shelf result in the log is explained by
+facts-per-file: 1.7 for the shipped shelf, 2.0 for lean, 3.0 for terse, and
+the oracle ranking tracks it exactly. Fewer folders means fatter folders and
+a fatter folder loses more to Recall. Recall chunks by `RowsPerWorker`, so
+rows a turn is LLM calls a turn: the winning arm reads 21 files and 48 rows
+on a 24-statement corpus, and that is linear in the archive. A 100k-row file
+is not a parquet problem -- parquet does not care -- it is 2000 model calls
+in one turn, throttled to `MaxConcurrentRecalls`. The narrowing inside a
+category is the thing that does not scale, and it is the only stage still
+doing its narrowing with a model.
+
+The second is sharper and corrects an assumption held through batches 3-11.
+The paragraph above says the embedding "does nothing for pair selection" and
+is "a within-file narrower", which is true and was read as a limit. Batch 12
+says the within-file narrowing is where the loss actually is. Same shelf,
+same archive, the only difference being whether Recall filters: 78% with
+`nopick`, 60% with the lenient bar. Recall discarding rows costs 18pp --
+more than selection, more than any shelf choice measured. `nopick` wins
+because Recall stops judging and hands everything on.
+
+So the embedding is not only a cost fix for a stage that works. It is a
+replacement for the stage that loses the most, by a mechanism that cannot
+make the same mistake: cosine takes the nearest rows without a model
+deciding which ones are worth keeping. The target shape is the pair as the
+coarse symbolic cut, cosine as the fine cut inside it, and `nopick` over
+what survives -- the winning arm, at a candidate-set size that is constant
+rather than linear in the archive.
+
+Three constraints on building it, each from a failure already in this log.
+
+The vector column is **non-nullable, with a startup check** -- not `= ""`,
+not backfilled lazily. A nullable vector means a silent mix of embedded and
+unembedded rows, a cosine sweep that quietly skips half the archive, and a
+plausible answer either way. That is the same failure shape as
+`unfiled/unfiled` (batch 9, void: 18 of 31 rows misfiled, full table
+printed) and the silently dropped arm name (batch 12's first launch). Both
+were runs that looked complete and were not. It should refuse to start.
+
+The pair keeps its job. There is a class of question no embedding reaches
+-- inference over facts rather than similarity to them, the "am I old
+enough to rent" case below -- so the symbolic cut is not replaced by the
+arithmetic one. This is also the argument against growing the shelf past
+170: once the vector does the narrowing, more hand-written pairs buy
+nothing, and every one of them is a curation decision on a schema that
+cannot be migrated after rows point at it.
+
+Fatness has never been measured. The bench corpus is 24 statements and 35
+rows, three orders of magnitude too small to see what a fat file does. No
+claim that "170 pairs is enough" is supported by anything here. Proving the
+embedding needs a larger corpus first -- one grown until files hold 20+
+rows -- and that corpus is a prerequisite, not a follow-up.
+
 
 The write side works, but "settled" was too strong. Archivist extracts
 `subtopic/subject/key=value`, Cataloger picks a drawer then a folder from a
