@@ -59,6 +59,10 @@ makes it more fabricating too, and that trade is invisible on the other axes.
   down, one level.
 - `variant_b.py` — that property rule, now the shipped text; `apply()` runs
   the replacement backwards so the comparison still re-runs.
+- `subject_probe.py` — does a named person actually become the subject.
+  Counts subjects on two sentences, which is the one thing the sufficiency
+  score cannot see: `subject=brother key=location value=Tromso` has every word
+  the answer needs and is still an address Librarian will not look at.
 - `review_other.py` — the second pass over `other`. **Dead end**: it removes
   `other` as designed and buys no accuracy, because `x/other` was never the
   loss it looks like — the read path opens `other` alongside its parent
