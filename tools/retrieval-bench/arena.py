@@ -362,6 +362,8 @@ ARMS = [
         select=whole_category(LEAN_GLOSS), gate=True),
     Arm("full+wc+gate", ".archive_v3.json", select=whole_category(GLOSS), gate=True),
     Arm("full+gloss+gate", ".archive_v3.json", gloss=GLOSS, gate=True),
+    Arm("full+wc+lenient", ".archive_v3.json",
+        select=whole_category(GLOSS), rec=LENIENT),
     # The terse shelf, end to end. Filed by its own writer and read by its
     # own selector, so a move here is the shelf and the gloss together --
     # which is what write_gloss_ab.py separates and this cannot.
@@ -403,4 +405,11 @@ def run(reps, arms):
 if __name__ == "__main__":
     want = [a for a in sys.argv[1:] if not a.isdigit()]
     reps = next((int(a) for a in sys.argv[1:] if a.isdigit()), 3)
+    # A misspelt arm used to be dropped in silence and the batch still
+    # printed a full table, which is the same failure shape as an archive
+    # full of unfiled rows: a plausible result with a stage missing.
+    unknown = [w for w in want if w not in {a.name for a in ARMS}]
+    if unknown:
+        raise SystemExit("no such arm: %s\nknown: %s" % (
+            ", ".join(unknown), " ".join(a.name for a in ARMS)))
     run(reps, [a for a in ARMS if not want or a.name in want])

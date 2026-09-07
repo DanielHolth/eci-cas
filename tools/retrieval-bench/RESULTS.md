@@ -203,3 +203,41 @@ Not answerable from this table: whether the terse archive is better WRITTEN.
 terse+oracle at 71% is the highest oracle measured anywhere, but lean+oracle
 is not in this batch and a cross-batch read is the one thing the method
 forbids. Running the three oracles together is the next batch.
+
+## Batch 11 — the three archives with the selector removed, four reps
+
+  arm            answer  files  rows
+  full+oracle       78%    1.1    1.7
+  terse+oracle      69%    1.1    3.0
+  lean+oracle       67%    1.1    2.0
+
+  terse vs lean, per rep:  +4  0  0  -1
+
+The oracle opens the pair the writer used, so this is how well each shelf is
+WRITTEN, with selection taken out. Four reps, one batch, finally comparable.
+
+Consolidation does not improve the archive. The shipped 170-pair shelf is
+about 10pp ahead of both consolidated shelves, and terse against lean is
+nothing -- terse's extra gloss and its six tie rules buy back nothing at
+this stage.
+
+The mechanism is the rows column and it is clean: 1.7 rows a file for full,
+2.0 for lean, 3.0 for terse. Fewer folders means more facts per folder, and
+Recall has to find the answer in a bigger pile. The ranking tracks the row
+count exactly.
+
+So consolidation's cost is not filing accuracy -- writable was level all
+along, and batch 8 already withdrew that claim. It is that every file gets
+fatter and a fatter file loses more to Recall.
+
+Which says what consolidation was ever for. It never improved anything on
+its own. It made whole-category fan-out affordable, 5 files instead of 21,
+and the gain attributed to the lean shelf across batches 3-7 was the
+selector's, borrowed.
+
+That reopens something set aside as unaffordable. Batch 3 measured
+full+wc+nopick at 75% answer, the highest end-to-end number in this log, on
+the shipped shelf at 21 files and 48 rows. It was dismissed on cost. This
+batch says the shipped archive is genuinely the best written one, so that
+75% may not be a fluke of its batch. Cross-batch, so it proves nothing --
+the next batch runs whole-category on all three shelves together.
