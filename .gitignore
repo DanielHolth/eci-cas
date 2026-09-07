@@ -20,3 +20,4 @@ tools/retrieval-bench/.archive_v3.json
 tools/retrieval-bench/.archive_v3_lean.json
 tools/retrieval-bench/.archive_v3_sent.json
 tools/retrieval-bench/.archive_v3_terse.json
+tools/retrieval-bench/.archive_v4_*.json
