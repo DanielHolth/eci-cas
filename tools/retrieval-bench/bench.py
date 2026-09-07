@@ -84,10 +84,17 @@ def extract(text, prompt):
 SCORED = ("subtopic", "subject", "key", "value")
 
 
-def sufficient(rows, question):
-    """(a): is every token of some alternative present across the rows?"""
+def sufficient(rows, question, answers=None):
+    """(a): is every token of some alternative present across the rows?
+
+    answers defaults to this module's v2 key. A caller working the v3
+    statement corpus passes answers_v3.ANSWERS -- the two corpora ask
+    different questions, and a missing key is a KeyError rather than a miss,
+    which is how the mismatch announces itself instead of scoring zero.
+    """
+    key = answers or ANSWERS
     blob = " ".join(" ".join(r.get(k, "") for k in SCORED) for r in rows).lower()
-    return any(all(tok in blob for tok in alt) for alt in ANSWERS[question])
+    return any(all(tok in blob for tok in alt) for alt in key[question])
 
 
 def score_a(statements, prompt, log=None):

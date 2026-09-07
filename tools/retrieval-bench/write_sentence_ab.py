@@ -36,6 +36,7 @@ import bench
 # statement corpus the read arms use is v3. Named apart so the two are
 # not confused again -- fabrications() scores v2's NULLS by design.
 import retrieval_v3 as statements
+from answers_v3 import ANSWERS as V3
 
 # The commit that added the field. Its parent is the last version of the
 # prompt without it, which is the whole of the "old" arm.
@@ -80,7 +81,7 @@ def run(reps=3):
                 t["sent"] += sum(bool(r.get("sentence")) for r in rows)
                 for q in qs:
                     t["n"] += 1
-                    t["value"] += bench.sufficient(rows, q)
+                    t["value"] += bench.sufficient(rows, q, V3)
         line = "rep%d  " % (rep + 1)
         for name, _ in arms:
             t, p = per[name], prev[name]
