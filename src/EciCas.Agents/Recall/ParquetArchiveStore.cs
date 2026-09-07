@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using Parquet.Serialization;
@@ -71,6 +71,14 @@ public sealed class ParquetArchiveStore : IArchiveStore
         public string Timestamp { get; set; } = "";
         public string Domain { get; set; } = "";
         public double Importance { get; set; }
+
+        // Nullable so a pair file written before the sentence existed still
+        // deserializes: Parquet gives a missing column its default, and null
+        // is the honest answer — nobody wrote a sentence for that row, which
+        // is not the same as writing an empty one. Verified against
+        // Parquet.Net 6.1.0 rather than assumed: an old file reads back with
+        // this null, and a new file still reads under the old schema.
+        public string? Sentence { get; set; }
     }
 
     /// <summary>Pairs are addresses, and addresses are case-insensitive — as are the file names that carry them.</summary>
@@ -405,7 +413,7 @@ public sealed class ParquetArchiveStore : IArchiveStore
         var result = await ParquetSerializer.DeserializeAsync<RecordRow>(path, cancellationToken: cancellationToken).ConfigureAwait(false);
         return [.. result.Data.Select(r => new ArchiveRecord(
             r.Category, r.Topic, r.Subtopic, r.Subject, r.Key, r.Value,
-            DateTimeOffset.Parse(r.Timestamp, CultureInfo.InvariantCulture), r.Domain, r.Importance))];
+            DateTimeOffset.Parse(r.Timestamp, CultureInfo.InvariantCulture), r.Domain, r.Importance, r.Sentence ?? ""))];
     }
 
     public static async Task WriteRecordsAsync(string path, List<ArchiveRecord> records, CancellationToken cancellationToken)
@@ -421,6 +429,7 @@ public sealed class ParquetArchiveStore : IArchiveStore
             Timestamp = r.Timestamp.ToString("O", CultureInfo.InvariantCulture),
             Domain = r.Domain,
             Importance = r.Importance,
+            Sentence = r.Sentence,
         });
         // Through a temp file, for the reason JsonlAgentStateStore already
         // gives about the persona's state: a crash, a full disk or a killed

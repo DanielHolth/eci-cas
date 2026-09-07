@@ -1,4 +1,4 @@
-# Extraction only. This file used to ask for the whole six-field address,
+﻿# Extraction only. This file used to ask for the whole six-field address,
 # including category and topic, and the model invented both from nothing --
 # which is how the archive grew "hobby/music/food" and two near-synonymous
 # categories for the same drawer. Category and topic are now picked by the
@@ -8,10 +8,22 @@
 # What is left is the part only a reader of this message can do: notice that
 # something was stated, and say what about whom.
 Facts stated in this message, one line per fact:
-subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords>
+subtopic=<1-2 words> subject=<1-2 words> key=<1-3 words> value=<1-4 keywords> sentence=<the same fact as one plain sentence>
 
 # Left out, the value gets restated as the subject.
 subject is who or what the fact is about. It is never a restatement of the value.
+
+# The vocabulary constraints above are what make the address a stable
+# address; they are also what make the row unreadable as language. The
+# sentence is the same fact without them, and it is the last field on the
+# line so it can run to the end of it.
+#
+# "How a person would say it" rather than a length rule: told to be brief the
+# model writes the address back with spaces in it, which adds no surface to
+# match against and is the whole reason this field exists.
+sentence restates that one fact the way a person would say it, in full words,
+naming the subject rather than pointing at it. It adds nothing the other
+fields do not already say -- it says the same thing differently.
 
 key is a property of subject. When the key names something that belongs to
 some other thing, that thing is the subject: the colour of a car has
@@ -19,13 +31,13 @@ subject=car, not subject=user.
 
 A fact about another person has that person as the subject, under the name
 they were given, not under the relation:
-subtopic=<1-2 words> subject=<their name> key=<1-3 words> value=<1-4 keywords>
+subtopic=<1-2 words> subject=<their name> key=<1-3 words> value=<1-4 keywords> sentence=<the same fact as one plain sentence>
 
 # Nothing else says who "I" is; without it the speaker's own facts land on subject=assistant.
 # The worked line stays templated: only a literal one can be copied out as a fact.
 The message is the person speaking. A fact they state about themselves has
 subject=user, not subject=assistant:
-subtopic=<1-2 words> subject=user key=<1-3 words> value=<1-4 keywords>
+subtopic=<1-2 words> subject=user key=<1-3 words> value=<1-4 keywords> sentence=<the same fact as one plain sentence>
 
 # Three, not two: at two the malformed rate doubles. They are shape anchors, not naming rules.
 # All three keep subject=lisbon: no message produces that, so a copied example is visible in the archive.
@@ -33,15 +45,21 @@ subtopic=<1-2 words> subject=user key=<1-3 words> value=<1-4 keywords>
 The three lines below are shape only. They are instructions, not knowledge:
 never output them, never treat them as things you know, never mention them.
 
-subtopic=rainfall subject=lisbon key=annual rainfall value=725mm
-subtopic=temperature subject=lisbon key=summer high value=28c
-subtopic=lines subject=lisbon key=line count value=four
+subtopic=rainfall subject=lisbon key=annual rainfall value=725mm sentence=Lisbon gets 725mm of rain a year.
+subtopic=temperature subject=lisbon key=summer high value=28c sentence=Lisbon reaches 28c on a summer day.
+subtopic=lines subject=lisbon key=line count value=four sentence=Lisbon has four lines.
 
-None of them repeats the value in the subject. Do the same.
+None of them repeats the value in the subject, and each sentence says the
+same fact as its own line rather than a new one. Do the same.
 
 # The path is the address; a translated one is a different row.
 subtopic and key in English whatever language the message was in. Never
 translate a name, place or organisation.
+
+# The address is matched against other addresses, so it is normalised to one
+# language. The sentence is matched against the question, and the question
+# will be in the language the message was.
+sentence in the language of the message.
 
 A question states nothing. Nothing stated: reply nothing.
 

@@ -1,4 +1,4 @@
-# Rules before rows before turn, for the prefix-caching reason given in
+﻿# Rules before rows before turn, for the prefix-caching reason given in
 # librarian.txt. The rows move whenever the archive does; the rules do not.
 #
 # The bar is "answering without it would be wrong", not "relevant" — a 4B
@@ -34,7 +34,14 @@ Greeted, or asked something these rows say nothing about: reply none.
 Reply with the numbers of the facts that pass, best first, bare digits,
 comma-separated (e.g. "0, 2"), at most {max}. If none pass, reply "none".
 
-Candidate facts (index: subtopic / subject key = value), most important first:
+# A row may carry a plain-sentence restatement after an em dash — the same
+# fact said the way a person would say it, written by the Archivist call
+# that extracted it. Rows written before that column existed have none, so
+# the shape below has to describe both, and the sentence is named as the
+# same fact rather than as extra material: a model shown two renderings of
+# one row will otherwise count it twice.
+Candidate facts (index: subtopic / subject key = value, then the same fact as
+a sentence where one was written), most important first:
 {rows}
 
 Turn: {text}

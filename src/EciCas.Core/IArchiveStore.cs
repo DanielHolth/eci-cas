@@ -48,9 +48,42 @@ public sealed record ArchiveRecord(
     string Value,
     DateTimeOffset Timestamp,
     string Domain = ArchiveDomain.External,
-    double Importance = 0.5)
+    double Importance = 0.5,
+    string Sentence = "")
 {
     public ArchivePair Pair => new(Category, Topic);
+
+    /// <summary>
+    /// The same fact as one plain sentence — "Daniel's passport expires in
+    /// March 2027" for renewal/passport expiry = 2027-03. Written by the
+    /// Archivist call that extracted the row, so it costs no extra call and
+    /// is paid once rather than on every read.
+    ///
+    /// It exists because the address form is telegraphic and matches almost
+    /// nothing a question says, and the stage that suffers for that is the
+    /// one measured to lose the most: Recall discarding rows costs 18pp
+    /// (RESULTS.md batch 12), more than pair selection or any shelf choice.
+    /// More surface to match against helps a weak reader and a strong one
+    /// for the same reason.
+    ///
+    /// Empty is normal, not broken: every row written before this column
+    /// existed has none, and a substrate that omits the field still yields a
+    /// usable fact. Readers fall back to the address form rather than
+    /// dropping the row — see <see cref="Rendered"/>.
+    /// </summary>
+    public string Sentence { get; init; } = Sentence;
+
+    /// <summary>
+    /// How a row is put in front of a model: the address always, the
+    /// sentence after it when there is one. Both, not either — the address
+    /// carries the grouping a question may name explicitly, and dropping it
+    /// for rows that happen to have a sentence would make a pair's rows
+    /// render inconsistently within one prompt.
+    /// </summary>
+    public string Rendered =>
+        Sentence.Length == 0
+            ? $"{Subtopic} / {Subject} {Key} = {Value}"
+            : $"{Subtopic} / {Subject} {Key} = {Value} — {Sentence}";
 }
 
 public static class ArchiveDomain

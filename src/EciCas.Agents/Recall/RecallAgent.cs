@@ -252,7 +252,12 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // the human's name as a person-category row, since nothing here
         // ranked one over the other. What the categories mean is left to the
         // model: the path segments say it in words it already knows.
-        var rows = string.Join("\n", candidates.Select((r, i) => $"{i}. {r.Subtopic} / {r.Subject} {r.Key} = {r.Value}"));
+        // Rendered, not hand-formatted here: rows carry a plain-sentence
+        // restatement when the Archivist wrote one, and this is the stage
+        // that stands to gain from it. Batch 12 measured Recall's filtering
+        // as an 18pp loss — the largest in the log — against a row form so
+        // telegraphic it matches almost nothing a question says.
+        var rows = string.Join("\n", candidates.Select((r, i) => $"{i}. {r.Rendered}"));
         return InstructionFile.Fill(_instructions.For(Name),
             ("rows", rows),
             ("max", _knobs.RecallDepth.ToString()),

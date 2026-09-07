@@ -1,4 +1,4 @@
-using EciCas.Agents.Archivist;
+﻿using EciCas.Agents.Archivist;
 using EciCas.Agents.Librarian;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
@@ -74,6 +74,46 @@ public class ArchivistAgentTests
 
         Assert.True(facts.TryRead(out var published));
         Assert.Empty(FactsOn(published!));
+    }
+
+    [Fact]
+    public async Task SentenceIsCarriedOnTheRecord_AndRunsToTheEndOfTheLine()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var facts = bus.Subscribe(Topics.Facts);
+        var line = FactLine + " sentence=Marcus Holth was born on 28 August 2020.";
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(line, TimeSpan.Zero, 10, 0m)));
+
+        await Agent(bus, activity, substrate).HandleAsync(Bundle("our son's birthday was yesterday"), CancellationToken.None);
+
+        Assert.True(facts.TryRead(out var published));
+        var record = Assert.Single(FactsOn(published!));
+
+        // The whole sentence, spaces and full stop included: it is the last
+        // field precisely so the marker split has nothing to cut it at.
+        Assert.Equal("Marcus Holth was born on 28 August 2020.", record.Sentence);
+        Assert.Equal("2020-08-28", record.Value);
+    }
+
+    /// <summary>
+    /// The field is optional on purpose. A model that omits it costs the row
+    /// some retrieval surface; treating it as required would cost the fact.
+    /// </summary>
+    [Fact]
+    public async Task WhenNoSentenceIsWritten_TheFactStillLands_AndRendersFromItsAddress()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var facts = bus.Subscribe(Topics.Facts);
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
+
+        await Agent(bus, activity, substrate).HandleAsync(Bundle("our son's birthday was yesterday"), CancellationToken.None);
+
+        Assert.True(facts.TryRead(out var published));
+        var record = Assert.Single(FactsOn(published!));
+        Assert.Equal("", record.Sentence);
+        Assert.Equal("son / marcus holth birthdate = 2020-08-28", record.Rendered);
     }
 
     [Fact]

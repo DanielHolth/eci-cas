@@ -243,7 +243,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
                     continue;
                 }
 
-                var (subtopic, subject, key, value) = fields;
+                var (subtopic, subject, key, value, sentence) = fields;
 
                 // Written as the substrate wrote it. A validator may reject a
                 // row; it may never edit one. Truncating a value here would
@@ -254,7 +254,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
                 // that knows them. CatalogerAgent fills both before anything
                 // reaches the store, and drops the fact if it cannot.
                 records.Add(new ArchiveRecord(string.Empty, string.Empty, subtopic, subject, key, value,
-                    timestamp, ArchiveDomain.External, Importance(key)));
+                    timestamp, ArchiveDomain.External, Importance(key), sentence));
             }
         }
 
@@ -262,13 +262,13 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     }
 
     private static readonly Regex ColonFieldPattern = new(
-        @"\b(category|topic|subtopic|subject|key|value)\s*:\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"\b(category|topic|subtopic|subject|key|value|sentence)\s*:\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // \b matters: "subtopic=" contains "topic=", so a plain substring search
     // for the topic marker lands inside the subtopic one whenever the model
     // omits a standalone topic.
     private static readonly Regex FieldMarkerPattern = new(
-        @"\b(category|topic|subtopic|subject|key|value)=", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"\b(category|topic|subtopic|subject|key|value|sentence)=", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>Values that occupy the slot without saying anything.</summary>
     private static bool IsEmptyWord(string value) => value.Trim().TrimEnd('.').ToLowerInvariant() switch
@@ -277,7 +277,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         _ => false,
     };
 
-    private static (string Subtopic, string Subject, string Key, string Value)? ParseFields(string line)
+    private static (string Subtopic, string Subject, string Key, string Value, string Sentence)? ParseFields(string line)
     {
         // Smaller models don't reliably stick to the requested "key=value"
         // shape and often write "key: value" instead — normalize that before
@@ -292,7 +292,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         // subtopic at all) — those default rather than losing the whole
         // fact; Category/Subject/Key/Value are the fact itself and stay
         // required.
-        var names = new[] { "category", "topic", "subtopic", "subject", "key", "value" };
+        var names = new[] { "category", "topic", "subtopic", "subject", "key", "value", "sentence" };
         var matches = FieldMarkerPattern.Matches(line);
 
         // First occurrence wins, matching the previous IndexOf behaviour: a
@@ -347,7 +347,17 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         }
 
         var subtopic = string.IsNullOrEmpty(values[2]) ? "general" : values[2]!;
-        return (subtopic, values[3]!, values[4]!, values[5]!);
+
+        // Optional, unlike every other field that survives to here. A
+        // missing sentence costs a row some retrieval surface; a required
+        // one would cost the whole fact, and the fact is what this agent
+        // exists to catch. Same reasoning that lets subtopic default rather
+        // than drop the row.
+        //
+        // Last in the field order, so it runs to the end of the line and can
+        // be an ordinary sentence with spaces in it — the marker split ends
+        // it at the next field marker, and there is no next field.
+        return (subtopic, values[3]!, values[4]!, values[5]!, values[6] ?? "");
     }
 
     /// <summary>

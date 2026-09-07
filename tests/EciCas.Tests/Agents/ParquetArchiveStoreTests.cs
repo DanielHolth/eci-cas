@@ -1,5 +1,7 @@
+﻿using System.Globalization;
 using EciCas.Agents.Recall;
 using EciCas.Core;
+using Parquet.Serialization;
 
 namespace EciCas.Tests.Agents;
 
@@ -24,6 +26,72 @@ public class ParquetArchiveStoreTests : IDisposable
 
     private static ArchiveRecord Record(string category, string topic, string subtopic, string key, string value, double importance = 0.5) =>
         new(category, topic, subtopic, "subject", key, value, DateTimeOffset.UtcNow, ArchiveDomain.External, importance);
+
+    /// <summary>
+    /// Written before the sentence column existed. Kept as a class here
+    /// rather than as a checked-in file, so the "old file still reads" claim
+    /// is re-proved against whatever Parquet.Net version the build resolves.
+    /// </summary>
+    private sealed class LegacyRow
+    {
+        public string Category { get; set; } = "";
+        public string Topic { get; set; } = "";
+        public string Subtopic { get; set; } = "";
+        public string Subject { get; set; } = "";
+        public string Key { get; set; } = "";
+        public string Value { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+        public string Domain { get; set; } = "";
+        public double Importance { get; set; }
+    }
+
+    [Fact]
+    public async Task SentenceSurvivesTheRoundTrip()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        await store.WriteAsync(
+            [Record("person", "family", "son", "birthdate", "2020-08-28") with { Sentence = "Marcus was born on 28 August 2020." }],
+            null, CancellationToken.None);
+
+        var reopened = new ParquetArchiveStore(_directory);
+        var row = Assert.Single(await reopened.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None));
+        Assert.Equal("Marcus was born on 28 August 2020.", row.Sentence);
+    }
+
+    /// <summary>
+    /// The whole no-migration answer rests on this: a pair file written
+    /// before the column existed must read, not throw. If it throws, every
+    /// archive on disk breaks on the first read after an upgrade.
+    /// </summary>
+    [Fact]
+    public async Task APairFileWrittenWithoutTheColumn_StillReads_WithAnEmptySentence()
+    {
+        var pair = new ArchivePair("person", "family");
+        Directory.CreateDirectory(_directory);
+        var path = ParquetArchiveStore.PairPathFor(_directory, pair);
+        await ParquetSerializer.SerializeAsync(new[]
+        {
+            new LegacyRow
+            {
+                Category = "person", Topic = "family", Subtopic = "son", Subject = "subject",
+                Key = "birthdate", Value = "2020-08-28",
+                Timestamp = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                Domain = ArchiveDomain.External, Importance = 0.5,
+            },
+        }, path);
+
+        var store = new ParquetArchiveStore(_directory);
+        var row = Assert.Single(await store.LookupAsync(pair, null, CancellationToken.None));
+        Assert.Equal("", row.Sentence);
+
+        // And it heals on the next write to that pair rather than needing a
+        // migration: the row is rewritten through the same widened schema.
+        await store.WriteAsync([row with { Sentence = "Marcus was born on 28 August 2020." }], null, CancellationToken.None);
+        var reopened = new ParquetArchiveStore(_directory);
+        Assert.Equal(
+            "Marcus was born on 28 August 2020.",
+            Assert.Single(await reopened.LookupAsync(pair, null, CancellationToken.None)).Sentence);
+    }
 
     [Theory]
     [InlineData("person")]
