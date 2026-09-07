@@ -13,14 +13,21 @@ Daniel's idea, and the reason this file exists: give the picker samples of
 what is in each file rather than only the name. It works -- but not in the
 form first measured here, and not for the reason first claimed.
 
-    method        vectors/file   strict     (3 files opened, k=5, of 87)
-    librarian          0           40%      LLM reading the name
-    name-only          1           50%
-    sample-3           3           63%
-    centroid           1           70%
-    sample-10         10           75%
-    all-rows       1 per row       80%
-    flat           1 per row       78%      no files at all
+    method        vectors/file    bge    e5    (3 files, k=5, strict, of 87)
+    librarian          0           40%     -     LLM reading the name
+    name-only          1           54%    42%
+    sample-3           3           65%    58%
+    centroid           1           74%    68%
+    sample-10         10           78%    74%
+    all-rows       1 per row       85%    81%
+    flat           1 per row       78%     -     no files at all
+
+Both columns are shown because the ship model changed after these were first
+measured: lang_v4 settled on multilingual-e5-small, which costs 4-12pp on this
+all-English corpus and buys an archive that survives being spoken to in
+Norwegian. The ordering is identical under both, so nothing below is affected.
+name-only takes the largest hit, which figures -- a file name is a bare
+English shelf term with no sentence around it, the case e5 is worst at.
 
 Three things to keep straight.
 
@@ -79,7 +86,7 @@ def main(k=5, files=3):
 
     e = Embedder()
     print("embedding %d rows ..." % len(flat_rows), flush=True)
-    matrix = e.encode([rb.embed_text(r) for r in flat_rows])
+    matrix = e.encode([rb.embed_text(r) for r in flat_rows], kind="passage")
 
     # One centroid per file, and a sample of each file's rows.
     #
@@ -99,10 +106,10 @@ def main(k=5, files=3):
                       for ix in per_file])
     cent /= np.maximum(np.linalg.norm(cent, axis=1, keepdims=True), 1e-9)
 
-    names = e.encode([p.replace("/", " / ") for p in index])
+    names = e.encode([p.replace("/", " / ") for p in index], kind="passage")
     qs = sorted(ANSWERS)
     turns = qs + list(corpus.NULLS)
-    qv = e.encode(turns)
+    qv = e.encode(turns, kind="query")
     print("embedded. %d turns\n" % len(turns), flush=True)
 
     samples = (1, 3, 10)

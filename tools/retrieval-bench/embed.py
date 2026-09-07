@@ -32,7 +32,13 @@ import os
 import numpy as np
 
 ROOT = __file__.rsplit("tools", 1)[0]
-DEFAULT_MODEL = ROOT + "models/embedding/bge-small-en-v1.5"
+# multilingual-e5-small, not bge-small-en-v1.5, though bge is 4-6pp better on
+# the all-English v4 corpus and faster. archivist.txt writes the sentence in
+# the language of the message, and lang_v4 shows bge cannot find a Norwegian
+# row from an English question at any k (mean rank 256 of 1579, against e5's
+# 4.5). Override with ECI_EMBED to measure the other one.
+DEFAULT_MODEL = os.environ.get(
+    "ECI_EMBED", ROOT + "models/embedding/multilingual-e5-small")
 
 
 class Embedder:
@@ -55,6 +61,8 @@ class Embedder:
             os.path.join(self.path, "model.onnx"), opts,
             providers=["CPUExecutionProvider"])
         self.inputs = set(i.name for i in self.sess.get_inputs())
+        self.prefix = ({"query": "query: ", "passage": "passage: "}
+                       if "e5" in self.name else {})
 
     @property
     def model_id(self):
@@ -63,7 +71,20 @@ class Embedder:
         read path treats it as missing rather than as data."""
         return "%s/%d" % (self.name, self.max_len)
 
-    def encode(self, texts, batch=64):
+    def encode(self, texts, batch=64, kind=None):
+        """`kind` is "query" or "passage" for models trained asymmetrically.
+
+        The e5 family is: it was trained with "query: " and "passage: "
+        prefixes and loses several points without them, because the two roles
+        occupy different regions of its space by design. bge-small-en has no
+        such prefix in this usage, so the mapping below is per-model rather
+        than a flag the caller has to remember -- passing kind to a model that
+        does not want one is a no-op, which keeps every arm's call identical
+        across embedders.
+        """
+        pre = self.prefix.get(kind, "") if kind else ""
+        if pre:
+            texts = [pre + t for t in texts]
         out = []
         for i in range(0, len(texts), batch):
             chunk = texts[i:i + batch]

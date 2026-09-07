@@ -77,11 +77,11 @@ def main(k=5):
 
     e = Embedder()
     print("embedding %d rows with %s ..." % (len(flat_rows), e.model_id), flush=True)
-    matrix = e.encode([rb.embed_text(r) for r in flat_rows])
+    matrix = e.encode([rb.embed_text(r) for r in flat_rows], kind="passage")
 
     qs = sorted(ANSWERS)
     turns = qs + list(corpus.NULLS)
-    qv = e.encode(turns)
+    qv = e.encode(turns, kind="query")
     print("embedded. %d turns, %d dims\n" % (len(turns), matrix.shape[1]), flush=True)
 
     tally = collections.Counter()
