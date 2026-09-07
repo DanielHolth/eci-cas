@@ -313,6 +313,11 @@ ARMS = [
         select=whole_category(LEAN_GLOSS), rec=LENIENT),
     Arm("lean+or+lenient", ".archive_v3_lean.json", vocab=LEAN,
         oracle=True, rec=LENIENT),
+    # The two prompt-only changes on the shipped shelf. Neither touches the
+    # vocabulary, so neither can damage filing, and the write side is where
+    # consolidation lost what the read side gained.
+    Arm("full+gloss+len", ".archive_v3.json", gloss=GLOSS, rec=LENIENT),
+    Arm("full+len", ".archive_v3.json", rec=LENIENT),
 ]
 
 
