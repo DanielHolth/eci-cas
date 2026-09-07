@@ -375,3 +375,98 @@ helps a reader under pressure, and its read-side value at this scale is
 unproven rather than disproven. The case for keeping it now rests on what
 it was always the prerequisite for -- a vector over the sentence rather
 than over the address form -- not on a read-side win it has not shown.
+
+## Batch 15: the embedder, the scorer, and both halves of the gloss idea
+
+Four results overnight, two of them corrections to this log rather than
+additions to it.
+
+**The ship embedder is multilingual-e5-small, and the comparison that said
+otherwise was asking the wrong question.** On the v4 corpus bge-small-en-v1.5
+wins 92/81/92 flat/centroid/all-rows against e5's 88/75/88, and it is faster.
+The corpus is English throughout, which is bge's home ground, and
+`archivist.txt` writes the sentence in the language of the message -- so a
+Norwegian household gets a Norwegian archive and none of those numbers
+describe it. `lang_v4.py` puts twenty v4 statements, hand-written in
+Norwegian, into the real 1559-row English archive and asks the English
+questions:
+
+    embedder            top1   top5   top20   mean rank (of 1579)
+    bge-small-en          0%    15%     15%       256.1
+    multilingual-e5      30%    90%     95%         4.5
+
+bge has no shared multilingual space, so the Norwegian row is not near its
+question at any k. Ship e5, pay 4-12pp on English. Hand-written rather than
+machine-translated: a translation model in the loop would put its vocabulary
+between the statement and the embedder, and a bad translation would read as
+a bad embedder.
+
+**The scorer was ignoring half the archive.** `answered` matched answer keys
+against `line(r)` -- category/topic/subject/key/value -- and never the
+sentence field, which the Archivist writes, the archive stores and the
+embedder has read since a7096f4. `raw_v4.py`:
+
+    stored              ceiling   strict@5    chars
+    line                    91%        77%       48
+    line+sent               97%        87%      103
+    line+sent+stmt         100%        88%      106
+
+`writable` goes 77/87 to 85/87 with no change to what is written. Every
+write-side loss reported in batches 3-14 is partly measurement, and the
+specific claim that the Archivist drops proper nouns from two-fact statements
+is **withdrawn** -- the noun is in the sentence and `line()` dropped it.
+Numbers from before 2026-09-08 do not compare to numbers after it.
+
+That is also Daniel's idea 1 answered: storing the original message on top
+does reach a 100% ceiling, so the raw text makes every fact recoverable and
+lets one row carry two. But the sentence already gets 6 of the 9 points for
+free, and the message is the expensive half of the idea.
+
+**Idea 2, read half: staging the pick costs and never pays.** Match the
+category first, then the file within it, with derived centroids at both
+levels so the summary method is constant and the gap is the staging alone:
+
+    categories kept    1     2     3     5     8    all
+    strict            54%   62%   65%   72%   72%   72%
+
+Monotone into the flat arm and never past it. A gate can only discard files
+the second stage would have ranked, and a category centroid is blurrier than
+any file centroid inside it. A written gloss could sharpen the gate; it cannot
+beat removing it. Held as a price list rather than a refutation -- staging
+exists to avoid scoring every file, 171 files are free to score, and 7pp at
+c=3 for a 14x smaller second stage is the trade once they are not.
+
+**Idea 2, write half: this is where it pays.** `file_v4.py` re-files the same
+extracted rows three ways, padding untouched, so the only variable is where a
+gold row went.
+
+    filing       agree   select   strict   spread
+    llm           100%      74%      72%       54
+    by-name        32%      66%      65%       55
+    by-gloss       11%      77%      73%       31
+
+    files opened      1          3          5
+    llm            49 / 49    74 / 72    82 / 79
+    by-gloss       55 / 52    77 / 73    89 / 81
+
+by-gloss uses the mean of a file's padding as its gloss -- LLM-written
+examples of what belongs under that pair, independent of the gold rows, so it
+is not scoring itself. **It matches or beats two LLM calls per row while
+putting nine rows in ten somewhere else.** What retrieval needs is that filing
+and retrieval agree with each other, not that either agrees with a human's
+sense of where a thing goes. And the economics run the right way: a gloss
+costs calls per file, once, against two calls per row forever.
+
+Three things held against it. `by-name` loses 7pp, so the gloss and not the
+name is doing the work -- consistent with name-only being the weakest read arm
+in shelf_v4. by-gloss concentrates into 31 pairs against the Cataloger's 54,
+and fewer-fatter-files is exactly what sank the consolidated shelves in
+batches 8-12, though the width sweep shows it is not biting at this size.
+And 11% agreement is a legibility cost for a store meant to be human-readable,
+which no retrieval number will ever show.
+
+**Withdrawn from the previous commit:** the address-only Recall listing was
+called a product bug. It is a measured default -- `sentence_ab.py` tested the
+same swap in batch 14 and found it lifts a scarce reader 12pp and moves the
+shipping lenient arm not at all. `rb.pick` now takes `show` so that fork can
+go away and v4, which has the fat files v3 lacked, can ask again.
