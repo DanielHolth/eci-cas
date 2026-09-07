@@ -79,7 +79,7 @@ def main(k=5, files=3):
 
     e = Embedder()
     print("embedding %d rows ..." % len(flat_rows), flush=True)
-    matrix = e.encode([rb.line(r) for r in flat_rows])
+    matrix = e.encode([rb.embed_text(r) for r in flat_rows])
 
     # One centroid per file, and a sample of each file's rows.
     #

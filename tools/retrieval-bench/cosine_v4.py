@@ -77,7 +77,7 @@ def main(k=5):
 
     e = Embedder()
     print("embedding %d rows with %s ..." % (len(flat_rows), e.model_id), flush=True)
-    matrix = e.encode([rb.line(r) for r in flat_rows])
+    matrix = e.encode([rb.embed_text(r) for r in flat_rows])
 
     qs = sorted(ANSWERS)
     turns = qs + list(corpus.NULLS)
