@@ -1250,6 +1250,43 @@ a person browsing their own archive. The likely landing is vectors as the
 primary index with pairs demoted to a file layout and a degraded path, but
 the arm decides it. See `tools/retrieval-bench/README.md`, v4.
 
+**Answered, batch 15: no, and the predicted landing is the one that happened.**
+Both calls were measured against their absence on the v4 corpus (87 questions,
+1559 rows, near-miss clusters, strict scoring).
+
+*The read call loses outright.* The Librarian selects 47% and answers 42%;
+ranking the same files by a centroid of their rows selects 74% and answers
+72%, and letting every row vote reaches 87%. Given a correct pair, cosine
+ranks as well inside it as a flat sweep does across the whole archive, so the
+narrowing never improved the ranking -- it only sometimes handed over the
+wrong pile. Even embedding the file name the Librarian reads, rather than
+having a 4B rank 170 of them, is worth 3pp. Delete the call.
+
+*The write calls tie.* Re-filing the same extracted rows by nearest gloss --
+the mean of ten sampled rows already in a file -- scores 77%/73% select/strict
+against the Cataloger's 74%/72%, while agreeing with it on 11% of rows. A
+paired bootstrap puts that at +1.1pp, 95% CI [-9.2, +12.6]: a tie, not a win.
+The same bootstrap separates a one-row gloss (-12.6pp) and a three-row gloss
+(-11.5pp) cleanly, so the instrument can see an effect where there is one.
+Two calls per row bought nothing measurable over arithmetic that disagrees
+with them nine times in ten, and a gloss costs calls per *file*, once, against
+two calls per *row* forever.
+
+So the vocabulary earns zero of its two calls, and survives for exactly the
+three non-retrieval reasons listed above. Two caveats carried forward: filing
+by gloss concentrates gold into 31 pairs where the Cataloger uses 54 -- a
+density sweep shows both readers degrading in parallel rather than the vector
+filer degrading faster, which downgrades that worry without closing it -- and
+11% agreement means an archive filed where a person would not look, which is a
+real cost for a store meant to be browsable and which no retrieval number will
+ever show.
+
+One measurement changed underneath all of this and is worth carrying: the
+bench scorer had been matching answer keys against the address line only,
+never the sentence field the Archivist writes and the embedder reads. Fixing
+it moves the write-side ceiling from 77/87 to 85/87, so the write side was
+never as lossy as batches 3-14 reported.
+
 **Two extractors over one message.** Redundant columns cost nothing at rest,
 so the archive could carry facts from a strict field extractor and from a
 looser second pass side by side, and let the reader see both. Attractive
