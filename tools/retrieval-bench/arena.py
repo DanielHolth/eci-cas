@@ -43,9 +43,10 @@ BASE = ROOT + "tools/retrieval-bench/"
 class Arm:
     """One shelf and one way of showing it."""
 
-    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False):
+    def __init__(self, name, cache, vocab=None, gloss=None, select=None, oracle=False, pick=True):
         self.name = name
         self.oracle = oracle
+        self.pick = pick
         self.cache = BASE + cache
         self.vocab = vocab
         self.gloss = gloss
@@ -69,7 +70,13 @@ class Arm:
         # by the row itself, and no selector however good can win it back.
         opened = (sorted(self.gold[q]) if self.oracle
                   else self.select(q, self.index, self.rows))
-        got = rb.pick(q, [r for p in opened for r in self.rows[p]])
+        rows = [r for p in opened for r in self.rows[p]]
+        # An arm with pick=False hands Recall's input straight to the answer.
+        # That is a shippable configuration and not just a ceiling: on the
+        # lean shelf whole-category opens ten rows, which is a smaller prompt
+        # than the one Recall is given to sift it with. If the numbers match,
+        # the stage is paying a call to subtract nothing.
+        got = rb.pick(q, rows) if self.pick else rows
         t = self.t
         t["n"] += 1
         t["select"] += bool(self.gold[q] & set(opened))
@@ -172,6 +179,22 @@ def sampled_values(n=2):
     return go
 
 
+def values_category():
+    """The two arms that won, composed: pick pairs by their contents, then
+    open the rest of those categories anyway. sampled_values and
+    whole_category were the top two of the first six and they disagree about
+    what the selector should be shown, so this is the test of whether they
+    are two routes to the same win or two wins that add."""
+    inner = sampled_values()
+
+    def go(q, index, rows):
+        picked = inner(q, index, rows)
+        cats = list(dict.fromkeys(p.split("/")[0] for p in picked))
+        return picked + [p for p in index
+                         if p.split("/")[0] in cats and p not in picked]
+    return go
+
+
 def two_stage(gloss=None, cats=2):
     """Categories first, then topics inside the ones chosen.
 
@@ -245,6 +268,14 @@ ARMS = [
         select=subject_llm(LEAN_GLOSS)),
     Arm("lean+oracle", ".archive_v3_lean.json", vocab=LEAN, oracle=True),
     Arm("full+oracle", ".archive_v3.json", oracle=True),
+    Arm("lean+wc+nopick", ".archive_v3_lean.json", vocab=LEAN,
+        select=whole_category(LEAN_GLOSS), pick=False),
+    Arm("full+wc+nopick", ".archive_v3.json",
+        select=whole_category(GLOSS), pick=False),
+    Arm("lean+or+nopick", ".archive_v3_lean.json", vocab=LEAN,
+        oracle=True, pick=False),
+    Arm("lean+val+wc", ".archive_v3_lean.json", vocab=LEAN,
+        select=values_category()),
 ]
 
 
