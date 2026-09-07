@@ -59,24 +59,29 @@ STATEMENTS = [
 # result). A question that names a place and wants a person is the case a
 # subject index would have to earn its keep on.
 #
-# (question, [pairs that would be a good open], [tokens that would answer it])
+# (question, the statement that answers it, alternatives as in the answer key).
+# The statement rather than a hand-written pair: the first version of this
+# list guessed pairs that the vocabulary does not contain -- health/allergy,
+# finance/saving -- and scored 0/8 for that reason alone. Naming the
+# statement makes the harness look up where the fact was really filed, which
+# is also the only thing worth asking about retrievability.
 OBLIQUE = [
  ("Who should we drop by and visit while we are staying in Bodo?",
-  ["relations/family", "relations/sibling", "relations/other"], ["marit"]),
+  "My sister Marit lives in Bodo with her husband",        [("marit",)]),
  ("Anything I should tell the doctor before they prescribe something?",
-  ["health/allergy", "health/condition", "health/other"], ["penicillin"]),
+  "I am allergic to penicillin",                           [("penicillin",)]),
  ("Is there anyone nearby I can ask to let the plumber in?",
-  ["relations/neighbour", "relations/other"], ["bjorn"]),
+  "Our neighbour Bjorn keeps the spare key",               [("bjorn",)]),
  ("What should I not do on the boat trip?",
-  ["health/condition", "health/other"], ["seasick"]),
+  "I get seasick on anything smaller than a ferry",        [("seasick",)]),
  ("Will I need to renew any documents before the trip?",
-  ["identity/document", "identity/other"], ["licence", "2028"]),
+  "My driving licence needs renewing in 2028",             [("licence",), ("2028",)]),
  ("What could we spend the extra money on?",
-  ["finance/saving", "household/renovation", "finance/other"], ["kitchen"]),
+  "We are saving for a kitchen renovation",                [("kitchen",)]),
  ("Something to keep Ingrid calm during the storm tonight?",
-  ["relations/family", "identity/fear"], ["thunder"]),
+  "Ingrid is scared of thunder",                           [("thunder",)]),
  ("Anything to be careful about when loading up after dinner?",
-  ["household/appliance", "household/other"], ["dishwasher"]),
+  "The dishwasher leaks if you overload it",               [("dishwasher",), ("leak",), ("overload",)]),
 ]
 
 # States no fact. Anything archived from these is a fabrication; anything

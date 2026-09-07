@@ -204,18 +204,23 @@ def oblique():
     """Bonus tier. Never folded into the headline -- see retrieval_v3."""
     a, rows = archive()
     index = sorted(rows)
+    by_stmt = collections.defaultdict(set)
+    for g in a["gold"]:
+        by_stmt[g["stmt"]].add(g["pair"])
     good = ans = 0
-    for q, pairs, toks in corpus.OBLIQUE:
+    for q, stmt, alts in corpus.OBLIQUE:
+        want = by_stmt[stmt]
         opened = select(q, index)
-        g = bool(set(pairs) & set(opened))
+        g = bool(want & set(opened))
         got = pick(q, [r for p in opened for r in rows[p]])
         blob = " ".join(line(r).lower() for r in got)
-        a_ok = all(t in blob for t in toks)
+        a_ok = any(all(t in blob for t in alt) for alt in alts)
         good += g
         ans += a_ok
-        print("  %s%s  %s\n        opened=%s" % (
-            "HIT " if g else "    ", "ANS" if a_ok else "   ", q, ",".join(opened) or "-"))
-    print("\noblique: plausible pair %d/%d   answered %d/%d" % (
+        print("  %s%s  %s\n        filed=%s\n        opened=%s" % (
+            "HIT " if g else "    ", "ANS" if a_ok else "   ", q,
+            ",".join(sorted(want)) or "-", ",".join(opened) or "-"))
+    print("\noblique: filed pair opened %d/%d   answered %d/%d" % (
         good, len(corpus.OBLIQUE), ans, len(corpus.OBLIQUE)))
 
 
