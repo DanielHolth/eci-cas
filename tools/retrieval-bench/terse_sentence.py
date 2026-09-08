@@ -1,0 +1,31 @@
+# Sentence restatements of TERSE_GLOSS. Same information, prose rather than a
+# comma list. Written from the keyword line alone -- never from the archive --
+# so this is a format change and nothing else.
+TERSE_SENTENCE = {
+ "identity/self": "Who this person is: their name and what they are called, how old they are, when and where they were born, where they are from, their nationality, and what they look like.",
+ "identity/belief": "What this person believes in: their faith or religion, their politics, and the values and principles they hold and act on.",
+ "identity/trait": "What this person is like as a person: what they are afraid of, what they like and prefer, their personality, the languages they speak, and their personal habits.",
+ "identity/history": "This person's past: where they grew up, what they studied, what they used to do, their childhood, and how they became what they are now.",
+ "body/health": "This person's health: illnesses and conditions they have, allergies and foods they cannot eat, injuries, medication they take, symptoms, blood type, eyesight, and how tall they are.",
+ "body/state": "How this person is feeling right now: tired, exhausted, stressed, anxious, low, run down, in pain, recovering, sleeping badly, and their current energy and mood.",
+ "body/habit": "How this person looks after their body day to day: what they eat, their diet, how they sleep, the exercise and training they do, their fitness and their weight.",
+ "relations/family": "The people this person is related to: their wife, husband or partner, their children, their parents, brothers and sisters, cousins and in-laws, and family birthdays and anniversaries.",
+ "relations/person": "People this person knows who are not family: friends, colleagues, their manager or boss, neighbours, their doctor or teacher, and who these people are and how they met.",
+ "relations/agent": "Assistants, companions, bots, models and software agents this person uses to help them, and what each of them is used for.",
+ "work/job": "What this person does for a living: their job title and role, what they work as, the duties the job involves, and what they are qualified or trained as.",
+ "work/employer": "Who this person works for: the company, the office or workplace they work at, how they commute there, and their employer or their clients.",
+ "work/plan": "What this person is working towards at work: current projects and deadlines, their career and any promotion, leave they are taking, and courses they are studying for.",
+ "resources/home": "Where this person lives and what is in it: their house or flat, their address, the rooms, the kitchen, the garden, a cabin, and where particular things are kept or stored.",
+ "resources/thing": "Things this person owns: the car they drive, a bike, their phone and laptop, appliances and the boiler, tools, and pets such as a dog or a cat.",
+ "resources/upkeep": "Looking after the things they own: what has been serviced, repaired, fixed, replaced or cleaned, maintenance that is due, and anything that has broken.",
+ "resources/money": "This person's money: what they earn, their salary and income, what they pay for, bills, costs and prices, rent, debts and loans, savings, pension and budget.",
+ "leisure/travel": "Travel: trips and holidays, where they are flying to, destinations abroad, a cabin or an RV, places they go to, places they have been, and places they want to visit.",
+ "leisure/pastime": "What this person does for fun: hobbies, sports they play, running, hiking, cooking, making and building things, and bands, clubs, teams or choirs they are a member of.",
+ "leisure/media": "What this person watches, reads and listens to: music, films and series, books, games, and things they collect.",
+ "records/document": "Official documents this person holds: a passport, a licence, certificates, warranties, a will, a deed, and the reference numbers and paperwork that go with them.",
+ "records/policy": "Ongoing agreements this person is signed up to: insurance policies, contracts, memberships and subscriptions, what they cover, and the terms of each plan.",
+ "records/account": "Accounts this person holds with providers and suppliers: who they are registered with, their utilities, customer numbers, and services they have signed up to.",
+ "appointment/booked": "Appointments that have been booked: who they are seeing, on what day and at what time, and any scheduled slot.",
+ "appointment/deadline": "Dates by which something must happen: when it is due, when it expires or runs out, what must be done by the end of a period, and when something has to be renewed.",
+ "appointment/event": "Events coming up: a wedding, a concert, a trip they are going on, somewhere they are flying to, and what is happening next month.",
+}

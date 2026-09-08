@@ -47,6 +47,35 @@ shipped shelf gets 63. Matched on rows reached instead:
        100            78%  (5 files)     51%  (1 file, 80 rows)
        220            80%  (8 files)     75%  (3 files, 214 rows)
 
+**Keywords or sentences?** Both shipped glosses are comma lists -- 4.1 words
+per pair on the 170-shelf, 10.9 on terse -- and e5 is a sentence embedder, so
+the first run confounded shelf with gloss format. `terse_sentence.py` restates
+all 26 terse glosses as prose, written from the keyword line alone and never
+from the archive, so the shelf and the rows are fixed and only the format
+moves:
+
+    terse/34, pick by      1 file   3 files   8 files
+    keywords, gloss-pick     50%      68%       83%
+    sentences, gloss-pick    47%      71%       85%
+    keywords, centroid       51%      75%       83%
+    sentences, centroid      55%      68%       85%
+
+Prose is worth about 3pp where the gloss is doing the picking, which is the
+direction the embedder argument predicts, and nothing beyond noise elsewhere.
+It is a real but small effect, not a different regime.
+
+It does not rescue the shelf, and at the expensive end it makes things worse:
+matched on reach, sentences move terse from 51% to 55% at the cheap end
+against the shipped shelf's 70%, and from 75% to 68% at the expensive end.
+That last point matters for how the head-to-head should be read -- the shipped
+arm is still keywords, the *weaker* format, so terse is now being given the
+better one and still losing at every budget. The confound runs against the
+conclusion rather than for it, which strengthens it.
+
+What is not yet known is whether the 170-pair shelf would gain the same 3pp
+from prose. That needs 160 sentences written and is worth doing, since the
+written gloss is what would actually ship as the filer.
+
 A paired bootstrap over the 87 questions, which is what separated the gloss
 sizes in `file_v4` and is owed here too:
 
@@ -87,6 +116,7 @@ import bench
 import read_bench as rb
 import retrieval_v4 as corpus
 import terse_vocab
+import terse_sentence
 from answers_v4 import ANSWERS
 from embed import Embedder
 from arms_v4 import CACHE, shape
@@ -161,7 +191,13 @@ def main(k=5):
     qv = e.encode(qs, kind="query")
     n = len(qs)
 
-    shelves = [("shipped/170", shipped_gloss()), ("terse/34", terse_gloss())]
+    # The third arm is the same 26 terse pairs with the same information
+    # written as prose instead of a comma list. Daniel's point: e5 is a
+    # sentence embedder and a bare keyword list is the input it is worst at,
+    # so shelf and gloss format were confounded in the first run. Holding the
+    # shelf fixed isolates the format.
+    shelves = [("shipped/170", shipped_gloss()), ("terse/34", terse_gloss()),
+               ("terse/34 sent", dict(terse_sentence.TERSE_SENTENCE))]
     for name, shelf in shelves:
         missing = [p for p in rb.all_pairs() if p not in shelf] if "170" in name else []
         print("%-12s %d pairs glossed%s" % (
@@ -190,14 +226,15 @@ def main(k=5):
     # being handed four times as many rows to rank has not shown that its
     # folders are better, it has shown that a bigger slice is easier.
     print("\n  matched on rows reached, centroid pick, nearest sweep point:")
-    print("    %8s   %-22s %-22s" % ("~rows", "shipped/170", "terse/34"))
+    print("    %8s   %-22s %-22s %-22s"
+          % ("~rows", "shipped/170", "terse/34", "terse/34 sent"))
     for target in (20, 60, 100, 220):
         cells = []
         for nm, _ in shelves:
             cand = [r for r in swept if r[2] == "centroid" and r[0] == nm]
             b = min(cand, key=lambda r: abs(r[3] - target))
             cells.append("%3d%% (%d files, %3.0f rows)" % (b[4], b[1], b[3]))
-        print("    %8d   %-22s %-22s" % (target, cells[0], cells[1]))
+        print("    %8d   %-22s %-22s %-22s" % (target, cells[0], cells[1], cells[2]))
 
     # 87 questions makes a 5pp gap four questions wide, so the file-count
     # table cannot be read as a win for either shelf on its own. Paired over
@@ -206,12 +243,15 @@ def main(k=5):
     rng = np.random.default_rng(4)
     print("")
     print("  paired bootstrap, terse minus shipped, 5000 resamples of %d questions:" % n)
-    for lo, hi, why in ((3, 1, "63 vs 80 rows"), (8, 3, "176 vs 214 rows")):
-        d = PERQ[("terse/34", hi, "centroid")] - PERQ[("shipped/170", lo, "centroid")]
+    for arm, lo, hi, why in (("terse/34", 3, 1, "63 vs 80 rows"),
+                             ("terse/34", 8, 3, "176 vs 214 rows"),
+                             ("terse/34 sent", 3, 1, "63 vs 80 rows"),
+                             ("terse/34 sent", 8, 3, "176 vs 214 rows")):
+        d = PERQ[(arm, hi, "centroid")] - PERQ[("shipped/170", lo, "centroid")]
         boot = d[rng.integers(0, len(d), (5000, len(d)))].mean(1)
-        print("    shipped@%d vs terse@%d (%s)  %+5.1fpp  95%% CI [%+5.1f, %+5.1f]"
+        print("    shipped@%d vs %-13s@%d (%s)  %+5.1fpp  95%% CI [%+5.1f, %+5.1f]"
               "  P(terse better) %3d%%" % (
-                  lo, hi, why, 100 * d.mean(), 100 * np.percentile(boot, 2.5),
+                  lo, arm, hi, why, 100 * d.mean(), 100 * np.percentile(boot, 2.5),
                   100 * np.percentile(boot, 97.5), 100 * (boot > 0).mean()))
 
     print("\n  select = an opened file holds the answer. Not comparable across")
