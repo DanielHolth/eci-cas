@@ -38,12 +38,19 @@ One command, if you want the lazy path:
 ```
 
 It reads the tier file to decide what that tier actually needs, starts
-llama-server (only for tiers routing a class at `local`), the host and the
-surface in windows of their own, waits for both ports and opens the browser.
-Nothing heavy is installed behind your back: missing weights, a missing
-llama-server and a missing API key are each reported with the one command that
-fixes them. `-WhatIfOnly` prints what it would start; `-NoUi`, `-NoLlm` and
-`-NoBrowser` leave a part out.
+llama-server (only for tiers routing a class at `local`, via
+`get-local-model.ps1 -Start`), the host (`dotnet run --project src/EciCas.Host`)
+and the surface (`morrow-eci`'s own `dev.cmd`, which puts nodejs on PATH first)
+each in a window of their own, waits for both ports and opens the browser.
+Ports are probed, not assumed: a server already answering is left alone, and
+a busy `:5179` is a hard stop rather than a warning, since only one process
+may hold the archive directory. Nothing heavy is installed behind your back:
+missing weights, a missing `node_modules` and a missing API key are each
+reported with the one command that fixes them, and the rest still starts.
+`-WhatIfOnly` prints what it would start and starts nothing; `-NoUi`, `-NoLlm`
+and `-NoBrowser` leave a part out; `-Port`, `-UiPort` and `-LlmPort` move the
+three servers off their defaults (`5179`, `3000`, `8080`) for a second
+instance beside a running one.
 
 By hand it is two terminals. The host serves the bus and the SSE feed on `:5179`; the
 surface talks to it from `:3000`.
