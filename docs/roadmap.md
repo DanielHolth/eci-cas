@@ -727,6 +727,33 @@ DERIVED view: trimming it destroys nothing, because every row it drops still
 lives at its own address. It is a window, not a store, and it should be built
 so that deleting the whole file is a no-op you can do at any time.
 
+**Two lanes rather than one, which is Daniel's refinement and mostly right.**
+The proposal is `recent.parquet` at 5,000 rows or thirty days, and
+`fatMemory.parquet` at 100,000 rows kept lean. The instinct to separate them
+is good, but the test to hold it to is whether they differ in KIND rather
+than in size: two flat cosine scans at 5k and 100k are one mechanism twice,
+and the same effect is available from a single file with a recency term in
+the score, at one deletion path instead of two.
+
+What would make them differ in kind is the access method, and that is where
+"rows only, to avoid bloat" needs pinning down. A vector lane needs stored
+vectors; without them 100,000 rows must be embedded at query time, which is
+seconds on a CPU rather than the milliseconds the lane is worth. And the
+bloat being avoided is smaller than it looks -- 100k at 384 dims is 153 MB,
+which is not the constraint the "Nothing is ever deleted" section already
+established storage never is. So either the fat lane stores its vectors and
+is a real second scan, or it is reached some other way entirely (exact key
+match, or a keyword index), and THAT is the version that is different in
+kind and worth two files.
+
+Size units should differ too, and for a reason: `recent` should be bounded by
+TIME, because "lately" is what it means and a row count only approximates it
+at a fixed conversation rate. `fatMemory` should be bounded by ROWS, because
+there the cap is a resource bound and not a meaning.
+
+Two derived copies make the deletion problem above worse, not better, and it
+is the same fix: an id on the row, so a forget reaches every copy.
+
 Threshold, and whether the lane is consulted at all, are config
 (`Archive:CacheRows`, default off) rather than code.
 
