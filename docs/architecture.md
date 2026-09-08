@@ -158,6 +158,65 @@ nothing in the substrate path caches its config. Switching re-seeds recall
 depth from the new tier. In-memory only: a restart resets each to a default
 matching the tier's config, so an untouched slider changes nothing.
 
+## Tier knobs: `Recall` and `Librarian` in `appsettings.*.json`
+
+These are the two sections a tier scales to decide how hard a turn reads. They
+are config, not code, precisely so the load can be softened without a rebuild;
+every one of them is bound per tier and re-bound by the live Tier dropdown.
+
+### `Librarian` — how wide the shelf opens
+
+| Key | Means | Costs |
+|---|---|---|
+| `MaxSelectedPairs` | How many index pairs the one selection call may name. | One pair = one whole file Recall then reads. This is the biggest single lever on a turn's read cost. |
+| `VectorPairs` | How many more pairs the gloss-vector sweep may add *beside* that selection. A second opinion, not a second selector. `0` turns the pair-vector layer off. | Adds files on top of `MaxSelectedPairs`, so the real ceiling is their sum. |
+| `VectorMinScore` | Cosine floor a gloss must clear to count as a lead. Without it the sweep always returns its full quota, even on a turn about nothing in the archive. | Raising it drops weak leads; lowering it spends `VectorPairs` on every turn. |
+
+### `Recall` — how deep each opened pair is read
+
+| Key | Means | Costs |
+|---|---|---|
+| `RowsPerWorker` | How many candidate rows one picking call is shown. A quality limit, not a context one — a small model's ability to spot the right row in a flat list falls off long before its window does. | A pair deeper than this splits across that many more parallel workers. |
+| `MaxConcurrentRecalls` | Ceiling on picking calls per turn across all pairs. Sized at roughly twice `MaxSelectedPairs`, so an ordinary turn never reaches it and only an unusually deep pair does. | The hard cap on read-side fan-out. |
+| `MaxPickedPerWorker` | How many rows one picking call may return — and, because the call is skipped when a lane holds no more rows than this, also the size below which a young archive passes whole with no substrate call. Seeds the Recall-depth slider. | Decides how many facts reach Intent; the ceiling is this × `MaxConcurrentRecalls`. |
+| `RecentRows` | How many rows of the recency lane go in front of the picking model. The lane spans a year; this is what makes it a prompt rather than a dump. | One call a turn, always made, whatever Librarian selected. |
+| `VectorCandidates` | How many rows survive the cosine cut *inside* one pair. Five is where it was measured: given the right file, the fact is in the vector top five 97% of the time. `0` turns the row-vector layer off and restores the pre-vector read path exactly. | Replaces chunking when it applies; it does not replace `RowsPerWorker` for a pair that cannot be narrowed. |
+| `PickAfterVector` | Whether vector-narrowed rows still go through a picking call. `false` everywhere, because it was measured: picking was the biggest read-side loss in the bench (78% without it against a lenient 60% bar), and cosine-ranked rows are exactly the ones it discarded. | `true` costs one call per narrowed pair for a model you have a reason to trust. |
+
+### What each tier currently sets
+
+| | Mock | Minimal | Budget | Default | Super |
+|---|---|---|---|---|---|
+| `Librarian:MaxSelectedPairs` | 2 | 2 | 4 | 4 | 8 |
+| `Librarian:VectorPairs` | 2 | 2 | 2 | 2 | 4 |
+| `Recall:RowsPerWorker` | 10 | 10 | 25 | 50 | 100 |
+| `Recall:MaxConcurrentRecalls` | 4 | 4 | 8 | 12 | 16 |
+| `Recall:MaxPickedPerWorker` | 2 | 2 | 4 | 4 | 8 |
+| `Recall:RecentRows` | 10 | 10 | 20 | 30 | 60 |
+| `Recall:VectorCandidates` | 4 | 4 | 5 | 6 | 8 |
+
+`VectorMinScore` is 0.75 and `PickAfterVector` false on every tier.
+
+### Why Default reads narrower than its rank
+
+Default used to open nine files a turn (6 selected + 3 vector) and read six
+rows out of each, which on an observed turn was five Librarian pairs, eleven
+priced calls and 37 seconds wall-clock for a reply that used one recalled
+fact. Minimal, at a third of those numbers, was not visibly worse at
+remembering — the extra pairs were width nobody spent.
+
+So the read knobs came down to Budget's shape: `MaxSelectedPairs` 6 → 4,
+`VectorPairs` 3 → 2, `MaxPickedPerWorker` 6 → 4, `RecentRows` 40 → 30. Default
+still differs from Budget where it matters, in the models behind each class.
+Pairs are the lever that pays: each one dropped is a whole file read plus its
+picking calls.
+
+`RowsPerWorker` stayed at 50 — it only bites when a pair is deeper than that,
+so lowering it costs splits on the archive's biggest files and saves nothing
+on the rest. `VectorCandidates` and `PickAfterVector` stayed as they are:
+those are the measured settings, and they are what keeps the narrower read
+accurate.
+
 ## Governance: decision-only
 
 Three jobs, all decisions over held state: bundling the advisory fan-out,

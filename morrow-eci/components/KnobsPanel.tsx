@@ -11,12 +11,31 @@ import { Knobs, fetchKnobs, setMaxSentences, setRecallDepth, setReflectionEvery,
 export function KnobsPanel() {
   const [knobs, setKnobs] = useState<Knobs | null>(null);
 
+  // Retried rather than defaulted. A failed fetch used to install an
+  // invented payload -- tier "Mock", one tier in the list, the sliders at
+  // their compiled-in numbers -- which on a cold boot, where the surface is
+  // simply up before the host is, read as a statement about the running host
+  // and said Mock while Minimal was answering. The panel now shows nothing
+  // until it has been told something, and keeps asking.
   useEffect(() => {
-    fetchKnobs()
-      .then(setKnobs)
-      .catch(() =>
-        setKnobs({ tier: "Mock", tiers: [{ name: "Mock", missingKeys: [] }], maxSentences: 2, reflectionEvery: 5, recallDepth: 5, mood: "Neutral", moods: ["Maleficent", "Sarcastic", "Neutral", "Helpful", "Ecstatic"] }),
-      );
+    let live = true;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = () => {
+      fetchKnobs()
+        .then((k) => live && setKnobs(k))
+        .catch(() => {
+          if (live) {
+            timer = setTimeout(poll, 2000);
+          }
+        });
+    };
+
+    poll();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   async function apply<K extends keyof Knobs>(key: K, value: Knobs[K], write: (v: never) => Promise<Knobs>) {
