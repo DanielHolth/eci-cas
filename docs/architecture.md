@@ -39,6 +39,41 @@ snippet Identity reads at `assistant/persona` in the agent state store, the
 identity facts at `assistant/identity` in the archive, and Reflection's filed
 ideas at `assistant/reflection`.
 
+## The shape of a turn
+
+Ordered by dependency, not by clock — anything not waiting on the line above
+runs at the same time as it.
+
+1. **Perception** turns input into `events.perception`: text, profile, a fresh
+   `CorrelationId` every later envelope is derived from.
+2. Four agents wake on it at once. **Impulse** appraises, **Identity** reads the
+   persona, **Hindsight** sweeps the passage corpus, **Librarian** embeds the
+   turn once and names its pairs on `events.selected-pairs`.
+3. **Recall** reads those pairs and the recency lane, ranks both by cosine
+   against Librarian's vector, and publishes `events.advisories`.
+4. **Governance** bundles the roster — Impulse, Recall, Identity, Hindsight,
+   from `Governance:BundleRoster` — by `CorrelationId`, or gives up after
+   `BundleTimeoutMs`, and publishes `events.bundle`.
+5. Two agents read that bundle. **Intent** writes the reply on
+   `events.proposal`; **Archivist** extracts facts on `events.facts`, which
+   **Cataloger** addresses and writes, announcing `Written` on `system.control`.
+6. **Security** judges every proposal on `events.verdict`. Yellow buys up to
+   `MaxRevisionPasses` passes back through Intent; Red replaces the reply.
+7. **Governance** gates on that verdict: `events.action`, which **Action**
+   delivers, and `events.conclusion`.
+8. **Reflection** counts conclusions and fires every `BatchSize` of them — one
+   passage, a mood label on `system.control`, and possibly an idea published
+   back onto `events.perception` as `triggered_by: self`.
+
+Two paths skip the middle. Impulse's Critical reflex publishes its own
+`events.proposal` straight from step 2, gated by Security like any other. A
+control message (`system.control`) reaches Identity and Impulse outside a turn
+entirely.
+
+`TurnLog` folds every envelope sharing a `CorrelationId` back into one record,
+which is why steps 5–8 landing after the person has been answered still belong
+to the same event.
+
 ## Bus mechanics
 
 One topic, per-subscriber queues: `ChannelBus` maps
@@ -182,8 +217,8 @@ then a vector pair again.
 | *n* | recent + `n / 2` vector + `(n - 1) / 2` selected |
 
 Those two quotients are `RuntimeKnobs.VectorLanePairs` and
-`SelectorLanePairs`, and Librarian reads them directly — which is why
-`MaxSelectedPairs` and `VectorPairs` no longer exist as configuration. The cut
+`SelectorLanePairs`, and Librarian reads them directly — and they are the
+only configuration of how many pairs a turn opens. The cut
 is upstream: a thread the slider does not allow is a pair Librarian never
 names, not a pair Recall opens and discards. Passage leads share the vector
 lane's budget rather than adding to it.
@@ -196,8 +231,7 @@ the recency lane, it is what a picking call may return, and it is the size
 below which a lane passes whole with no substrate call at all.
 
 It also *is* the row-vector cut: `RuntimeKnobs.VectorCandidates` is the depth
-itself, so cosine keeps exactly as many rows as the lane may hand back. There
-is no `VectorCandidates` key any more.
+itself, so cosine keeps exactly as many rows as the lane may hand back.
 
 Depth governs every cosine cut a turn makes, not only the ones over archive
 rows: Hindsight's wake and Librarian's passage sweep both take their top-K
@@ -227,25 +261,23 @@ discarding exactly the cosine-ranked rows.
 | `Recall:RowsPerWorker` | How many candidate rows one picking call is shown when a pair *cannot* be vector-narrowed and falls back to chunk-and-pick. A quality limit, not a context one: a small model's ability to spot the right row in a flat list falls off long before its window does. |
 | `Recall:MaxConcurrentRecalls` | Ceiling on picking calls per turn across all lanes — the backstop for an unusually deep pair that splits into many chunks. |
 | `Recall:RecentRows` | How far back the recency lane may look before depth cuts it. The lane spans a year; this is what makes it a prompt rather than a dump. |
-| `Recall:PickAfterVector` | Whether vector-narrowed rows still go through a picking call. `false` on every tier, and with the cut equal to the depth there is nothing for such a call to do; it stays a key so the pre-vector read path can be restored exactly. |
+| `Recall:PickAfterVector` | Whether cosine-narrowed rows still go through a picking call. `true` in code, `false` on every tier: with the cut equal to the depth such a call has nothing to choose from. Raising the cut above the depth is what makes it worth switching on. |
 | `Librarian:VectorMinScore` | Cosine floor a gloss must clear to count as a lead. Without it the sweep always returns its full quota, even on a turn about nothing in the archive. `0.75` on every tier. |
 
 ### What each tier currently sets
 
 | | Mock | Minimal | Budget | Default | Super |
 |---|---|---|---|---|---|
-| `Recall:Threads` | 3 | 3 | 4 | 5 | 8 |
-| `Recall:MaxPickedPerWorker` | 2 | 2 | 4 | 4 | 8 |
+| `Recall:Threads` | 3 | 4 | 4 | 5 | 8 |
+| `Recall:MaxPickedPerWorker` | 2 | 5 | 4 | 4 | 8 |
 | `Recall:RowsPerWorker` | 10 | 10 | 25 | 50 | 100 |
 | `Recall:MaxConcurrentRecalls` | 4 | 4 | 8 | 12 | 16 |
 | `Recall:RecentRows` | 10 | 10 | 20 | 30 | 60 |
 
 So Default opens five lanes — recent, two vector pairs, two selected pairs —
-and takes at most four rows out of each. It used to open nine files a turn
-and read six rows out of each, which on an observed turn was five Librarian
-pairs, eleven priced calls and 37 seconds wall-clock for a reply that used
-one recalled fact. Minimal, at a third of those numbers, was not visibly
-worse at remembering; the extra pairs were width nobody spent.
+and takes at most four rows out of each. Width is the expensive axis and the
+one that buys least: doubling the pairs a turn opens costs a substrate call
+each and does not measurably improve what the persona remembers.
 
 ### Saving a setting that was found by dragging
 
@@ -414,6 +446,11 @@ The window is one year, and `TrimRecentAsync` drops what has aged out at boot,
 not on write. Nothing is lost: the pair file that owns a row is the long-term
 store.
 
+Recency is how the lane is *built*, not how it is ranked. Once read, its rows
+are candidates like any others and go through the same cosine cut the selected
+pairs get — `RecentRows` decides how far back the lane looks, and the question
+decides which of those rows Intent sees.
+
 ### The third store: agent state
 
 `IAgentStateStore` (`JsonlAgentStateStore`, `memory.jsonl`) holds opaque blobs
@@ -463,9 +500,9 @@ fact at `unfiled/unfiled`. It groups the batch by profile and calls
 `WriteAsync` once per profile, which fans out to one append per pair.
 
 **Nothing that was stated is dropped.** Two addresses exist so that the closed
-vocabulary can stay closed without costing facts. `{category}/other` has always
-absorbed an unlisted topic; `unfiled/unfiled` now does the same one level up,
-where an unmatched category used to end the fact's life. Its topic is not
+vocabulary can stay closed without costing facts. `{category}/other`
+absorbs an unlisted topic; `unfiled/unfiled` does the same one level up, for a
+fact whose category matches nothing at all. Its topic is not
 `other` because Librarian hides every `other` topic from the selector and opens
 it in code beside its parent — an `unfiled/other` would be a file nothing ever
 selects and nothing ever opens alongside. As a visible pair it can be picked,
@@ -536,8 +573,9 @@ The lane gets one dedicated call, appended after that trim: the cap is a budget
 over the pairs Librarian selected, and the lane is not one of them. Recall skips
 picking entirely when everything loaded fits `RecallDepth` — an under-budget
 chunk is nothing to choose from — and with no picking model configured it hands
-over the newest lane rows as they stand. A fact picked both from its drawer and
-from the lane reaches Intent once.
+over the newest lane rows as they stand. Every publish goes through one
+`Distinct` over the full `category/topic/subtopic/subject/key` address, so a
+fact reached both from its drawer and from the lane arrives at Intent once.
 
 Findings go straight to Governance, never back through Librarian: the two are
 different sources of truth — parametric model knowledge against stored record —
@@ -563,7 +601,9 @@ of them acquiring an embedder. It embeds only rows that lack a current vector,
 in one batch, and swallows a provider failure — a fact reaching the archive
 matters more than a fact reaching it searchable.
 
-Reading is all-or-nothing per pair. Recall narrows a pair by cosine only when
+Reading is all-or-nothing per set — a selected pair, or the recency lane, which
+by the time it is a list of candidate rows is nothing else. Recall narrows a set
+by cosine only when
 *every* row in it has a vector from the current `ModelId` and a hash matching
 its own text; one bare row sends the whole file back to chunk-and-pick.
 Sweeping half a file would rank the embedded half against nothing and lose the
@@ -571,8 +611,8 @@ rest silently. The hash is what makes a restatement self-invalidate: `Merged`
 keeps the address and swaps the value, so an inherited vector would go on
 scoring as Oslo after the row said Bergen.
 
-When every selected pair narrowed, Recall publishes the survivors and skips the
-picking calls entirely — `PickAfterVector` is false because picking is
+When every selected pair *and the lane* narrowed, Recall publishes the survivors
+and skips the picking calls entirely — `PickAfterVector` is false because picking is
 the biggest read-side loss measured (batch 12: 78% with `nopick`, 60% with the
 lenient bar). How many rows survive per pair is `RuntimeKnobs.VectorCandidates`,
 which is the Recall-depth slider itself.
@@ -588,11 +628,13 @@ asymmetry lives in the providers: `EmbeddingKind.Query`/`Passage` chooses the
 `query: ` / `passage: ` prefix, so the retrieval probe measures what the running
 system does.
 
-**Backfilling.** An archive written before the embedder existed is uncovered,
-not broken, and heals a pair at a time on the next write. `ArchiveTool`'s
-`embed <model.onnx> <vocab.txt>` stamps the lot in place. The paths matter
-exactly: `ModelId` is `onnx:{ModelPath}`, and the same weights under a different
-path produce vectors that are correct and ignored.
+**Backfilling.** An archive missing vectors is uncovered, not broken. The host
+runs `ArchiveBackfill` at boot against the embedder it resolved and invalidates
+the store's cache if it wrote anything, so a running deployment never needs the
+tool. `ArchiveTool`'s `embed <model.onnx> <vocab.txt>` is the same job for an
+archive no host is booting — a copy under test, one restored from backup. There
+the paths matter exactly: `ModelId` is `onnx:{ModelPath}`, and the same weights
+under a different path produce vectors that are correct and ignored.
 
 ## The passage corpus: what it missed, not what it knows
 
@@ -753,28 +795,41 @@ Security blocked; `--Verbose=true` restores the exhaustive per-envelope trace.
 archive directly, when a record needs correcting without running the swarm.
 
 ```bash
-dotnet run --project src/EciCas.ArchiveTool -- <archive-directory>
+dotnet run --project src/EciCas.ArchiveTool -- src/EciCas.Host/bin/Debug/net10.0/archive
 ```
 
-Defaults to `archive` relative to cwd. On Windows prefer PowerShell or forward
-slashes — Git Bash mangles a backslash-prefixed argument.
+The directory argument defaults to `archive` relative to cwd and must already
+exist — the tool edits an archive, the host makes one. On Windows prefer
+PowerShell or forward slashes; Git Bash mangles a backslash-prefixed argument.
+
+Every address may carry a tier prefix, `profile:category`, because the same
+pair name can exist in the shared root and under any `profiles/<id>/`. Without
+one, a command spans every tier for reads and refuses to guess for deletes.
 
 | Command | Effect |
 |---|---|
-| `list` | Known `category/topic` pairs, decoded from file names |
-| `show <category> [topic] [subtopic]` | `[i] Topic/Subtopic/Subject/Key = Value`, across every matching pair |
-| `showall <category> [topic] [subtopic]` | Full field dump per row, including Importance/Domain/Timestamp |
-| `del <category> <topic> <index[,index…]>` | Delete rows by the index `show` printed |
-| `del <category> <topic> [subtopic]` | Delete every row in the pair whose Subtopic contains the text |
+| `list` | Known pairs, decoded from file names, prefixed by tier |
+| `show <[profile:]category> [topic] [subtopic]` | `[i] Topic/Subtopic/Subject/Key = Value` across every matching pair |
+| `showall <[profile:]category> [topic] [subtopic]` | Full field dump per row, including Importance/Domain/Timestamp |
+| `recent [[profile:]recent]` | The recency lane, newest first, with timestamps |
+| `passages [count]` | Reflection's notes — id, lineage, pairs, first line |
+| `passage <id>` | One note in full, id matched on any unambiguous prefix |
+| `del <[profile:]category> <topic> <index[,index…]>` | Delete rows by the index `show` printed |
+| `del <[profile:]category> <topic> [subtopic]` | Delete every row in the pair whose Subtopic contains the text |
+| `del [profile:]recent <index[,index…]>` | Delete lane rows by the index `recent` printed |
+| `del passage <id>` | Delete one note |
+| `embed <model.onnx> <vocab.txt>` | Backfill vectors in place |
 | `reset` | Delete every `*.parquet` and reseed the one version record |
 | `help` / `exit` | — |
 
-`del` always names one pair, since a row index is only meaningful within one
-file; the second form is picked automatically when the third token is not a
-comma-separated list of integers. Deleting a pair's last row deletes the file,
-which is how that pair leaves the index — there is no `rebuild-index`, because
-the directory listing *is* the index. Arguments split on plain whitespace with
-no quote-awareness, and filter delete is a substring match.
+`del` always names one pair or one lane, since a row index is only meaningful
+within one file; the pair form picks between index and subtopic by whether the
+third token is a comma-separated list of integers. Deleting a pair's last row
+deletes the file, which is how that pair leaves the index — there is no
+`rebuild-index`, because the directory listing *is* the index. Deleting from
+the lane does not touch the pair file that owns the row. Arguments split on
+plain whitespace with no quote-awareness, and filter delete is a substring
+match.
 
 ## Verification
 
