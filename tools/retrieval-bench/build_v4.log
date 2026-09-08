@@ -1,0 +1,260 @@
+
+planned, blind (the real plan is drawn after the write pass)
+  fat       8 pairs    478 rows  51-65
+  middle   40 pairs    737 rows  11-25
+  thin    122 pairs    302 rows  1-4
+  total   170 pairs   1517 rows
+
+  padding calls   ~342
+  gold calls       156  (78 statements x archivist + cataloger)
+  questions        87 direct, 28 null, 10 oblique
+
+building .archive_v4_minimal.json ...
+building archive (once): .archive_v4_minimal.json
+  write 1/78: My passport runs out in March 2027
+  write 2/78: My driving licence needs renewing in 2028
+  write 3/78: The house insurance renews every March
+  write 4/78: Our gym membership auto-renews in January
+  write 5/78: The car warranty ran out last autumn
+  write 6/78: Ingrid's passport is valid until 2031
+  write 7/78: My sister Marit lives in Bodo with her husba
+  write 8/78: I fly to Bodo for work about once a month
+  write 9/78: We stayed at the Scandic in Bodo last Easter
+  write 10/78: The Bodo office handles our northern contrac
+  write 11/78: The heat pump was installed in 2021
+  write 12/78: We repainted the house in 2021
+  write 13/78: I was promoted to senior engineer in 2021
+  write 14/78: Our dog Nella was born in 2021
+  write 15/78: I sing tenor in the church choir on Wednesda
+  write 16/78: Ingrid has handball training on Tuesdays
+  write 17/78: The bins go out on Thursday night
+  write 18/78: We walk the dog before breakfast
+  write 19/78: I work from home on Fridays
+  write 20/78: I am allergic to penicillin
+  write 21/78: Ingrid is allergic to hazelnuts
+  write 22/78: I take blood pressure tablets each morning
+  write 23/78: I get seasick on anything smaller than a fer
+  write 24/78: My back goes if I lift badly
+  write 25/78: I gave up smoking four years ago
+  write 26/78: The dentist wants me back in six months
+  write 27/78: Our neighbour Bjorn keeps the spare key
+  write 28/78: My colleague Ingvild handles the invoices
+  write 29/78: Astrid next door feeds the cat when we trave
+  write 30/78: A plumber called Rune did the bathroom
+  write 31/78: My manager is called Henrik
+  write 32/78: The dishwasher leaks if you overload it
+  write 33/78: The downstairs toilet runs unless you jiggle
+  write 34/78: We rent out the basement flat to a student
+  write 35/78: The loft is full of Christmas decorations
+  write 36/78: Our address is Bjerkeveien 14
+  write 37/78: The garage door sticks in cold weather
+  write 38/78: We have a woodburner in the living room
+  write 39/78: We drive a silver Skoda Octavia
+  write 40/78: The winter tyres go on in November
+  write 41/78: I take the 07:20 bus into town
+  write 42/78: Ingrid has a red bicycle with a broken bell
+  write 43/78: I have been at Statkraft for eleven years
+  write 44/78: I am a hydrology engineer
+  write 45/78: Payday is the fifteenth
+  write 46/78: I have twelve days of leave left this year
+  write 47/78: The Monday stand-up is at half eight
+  write 48/78: I did my masters in marine biology at UiT
+  write 49/78: We are saving for a kitchen renovation
+  write 50/78: The mortgage is with Sparebank 1
+  write 51/78: We pay 340 kroner a month for the streaming 
+  write 52/78: My pension is with KLP
+  write 53/78: The electricity bill doubled last winter
+  write 54/78: My daughter Ingrid turns seven in November
+  write 55/78: My father passed away in 2019
+  write 56/78: My mother still lives in the house I grew up
+  write 57/78: My wife Kristin teaches at the upper seconda
+  write 58/78: Ingrid is scared of thunder
+  write 59/78: Kristin and I married in Trondheim
+  write 60/78: I read crime novels, mostly Nesbo
+  write 61/78: I play badminton on Sunday mornings
+  write 62/78: We have a cabin on Senja, an hour from Finns
+  write 63/78: I brew beer in the garage twice a year
+  write 64/78: Kristin does pottery at the community centre
+  write 65/78: I follow Rosenborg but rarely go to matches
+  write 66/78: We booked Lofoten for the summer holiday
+  write 67/78: I will not fly with a stopover under an hour
+  write 68/78: We always take the night train south
+  write 69/78: Ingrid gets carsick on mountain roads
+  write 70/78: I studied German at school but have forgotte
+  write 71/78: I am halfway through an online course on hyd
+  write 72/78: Ingrid started piano lessons in August
+  write 73/78: Kristin is learning Spanish from an app
+  write 74/78: I cannot stand coriander
+  write 75/78: I take my coffee black
+  write 76/78: We eat fish on Fridays
+  write 77/78: I am hopeless with names
+  write 78/78: I prefer text messages to phone calls
+  1 of 81 rows filed to unfiled/unfiled:
+    Ingrid is allergic to hazelnuts | allergy
+  pad 1/170 (2 rows, 0 gold): identity/name
+  pad 2/170 (1 rows, 0 gold): identity/age
+  pad 3/170 (4 rows, 0 gold): identity/birth
+  pad 4/170 (2 rows, 0 gold): identity/origin
+  pad 5/170 (2 rows, 0 gold): identity/nationality
+  pad 6/170 (3 rows, 0 gold): identity/language
+  pad 7/170 (4 rows, 0 gold): identity/appearance
+  pad 8/170 (2 rows, 0 gold): identity/personality
+  pad 9/170 (2 rows, 0 gold): identity/belief
+  pad 10/170 (4 rows, 0 gold): identity/religion
+  pad 11/170 (4 rows, 0 gold): identity/politics
+  pad 12/170 (63 rows, 0 gold): identity/value
+  pad 13/170 (13 rows, 1 gold): identity/fear
+  pad 14/170 (18 rows, 1 gold): identity/preference
+  pad 15/170 (25 rows, 0 gold): identity/allegiance
+  pad 16/170 (18 rows, 0 gold): identity/habit
+  pad 17/170 (2 rows, 0 gold): identity/humour
+  pad 18/170 (71 rows, 3 gold): identity/other
+  pad 19/170 (22 rows, 1 gold): body/condition
+  pad 20/170 (16 rows, 1 gold): body/injury
+  pad 22/170 (64 rows, 1 gold): body/medication
+  pad 23/170 (15 rows, 1 gold): body/diet
+  pad 24/170 (2 rows, 0 gold): body/sleep
+  pad 25/170 (4 rows, 0 gold): body/fitness
+  pad 26/170 (3 rows, 0 gold): body/weight
+  pad 27/170 (3 rows, 0 gold): body/vision
+  pad 28/170 (4 rows, 0 gold): body/hearing
+  pad 29/170 (4 rows, 0 gold): body/dental
+  pad 30/170 (3 rows, 0 gold): body/mental
+  pad 31/170 (24 rows, 0 gold): body/practitioner
+  pad 32/170 (4 rows, 0 gold): body/appointment
+  pad 33/170 (2 rows, 0 gold): body/treatment
+  pad 34/170 (4 rows, 0 gold): body/vaccination
+  pad 35/170 (3 rows, 0 gold): body/symptom
+  pad 36/170 (1 rows, 0 gold): body/other
+  pad 37/170 (3 rows, 0 gold): household/property
+  pad 38/170 (3 rows, 0 gold): household/room
+  pad 39/170 (4 rows, 0 gold): household/garden
+  pad 40/170 (23 rows, 0 gold): household/furniture
+  pad 41/170 (2 rows, 2 gold): household/appliance
+  pad 42/170 (3 rows, 0 gold): household/electronics
+  pad 44/170 (64 rows, 0 gold): household/tool
+  pad 46/170 (11 rows, 0 gold): household/repair
+  pad 47/170 (1 rows, 0 gold): household/cleaning
+  pad 48/170 (4 rows, 0 gold): household/utility
+  pad 49/170 (1 rows, 3 gold): household/pet
+  pad 50/170 (1 rows, 0 gold): household/plant
+  pad 51/170 (25 rows, 0 gold): household/storage
+  pad 52/170 (22 rows, 1 gold): household/decor
+  pad 54/170 (20 rows, 3 gold): household/other
+  pad 55/170 (1 rows, 1 gold): relations/family
+  pad 56/170 (1 rows, 0 gold): relations/parent
+  pad 57/170 (4 rows, 0 gold): relations/sibling
+  pad 58/170 (2 rows, 0 gold): relations/child
+  pad 59/170 (3 rows, 0 gold): relations/partner
+  pad 60/170 (2 rows, 0 gold): relations/friend
+  pad 61/170 (3 rows, 1 gold): relations/colleague
+  pad 62/170 (1 rows, 0 gold): relations/neighbour
+  pad 63/170 (17 rows, 1 gold): relations/birthday
+  pad 64/170 (2 rows, 0 gold): relations/anniversary
+  pad 65/170 (2 rows, 0 gold): relations/contact
+  pad 66/170 (23 rows, 0 gold): relations/conflict
+  pad 67/170 (4 rows, 0 gold): relations/care
+  pad 68/170 (4 rows, 0 gold): relations/gift
+  pad 69/170 (2 rows, 0 gold): relations/visit
+  pad 70/170 (2 rows, 1 gold): relations/history
+  pad 71/170 (3 rows, 1 gold): relations/other
+  pad 72/170 (3 rows, 0 gold): work/employer
+  pad 73/170 (3 rows, 1 gold): work/role
+  pad 74/170 (3 rows, 0 gold): work/duty
+  pad 75/170 (14 rows, 1 gold): work/project
+  pad 77/170 (10 rows, 1 gold): work/location
+  pad 78/170 (3 rows, 0 gold): work/commute
+  pad 79/170 (3 rows, 0 gold): work/meeting
+  pad 80/170 (20 rows, 0 gold): work/client
+  pad 81/170 (3 rows, 0 gold): work/performance
+  pad 82/170 (1 rows, 0 gold): work/promotion
+  pad 83/170 (3 rows, 0 gold): work/leave
+  pad 85/170 (3 rows, 0 gold): work/workplace
+  pad 86/170 (1 rows, 0 gold): work/tool
+  pad 87/170 (4 rows, 0 gold): work/history
+  pad 89/170 (1 rows, 0 gold): money/income
+  pad 90/170 (2 rows, 0 gold): money/salary
+  pad 91/170 (19 rows, 1 gold): money/payday
+  pad 92/170 (10 rows, 1 gold): money/expense
+  pad 93/170 (15 rows, 1 gold): money/bill
+  pad 94/170 (4 rows, 0 gold): money/subscription
+  pad 95/170 (56 rows, 0 gold): money/debt
+  pad 96/170 (1 rows, 0 gold): money/loan
+  pad 97/170 (2 rows, 1 gold): money/mortgage
+  pad 98/170 (12 rows, 1 gold): money/saving
+  pad 99/170 (2 rows, 0 gold): money/investment
+  pad 100/170 (10 rows, 1 gold): money/pension
+  pad 101/170 (2 rows, 0 gold): money/budget
+  pad 102/170 (20 rows, 0 gold): money/purchase
+  pad 103/170 (4 rows, 0 gold): money/price
+  pad 104/170 (1 rows, 0 gold): money/tax
+  pad 105/170 (2 rows, 0 gold): money/benefit
+  pad 106/170 (22 rows, 0 gold): money/other
+  pad 107/170 (25 rows, 0 gold): learning/school
+  pad 108/170 (4 rows, 0 gold): learning/university
+  pad 109/170 (21 rows, 1 gold): learning/course
+  pad 110/170 (69 rows, 1 gold): learning/subject
+  pad 111/170 (20 rows, 0 gold): learning/qualification
+  pad 112/170 (25 rows, 0 gold): learning/exam
+  pad 113/170 (1 rows, 0 gold): learning/skill
+  pad 114/170 (14 rows, 2 gold): learning/language
+  pad 115/170 (3 rows, 0 gold): learning/teacher
+  pad 116/170 (1 rows, 0 gold): learning/study
+  pad 117/170 (3 rows, 0 gold): learning/book
+  pad 118/170 (56 rows, 0 gold): learning/certification
+  pad 119/170 (17 rows, 0 gold): learning/plan
+  pad 120/170 (3 rows, 0 gold): learning/progress
+  pad 121/170 (1 rows, 0 gold): learning/other
+  pad 122/170 (3 rows, 1 gold): leisure/hobby
+  pad 124/170 (4 rows, 0 gold): leisure/team
+  pad 125/170 (10 rows, 1 gold): leisure/music
+  pad 126/170 (3 rows, 0 gold): leisure/instrument
+  pad 127/170 (1 rows, 0 gold): leisure/game
+  pad 128/170 (22 rows, 1 gold): leisure/reading
+  pad 129/170 (16 rows, 0 gold): leisure/film
+  pad 130/170 (4 rows, 0 gold): leisure/television
+  pad 131/170 (12 rows, 0 gold): leisure/cooking
+  pad 132/170 (1 rows, 0 gold): leisure/outdoor
+  pad 135/170 (2 rows, 0 gold): leisure/event
+  pad 137/170 (1 rows, 1 gold): leisure/social
+  pad 138/170 (1 rows, 0 gold): leisure/collection
+  pad 139/170 (3 rows, 1 gold): leisure/other
+  pad 140/170 (18 rows, 0 gold): travel/trip
+  pad 141/170 (1 rows, 1 gold): travel/destination
+  pad 142/170 (2 rows, 2 gold): travel/accommodation
+  pad 143/170 (3 rows, 0 gold): travel/flight
+  pad 144/170 (56 rows, 1 gold): travel/transport
+  pad 145/170 (3 rows, 1 gold): travel/booking
+  pad 146/170 (3 rows, 0 gold): travel/plan
+  pad 147/170 (1 rows, 0 gold): travel/visit
+  pad 148/170 (1 rows, 0 gold): travel/holiday
+  pad 149/170 (1 rows, 0 gold): travel/luggage
+  pad 150/170 (3 rows, 0 gold): travel/companion
+  pad 151/170 (1 rows, 1 gold): travel/experience
+  pad 152/170 (2 rows, 1 gold): travel/preference
+  pad 153/170 (2 rows, 1 gold): travel/frequency
+  pad 154/170 (17 rows, 0 gold): travel/other
+  pad 155/170 (1 rows, 1 gold): admin/passport
+  pad 156/170 (2 rows, 0 gold): admin/licence
+  pad 157/170 (17 rows, 0 gold): admin/insurance
+  pad 158/170 (4 rows, 0 gold): admin/contract
+  pad 159/170 (1 rows, 0 gold): admin/account
+  pad 160/170 (3 rows, 0 gold): admin/membership
+  pad 161/170 (1 rows, 0 gold): admin/registration
+  pad 162/170 (3 rows, 0 gold): admin/warranty
+  pad 163/170 (4 rows, 0 gold): admin/certificate
+  pad 164/170 (12 rows, 4 gold): admin/renewal
+  pad 165/170 (1 rows, 0 gold): admin/deadline
+  pad 166/170 (1 rows, 0 gold): admin/provider
+  pad 167/170 (4 rows, 0 gold): admin/will
+  pad 168/170 (3 rows, 0 gold): admin/document
+  pad 169/170 (18 rows, 0 gold): admin/reference
+  pad 170/170 (3 rows, 0 gold): admin/other
+
+actual (gold + padding, as built)
+  fat       8 pairs    505 rows  56-74
+  middle   40 pairs    734 rows  11-25
+  thin    123 pairs    320 rows  1-4
+  total   171 pairs   1559 rows
+
+gold rows 81 over 54 pairs

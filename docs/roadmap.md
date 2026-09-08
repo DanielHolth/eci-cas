@@ -530,6 +530,58 @@ Hand-written for `assistant/*`; LLM-written once per user-space pair at
 creation, never per turn. When Morrow keeps missing a topic, the fix is
 **editing one line of English**.
 
+### The assistant is a scope, and hindsight is not a lookup
+
+The retrieval vocabulary widens to roughly **512 pairs** (batch 18: the extra
+granularity is close to free, and the price curve keeps falling well past the
+shipped 170). It widens as a vocabulary of **the user's domain only**. There
+is no drawer in it for the ECI's own reflections, and adding one was measured
+rather than assumed.
+
+**Routing a reflection question by similarity does not work.** Given assistant
+drawers summarised the best way batch 17 found, `refl_v4` puts 1 of 16
+addressed-to-the-assistant turns in an assistant drawer, while 6 of 6 human
+controls stay correctly out of them:
+
+    "Do you have any thoughts about that?"   -> identity/belief
+    "What is your name?"                     -> identity/name
+    "What do you think about the boiler?"    -> household/appliance
+
+The control passing identifies the cause. A bi-encoder has nowhere to encode
+*whose* fact this is: ownership is one weak pronoun in a sentence whose
+content is about names, moods and boilers, and content is what the other
+drawers compete on and win. **No name and no example set fixes that**, so the
+awkwardly-named drawer is not worth having. Finer drawers make it worse, not
+better — a narrower human gloss matches its content more sharply. Restricting
+the pick to assistant drawers only, with no human competition at all, still
+routes 5 of 9 on topic: `reflection`, `opinion` and `memory` blur, because
+those are distinctions of stance and stance is not in the sentence either.
+
+So `assistant` stays what the store already treats it as — **a scope decided
+before ranking**, like the `profiles/{id}` directories, not a category ranked
+against `household`. A bare second-person gate gets 21 of 22 of these turns
+(22 hand-written turns: read it as "a cheap signal exists", not as accuracy).
+Its one miss, *"Any thoughts?"*, has its subject in the previous turn — that
+is conversation state, not retrieval, and nothing computed from the string
+alone reaches it.
+
+The larger reason to keep the paths apart is that they fail differently.
+**512 is a lookup**: a fact exists and the shelf finds it. **Hindsight is
+generative**: no row answers *"do you have any thoughts about that?"* — the
+answer is produced from the conversation and from prior reflections. Sending
+it through a similarity search does not merely fail, it fails in the way that
+costs the behaviour: it returns a household fact with confidence, and Morrow
+reports a boiler instead of thinking. Reflection and Hindsight therefore stay
+untouched by the vocabulary work.
+
+This also pays down existing debt rather than adding to it. `assistant` is
+today an undeclared eleventh category: known to `ParquetArchiveStore`, written
+by `ReflectionAgent` and `IdentityAgent`, absent from `cataloger.txt`, and
+worked around defensively in both `LibrarianAgent` and `RecallAgent` because
+assistant rows outrank human ones on content. A declared scope with three or
+four coarse drawers deletes both workarounds. A finer vocabulary leaves them,
+now defending against 512 drawers instead of 170.
+
 ### Union, not replacement
 
 Selected pairs would be the union of `vector top-K` and `LLM selection`.
