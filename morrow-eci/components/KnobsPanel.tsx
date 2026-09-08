@@ -224,7 +224,7 @@ export function KnobsPanel() {
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span title="Rows one lane may return, and the cosine cut itself — archive rows and woken notes alike." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Recall depth</span>
+          <span title="Rows one lane may return, and the cosine cut itself. Woken notes get half of it plus one." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Recall depth</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">
             {knobs === null ? "…" : `${knobs.recallDepth} rows/lane`}
           </span>

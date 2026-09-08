@@ -93,6 +93,20 @@ public sealed class RuntimeKnobs
     /// </summary>
     public int VectorCandidates => _recallDepth;
 
+    /// <summary>
+    /// How many passages a turn's cosine sweep may wake -- Hindsight's and
+    /// Librarian's alike. Half the depth plus one, so it moves with the
+    /// retrieval budget without matching it.
+    ///
+    /// The unit is what makes the discount right. A row is a fact, and ten
+    /// facts is a well-read turn; a passage is the persona's own thought
+    /// about a stretch of turns, and ten of those is the prompt spent on
+    /// second-guessing. The corpus was designed around three. The plus one
+    /// keeps the shallowest setting from silencing hindsight entirely:
+    /// depth 1 should read little, not read nothing.
+    /// </summary>
+    public int PassageCandidates => 1 + _recallDepth / 2;
+
     /// <summary>How the persona feels this turn, on top of whatever
     /// Identity's own advisory already says about who it is.
     ///

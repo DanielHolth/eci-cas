@@ -205,6 +205,13 @@ from it, in place of `PassageOptions.TopK`. A turn has one retrieval budget,
 and a knob that covered rows but not notes would only half answer "how much
 does this read".
 
+Over the passage corpus it is discounted — `RuntimeKnobs.PassageCandidates`
+is `1 + depth / 2`, so depth 3 wakes two notes and depth 10 wakes six. The
+unit is what earns the discount: a row is a fact and ten facts is a well-read
+turn, where a passage is the persona's own thought about a stretch of turns
+and ten of those is the prompt spent on second-guessing. The plus one is so
+the shallowest setting reads little rather than nothing.
+
 That cut applies to every pair Recall opens, not only the ones the gloss
 sweep found — it runs downstream of selection and does not know how a pair
 was chosen. And because the cut equals the budget, the picking call has

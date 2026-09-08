@@ -164,11 +164,9 @@ public sealed class HindsightAgent : AgentBase
     private async Task<IReadOnlyList<PassageHit>> WakeAsync(string text, CancellationToken cancellationToken)
     {
         // The same slider that says how many archive rows a Recall lane may
-        // return says how many notes this may wake. It is the one cosine cut
-        // the persona has, run over a different corpus: a knob that governed
-        // rows but not notes would be a knob that only half answers "how much
-        // does a turn read".
-        var topK = _knobs.RecallDepth;
+        // return says how many notes this may wake -- discounted, because the
+        // unit is different. See RuntimeKnobs.PassageCandidates.
+        var topK = _knobs.PassageCandidates;
         if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || topK <= 0)
         {
             _logger.LogDebug("{Agent} did not search: embeddings available {Available}, topK {TopK}", Name, _embeddings.Available, topK);
