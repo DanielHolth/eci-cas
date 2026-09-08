@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Knobs, fetchKnobs, setMaxSentences, setRecallDepth, setReflectionEvery, setMood, setTier } from "@/lib/api";
+import {
+  Knobs,
+  fetchKnobs,
+  saveKnobs,
+  setMaxSentences,
+  setRecallDepth,
+  setRecallThreads,
+  setReflectionEvery,
+  setMood,
+  setTier,
+} from "@/lib/api";
 
 /**
  * Live session experiments, not configuration: every value here resets to
@@ -10,6 +20,7 @@ import { Knobs, fetchKnobs, setMaxSentences, setRecallDepth, setReflectionEvery,
  */
 export function KnobsPanel() {
   const [knobs, setKnobs] = useState<Knobs | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Retried rather than defaulted. A failed fetch used to install an
   // invented payload -- tier "Mock", one tier in the list, the sliders at
@@ -51,6 +62,26 @@ export function KnobsPanel() {
     }
   }
 
+  // Only the two Recall knobs are written back: the rest are session
+  // experiments by design (see RuntimeKnobs), and offering to persist a mood
+  // would imply a tier file has somewhere to put it.
+  const dirty =
+    knobs !== null &&
+    (knobs.recallDepth !== knobs.savedRecallDepth || knobs.recallThreads !== knobs.savedRecallThreads);
+
+  async function save() {
+    if (!dirty || saving) return;
+    setSaving(true);
+    try {
+      setKnobs(await saveKnobs());
+    } catch {
+      // The button stays lit, which is the correct report: nothing was
+      // written, and the values still differ from the file.
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // Mood, not tone: the slider sets how the persona feels this turn, where
   // Identity's profile says who it standingly is. Both used to say "tone".
   const moodIndex = knobs ? Math.max(0, knobs.moods.indexOf(knobs.mood)) : 2;
@@ -58,9 +89,23 @@ export function KnobsPanel() {
 
   return (
     <div className="border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-        Knobs
-      </h3>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Knobs
+        </h3>
+        {/* Grey until the live Recall knobs differ from the tier file, so the
+            button doubles as the answer to "is what I am running what is
+            written down". */}
+        <button
+          type="button"
+          onClick={save}
+          disabled={!dirty || saving}
+          title={dirty ? `Write to appsettings.${knobs?.tier}.json` : "Nothing changed since the tier file"}
+          className="rounded border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 disabled:cursor-default disabled:border-neutral-200 disabled:text-neutral-400 disabled:hover:bg-transparent dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:disabled:border-neutral-800 dark:disabled:text-neutral-600"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
 
       {/* A tier is a preset over everything below it -- which models back
           which class, how wide Recall fans out, whether Reflection runs at
@@ -152,17 +197,42 @@ export function KnobsPanel() {
         />
       </label>
 
+      {/* Two knobs, one fan-out. Threads says how many lanes open: 1 is the
+          recency lane alone, and every pair after that alternates a vector
+          lane with a selected-pair lane, so 3 is recent + 1 vector + 1
+          selected. Depth says how many rows each of those lanes may hand
+          back -- and, tripled, how many candidates cosine offers the pick
+          call that cuts them down. */}
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Recall depth</span>
+          <span>Recall threads</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">
-            {knobs === null ? "…" : `${knobs.recallDepth} rows`}
+            {knobs === null ? "…" : `${knobs.recallThreads} lane${knobs.recallThreads === 1 ? "" : "s"}`}
           </span>
         </span>
         <input
           type="range"
           min={1}
-          max={20}
+          max={12}
+          step={1}
+          value={knobs?.recallThreads ?? 3}
+          disabled={knobs === null}
+          onChange={(e) => apply("recallThreads", Number(e.target.value), setRecallThreads)}
+          className="accent-neutral-700 dark:accent-neutral-300"
+        />
+      </label>
+
+      <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
+        <span className="flex items-center justify-between">
+          <span>Recall depth</span>
+          <span className="font-mono text-neutral-800 dark:text-neutral-100">
+            {knobs === null ? "…" : `${knobs.recallDepth} rows/lane`}
+          </span>
+        </span>
+        <input
+          type="range"
+          min={1}
+          max={10}
           step={1}
           value={knobs?.recallDepth ?? 5}
           disabled={knobs === null}

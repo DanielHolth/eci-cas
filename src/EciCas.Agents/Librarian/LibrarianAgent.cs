@@ -56,6 +56,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     private readonly ISubstrateProvider _substrate;
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly LibrarianOptions _options;
+    private readonly RuntimeKnobs _knobs;
 
     /// <summary>
     /// Null when cataloger.txt has no gloss section, which is a shelf with no
@@ -72,6 +73,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 
     public LibrarianAgent(IMessageBus bus, BusActivityTracker activity, ILogger<LibrarianAgent> logger, IArchiveStore store,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<LibrarianOptions> options,
+        RuntimeKnobs knobs,
         IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> passageOptions,
         IInstructionStore instructions)
         : base(bus, activity, logger, substrate, agentSubstrates)
@@ -93,6 +95,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         _substrate = substrate;
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
+        _knobs = knobs;
         _embeddings = embeddings;
         _pairVectors = new PairVectorIndex(embeddings);
         _passages = passages;
@@ -203,10 +206,10 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // The pair layer's own vector cut, merged in beside the passage leads
         // and ahead of neither: a gloss match says this shelf is about what
         // was asked, which is a lead of exactly the same standing.
-        if (queryVector is not null)
+        if (queryVector is not null && VectorLaneRoom(remembered) > 0)
         {
             var near = await _pairVectors
-                .NearestAsync(queryVector, Shown(index), _gloss.Value, _options.VectorPairs, _options.VectorMinScore, cancellationToken)
+                .NearestAsync(queryVector, Shown(index), _gloss.Value, VectorLaneRoom(remembered), _options.VectorMinScore, cancellationToken)
                 .ConfigureAwait(false);
 
             if (near.Count > 0)
@@ -313,7 +316,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             .Select(p => known.GetValueOrDefault($"{p.Category}/{p.Topic}"))
             .OfType<ArchivePair>()
             .Distinct()
-            .Take(_passageOptions.MaxPairsFromPassages)
+            .Take(Math.Min(_passageOptions.MaxPairsFromPassages, _knobs.VectorLanePairs))
             .ToList();
 
         _logger.LogInformation("{Agent} matched {Count} note(s) for {Pairs} lead(s)", Name, hits.Count, pairs.Count);
@@ -353,6 +356,16 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     }
 
     /// <summary>Selection first, passage leads after, no duplicates — the LLM saw the whole index, a passage saw one past turn.</summary>
+    /// <summary>
+    /// What is left of the vector lane's budget after the passage leads have
+    /// taken their share. One lane, two sources: a note saying "read X" and a
+    /// gloss that matches the question are leads of the same standing, and
+    /// the thread count promises a number of recalls, not a number of ways
+    /// of arriving at one.
+    /// </summary>
+    private int VectorLaneRoom(IReadOnlyList<ArchivePair> remembered) =>
+        Math.Max(0, _knobs.VectorLanePairs - remembered.Count);
+
     private static IReadOnlyList<ArchivePair> Merge(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> remembered) =>
         [.. selected, .. remembered.Where(p => !selected.Contains(p))];
 
@@ -374,7 +387,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// the decision to read it is made in code from the category the selector
     /// already chose, rather than asked of a model that has only a folder name
     /// to go on. Appended after the selection, so it never displaces a pair
-    /// the selector named within MaxSelectedPairs.
+    /// the selector named within the selector lane's budget.
     /// </summary>
     private static IReadOnlyList<ArchivePair> WithOverflow(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> index)
     {
@@ -414,7 +427,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         }));
         return InstructionFile.Fill(_instructions.For(Name),
             ("options", options),
-            ("max", _options.MaxSelectedPairs.ToString()),
+            ("max", _knobs.SelectorLanePairs.ToString()),
             ("text", text ?? string.Empty));
     }
 
@@ -436,7 +449,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         var seen = new HashSet<int>();
         foreach (var i in InstructionFile.Indices(response))
         {
-            if (selected.Count >= _options.MaxSelectedPairs)
+            if (selected.Count >= _knobs.SelectorLanePairs)
             {
                 break;
             }

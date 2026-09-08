@@ -18,7 +18,7 @@ public sealed class RecallOptions
 
     /// <summary>
     /// Ceiling on how many picking calls one turn may fan out into, across
-    /// all selected pairs. Sized against LibrarianOptions.MaxSelectedPairs —
+    /// all selected pairs. Sized against the lane count RuntimeKnobs derives —
     /// roughly twice it, so an ordinary turn never hits the ceiling and only
     /// an unusually deep pair does. Its own knob rather than a derived value,
     /// so the fan-out can be tuned without touching selection.
@@ -48,27 +48,29 @@ public sealed class RecallOptions
     public int RecentRows { get; set; } = 30;
 
     /// <summary>
-    /// How many rows survive the cosine cut inside one pair. Sized at five
-    /// because that is where it was measured: given the right file, the fact
-    /// is in the vector top five 97% of the time, and a sixth row buys
-    /// almost nothing while costing prompt room. Zero turns the row-vector
-    /// layer off and restores the pre-vector read path exactly.
+    /// Recalls a turn may fire, the recency lane included — the tier's
+    /// starting value for the Recall-threads knob, which is what actually
+    /// governs. One is the lane alone; every thread after it is one pair,
+    /// alternating vector lane then selector lane.
     ///
-    /// This is not RowsPerWorker's replacement - a pair that cannot be
-    /// narrowed still chunks by that. It is what makes the chunking
-    /// unnecessary when it applies.
+    /// This replaced LibrarianOptions.MaxSelectedPairs and VectorPairs,
+    /// which were two budgets for one question. A person tuning this is
+    /// asking "how many calls may a turn cost", and answering that in two
+    /// places meant neither number could be read as the answer.
     /// </summary>
-    public int VectorCandidates { get; set; } = 5;
+    public int Threads { get; set; } = 3;
 
     /// <summary>
     /// Whether vector-narrowed rows still go through a picking call.
     ///
-    /// False, because it was measured: the picking stage was the biggest
-    /// single read-side loss in the bench (batch 12 - not picking scored 78%
-    /// against a lenient picking bar of 60%), and rows that cosine already
-    /// ranked are exactly the rows it was most likely to throw away. A tier
-    /// with a strong picking model and a reason to trust it can set this
-    /// true; the calls it costs are real.
+    /// True now, and the measurement that said otherwise has not been
+    /// contradicted -- it was answering a different question. When the cosine
+    /// cut kept fewer rows than a worker was allowed to return, picking could
+    /// only subtract, and the bench duly measured it subtracting the right
+    /// answer (batch 12: 78% without it against a lenient 60% bar). The cut
+    /// is three times the depth now, so the picking call is what turns thirty
+    /// candidates into the ten a turn actually carries. Setting this false
+    /// hands all thirty to Intent instead.
     /// </summary>
-    public bool PickAfterVector { get; set; }
+    public bool PickAfterVector { get; set; } = true;
 }

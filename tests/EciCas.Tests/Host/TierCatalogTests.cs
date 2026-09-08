@@ -91,11 +91,12 @@ public class TierCatalogTests
         Assert.False(agents.Agents["Reflection"].UseSubstrate);
         Assert.True(agents.Agents["Intent"].UseSubstrate);
         Assert.Equal(10, recall.RowsPerWorker);
-        Assert.Equal(2, librarian.MaxSelectedPairs);
+        Assert.Equal(3, recall.Threads);
 
-        // RecallDepth overrides MaxPickedPerWorker, so leaving it behind
-        // would run the new tier at the old one's depth.
+        // Both live knobs override their option, so leaving either behind
+        // would run the new tier at the old one's fan-out.
         Assert.Equal(2, knobs.RecallDepth);
+        Assert.Equal(3, knobs.RecallThreads);
     }
 
     /// <summary>

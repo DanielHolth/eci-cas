@@ -36,7 +36,8 @@ public class LibrarianAgentTests
 
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new LibrarianOptions { MaxSelectedPairs = 3 }),
+            Manifest(), Options.Create(new LibrarianOptions()),
+            new RuntimeKnobs { RecallThreads = 5 },
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -60,6 +61,7 @@ public class LibrarianAgentTests
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
             Manifest(), Options.Create(new LibrarianOptions()),
+            new RuntimeKnobs { RecallThreads = 5 },
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -87,6 +89,7 @@ public class LibrarianAgentTests
         var substrate = new StubSubstrate(_ => throw new InvalidOperationException("down"));
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
             Manifest(), Options.Create(new LibrarianOptions()),
+            new RuntimeKnobs { RecallThreads = 5 },
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -124,6 +127,7 @@ public class LibrarianAgentTests
         var substrate = new StubSubstrate(_ => { called = true; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
             Manifest(), Options.Create(new LibrarianOptions()),
+            new RuntimeKnobs { RecallThreads = 5 },
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -164,7 +168,8 @@ public class LibrarianAgentTests
         var prompt = "";
         var substrate = new StubSubstrate(p => { prompt = p; return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)); });
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
-            Manifest(), Options.Create(new LibrarianOptions { MaxSelectedPairs = 3 }),
+            Manifest(), Options.Create(new LibrarianOptions()),
+            new RuntimeKnobs { RecallThreads = 5 },
             new StubEmbeddings(), new InMemoryPassageStore(), Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,

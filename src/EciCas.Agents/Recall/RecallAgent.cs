@@ -127,14 +127,18 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
                 string.Join(" | ", loaded.SelectMany(rows => rows).Select(Describe)));
         }
 
-        // Ranking is not picking, and on the measured arms it is the better
-        // of the two: given the right file, cosine puts the fact in the top
-        // five 97% of the time, while the picking call's own filtering was
-        // the single biggest read-side loss (batch 12, nopick 78% against a
-        // lenient bar of 60%). So when every selected pair was narrowed by
-        // vector, the default is to hand those rows straight to Intent and
-        // spend no picking call at all. PickAfterVector: true restores the
-        // old shape for a tier that would rather pay for the second opinion.
+        // Ranking is not picking, and it used to be the whole of the read:
+        // cosine puts the fact in the top five 97% of the time given the
+        // right file, so a cut that kept fewer rows than a worker could
+        // return made the picking call pure subtraction, and the bench
+        // measured it subtracting the right answer.
+        //
+        // The cut is three times the depth now, so those two stages no
+        // longer overlap -- cosine says which thirty rows are worth reading
+        // and the picking call says which ten of them answer the question.
+        // PickAfterVector: false restores the old shape and hands all thirty
+        // to Intent, which is a real choice for a tier with no picking model
+        // worth the call.
         if (narrowedAll && !_options.PickAfterVector && loaded.Length > 0)
         {
             _logger.LogInformation("{Agent} vector-narrowed every pair; skipping the picking calls", Name);
@@ -194,7 +198,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     private async Task<(IReadOnlyList<ArchiveRecord>[] Loaded, bool NarrowedAll)> NarrowAsync(
         Envelope envelope, IReadOnlyList<ArchiveRecord>[] loaded, string text, CancellationToken cancellationToken)
     {
-        if (loaded.Length == 0 || _options.VectorCandidates <= 0 || !_embeddings.Available)
+        if (loaded.Length == 0 || _knobs.VectorCandidates <= 0 || !_embeddings.Available)
         {
             return (loaded, false);
         }
@@ -224,7 +228,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
                 .. rows
                     .Select(r => (Row: r, Score: VectorMath.Cosine(query, r.Embedding!)))
                     .OrderByDescending(x => x.Score)
-                    .Take(_options.VectorCandidates)
+                    .Take(_knobs.VectorCandidates)
                     .Select(x => x.Row),
             ];
 

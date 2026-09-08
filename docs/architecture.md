@@ -149,73 +149,101 @@ then. Only the lifetime total persists (`TurnLog:CostPath`).
 ## Runtime knobs
 
 `RuntimeKnobs` holds the numbers the companion's Debug panel exposes as
-sliders — reply length, reflection cadence, recall depth, and a five-step mood
-enum — overriding the corresponding static options live. Beside them sits the
+sliders — reply length, reflection cadence, recall threads and depth, and a
+five-step mood enum — overriding the corresponding static options live. Beside them sits the
 Tier dropdown, which is not a knob but the whole configuration: `TierCatalog`
 binds every `appsettings.<Tier>.json` at boot, and a switch replaces
 `Substrates:Classes` and `AgentSubstrates` by reference, which is safe because
 nothing in the substrate path caches its config. Switching re-seeds recall
-depth from the new tier. In-memory only: a restart resets each to a default
-matching the tier's config, so an untouched slider changes nothing.
+threads and depth from the new tier. In-memory only apart from those two: a
+restart resets each to a default matching the tier's config, so an untouched
+slider changes nothing, and Save is what makes a dragged one survive.
 
-## Tier knobs: `Recall` and `Librarian` in `appsettings.*.json`
+## Tier knobs: how wide and how deep a turn reads
 
-These are the two sections a tier scales to decide how hard a turn reads. They
-are config, not code, precisely so the load can be softened without a rebuild;
-every one of them is bound per tier and re-bound by the live Tier dropdown.
+Two numbers decide a turn's read cost, and both are sliders in the Debug
+panel seeded from the tier file: **threads** (how many lanes open) and
+**depth** (how many rows each lane hands back). Everything else about
+retrieval is derived from them, so there is one place to turn and no way for
+the surface to claim a fan-out the agents are not running.
 
-### `Librarian` — how wide the shelf opens
+### Threads: `Recall:Threads`, seeded into `RuntimeKnobs.RecallThreads`
 
-| Key | Means | Costs |
-|---|---|---|
-| `MaxSelectedPairs` | How many index pairs the one selection call may name. | One pair = one whole file Recall then reads. This is the biggest single lever on a turn's read cost. |
-| `VectorPairs` | How many more pairs the gloss-vector sweep may add *beside* that selection. A second opinion, not a second selector. `0` turns the pair-vector layer off. | Adds files on top of `MaxSelectedPairs`, so the real ceiling is their sum. |
-| `VectorMinScore` | Cosine floor a gloss must clear to count as a lead. Without it the sweep always returns its full quota, even on a turn about nothing in the archive. | Raising it drops weak leads; lowering it spends `VectorPairs` on every turn. |
+Lane 1 is the recency lane, which is not a pair and is always read. Every
+lane after that alternates: a vector-found pair, then a selector-named pair,
+then a vector pair again.
 
-### `Recall` — how deep each opened pair is read
+| Threads | Opens |
+|---|---|
+| 1 | recent only |
+| 2 | recent + 1 vector pair |
+| 3 | recent + 1 vector + 1 selected |
+| 4 | recent + 2 vector + 1 selected |
+| *n* | recent + `n / 2` vector + `(n - 1) / 2` selected |
 
-| Key | Means | Costs |
-|---|---|---|
-| `RowsPerWorker` | How many candidate rows one picking call is shown. A quality limit, not a context one — a small model's ability to spot the right row in a flat list falls off long before its window does. | A pair deeper than this splits across that many more parallel workers. |
-| `MaxConcurrentRecalls` | Ceiling on picking calls per turn across all pairs. Sized at roughly twice `MaxSelectedPairs`, so an ordinary turn never reaches it and only an unusually deep pair does. | The hard cap on read-side fan-out. |
-| `MaxPickedPerWorker` | How many rows one picking call may return — and, because the call is skipped when a lane holds no more rows than this, also the size below which a young archive passes whole with no substrate call. Seeds the Recall-depth slider. | Decides how many facts reach Intent; the ceiling is this × `MaxConcurrentRecalls`. |
-| `RecentRows` | How many rows of the recency lane go in front of the picking model. The lane spans a year; this is what makes it a prompt rather than a dump. | One call a turn, always made, whatever Librarian selected. |
-| `VectorCandidates` | How many rows survive the cosine cut *inside* one pair. Five is where it was measured: given the right file, the fact is in the vector top five 97% of the time. `0` turns the row-vector layer off and restores the pre-vector read path exactly. | Replaces chunking when it applies; it does not replace `RowsPerWorker` for a pair that cannot be narrowed. |
-| `PickAfterVector` | Whether vector-narrowed rows still go through a picking call. `false` everywhere, because it was measured: picking was the biggest read-side loss in the bench (78% without it against a lenient 60% bar), and cosine-ranked rows are exactly the ones it discarded. | `true` costs one call per narrowed pair for a model you have a reason to trust. |
+Those two quotients are `RuntimeKnobs.VectorLanePairs` and
+`SelectorLanePairs`, and Librarian reads them directly — which is why
+`MaxSelectedPairs` and `VectorPairs` no longer exist as configuration. The cut
+is upstream: a thread the slider does not allow is a pair Librarian never
+names, not a pair Recall opens and discards. Passage leads share the vector
+lane's budget rather than adding to it.
+
+### Depth: `Recall:MaxPickedPerWorker`, seeded into `RuntimeKnobs.RecallDepth`
+
+Depth is how many rows one lane may hand Intent — capped at 10, because the
+prompt is the scarce thing and past that the reply is quoting a file. It caps
+the recency lane, it is what a picking call may return, and it is the size
+below which a lane passes whole with no substrate call at all.
+
+It also *is* the row-vector cut: `RuntimeKnobs.VectorCandidates` is the depth
+itself, so cosine keeps exactly as many rows as the lane may hand back. There
+is no `VectorCandidates` key any more.
+
+That cut applies to every pair Recall opens, not only the ones the gloss
+sweep found — it runs downstream of selection and does not know how a pair
+was chosen. And because the cut equals the budget, the picking call has
+nothing left to cut: a pair that narrows costs no substrate call at all. The
+measured reason to want that is the bench's own nopick rate, 78% against a
+lenient bar, which said the picker was the read side's largest loss and was
+discarding exactly the cosine-ranked rows.
+
+### What is still a tier file's own
+
+| Key | Means |
+|---|---|
+| `Recall:RowsPerWorker` | How many candidate rows one picking call is shown when a pair *cannot* be vector-narrowed and falls back to chunk-and-pick. A quality limit, not a context one: a small model's ability to spot the right row in a flat list falls off long before its window does. |
+| `Recall:MaxConcurrentRecalls` | Ceiling on picking calls per turn across all lanes — the backstop for an unusually deep pair that splits into many chunks. |
+| `Recall:RecentRows` | How far back the recency lane may look before depth cuts it. The lane spans a year; this is what makes it a prompt rather than a dump. |
+| `Recall:PickAfterVector` | Whether vector-narrowed rows still go through a picking call. `false` on every tier, and with the cut equal to the depth there is nothing for such a call to do; it stays a key so the pre-vector read path can be restored exactly. |
+| `Librarian:VectorMinScore` | Cosine floor a gloss must clear to count as a lead. Without it the sweep always returns its full quota, even on a turn about nothing in the archive. `0.75` on every tier. |
 
 ### What each tier currently sets
 
 | | Mock | Minimal | Budget | Default | Super |
 |---|---|---|---|---|---|
-| `Librarian:MaxSelectedPairs` | 2 | 2 | 4 | 4 | 8 |
-| `Librarian:VectorPairs` | 2 | 2 | 2 | 2 | 4 |
+| `Recall:Threads` | 3 | 3 | 4 | 5 | 8 |
+| `Recall:MaxPickedPerWorker` | 2 | 2 | 4 | 4 | 8 |
 | `Recall:RowsPerWorker` | 10 | 10 | 25 | 50 | 100 |
 | `Recall:MaxConcurrentRecalls` | 4 | 4 | 8 | 12 | 16 |
-| `Recall:MaxPickedPerWorker` | 2 | 2 | 4 | 4 | 8 |
 | `Recall:RecentRows` | 10 | 10 | 20 | 30 | 60 |
-| `Recall:VectorCandidates` | 4 | 4 | 5 | 6 | 8 |
 
-`VectorMinScore` is 0.75 and `PickAfterVector` false on every tier.
+So Default opens five lanes — recent, two vector pairs, two selected pairs —
+and takes at most four rows out of each. It used to open nine files a turn
+and read six rows out of each, which on an observed turn was five Librarian
+pairs, eleven priced calls and 37 seconds wall-clock for a reply that used
+one recalled fact. Minimal, at a third of those numbers, was not visibly
+worse at remembering; the extra pairs were width nobody spent.
 
-### Why Default reads narrower than its rank
+### Saving a setting that was found by dragging
 
-Default used to open nine files a turn (6 selected + 3 vector) and read six
-rows out of each, which on an observed turn was five Librarian pairs, eleven
-priced calls and 37 seconds wall-clock for a reply that used one recalled
-fact. Minimal, at a third of those numbers, was not visibly worse at
-remembering — the extra pairs were width nobody spent.
-
-So the read knobs came down to Budget's shape: `MaxSelectedPairs` 6 → 4,
-`VectorPairs` 3 → 2, `MaxPickedPerWorker` 6 → 4, `RecentRows` 40 → 30. Default
-still differs from Budget where it matters, in the models behind each class.
-Pairs are the lever that pays: each one dropped is a whole file read plus its
-picking calls.
-
-`RowsPerWorker` stayed at 50 — it only bites when a pair is deeper than that,
-so lowering it costs splits on the archive's biggest files and saves nothing
-on the rest. `VectorCandidates` and `PickAfterVector` stayed as they are:
-those are the measured settings, and they are what keeps the narrower read
-accurate.
+The Debug panel's Save button writes the two live Recall knobs back into
+`appsettings.<ActiveTier>.json` — both the copy in `src/EciCas.Host/` that a
+human and git read, and the copy under the binary that the next boot actually
+loads. Writing only one of the two is the failure worth avoiding: the source
+alone and the next run ignores the save, the build output alone and the next
+`dotnet build` reverts it. The button is grey while the live values match the
+file, which makes it also the answer to "is what I am running what is written
+down".
 
 ## Governance: decision-only
 
@@ -406,7 +434,7 @@ index of its own — the address is always a `(Category, Topic)` pair handed to
 **Librarian** calls `IndexFor(profileId)` and gets the union of the shared and
 profile directories, decoded from file names. It sees pairs, never rows, so its
 prompt stays short as the archive deepens. It selects up to
-`MaxSelectedPairs` and publishes them; it never opens a file.
+`RuntimeKnobs.SelectorLanePairs` and publishes them; it never opens a file.
 
 **Recall** calls `LookupAsync(pair, profileId)` once per selected pair — one
 file read each, in parallel, since distinct pairs are distinct files — and
@@ -463,7 +491,7 @@ cannot drift. Only one process should point at an archive directory at a time.
 ## The Librarian to Recall knowledge swarm
 
 Librarian is a **selector**, not a reader: given the turn's text and the pair
-index, it picks up to `MaxSelectedPairs` pairs and publishes them on
+index, it picks up to `RuntimeKnobs.SelectorLanePairs` pairs and publishes them on
 `events.selected-pairs` — even an empty list on fallback, so Recall replies
 exactly once and Governance's bundle roster stays static. Selection is
 LLM-driven rather than keyword matching, because disambiguating "name of
@@ -531,14 +559,15 @@ keeps the address and swaps the value, so an inherited vector would go on
 scoring as Oslo after the row said Bergen.
 
 When every selected pair narrowed, Recall publishes the survivors and skips the
-picking calls entirely — `PickAfterVector` defaults to false because picking is
+picking calls entirely — `PickAfterVector` is false because picking is
 the biggest read-side loss measured (batch 12: 78% with `nopick`, 60% with the
-lenient bar). `VectorCandidates` is how many rows survive per pair.
+lenient bar). How many rows survive per pair is `RuntimeKnobs.VectorCandidates`,
+which is the Recall-depth slider itself.
 
 **The pair layer.** `PairVectorIndex` embeds each `category/topic` as
 `"{category} {topic}: {gloss}"`, lazily and in one batch, and drops the table
-when `ModelId` changes. Librarian unions the top `VectorPairs` above
-`VectorMinScore` into its own LLM selection rather than replacing it.
+when `ModelId` changes. Librarian unions the top `RuntimeKnobs.VectorLanePairs`
+above `VectorMinScore` into its own LLM selection rather than replacing it.
 
 The query is embedded once per turn. Librarian publishes it on the envelope as
 `librarian.query_vector`, and Recall uses that rather than re-deriving it. e5

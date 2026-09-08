@@ -81,10 +81,11 @@ public class RecallVectorTests
     }
 
     private static RecallAgent Agent(IMessageBus bus, BusActivityTracker activity, IArchiveStore store,
-        ISubstrateProvider substrate, IEmbeddingProvider embeddings, RecallOptions? options = null) =>
+        ISubstrateProvider substrate, IEmbeddingProvider embeddings, RecallOptions? options = null,
+        int depth = 2) =>
         new(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
-            Options.Create(options ?? new RecallOptions { VectorCandidates = 2, RecentRows = 0 }),
-            ShippedInstructions.Store, new RuntimeKnobs(), embeddings);
+            Options.Create(options ?? new RecallOptions { RecentRows = 0 }),
+            ShippedInstructions.Store, new RuntimeKnobs { RecallDepth = depth }, embeddings);
 
     /// <summary>
     /// The point of the whole thing: a fully embedded pair hands Intent the
@@ -141,7 +142,7 @@ public class RecallVectorTests
 
         var substrate = new RecordingSubstrate(_ => "0");
         var agent = Agent(bus, activity, store, substrate, embeddings,
-            new RecallOptions { VectorCandidates = 1, RecentRows = 0, RowsPerWorker = 50, MaxPickedPerWorker = 1 });
+            new RecallOptions { RecentRows = 0, RowsPerWorker = 50, MaxPickedPerWorker = 1 }, depth: 1);
 
         await agent.HandleAsync(Selection(new ArchivePair("person", "family"), "xxxxxxxx"), CancellationToken.None);
 
@@ -221,7 +222,7 @@ public class RecallVectorTests
         ], null, CancellationToken.None);
 
         var agent = Agent(bus, activity, store, new NeverCalledSubstrate(), embeddings,
-            new RecallOptions { VectorCandidates = 1, RecentRows = 0 });
+            new RecallOptions { RecentRows = 0 }, depth: 1);
 
         await agent.HandleAsync(
             Selection(new ArchivePair("person", "family"), "xxxxxxxxxxxx", query: [0.05f, 1f]),

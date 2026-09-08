@@ -32,6 +32,11 @@ export interface Knobs {
   maxSentences: number;
   reflectionEvery: number;
   recallDepth: number;
+  recallThreads: number;
+  // What the active tier's file on disk says, so the Save button can tell a
+  // dragged value from a stored one instead of always offering to write.
+  savedRecallDepth: number;
+  savedRecallThreads: number;
   mood: string;
   moods: string[];
 }
@@ -44,7 +49,7 @@ export async function fetchKnobs(): Promise<Knobs> {
   return response.json();
 }
 
-async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "mood" | "tier", number | string>>): Promise<Knobs> {
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "recallThreads" | "mood" | "tier", number | string>>): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -60,5 +65,17 @@ async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery"
 export const setMaxSentences = (maxSentences: number) => postKnobs({ maxSentences });
 export const setReflectionEvery = (reflectionEvery: number) => postKnobs({ reflectionEvery });
 export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth });
+export const setRecallThreads = (recallThreads: number) => postKnobs({ recallThreads });
 export const setMood = (mood: string) => postKnobs({ mood });
 export const setTier = (tier: string) => postKnobs({ tier });
+
+/** Writes the live Recall knobs into the active tier's appsettings file --
+ * both the source tree's copy and the one the binary loads -- so a setting
+ * arrived at by dragging outlives the process that found it. */
+export async function saveKnobs(): Promise<Knobs> {
+  const response = await fetch(`${API_BASE}/api/knobs/save`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`knobs save failed: ${response.status}`);
+  }
+  return response.json();
+}

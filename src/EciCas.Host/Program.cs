@@ -1,6 +1,7 @@
 ﻿using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using EciCas.Agents.Action;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Cataloger;
@@ -325,6 +326,7 @@ builder.Services.AddSingleton(sp => new TierCatalog(
 builder.Services.AddSingleton(sp => new RuntimeKnobs
 {
     RecallDepth = sp.GetRequiredService<IOptions<RecallOptions>>().Value.MaxPickedPerWorker,
+    RecallThreads = sp.GetRequiredService<IOptions<RecallOptions>>().Value.Threads,
 });
 
 RegisterAgent<PerceptionAgent>(builder.Services);
@@ -377,9 +379,10 @@ app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.Lis
 
 // The Debug panel's sliders — live, in-memory, and reset on restart. Read
 // on every Intent prompt, so a drag takes effect on the very next turn.
-app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers) => Results.Json(ToKnobsPayload(knobs, tiers), jsonOptions));
+app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall) =>
+    Results.Json(ToKnobsPayload(knobs, tiers, recall.Value), jsonOptions));
 
-app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers) =>
+app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall) =>
 {
     // First, because it re-seeds RecallDepth: a request that sets both
     // should end with the explicit depth, not with the tier's answer to it.
@@ -403,21 +406,90 @@ app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog
         knobs.RecallDepth = d;
     }
 
+    if (request.RecallThreads is { } t)
+    {
+        knobs.RecallThreads = t;
+    }
+
     if (request.Mood is { } moodName && Enum.TryParse<Mood>(moodName, ignoreCase: true, out var mood))
     {
         knobs.Mood = mood;
     }
 
-    return Results.Json(ToKnobsPayload(knobs, tiers), jsonOptions);
+    return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value), jsonOptions);
 });
 
-static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers) => new
+// Writes the two live Recall knobs back into the active tier's file, so a
+// setting found by dragging survives the restart that found it. Both copies
+// get it: the source tree's file is the one a human and git read, and the
+// one under the binary is the one the next boot actually loads -- writing
+// only the source means the next run silently ignores the save, and writing
+// only the build output means the next `dotnet build` silently reverts it.
+//
+// Read-modify-write of the parsed JSON rather than a re-serialise of
+// RecallOptions: a tier file carries Classes, Agents and Rank too, and
+// nothing here has any business rewriting those.
+app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall) =>
+{
+    var file = $"appsettings.{tiers.Active}.json";
+    var targets = new[]
+    {
+        Path.Combine(AppContext.BaseDirectory, file),
+        Path.Combine(SourceTierDirectory(), file),
+    };
+
+    var written = new List<string>();
+    foreach (var path in targets.Distinct(StringComparer.OrdinalIgnoreCase))
+    {
+        if (!File.Exists(path))
+        {
+            continue;
+        }
+
+        var node = JsonNode.Parse(File.ReadAllText(path))?.AsObject();
+        if (node is null)
+        {
+            continue;
+        }
+
+        if (node["Recall"] is not JsonObject section)
+        {
+            section = new JsonObject();
+            node["Recall"] = section;
+        }
+
+        section["MaxPickedPerWorker"] = knobs.RecallDepth;
+        section["Threads"] = knobs.RecallThreads;
+
+        File.WriteAllText(path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        written.Add(path);
+    }
+
+    if (written.Count == 0)
+    {
+        return Results.NotFound($"No {file} to write -- {tiers.Active} has no tier file on disk.");
+    }
+
+    // The bound options are what the payload reports as "saved", so they have
+    // to move with the file or the Save button stays lit after a good save.
+    recall.Value.MaxPickedPerWorker = knobs.RecallDepth;
+    recall.Value.Threads = knobs.RecallThreads;
+
+    return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value), jsonOptions);
+});
+
+static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOptions recall) => new
 {
     tier = tiers.Active,
     tiers = tiers.Presets.Select(p => new { name = p.Name, missingKeys = p.MissingKeys }),
     maxSentences = knobs.MaxSentences,
     reflectionEvery = knobs.ReflectionEvery,
     recallDepth = knobs.RecallDepth,
+    recallThreads = knobs.RecallThreads,
+    // What the tier file on disk says, so the surface can grey its Save
+    // button rather than having to guess whether a drag is unsaved.
+    savedRecallDepth = recall.MaxPickedPerWorker,
+    savedRecallThreads = recall.Threads,
     mood = knobs.Mood.ToString(),
     moods = Enum.GetNames<Mood>(),
 };
@@ -603,6 +675,31 @@ while (!string.IsNullOrWhiteSpace(line = Console.ReadLine()))
 
 await app.StopAsync();
 
+/// <summary>
+/// The tier files in the source tree, walking up from the binary until a
+/// directory holding appsettings.json is found. The build copies those files
+/// next to the binary, so a save that touched only the copy would be undone
+/// by the next build -- and there is no configuration entry for "where did
+/// this come from", only the layout.
+/// </summary>
+static string SourceTierDirectory()
+{
+    var dir = new DirectoryInfo(AppContext.BaseDirectory);
+    while (dir is not null)
+    {
+        var candidate = Path.Combine(dir.FullName, "appsettings.json");
+        if (File.Exists(candidate) && !string.Equals(dir.FullName.TrimEnd(Path.DirectorySeparatorChar),
+                AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+        {
+            return dir.FullName;
+        }
+
+        dir = dir.Parent;
+    }
+
+    return AppContext.BaseDirectory;
+}
+
 static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : AgentBase, IAgent
 {
     services.AddSingleton<TAgent>();
@@ -612,6 +709,6 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
 
 internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, string? Mood = null, string? Tier = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, int? RecallThreads = null, string? Mood = null, string? Tier = null);
 
 internal sealed record CreateProfileRequest(string DisplayName, string Avatar);
