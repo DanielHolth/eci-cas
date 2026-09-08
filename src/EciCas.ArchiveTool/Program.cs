@@ -1,3 +1,4 @@
+using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -17,7 +18,13 @@ if (!Directory.Exists(directory))
     return;
 }
 
-const string Usage = "list | show <[profile:]category> [topic] [subtopic] | showall <[profile:]category> [topic] [subtopic] | del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic] | embed <model.onnx> <vocab.txt> | reset | help | exit";
+const string Usage = """
+    list | show <[profile:]category> [topic] [subtopic] | showall <[profile:]category> [topic] [subtopic]
+    recent [[profile:]recent] | passages [count] | passage <id>
+    del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic]
+    del [profile:]recent <index[,index...]> | del passage <id>
+    embed <model.onnx> <vocab.txt> | reset | help | exit
+    """;
 
 Console.WriteLine($"EciCas Archive Tool — {Path.GetFullPath(directory)}");
 Console.WriteLine($"Commands: {Usage}");
@@ -59,6 +66,26 @@ while (true)
 
             case "showall" when parts.Length >= 2:
                 await ShowAsync(directory, parts[1], parts.ElementAtOrDefault(2), parts.ElementAtOrDefault(3), full: true);
+                break;
+
+            case "recent":
+                await ShowRecentAsync(directory, parts.ElementAtOrDefault(1));
+                break;
+
+            case "passages":
+                await ShowPassagesAsync(directory, parts.ElementAtOrDefault(1));
+                break;
+
+            case "passage" when parts.Length >= 2:
+                await ShowPassageAsync(directory, parts[1]);
+                break;
+
+            case "del" when parts.Length >= 3 && IsLane(parts[1]) && IsIndexList(parts[2]):
+                await DeleteRecentAsync(directory, parts[1], parts[2]);
+                break;
+
+            case "del" when parts.Length >= 3 && parts[1].Equals("passage", StringComparison.OrdinalIgnoreCase):
+                await DeletePassageAsync(directory, parts[2]);
                 break;
 
             case "del" when parts.Length >= 4 && IsIndexList(parts[3]):
@@ -388,6 +415,163 @@ static async Task SaveAsync(string path, List<ArchiveRecord> records)
     }
 
     await ParquetArchiveStore.WriteRecordsAsync(path, records, CancellationToken.None);
+}
+
+// The recent lane. Not a pair and so not in `list`: recent.parquet has no
+// category~topic name to decode, and the store keeps it as one flat drawer
+// per tier beside the index rather than inside it. It still holds rows a
+// person might want gone -- a fact the persona picked up wrong is in here as
+// well as in its pair -- so it gets a view and a delete of its own.
+static async Task ShowRecentAsync(string directory, string? scopeArg)
+{
+    var (profile, _) = SplitScope(scopeArg ?? string.Empty);
+
+    foreach (var scope in ScopesFor(directory, profile))
+    {
+        var path = Path.Combine(scope.Directory, ParquetArchiveStore.RecentFileName);
+        if (!File.Exists(path))
+        {
+            continue;
+        }
+
+        var records = await LaneAsync(path);
+        Console.WriteLine($"{scope.Prefix}recent - {records.Count} record(s)");
+        for (var i = 0; i < records.Count; i++)
+        {
+            var r = records[i];
+            Console.WriteLine($"  [{i}] {r.Timestamp:yyyy-MM-dd HH:mm} {r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}");
+        }
+    }
+}
+
+// Newest first, which is both how the store reads the lane and the order
+// anybody scanning it wants. The index a delete takes is the one printed
+// here, so the two share one function rather than two sorts that could drift.
+static async Task<List<ArchiveRecord>> LaneAsync(string path) =>
+    [.. (await ParquetArchiveStore.ReadRecordsAsync(path, CancellationToken.None)).OrderByDescending(r => r.Timestamp)];
+
+static bool IsLane(string token) =>
+    SplitScope(token).Category.Equals("recent", StringComparison.OrdinalIgnoreCase);
+
+static async Task DeleteRecentAsync(string directory, string scopeArg, string indexList)
+{
+    var (profile, _) = SplitScope(scopeArg);
+    var lanes = ScopesFor(directory, profile)
+        .Select(s => (s.Prefix, Path: Path.Combine(s.Directory, ParquetArchiveStore.RecentFileName)))
+        .Where(x => File.Exists(x.Path))
+        .ToList();
+
+    // Same rule as a pair: one lane per delete. Indices printed for two tiers
+    // are two numberings, and applying one to the other quietly removes the
+    // wrong rows.
+    if (lanes.Count != 1)
+    {
+        Console.WriteLine(lanes.Count == 0
+            ? "No recent lane there."
+            : $"More than one lane: {string.Join(", ", lanes.Select(x => $"{x.Prefix}recent"))}. Name one.");
+        return;
+    }
+
+    var records = await LaneAsync(lanes[0].Path);
+    foreach (var i in indexList.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).OrderByDescending(i => i))
+    {
+        if (i < 0 || i >= records.Count)
+        {
+            Console.WriteLine($"Index {i} out of range, skipped.");
+            continue;
+        }
+        records.RemoveAt(i);
+    }
+
+    await SaveAsync(lanes[0].Path, records);
+    Console.WriteLine($"Deleted. {records.Count} record(s) remain in {lanes[0].Prefix}recent.");
+}
+
+// Reflection's corpus, which no other command touches: it is prose the
+// persona wrote to itself, one note per event-series, not facts in drawers.
+// Shared-tier only by construction -- a self-critique belongs to the persona
+// rather than to whoever happened to be talking -- so no profile argument
+// here and no union read.
+static ParquetPassageStore Passages(string directory) => new(directory);
+
+static async Task ShowPassagesAsync(string directory, string? countArg)
+{
+    var all = await Passages(directory).AllAsync(CancellationToken.None);
+    if (all.Count == 0)
+    {
+        Console.WriteLine($"No {ParquetPassageStore.FileName} yet - Reflection has not written a note in this archive.");
+        return;
+    }
+
+    var count = int.TryParse(countArg, out var n) ? n : 20;
+    foreach (var p in all.OrderByDescending(p => p.Timestamp).Take(count))
+    {
+        var pairs = p.Pairs.Count == 0 ? "-" : string.Join(" ", p.Pairs.Select(x => $"{x.Category}/{x.Topic}"));
+        Console.WriteLine($"{p.Id}  {p.Timestamp:yyyy-MM-dd HH:mm}  gen={p.Generation} echo={p.EchoDepth}  {pairs}");
+        Console.WriteLine($"  {Oneline(p.Text, 160)}");
+    }
+
+    Console.WriteLine($"{all.Count} passage(s); showing up to {count}. `passage <id>` for one in full.");
+}
+
+// A note runs to paragraphs, so the listing shows an opening and this shows
+// the thing itself. The id prefix is enough to name one, the way a commit is
+// named by its first characters.
+static async Task ShowPassageAsync(string directory, string id)
+{
+    var passage = await FindPassageAsync(directory, id);
+    if (passage is null)
+    {
+        return;
+    }
+
+    Console.WriteLine($"id        {passage.Id}");
+    Console.WriteLine($"written   {passage.Timestamp:O}");
+    Console.WriteLine($"lineage   generation {passage.Generation}, echo depth {passage.EchoDepth}{(passage.ParentIds.Count == 0 ? "" : $", after {string.Join(", ", passage.ParentIds)}")}");
+    Console.WriteLine($"pairs     {(passage.Pairs.Count == 0 ? "-" : string.Join(", ", passage.Pairs.Select(x => $"{x.Category}/{x.Topic}")))}");
+    Console.WriteLine($"vector    {(passage.Embedding.Length == 0 ? "none" : $"{passage.Embedding.Length}d {passage.ModelId}")}");
+    Console.WriteLine();
+    Console.WriteLine(passage.Text);
+}
+
+static async Task DeletePassageAsync(string directory, string id)
+{
+    var passage = await FindPassageAsync(directory, id);
+    if (passage is null)
+    {
+        return;
+    }
+
+    // The store's own replace path: one write, one temp file, one move. A
+    // delete here is a revisit that adds nothing.
+    await Passages(directory).WriteAsync([], passage.Id, CancellationToken.None);
+    Console.WriteLine($"Deleted passage {passage.Id}.");
+}
+
+static async Task<Passage?> FindPassageAsync(string directory, string id)
+{
+    var all = await Passages(directory).AllAsync(CancellationToken.None);
+    var matches = all.Where(p => p.Id.StartsWith(id, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    switch (matches.Count)
+    {
+        case 0:
+            Console.WriteLine($"No passage {id}. Try 'passages'.");
+            return null;
+
+        case 1:
+            return matches[0];
+
+        default:
+            Console.WriteLine($"{id} names {matches.Count} passages: {string.Join(", ", matches.Select(m => m.Id))}. Say more of it.");
+            return null;
+    }
+}
+
+static string Oneline(string text, int width)
+{
+    var flat = string.Join(" ", text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()));
+    return flat.Length <= width ? flat : flat[..width] + "...";
 }
 
 /// <summary>A tier of the archive: the shared root, or one person's own directory under it.</summary>

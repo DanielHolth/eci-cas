@@ -131,6 +131,13 @@ public sealed class ParquetPassageStore : IPassageStore
         }
     }
 
+    /// <summary>
+    /// The whole corpus, oldest first. Not on IPassageStore: no agent wants
+    /// every note at once — reading them is an operator's job, and the tool
+    /// that edits the archive is where an operator already is.
+    /// </summary>
+    public Task<IReadOnlyList<Passage>> AllAsync(CancellationToken cancellationToken) => LoadAsync(cancellationToken);
+
     private async Task<IReadOnlyList<Passage>> LoadAsync(CancellationToken cancellationToken)
     {
         if (_cache is { } cached)
