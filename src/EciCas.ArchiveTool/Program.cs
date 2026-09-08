@@ -5,9 +5,19 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 var directory = args.Length > 0 ? args[0] : "archive";
-Directory.CreateDirectory(directory);
 
-const string Usage = "list | show <category> [topic] [subtopic] | showall <category> [topic] [subtopic] | del <category> <topic> <index[,index...]> | del <category> <topic> [subtopic] | embed <model.onnx> <vocab.txt> | reset | help | exit";
+// Not CreateDirectory. A mistyped path used to be created on the spot and
+// then reported as an archive holding nothing, which reads exactly like an
+// empty archive and sends an operator hunting for the missing rows rather
+// than the missing letter. An archive is something that already exists; the
+// host makes it, this tool only edits it.
+if (!Directory.Exists(directory))
+{
+    Console.WriteLine($"No archive at {Path.GetFullPath(directory)} — pass the host's archive directory, e.g. src/EciCas.Host/bin/Debug/net10.0/archive");
+    return;
+}
+
+const string Usage = "list | show <[profile:]category> [topic] [subtopic] | showall <[profile:]category> [topic] [subtopic] | del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic] | embed <model.onnx> <vocab.txt> | reset | help | exit";
 
 Console.WriteLine($"EciCas Archive Tool — {Path.GetFullPath(directory)}");
 Console.WriteLine($"Commands: {Usage}");
@@ -159,30 +169,82 @@ static async Task EmbedAsync(string directory, string modelPath, string vocabPat
 
 // The directory listing IS the index — there is no index file to consult or
 // rebuild, so this can't disagree with what the store would report.
+//
+// Both tiers, because the archive has two. Only shared categories sit at the
+// root; everything belonging to a person lives under profiles/<id>/, which on
+// a real archive is most of it. Listing the root alone showed three assistant
+// pairs and hid fourteen, and an archive whose facts a tool cannot see is one
+// it cannot edit either.
 static void ListPairs(string directory)
 {
-    foreach (var pair in ParquetArchiveStore.PairsIn(directory).OrderBy(p => p.Category, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Topic, StringComparer.OrdinalIgnoreCase))
+    foreach (var scope in Scopes(directory))
     {
-        Console.WriteLine($"{pair.Category}/{pair.Topic}");
+        foreach (var pair in ParquetArchiveStore.PairsIn(scope.Directory)
+            .OrderBy(p => p.Category, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.Topic, StringComparer.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"{scope.Prefix}{pair.Category}/{pair.Topic}");
+        }
     }
 }
 
 /// <summary>
-/// Rows across every pair matching the given category (and topic, if given).
-/// `show` may span several files; `del` never does, so it takes the pair
-/// explicitly and reads one file directly.
+/// The shared root first, then every profile tier. Profile ids are slugs, so
+/// the directory name is the id — the store's escaping is a no-op for every
+/// legitimate one, and a directory that needed escaping was not written by us.
+/// </summary>
+static IReadOnlyList<Scope> Scopes(string directory)
+{
+    var scopes = new List<Scope> { new(string.Empty, directory) };
+    var profiles = Path.Combine(directory, ParquetArchiveStore.ProfilesDirectoryName);
+    if (Directory.Exists(profiles))
+    {
+        scopes.AddRange(Directory.EnumerateDirectories(profiles)
+            .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+            .Select(d => new Scope(Path.GetFileName(d), d)));
+    }
+
+    return scopes;
+}
+
+/// <summary>
+/// Splits an optional "profile:" off the front of a category argument. Absent
+/// a prefix the command spans every tier, which is what someone who typed a
+/// category actually wants: they know the fact, not which directory the
+/// writer decided it belonged in.
+/// </summary>
+static (string? Profile, string Category) SplitScope(string token)
+{
+    var colon = token.IndexOf(':');
+    return colon < 0 ? (null, token) : (token[..colon], token[(colon + 1)..]);
+}
+
+static IEnumerable<Scope> ScopesFor(string directory, string? profile) =>
+    profile is null
+        ? Scopes(directory)
+        : Scopes(directory).Where(s => string.Equals(s.Name, profile, StringComparison.OrdinalIgnoreCase));
+
+/// <summary>
+/// Rows across every pair matching the given category (and topic, if given),
+/// in every tier the argument allows. `show` may span several files; `del`
+/// never does, so it resolves to one pair and reads that file directly.
 /// </summary>
 static async Task<List<ArchiveRecord>> FilteredRecordsAsync(string directory, string category, string? topic, string? subtopic)
 {
-    var pairs = ParquetArchiveStore.PairsIn(directory)
-        .Where(p => p.Category.Contains(category, StringComparison.OrdinalIgnoreCase))
-        .Where(p => topic is null || p.Topic.Contains(topic, StringComparison.OrdinalIgnoreCase))
-        .OrderBy(p => p.Topic, StringComparer.OrdinalIgnoreCase);
+    var (profile, name) = SplitScope(category);
 
     var records = new List<ArchiveRecord>();
-    foreach (var pair in pairs)
+    foreach (var scope in ScopesFor(directory, profile))
     {
-        records.AddRange(await ParquetArchiveStore.ReadRecordsAsync(ParquetArchiveStore.PairPathFor(directory, pair), CancellationToken.None));
+        var pairs = ParquetArchiveStore.PairsIn(scope.Directory)
+            .Where(p => p.Category.Contains(name, StringComparison.OrdinalIgnoreCase))
+            .Where(p => topic is null || p.Topic.Contains(topic, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Topic, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pair in pairs)
+        {
+            records.AddRange(await ParquetArchiveStore.ReadRecordsAsync(ParquetArchiveStore.PairPathFor(scope.Directory, pair), CancellationToken.None));
+        }
     }
 
     return subtopic is null
@@ -208,11 +270,47 @@ static async Task ShowAsync(string directory, string category, string? topic, st
 static bool IsIndexList(string token) =>
     token.Split(',', StringSplitOptions.RemoveEmptyEntries).All(t => int.TryParse(t, out _));
 
+/// <summary>
+/// The one file a delete is allowed to touch. An unprefixed pair that exists
+/// in two tiers is refused rather than guessed at: deleting the wrong
+/// person's copy of a fact is not something to recover from, and the prefix
+/// that resolves it is right there in the listing.
+/// </summary>
+static string? ResolvePairPath(string directory, string category, string topic)
+{
+    var (profile, name) = SplitScope(category);
+    var pair = new ArchivePair(name, topic);
+
+    var paths = ScopesFor(directory, profile)
+        .Select(s => (s.Prefix, Path: ParquetArchiveStore.PairPathFor(s.Directory, pair)))
+        .Where(x => File.Exists(x.Path))
+        .ToList();
+
+    switch (paths.Count)
+    {
+        case 0:
+            Console.WriteLine($"No pair {category}/{topic}. Try 'list'.");
+            return null;
+
+        case 1:
+            return paths[0].Path;
+
+        default:
+            Console.WriteLine($"{name}/{topic} exists in more than one tier: {string.Join(", ", paths.Select(x => $"{x.Prefix}{name}/{topic}"))}. Name one.");
+            return null;
+    }
+}
+
 // Index-based delete reads one pair file, so the indices it takes are the
 // ones `show <category> <topic>` printed for that same single pair.
 static async Task DeleteByIndexAsync(string directory, string category, string topic, string indexList)
 {
-    var path = ParquetArchiveStore.PairPathFor(directory, new ArchivePair(category, topic));
+    var path = ResolvePairPath(directory, category, topic);
+    if (path is null)
+    {
+        return;
+    }
+
     var records = await ParquetArchiveStore.ReadRecordsAsync(path, CancellationToken.None);
 
     var indices = indexList.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -236,7 +334,12 @@ static async Task DeleteByIndexAsync(string directory, string category, string t
 
 static async Task DeleteByFilterAsync(string directory, string category, string topic, string? subtopic)
 {
-    var path = ParquetArchiveStore.PairPathFor(directory, new ArchivePair(category, topic));
+    var path = ResolvePairPath(directory, category, topic);
+    if (path is null)
+    {
+        return;
+    }
+
     var records = await ParquetArchiveStore.ReadRecordsAsync(path, CancellationToken.None);
 
     var toRemove = records
@@ -285,4 +388,11 @@ static async Task SaveAsync(string path, List<ArchiveRecord> records)
     }
 
     await ParquetArchiveStore.WriteRecordsAsync(path, records, CancellationToken.None);
+}
+
+/// <summary>A tier of the archive: the shared root, or one person's own directory under it.</summary>
+readonly record struct Scope(string Name, string Directory)
+{
+    /// <summary>What `list` prints and what a command may type back: "daniel:" for a profile, nothing for the shared root.</summary>
+    public string Prefix => Name.Length == 0 ? string.Empty : $"{Name}:";
 }
