@@ -114,7 +114,7 @@ export function KnobsPanel() {
           exists and why it is unavailable beats it being absent. */}
       <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Tier</span>
+          <span title="Which appsettings.<Tier>.json is in force — models, fan-out, everything below. Switching re-seeds these sliders." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Tier</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">{knobs?.tier ?? "…"}</span>
         </span>
         <select
@@ -144,7 +144,7 @@ export function KnobsPanel() {
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Reply length</span>
+          <span title="Sentence ceiling for Intent. It is told half this as a floor too, so the range is what governs, not the cap." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Reply length</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">
             {knobs === null ? "…" : `${knobs.maxSentences} sentence${knobs.maxSentences === 1 ? "" : "s"}`}
           </span>
@@ -163,7 +163,7 @@ export function KnobsPanel() {
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Mood</span>
+          <span title="How the persona feels this turn. Not tone: tone is the prose, mood is the state behind it." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Mood</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">{knobs?.mood ?? "…"}</span>
         </span>
         <input
@@ -180,7 +180,7 @@ export function KnobsPanel() {
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Reflection every</span>
+          <span title="Turns between Reflection passes. Each one is an unprompted thought written to the passage corpus." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Reflection every</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">
             {knobs === null ? "…" : `${knobs.reflectionEvery} turn${knobs.reflectionEvery === 1 ? "" : "s"}`}
           </span>
@@ -205,7 +205,7 @@ export function KnobsPanel() {
           call that cuts them down. */}
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Recall threads</span>
+          <span title="Lanes opened per turn. 1 is recency alone; each pair after adds a vector-found pair then a selector-named one." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Recall threads</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">
             {knobs === null ? "…" : `${knobs.recallThreads} lane${knobs.recallThreads === 1 ? "" : "s"}`}
           </span>
@@ -224,7 +224,7 @@ export function KnobsPanel() {
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
-          <span>Recall depth</span>
+          <span title="Rows one lane may return, and the cosine cut itself — archive rows and woken notes alike." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Recall depth</span>
           <span className="font-mono text-neutral-800 dark:text-neutral-100">
             {knobs === null ? "…" : `${knobs.recallDepth} rows/lane`}
           </span>

@@ -7,7 +7,13 @@ namespace EciCas.Agents.Passages;
 /// </summary>
 public sealed class PassageOptions
 {
-    /// <summary>How many passages a turn may match.</summary>
+    /// <summary>
+    /// How many passages a turn may match. Read by nothing any more:
+    /// Hindsight and Librarian both take the budget from
+    /// RuntimeKnobs.RecallDepth, so the one slider covers every cosine cut
+    /// a turn makes rather than only the ones over archive rows. Kept as a
+    /// documented default for the number the corpus was designed around.
+    /// </summary>
     public int TopK { get; set; } = 3;
 
     /// <summary>
@@ -15,8 +21,8 @@ public sealed class PassageOptions
     /// restate the prompt — the persona rediscovering what it already knew it
     /// was looking for, which is the one thing a note cannot usefully add. The
     /// hits worth having are the middling ones, where a thought touches the
-    /// turn sideways. TopK is the budget, not this: the floor rejects noise,
-    /// the cap decides how much gets through. Was 0.45 when a passage was a
+    /// turn sideways. Recall depth is the budget, not this: the floor
+    /// rejects noise, the cap decides how much gets through. Was 0.45 when a passage was a
     /// miss note whose pairs bought Recall workers; MaxPairsFromPassages
     /// bounds that cost on its own.
     /// </summary>

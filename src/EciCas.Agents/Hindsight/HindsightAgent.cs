@@ -68,16 +68,19 @@ public sealed class HindsightAgent : AgentBase
     private readonly IEmbeddingProvider _embeddings;
     private readonly IPassageStore _passages;
     private readonly PassageOptions _options;
+    private readonly RuntimeKnobs _knobs;
     private readonly ILogger _logger;
 
     public HindsightAgent(IMessageBus bus, BusActivityTracker activity, ILogger<HindsightAgent> logger,
-        IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> options)
+        IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> options,
+        RuntimeKnobs knobs)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _embeddings = embeddings;
         _passages = passages;
         _options = options.Value;
+        _knobs = knobs;
         _logger = logger;
     }
 
@@ -160,9 +163,15 @@ public sealed class HindsightAgent : AgentBase
     /// </summary>
     private async Task<IReadOnlyList<PassageHit>> WakeAsync(string text, CancellationToken cancellationToken)
     {
-        if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || _options.TopK <= 0)
+        // The same slider that says how many archive rows a Recall lane may
+        // return says how many notes this may wake. It is the one cosine cut
+        // the persona has, run over a different corpus: a knob that governed
+        // rows but not notes would be a knob that only half answers "how much
+        // does a turn read".
+        var topK = _knobs.RecallDepth;
+        if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || topK <= 0)
         {
-            _logger.LogDebug("{Agent} did not search: embeddings available {Available}, topK {TopK}", Name, _embeddings.Available, _options.TopK);
+            _logger.LogDebug("{Agent} did not search: embeddings available {Available}, topK {TopK}", Name, _embeddings.Available, topK);
             return [];
         }
 
@@ -172,10 +181,10 @@ public sealed class HindsightAgent : AgentBase
             return [];
         }
 
-        var hits = await _passages.SearchAsync(query[0], _options.TopK, _options.MinScore, cancellationToken).ConfigureAwait(false);
+        var hits = await _passages.SearchAsync(query[0], topK, _options.MinScore, cancellationToken).ConfigureAwait(false);
         if (hits.Count == 0)
         {
-            _logger.LogDebug("{Agent} woke nothing for \"{Text}\" (topK {TopK}, min score {MinScore})", Name, text, _options.TopK, _options.MinScore);
+            _logger.LogDebug("{Agent} woke nothing for \"{Text}\" (topK {TopK}, min score {MinScore})", Name, text, topK, _options.MinScore);
             return [];
         }
 

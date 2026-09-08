@@ -248,7 +248,7 @@ public class PassageMemoryTests
             null, CancellationToken.None);
 
         var agent = new HindsightAgent(bus, activity, NullLogger<HindsightAgent>.Instance,
-            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
+            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), new RuntimeKnobs { RecallDepth = 3 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?").With(ReflectionAgent.TriggeredByKey, "self")), CancellationToken.None);
@@ -274,7 +274,8 @@ public class PassageMemoryTests
         var advisories = bus.Subscribe(Topics.Advisories);
 
         var agent = new HindsightAgent(bus, activity, NullLogger<HindsightAgent>.Instance,
-            new StubEmbeddings(_ => Unit(0)), new InMemoryPassageStore(), Options.Create(new PassageOptions()));
+            new StubEmbeddings(_ => Unit(0)), new InMemoryPassageStore(), Options.Create(new PassageOptions()),
+            new RuntimeKnobs { RecallDepth = 3 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "anything on file?")), CancellationToken.None);
@@ -312,7 +313,7 @@ public class PassageMemoryTests
             null, CancellationToken.None);
 
         var agent = new HindsightAgent(bus, activity, NullLogger<HindsightAgent>.Instance,
-            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
+            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), new RuntimeKnobs { RecallDepth = 3 });
 
         // No TriggeredByKey: this is a plain human turn, the case the old
         // condition declined outright.
@@ -343,7 +344,8 @@ public class PassageMemoryTests
 
         var agent = new HindsightAgent(bus, activity, NullLogger<HindsightAgent>.Instance,
             new StubEmbeddings(_ => Unit(0)), passages,
-            Options.Create(new PassageOptions { WakeWhenAddressed = false }));
+            Options.Create(new PassageOptions { WakeWhenAddressed = false }),
+            new RuntimeKnobs { RecallDepth = 3 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
             MetaBag.Empty.With(PerceptionAgent.TextKey, "do you have any thoughts about that?")), CancellationToken.None);

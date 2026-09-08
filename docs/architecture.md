@@ -199,6 +199,12 @@ It also *is* the row-vector cut: `RuntimeKnobs.VectorCandidates` is the depth
 itself, so cosine keeps exactly as many rows as the lane may hand back. There
 is no `VectorCandidates` key any more.
 
+Depth governs every cosine cut a turn makes, not only the ones over archive
+rows: Hindsight's wake and Librarian's passage sweep both take their top-K
+from it, in place of `PassageOptions.TopK`. A turn has one retrieval budget,
+and a knob that covered rows but not notes would only half answer "how much
+does this read".
+
 That cut applies to every pair Recall opens, not only the ones the gloss
 sweep found — it runs downstream of selection and does not know how a pair
 was chosen. And because the cut equals the budget, the picking call has

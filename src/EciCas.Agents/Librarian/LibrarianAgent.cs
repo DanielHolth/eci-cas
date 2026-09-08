@@ -292,12 +292,16 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     private async Task<IReadOnlyList<ArchivePair>> SearchPassageLeadsAsync(
         float[]? query, IReadOnlyList<ArchivePair> index, CancellationToken cancellationToken)
     {
-        if (query is null || _passageOptions.TopK <= 0)
+        // Recall depth, not PassageOptions.TopK: one slider governs every
+        // cosine cut a turn makes, whether the corpus is archive rows or the
+        // persona's own notes.
+        var topK = _knobs.RecallDepth;
+        if (query is null || topK <= 0)
         {
             return [];
         }
 
-        var hits = await _passages.SearchAsync(query, _passageOptions.TopK, _passageOptions.MinScore, cancellationToken).ConfigureAwait(false);
+        var hits = await _passages.SearchAsync(query, topK, _passageOptions.MinScore, cancellationToken).ConfigureAwait(false);
         if (hits.Count == 0)
         {
             return [];
