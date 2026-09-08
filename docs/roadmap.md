@@ -568,10 +568,17 @@ propagates back to the action that started it, because that action finished
 long ago.
 
 Open: whether the tool result arrives tagged `tool` and unified with `device`
-at the perception seam or stays distinct; and whether an unfinished tool is
-state the persona can be asked about (*"what were you checking?"*) or is
-invisible until it lands — the manager holds the in-flight list either way, so
-this is a question about what reaches Intent, not about what is known.
+at the perception seam or stays distinct.
+
+**The manager's own state is reached by a tool like anything else.** *"What
+were you checking?"* is not a context problem to be solved by plumbing the
+in-flight list into Intent's prompt — it is a request that dispatches a
+diagnostics handler, which asks the manager and returns the answer as a
+perception. Nothing about the running system needs to be resident to be
+askable. That is the same trade the `skills.txt` index makes and the reason
+*"tell me about your debug settings"* sits in the list above beside *"check my
+camera"*: introspection is a tool, and the manager is one of the things it can
+be pointed at.
 
 ## Memory architecture — the layers not built
 
