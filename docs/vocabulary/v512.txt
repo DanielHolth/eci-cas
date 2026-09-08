@@ -63,10 +63,21 @@
 # subject" as a number; the boundary is now the post versus the working
 # week. `device` and `digital` are now physical hardware versus data.
 #
-# NOT confirmed: `moment` as a second `other`, the loudest consensus flag.
-# It measured mid-table (H 1.73, 60% from its largest source). It is only
-# weakly acquitted -- the corpus holds almost no narrative rows -- so it
-# stays on the watch list, minus two topics that overlapped `plan`.
+# NOT confirmed, and now CLOSED: `moment` as a second `other`, the loudest
+# consensus flag of round 1. It measured mid-table on bare paths (H 1.73,
+# 60% from its largest source) and after the gloss block it does not reach
+# the eight-row reporting floor at all -- the opposite of a catch-all. What
+# it turned out to have is the other disease, the leisure one: ten
+# narrative sentences reached it 4 of 10, and unlike leisure the glosses
+# did not fix that by themselves. Five rewrites took it to 7 of 10, and
+# the three that remain are genuinely ambiguous rather than misrouted
+# ("the day I walked out of that job" is defensibly workplace/leave).
+#
+# The five rewrites are the same lesson twice over. `moment/photo` lost to
+# `digital/photo` because "the pictures I have stored" describes a memory
+# as well as a library, and `plan/bucket-list` was stealing "I wish I had
+# visited him before he died" on the word "die" alone. A gloss competes
+# with its neighbours, so it has to be written against them.
 #
 # Rejected with reason: weather, news and current-events drawers. The
 # archive stores durable facts about the person, not what passed through

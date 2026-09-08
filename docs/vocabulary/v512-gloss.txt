@@ -247,7 +247,7 @@ digital/service: an online service I use
 digital/subscription: a service I pay for monthly
 digital/app: an application I have installed
 digital/file: a document or folder I keep
-digital/photo: the pictures I have stored
+digital/photo: the photo library on my phone and my computer
 digital/email: my email address and my inbox
 digital/profile: my profile on a site and what is on it
 digital/privacy: what I share and what I keep locked down
@@ -531,7 +531,7 @@ media/quote: a line from it that stayed with me
 media/other: something I read or watched that fits none of the above
 
 moment/milestone: a point in my life that marked a change
-moment/memory: something I remember clearly from years back
+moment/memory: I still remember that summer clearly, years later
 moment/anecdote: the story I tell about that time
 moment/first: the first time I ever did it
 moment/loss: something or someone I lost
@@ -539,12 +539,12 @@ moment/achievement: the thing I am proudest of doing
 moment/regret: what I wish I had done differently
 moment/turning-point: the moment everything went a different way
 moment/story: a longer account of something that happened to me
-moment/photo: a picture from then and what it shows
+moment/photo: an old picture from back then and what it shows
 moment/place: somewhere that means something to me
 moment/year: the year that stands out and what happened in it
 moment/lesson: what that taught me
-moment/era: that whole period of my life
-moment/retelling: how I usually tell it
+moment/era: my twenties, that whole stretch of my life
+moment/retelling: the story I always end up telling people
 moment/other: something from my past that fits none of the above
 
 plan/intention: what I mean to do
@@ -552,7 +552,7 @@ plan/plan-goal: what I am aiming at
 plan/wish: what I would like if it were possible
 plan/idea: a thought I had about doing something
 plan/someday: one day, but not soon
-plan/bucket-list: the thing I want to do before I die
+plan/bucket-list: something I want to do before I get too old
 plan/saving-for: what I am putting money aside towards
 plan/waiting-on: I cannot move until something else happens
 plan/pending: it is in progress and not settled
