@@ -39,12 +39,13 @@ public sealed class CachingEmbeddingProvider(
 
     public string ModelId => inner.ModelId;
 
-    public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, EmbeddingKind kind, CancellationToken cancellationToken)
     {
         if (!Available || texts.Count == 0)
         {
             return [];
         }
+
 
         // Answers are collected here rather than read back out of the cache at
         // the end. Reading back tied correctness to Capacity: nine distinct
@@ -52,6 +53,11 @@ public sealed class CachingEmbeddingProvider(
         // reached them, and the lookup threw. Nothing batches that wide today,
         // so it was a landmine rather than a fire — but a cache is allowed to
         // forget, and a caller is not allowed to notice.
+        // Keyed by kind as well as text: on an asymmetric model the same
+        // string embedded as a query and as a passage are two different
+        // vectors, and a cache keyed on the string alone would hand one out
+        // for the other. The text itself still goes to the provider unchanged
+        // - the prefix is the provider's business, not ours.
         var answers = new Dictionary<string, float[]>(StringComparer.Ordinal);
         List<string> missing;
 
@@ -62,16 +68,17 @@ public sealed class CachingEmbeddingProvider(
             var queued = new HashSet<string>(StringComparer.Ordinal);
             foreach (var text in texts)
             {
-                if (answers.ContainsKey(text))
+                var key = KeyFor(kind, text);
+                if (answers.ContainsKey(key))
                 {
                     continue;
                 }
 
-                if (_cache.TryGetValue(text, out var hit))
+                if (_cache.TryGetValue(key, out var hit))
                 {
-                    answers[text] = hit;
+                    answers[key] = hit;
                 }
-                else if (queued.Add(text))
+                else if (queued.Add(key))
                 {
                     missing.Add(text);
                 }
@@ -93,7 +100,7 @@ public sealed class CachingEmbeddingProvider(
             // ONNX serialises itself anyway. The cost of letting go is that two
             // callers racing on the same text may both compute it: duplicated
             // work, never a wrong answer, and the pair of them then agree.
-            var fresh = await inner.EmbedAsync(missing, cancellationToken).ConfigureAwait(false);
+            var fresh = await inner.EmbedAsync(missing, kind, cancellationToken).ConfigureAwait(false);
 
             // A provider that returns nothing is unavailable mid-flight rather
             // than at startup. Say nothing, cache nothing, and let the caller
@@ -109,8 +116,9 @@ public sealed class CachingEmbeddingProvider(
             {
                 for (var i = 0; i < missing.Count; i++)
                 {
-                    answers[missing[i]] = fresh[i];
-                    Store(missing[i], fresh[i]);
+                    var key = KeyFor(kind, missing[i]);
+                    answers[key] = fresh[i];
+                    Store(key, fresh[i]);
                 }
             }
             finally
@@ -122,8 +130,11 @@ public sealed class CachingEmbeddingProvider(
         // Copied per caller: before this type every EmbedAsync allocated a
         // fresh array, and handing out the cached instance would quietly alias
         // two agents' vectors to one buffer.
-        return [.. texts.Select(t => answers[t].AsSpan().ToArray())];
+        return [.. texts.Select(t => answers[KeyFor(kind, t)].AsSpan().ToArray())];
     }
+
+    /// <summary>A vector's identity here is the text and the role it was embedded in.</summary>
+    private static string KeyFor(EmbeddingKind kind, string text) => $"{(int)kind}\u0000{text}";
 
     private void Store(string text, float[] vector)
     {

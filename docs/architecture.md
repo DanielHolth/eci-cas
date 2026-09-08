@@ -417,12 +417,62 @@ Findings go straight to Governance, never back through Librarian: the two are
 different sources of truth — parametric model knowledge against stored record —
 and neither should become stateful across the other's response.
 
+## Two layers of cosine: the pair, then the row
+
+Both layers narrow; neither decides. The pair layer is still the coarse
+symbolic cut, because a class of question is inference over facts rather than
+similarity to them — "am I old enough to rent a car" names no row it needs.
+Cosine is the fine cut inside a pair.
+
+**The row layer.** `ArchiveRecord` carries a nullable `Embedding` beside the
+`ModelId` that produced it and a hash of the text that was embedded. The
+embedded text is `"{Subtopic} {Subject} {Key} = {Value}"` plus the sentence
+when there is one, and excludes category and topic — the pair layer already
+encodes those. Measured on the writable arms: the address line alone reaches
+88% top-5, the sentence alone 88%, the two together 92%.
+
+Writing is a decorator. `EmbeddingArchiveStore` wraps `IArchiveStore`, so
+Cataloger, Reflection, PersonaName and tool imports all get vectors without any
+of them acquiring an embedder. It embeds only rows that lack a current vector,
+in one batch, and swallows a provider failure — a fact reaching the archive
+matters more than a fact reaching it searchable.
+
+Reading is all-or-nothing per pair. Recall narrows a pair by cosine only when
+*every* row in it has a vector from the current `ModelId` and a hash matching
+its own text; one bare row sends the whole file back to chunk-and-pick.
+Sweeping half a file would rank the embedded half against nothing and lose the
+rest silently. The hash is what makes a restatement self-invalidate: `Merged`
+keeps the address and swaps the value, so an inherited vector would go on
+scoring as Oslo after the row said Bergen.
+
+When every selected pair narrowed, Recall publishes the survivors and skips the
+picking calls entirely — `PickAfterVector` defaults to false because picking is
+the biggest read-side loss measured (batch 12: 78% with `nopick`, 60% with the
+lenient bar). `VectorCandidates` is how many rows survive per pair.
+
+**The pair layer.** `PairVectorIndex` embeds each `category/topic` as
+`"{category} {topic}: {gloss}"`, lazily and in one batch, and drops the table
+when `ModelId` changes. Librarian unions the top `VectorPairs` above
+`VectorMinScore` into its own LLM selection rather than replacing it.
+
+The query is embedded once per turn. Librarian publishes it on the envelope as
+`librarian.query_vector`, and Recall uses that rather than re-deriving it. e5
+asymmetry lives in the providers: `EmbeddingKind.Query`/`Passage` chooses the
+`query: ` / `passage: ` prefix, so the retrieval probe measures what the running
+system does.
+
+**Backfilling.** An archive written before the embedder existed is uncovered,
+not broken, and heals a pair at a time on the next write. `ArchiveTool`'s
+`embed <model.onnx> <vocab.txt>` stamps the lot in place. The paths matter
+exactly: `ModelId` is `onnx:{ModelPath}`, and the same weights under a different
+path produce vectors that are correct and ignored.
+
 ## The passage corpus: what it missed, not what it knows
 
 The archive answers *what is true*. The passage corpus answers *what should I
-have looked up*, and it is the only thing carrying vectors.
+have looked up* — a different substance from either vector layer above.
 
-Nothing in `archive/` is embedded. Reflection reads a batch of concluded turns
+Reflection reads a batch of concluded turns
 and, alongside extracting ideas, writes a 5–15 word note on the context that
 batch missed, in the register of a code review of its own retrieval ("should
 have read the family record before answering"). That note, and only that note,

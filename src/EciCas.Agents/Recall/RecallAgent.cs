@@ -42,11 +42,12 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly RecallOptions _options;
     private readonly RuntimeKnobs _knobs;
+    private readonly IEmbeddingProvider _embeddings;
     private readonly ILogger _logger;
 
     public RecallAgent(IMessageBus bus, BusActivityTracker activity, ILogger<RecallAgent> logger, IArchiveStore store,
         ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<RecallOptions> options,
-        IInstructionStore instructions, RuntimeKnobs knobs)
+        IInstructionStore instructions, RuntimeKnobs knobs, IEmbeddingProvider embeddings)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -56,6 +57,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
         _knobs = knobs;
+        _embeddings = embeddings;
         _logger = logger;
     }
 
@@ -93,7 +95,14 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
         // Phase one: read every selected pair at once. Distinct pairs are
         // distinct files, so these don't contend with each other.
-        var loaded = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
+        var read = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
+
+        // The cosine cut, before anything is chunked. This is where the row
+        // vectors earn their disk: a pair every row of which carries a
+        // current vector is narrowed to the handful nearest the question, and
+        // what reaches the workers below is already the right end of the
+        // file rather than the first RowsPerWorker of it in importance order.
+        var (loaded, narrowedAll) = await NarrowAsync(envelope, read, text, cancellationToken).ConfigureAwait(false);
 
         // When every loaded row would fit in a single worker's pick budget,
         // the picking call can only return a subset of what passing them all
@@ -116,6 +125,21 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             _logger.LogDebug("{Agent} read {Rows} row(s) from {Pairs}: {Loaded}",
                 Name, loaded.Sum(rows => rows.Count), pairs.Count,
                 string.Join(" | ", loaded.SelectMany(rows => rows).Select(Describe)));
+        }
+
+        // Ranking is not picking, and on the measured arms it is the better
+        // of the two: given the right file, cosine puts the fact in the top
+        // five 97% of the time, while the picking call's own filtering was
+        // the single biggest read-side loss (batch 12, nopick 78% against a
+        // lenient bar of 60%). So when every selected pair was narrowed by
+        // vector, the default is to hand those rows straight to Intent and
+        // spend no picking call at all. PickAfterVector: true restores the
+        // old shape for a tier that would rather pay for the second opinion.
+        if (narrowedAll && !_options.PickAfterVector && loaded.Length > 0)
+        {
+            _logger.LogInformation("{Agent} vector-narrowed every pair; skipping the picking calls", Name);
+            Publish(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent.Take(_knobs.RecallDepth))), degraded: null);
+            return;
         }
 
         var total = loaded.Sum(rows => rows.Count) + recent.Count;
@@ -149,6 +173,99 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // wall-clock caveat to not be misread as a sum, and the per-call
         // lines carry the same numbers without needing one.
         Publish(envelope, picked, degraded);
+    }
+
+    /// <summary>
+    /// Narrows each loaded pair to the rows nearest this turn, and says
+    /// whether every pair could be narrowed that way.
+    ///
+    /// The rule is all-or-nothing per pair, and deliberately: a file where
+    /// half the rows carry a vector would be swept half-blind, and the half
+    /// with no vector would lose every time regardless of what it says. So a
+    /// pair narrows only when every row in it carries a vector from the
+    /// current model over text that still matches what the row says - and
+    /// otherwise passes through whole to the chunk-and-pick path, which is
+    /// what this system did before vectors existed and still works.
+    ///
+    /// That makes an archive written before the embedder arrived, or written
+    /// while it was down, simply slower rather than wrong. Backfilling is
+    /// what turns those pairs on.
+    /// </summary>
+    private async Task<(IReadOnlyList<ArchiveRecord>[] Loaded, bool NarrowedAll)> NarrowAsync(
+        Envelope envelope, IReadOnlyList<ArchiveRecord>[] loaded, string text, CancellationToken cancellationToken)
+    {
+        if (loaded.Length == 0 || _options.VectorCandidates <= 0 || !_embeddings.Available)
+        {
+            return (loaded, false);
+        }
+
+        var query = await QueryVectorAsync(envelope, text, cancellationToken).ConfigureAwait(false);
+        if (query is null)
+        {
+            return (loaded, false);
+        }
+
+        var modelId = _embeddings.ModelId;
+        var narrowed = new IReadOnlyList<ArchiveRecord>[loaded.Length];
+        var all = true;
+
+        for (var i = 0; i < loaded.Length; i++)
+        {
+            var rows = loaded[i];
+            if (rows.Count == 0 || !rows.All(r => r.HasVector(modelId)))
+            {
+                narrowed[i] = rows;
+                all = all && rows.Count == 0;
+                continue;
+            }
+
+            narrowed[i] =
+            [
+                .. rows
+                    .Select(r => (Row: r, Score: VectorMath.Cosine(query, r.Embedding!)))
+                    .OrderByDescending(x => x.Score)
+                    .Take(_options.VectorCandidates)
+                    .Select(x => x.Row),
+            ];
+
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("{Agent} narrowed {Category}/{Topic} from {Before} to {After} row(s) by cosine",
+                    Name, rows[0].Category, rows[0].Topic, rows.Count, narrowed[i].Count);
+            }
+        }
+
+        return (narrowed, all);
+    }
+
+    /// <summary>
+    /// Librarian's vector when it published one, and this turn's own embed
+    /// when it did not - a deterministic Librarian, or one whose embed
+    /// failed, must not cost Recall its ranking. Null means no ranking, which
+    /// every caller above treats as the ordinary pre-vector path.
+    /// </summary>
+    private async Task<float[]?> QueryVectorAsync(Envelope envelope, string text, CancellationToken cancellationToken)
+    {
+        if (envelope.Meta.Get<float[]>(LibrarianAgent.QueryVectorKey) is { Length: > 0 } published)
+        {
+            return published;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        try
+        {
+            var vectors = await _embeddings.EmbedAsync([text], EmbeddingKind.Query, cancellationToken).ConfigureAwait(false);
+            return vectors.Count == 0 ? null : vectors[0];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "{Agent} could not embed the turn; reading without vector ranking", Name);
+            return null;
+        }
     }
 
     /// <summary>

@@ -41,7 +41,7 @@ if (args_ is null)
                dotnet run --project tools/EciCas.RetrievalProbe -- \
             --archive <dir> --questions <file.json> \
             --model <model.onnx> --vocab <vocab.txt> \
-            [--glosses <file.json>] [--query-prefix "query: "] [--passage-prefix "passage: "]
+            [--glosses <file.json>]
 
         questions.json: [ { "ask": "what is my son called?", "expect": "person/family/son/marcus holth/name" } ]
         glosses.json:   { "person/family/son/marcus holth/name": "what my son is called, his first name" }
@@ -117,8 +117,11 @@ if (glosses.Count > 0)
 }
 
 var addresses = rows.Select(Address).ToList();
+// The e5 prefixes used to be flags here. They belong to the provider now,
+// which applies them from the weights path, so the probe measures the same
+// prefixing the running system does rather than a hand-typed approximation.
 var queryVectors = await embeddings.EmbedAsync(
-    [.. questions.Select(q => args_.QueryPrefix + q.Ask)], CancellationToken.None);
+    [.. questions.Select(q => q.Ask)], EmbeddingKind.Query, CancellationToken.None);
 
 var results = new List<(string Name, Summary Summary, List<string> Misses)>();
 
@@ -129,7 +132,7 @@ foreach (var (name, render) in representations)
         .ToList();
 
     var docVectors = await embeddings.EmbedAsync(
-        [.. kept.Select(x => args_.PassagePrefix + x.Text!)], CancellationToken.None);
+        [.. kept.Select(x => x.Text!)], EmbeddingKind.Passage, CancellationToken.None);
 
     var ranks = new List<int>();
     var misses = new List<string>();
@@ -179,9 +182,7 @@ internal sealed record Args(
     string QuestionsPath,
     string ModelPath,
     string VocabPath,
-    string? GlossesPath,
-    string QueryPrefix,
-    string PassagePrefix)
+    string? GlossesPath)
 {
     public static Args? Parse(string[] argv)
     {
@@ -204,8 +205,6 @@ internal sealed record Args(
             System.IO.Path.GetFullPath(questions),
             System.IO.Path.GetFullPath(model),
             System.IO.Path.GetFullPath(vocab),
-            map.TryGetValue("glosses", out var g) ? System.IO.Path.GetFullPath(g) : null,
-            map.GetValueOrDefault("query-prefix", ""),
-            map.GetValueOrDefault("passage-prefix", ""));
+            map.TryGetValue("glosses", out var g) ? System.IO.Path.GetFullPath(g) : null);
     }
 }

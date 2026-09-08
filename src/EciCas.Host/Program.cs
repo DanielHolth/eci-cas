@@ -259,7 +259,13 @@ if (seedNeeded)
 // files still hold.
 await archiveStore.TrimRecentAsync(CancellationToken.None);
 
-builder.Services.AddSingleton<IArchiveStore>(archiveStore);
+// Wrapped, not replaced: the parquet store still owns the files, and the
+// decorator only stamps a vector on rows on their way into it. Registered as
+// a factory so it picks up whichever embedder the tier configured - on the
+// offline tier that is the null provider, the wrapper writes straight
+// through, and rows land exactly as they did before vectors existed.
+builder.Services.AddSingleton<IArchiveStore>(sp =>
+    new EmbeddingArchiveStore(archiveStore, sp.GetRequiredService<IEmbeddingProvider>()));
 
 // Built above, because the persona seed reads from it. Registered here so
 // every agent gets the same loaded instance.

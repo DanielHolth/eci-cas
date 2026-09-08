@@ -13,7 +13,7 @@ public class CachingEmbeddingProviderTests
         public bool Available => available;
         public string ModelId => "onnx:test";
 
-        public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, EmbeddingKind kind, CancellationToken cancellationToken)
         {
             Calls++;
             TextsEmbedded += texts.Count;
@@ -35,8 +35,8 @@ public class CachingEmbeddingProviderTests
         var inner = new CountingProvider();
         var provider = Wrap(inner);
 
-        var first = await provider.EmbedAsync(["what did we say about the trip"], CancellationToken.None);
-        var second = await provider.EmbedAsync(["what did we say about the trip"], CancellationToken.None);
+        var first = await provider.EmbedAsync(["what did we say about the trip"], EmbeddingKind.Passage, CancellationToken.None);
+        var second = await provider.EmbedAsync(["what did we say about the trip"], EmbeddingKind.Passage, CancellationToken.None);
 
         Assert.Equal(1, inner.Calls);
         Assert.Equal(first[0], second[0]);
@@ -51,13 +51,13 @@ public class CachingEmbeddingProviderTests
     {
         var provider = Wrap(new CountingProvider());
 
-        var first = await provider.EmbedAsync(["a turn"], CancellationToken.None);
-        var second = await provider.EmbedAsync(["a turn"], CancellationToken.None);
+        var first = await provider.EmbedAsync(["a turn"], EmbeddingKind.Passage, CancellationToken.None);
+        var second = await provider.EmbedAsync(["a turn"], EmbeddingKind.Passage, CancellationToken.None);
 
         Assert.NotSame(first[0], second[0]);
 
         first[0][0] = 99f;
-        var third = await provider.EmbedAsync(["a turn"], CancellationToken.None);
+        var third = await provider.EmbedAsync(["a turn"], EmbeddingKind.Passage, CancellationToken.None);
         Assert.NotEqual(99f, third[0][0]);
     }
 
@@ -67,8 +67,8 @@ public class CachingEmbeddingProviderTests
         var inner = new CountingProvider();
         var provider = Wrap(inner);
 
-        await provider.EmbedAsync(["one", "two"], CancellationToken.None);
-        await provider.EmbedAsync(["two", "three"], CancellationToken.None);
+        await provider.EmbedAsync(["one", "two"], EmbeddingKind.Passage, CancellationToken.None);
+        await provider.EmbedAsync(["two", "three"], EmbeddingKind.Passage, CancellationToken.None);
 
         Assert.Equal(3, inner.TextsEmbedded);
     }
@@ -84,7 +84,7 @@ public class CachingEmbeddingProviderTests
         var provider = Wrap(inner);
 
         Assert.False(provider.Available);
-        Assert.Empty(await provider.EmbedAsync(["a turn"], CancellationToken.None));
+        Assert.Empty(await provider.EmbedAsync(["a turn"], EmbeddingKind.Passage, CancellationToken.None));
         Assert.Equal(0, inner.Calls);
     }
 
@@ -111,7 +111,7 @@ public class CachingEmbeddingProviderTests
         var provider = Wrap(inner);
         var texts = Enumerable.Range(0, 40).Select(i => new string('x', i + 1)).ToList();
 
-        var vectors = await provider.EmbedAsync(texts, CancellationToken.None);
+        var vectors = await provider.EmbedAsync(texts, EmbeddingKind.Passage, CancellationToken.None);
 
         Assert.Equal(texts.Count, vectors.Count);
         for (var i = 0; i < texts.Count; i++)
@@ -127,11 +127,34 @@ public class CachingEmbeddingProviderTests
         var inner = new CountingProvider();
         var provider = Wrap(inner);
 
-        var vectors = await provider.EmbedAsync(["ab", "abc", "ab"], CancellationToken.None);
+        var vectors = await provider.EmbedAsync(["ab", "abc", "ab"], EmbeddingKind.Passage, CancellationToken.None);
 
         Assert.Equal(2, inner.TextsEmbedded);
         Assert.Equal(3, vectors.Count);
         Assert.Equal(vectors[0], vectors[2]);
         Assert.NotSame(vectors[0], vectors[2]);
+    }
+
+    /// <summary>
+    /// The kind is part of a vector identity, not a rendering option. On the
+    /// shipped e5 the same sentence embedded as a question and as stored
+    /// material are two different vectors, and a cache keyed on the string
+    /// alone would hand one out for the other - silently, and only on the
+    /// second caller, which is the worst shape a bug like that can have.
+    /// </summary>
+    [Fact]
+    public async Task TheSameTextAsQueryAndAsPassage_AreTwoEntries()
+    {
+        var inner = new CountingProvider();
+        var provider = Wrap(inner);
+
+        await provider.EmbedAsync(["a turn"], EmbeddingKind.Passage, CancellationToken.None);
+        await provider.EmbedAsync(["a turn"], EmbeddingKind.Query, CancellationToken.None);
+
+        Assert.Equal(2, inner.Calls);
+
+        // And each is then cached in its own right.
+        await provider.EmbedAsync(["a turn"], EmbeddingKind.Query, CancellationToken.None);
+        Assert.Equal(2, inner.Calls);
     }
 }

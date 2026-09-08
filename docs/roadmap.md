@@ -172,6 +172,16 @@ coarse symbolic cut, cosine as the fine cut inside it, and `nopick` over
 what survives -- the winning arm, at a candidate-set size that is constant
 rather than linear in the archive.
 
+**Shipped.** All five constraints below are implemented and tested; see
+"Two layers of cosine" in [architecture.md](architecture.md). Row vectors are
+stamped by an `EmbeddingArchiveStore` decorator so every writer gets them;
+Recall narrows a pair only when the pair is fully covered, and skips picking
+when every pair narrowed (`PickAfterVector` false, `VectorCandidates` per
+tier); Librarian unions cosine-matched pairs into its LLM selection
+(`VectorPairs`, `VectorMinScore`) and publishes the query vector for Recall to
+reuse. `ArchiveTool embed` backfills an existing archive. What is still
+unmeasured is the last constraint: fatness.
+
 Five constraints on building it, each from a failure already in this log.
 
 **Never sweep a partial file** -- a pair narrows by cosine only if every row
@@ -477,6 +487,18 @@ Open beyond that: one agent with a tool registry or one per protocol; which
 integration surface (Matter, Home Assistant, MQTT, vendor APIs); and how a
 tool call is represented on the bus without giving Intent a second output
 vocabulary. Wants its own design pass before code.
+
+**IoT is one instance of a general shape, not the shape itself.** Any
+lookup Intent shouldn't carry in context every turn — technical docs about
+the system, later whatever else — fits the same seam: a dedicated agent
+answers async, off the bus, tagged `self`/`tool` rather than `device`, and
+comes back in as an ordinary `perception.text` like the toolbox's device
+replies do. A minimal `skills.txt` index (not the rows themselves) is the
+only thing that needs to live in context, the same trade Recall already
+makes at file-name granularity. Not started; parked behind the toolbox
+design pass since the hazards are the same ones — provenance on the
+returned fact, and Archivist deciding whether a skill's answer is worth
+writing down at all.
 
 ## Memory architecture — the layers not built
 

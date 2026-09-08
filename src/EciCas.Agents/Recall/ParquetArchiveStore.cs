@@ -100,6 +100,24 @@ public sealed class ParquetArchiveStore : IArchiveStore
         // Parquet.Net 6.1.0 rather than assumed: an old file reads back with
         // this null, and a new file still reads under the old schema.
         public string? Sentence { get; set; }
+
+        // The row vector, base64 over the raw float bytes. A scalar string
+        // column rather than a list of floats: nothing here filters or
+        // projects on a single dimension, and a flat schema is what keeps
+        // ParquetSerializer's POCO path working - the same reason the rest of
+        // this class is scalars. Nullable for the same reason Sentence is,
+        // and for a stronger one: an unembedded row and a row embedded to
+        // nothing have to stay distinguishable, because the rule that decides
+        // whether a pair may be swept by cosine is "every row carries one".
+        public string? Embedding { get; set; }
+
+        // Which embedder made it, and a hash of the text it was made from.
+        // Both are checked before the vector is used: a vector from another
+        // model, or one made from words the row no longer says, scores
+        // confidently and means nothing.
+        public string? EmbeddingModel { get; set; }
+
+        public string? EmbeddingHash { get; set; }
     }
 
     /// <summary>Pairs are addresses, and addresses are case-insensitive — as are the file names that carry them.</summary>
@@ -570,7 +588,9 @@ public sealed class ParquetArchiveStore : IArchiveStore
         var result = await ParquetSerializer.DeserializeAsync<RecordRow>(path, cancellationToken: cancellationToken).ConfigureAwait(false);
         return [.. result.Data.Select(r => new ArchiveRecord(
             r.Category, r.Topic, r.Subtopic, r.Subject, r.Key, r.Value,
-            DateTimeOffset.Parse(r.Timestamp, CultureInfo.InvariantCulture), r.Domain, r.Importance, r.Sentence ?? ""))];
+            DateTimeOffset.Parse(r.Timestamp, CultureInfo.InvariantCulture), r.Domain, r.Importance, r.Sentence ?? "",
+            string.IsNullOrEmpty(r.Embedding) ? null : VectorMath.Decode(r.Embedding),
+            r.EmbeddingModel ?? "", r.EmbeddingHash ?? ""))];
     }
 
     public static async Task WriteRecordsAsync(string path, List<ArchiveRecord> records, CancellationToken cancellationToken)
@@ -587,6 +607,9 @@ public sealed class ParquetArchiveStore : IArchiveStore
             Domain = r.Domain,
             Importance = r.Importance,
             Sentence = r.Sentence,
+            Embedding = r.Embedding is { Length: > 0 } v ? VectorMath.Encode(v) : null,
+            EmbeddingModel = r.EmbeddingModelId.Length == 0 ? null : r.EmbeddingModelId,
+            EmbeddingHash = r.EmbeddingHash.Length == 0 ? null : r.EmbeddingHash,
         });
         // Through a temp file, for the reason JsonlAgentStateStore already
         // gives about the persona's state: a crash, a full disk or a killed

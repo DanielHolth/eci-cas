@@ -14,6 +14,6 @@ public sealed class NullEmbeddingProvider : IEmbeddingProvider
 
     public string ModelId => string.Empty;
 
-    public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, EmbeddingKind kind, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<float[]>>([]);
 }

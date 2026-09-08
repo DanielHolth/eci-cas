@@ -58,23 +58,37 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
     /// file happens to be called.</summary>
     public string ModelId => Available ? $"onnx:{_options.ModelPath}" : string.Empty;
 
-    public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, EmbeddingKind kind, CancellationToken cancellationToken)
     {
         if (!Available || texts.Count == 0)
         {
             return [];
         }
 
+        var prefix = PrefixFor(kind);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return [.. texts.Select(Embed)];
+            return [.. texts.Select(t => Embed(prefix + t))];
         }
         finally
         {
             _lock.Release();
         }
     }
+
+    /// <summary>
+    /// The e5 family was trained with "query: " and "passage: " on the front
+    /// and loses several points without them: the two roles occupy different
+    /// regions of its space by design, so a question embedded as a passage is
+    /// being compared across that gap. Detected from the weights path rather
+    /// than configured, and a no-op for every model that wants no prefix -
+    /// which keeps the call identical for every caller whatever is installed.
+    /// </summary>
+    private string PrefixFor(EmbeddingKind kind) =>
+        _options.ModelPath.Contains("e5", StringComparison.OrdinalIgnoreCase)
+            ? kind == EmbeddingKind.Query ? "query: " : "passage: "
+            : string.Empty;
 
     private float[] Embed(string text)
     {

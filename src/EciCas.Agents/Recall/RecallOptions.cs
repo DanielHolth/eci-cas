@@ -47,4 +47,28 @@ public sealed class RecallOptions
     /// </summary>
     public int RecentRows { get; set; } = 30;
 
+    /// <summary>
+    /// How many rows survive the cosine cut inside one pair. Sized at five
+    /// because that is where it was measured: given the right file, the fact
+    /// is in the vector top five 97% of the time, and a sixth row buys
+    /// almost nothing while costing prompt room. Zero turns the row-vector
+    /// layer off and restores the pre-vector read path exactly.
+    ///
+    /// This is not RowsPerWorker's replacement - a pair that cannot be
+    /// narrowed still chunks by that. It is what makes the chunking
+    /// unnecessary when it applies.
+    /// </summary>
+    public int VectorCandidates { get; set; } = 5;
+
+    /// <summary>
+    /// Whether vector-narrowed rows still go through a picking call.
+    ///
+    /// False, because it was measured: the picking stage was the biggest
+    /// single read-side loss in the bench (batch 12 - not picking scored 78%
+    /// against a lenient picking bar of 60%), and rows that cosine already
+    /// ranked are exactly the rows it was most likely to throw away. A tier
+    /// with a strong picking model and a reason to trust it can set this
+    /// true; the calls it costs are real.
+    /// </summary>
+    public bool PickAfterVector { get; set; }
 }

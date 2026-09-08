@@ -56,7 +56,7 @@ thing score high, which is not the question-to-fact case. E5 and BGE are
 trained for it and expect prefixes:
 
 ```
---query-prefix "query: " --passage-prefix "passage: "
+
 ```
 
 Worth a second run before concluding anything about vectors in general: a

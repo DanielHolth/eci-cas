@@ -28,7 +28,39 @@ public interface IEmbeddingProvider
     /// </summary>
     string ModelId { get; }
 
-    Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken);
+    /// <summary>
+    /// Embeds as stored material. Kept so every existing caller reads the
+    /// same, and because it is the right default: most of what this system
+    /// embeds is a thing being filed, not a thing being asked.
+    /// </summary>
+    Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
+        => EmbedAsync(texts, EmbeddingKind.Passage, cancellationToken);
+
+    /// <summary>
+    /// Embeds as a question or as stored material, which are not the same
+    /// operation for an asymmetric model. The shipped embedder is
+    /// multilingual-e5, trained with "query: " and "passage: " prefixes and
+    /// measurably worse without them, because the two roles occupy different
+    /// regions of its space by design.
+    ///
+    /// A model that wants no prefix ignores the argument, so a caller never
+    /// has to know which kind of embedder is configured - it says what it
+    /// has, and the provider decides whether that matters.
+    /// </summary>
+    Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, EmbeddingKind kind, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// What a text is being embedded as. Not a formatting hint - for an
+/// asymmetric model these are two different encoders sharing weights.
+/// </summary>
+public enum EmbeddingKind
+{
+    /// <summary>Stored material: an archive row, a pair's gloss, a written note.</summary>
+    Passage,
+
+    /// <summary>What someone asked, this turn.</summary>
+    Query,
 }
 
 /// <summary>
@@ -172,6 +204,27 @@ public sealed record PassageHit(Passage Passage, double Score);
 
 public static class VectorMath
 {
+    /// <summary>
+    /// A vector as a base64 blob, which is how both parquet stores carry
+    /// one. A fixed-width scalar column rather than a list column: nothing
+    /// filters or projects on a single dimension, and a flat row schema is
+    /// what keeps ParquetSerializer's POCO path working unchanged.
+    /// </summary>
+    public static string Encode(float[] vector)
+    {
+        var bytes = new byte[vector.Length * sizeof(float)];
+        Buffer.BlockCopy(vector, 0, bytes, 0, bytes.Length);
+        return Convert.ToBase64String(bytes);
+    }
+
+    public static float[] Decode(string base64)
+    {
+        var bytes = Convert.FromBase64String(base64);
+        var vector = new float[bytes.Length / sizeof(float)];
+        Buffer.BlockCopy(bytes, 0, vector, 0, bytes.Length);
+        return vector;
+    }
+
     /// <summary>
     /// Plain dot product: every vector this system stores is L2-normalized at
     /// write time, so the denominator is 1 and computing it every query is

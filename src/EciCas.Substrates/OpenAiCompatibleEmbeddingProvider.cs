@@ -35,11 +35,20 @@ public sealed class OpenAiCompatibleEmbeddingProvider : IEmbeddingProvider
 
     public string ModelId => $"openai:{_options.ApiModel}";
 
-    public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, EmbeddingKind kind, CancellationToken cancellationToken)
     {
         if (texts.Count == 0)
         {
             return [];
+        }
+
+        // An endpoint serving an e5 model wants the same prefixes a local one
+        // does - the asymmetry is the model's, not the transport's. Every
+        // other model ignores it, so this is keyed off the model name.
+        if (_options.ApiModel.Contains("e5", StringComparison.OrdinalIgnoreCase))
+        {
+            var prefix = kind == EmbeddingKind.Query ? "query: " : "passage: ";
+            texts = [.. texts.Select(t => prefix + t)];
         }
 
         try

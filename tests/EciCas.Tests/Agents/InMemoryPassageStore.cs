@@ -43,6 +43,6 @@ internal sealed class StubEmbeddings(Func<string, float[]>? embed = null, string
 
     public string ModelId => Available ? modelId : string.Empty;
 
-    public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<float[]>> EmbedAsync(IReadOnlyList<string> texts, EmbeddingKind kind, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<float[]>>(embed is null ? [] : [.. texts.Select(embed)]);
 }

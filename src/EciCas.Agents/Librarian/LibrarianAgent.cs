@@ -42,6 +42,14 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// <summary>Selected pairs, carried on the events.selected-pairs envelope's Meta.</summary>
     public const string SelectedPairsKey = "librarian.selected_pairs";
 
+    /// <summary>
+    /// This turn's question as a vector, carried to Recall so it can rank the
+    /// rows inside a pair without embedding the same sentence a second time.
+    /// Absent whenever the embedder is unavailable, which Recall treats as
+    /// "no ranking" rather than as an error.
+    /// </summary>
+    public const string QueryVectorKey = "librarian.query_vector";
+
     private readonly IMessageBus _bus;
     private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
@@ -57,6 +65,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// </summary>
     private readonly Lazy<TopicGloss?> _gloss;
     private readonly IEmbeddingProvider _embeddings;
+    private readonly PairVectorIndex _pairVectors;
     private readonly IPassageStore _passages;
     private readonly PassageOptions _passageOptions;
     private readonly ILogger _logger;
@@ -85,6 +94,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         _agentSubstrates = agentSubstrates.Value;
         _options = options.Value;
         _embeddings = embeddings;
+        _pairVectors = new PairVectorIndex(embeddings);
         _passages = passages;
         _passageOptions = passageOptions.Value;
         _logger = logger;
@@ -111,7 +121,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     protected override void Publish(Envelope envelope, string prompt, IReadOnlyList<ArchivePair> result, SubstrateResult? diagnostics, string? degraded) =>
         Publish(envelope, result, degraded);
 
-    private void Publish(Envelope envelope, IReadOnlyList<ArchivePair> result, string? degraded)
+    private void Publish(Envelope envelope, IReadOnlyList<ArchivePair> result, string? degraded, float[]? queryVector = null)
     {
         // Always published, even empty on fallback/no-index/no-signal text —
         // Recall's roster slot in Governance's bundle needs a reply every
@@ -125,6 +135,16 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // a question about the human's own name.
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var meta = SubstrateHealth.Mark(MetaBag.Empty.With(SelectedPairsKey, result).With(PerceptionAgent.TextKey, text), degraded);
+
+        // The query vector rides along for the same reason the text does, and
+        // for one more: Recall would otherwise embed the identical sentence
+        // again on the same turn. The caching provider would make that cheap
+        // rather than free, and a second embed is a second chance for the two
+        // halves of one turn to disagree about what was asked.
+        if (queryVector is { Length: > 0 })
+        {
+            meta = meta.With(QueryVectorKey, queryVector);
+        }
 
         // The profile rides along for the same reason: it decides which
         // archive tier Recall reads, and Derive would otherwise drop it.
@@ -172,7 +192,30 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // Whatever it finds is merged into the selection below rather than
         // replacing it — a passage says "last time this came up I should have
         // read X", which is a lead, not a verdict on everything else.
-        var remembered = await SearchPassageLeadsAsync(text, index, cancellationToken).ConfigureAwait(false);
+        // Embedded once, as a question rather than as stored material: on the
+        // shipped e5 the two roles are different encoders, and everything this
+        // vector is compared against - passages, pair glosses, archive rows -
+        // was embedded as a passage.
+        var queryVector = await EmbedQueryAsync(text, cancellationToken).ConfigureAwait(false);
+
+        var remembered = await SearchPassageLeadsAsync(queryVector, index, cancellationToken).ConfigureAwait(false);
+
+        // The pair layer's own vector cut, merged in beside the passage leads
+        // and ahead of neither: a gloss match says this shelf is about what
+        // was asked, which is a lead of exactly the same standing.
+        if (queryVector is not null)
+        {
+            var near = await _pairVectors
+                .NearestAsync(queryVector, Shown(index), _gloss.Value, _options.VectorPairs, _options.VectorMinScore, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (near.Count > 0)
+            {
+                _logger.LogInformation("{Agent} vector leads: {Pairs}", Name,
+                    string.Join(", ", near.Select(p => $"{p.Category}/{p.Topic}")));
+                remembered = Merge(remembered, near);
+            }
+        }
 
         // An empty archive and a deliberately deterministic agent reach the
         // same place — nothing to select — and neither is a degradation. The
@@ -180,7 +223,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         // there is no reason a deterministic Librarian should lose them.
         if (index.Count == 0 || !entry.UseSubstrate)
         {
-            Publish(envelope, remembered, degraded: null);
+            Publish(envelope, remembered, degraded: null, queryVector);
             return;
         }
 
@@ -191,7 +234,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             // An archive holding nothing but "other" pairs has nothing to
             // offer a selector, and an empty options list makes the prompt a
             // question with no answers.
-            Publish(envelope, remembered, degraded: null);
+            Publish(envelope, remembered, degraded: null, queryVector);
             return;
         }
 
@@ -206,7 +249,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
                 Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             _logger.LogDebug("{Agent} selection response <<<\n{Response}", Name, result.Text);
             SubstrateTrace.Publish(_bus, envelope, Name, entry.Class, result);
-            Publish(envelope, Merge(WithOverflow(ParsePairs(result.Text, shown), index), remembered), degraded: null);
+            Publish(envelope, Merge(WithOverflow(ParsePairs(result.Text, shown), index), remembered), degraded: null, queryVector);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -219,7 +262,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             // Open posture, and the passages are exactly what makes it worth
             // something: a selection call that failed still leaves the turn
             // with whatever the persona previously learned to look up here.
-            Publish(envelope, remembered, cause);
+            Publish(envelope, remembered, cause, queryVector);
         }
     }
 
@@ -244,20 +287,14 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// without a shortcut it may never have had.
     /// </summary>
     private async Task<IReadOnlyList<ArchivePair>> SearchPassageLeadsAsync(
-        string? text, IReadOnlyList<ArchivePair> index, CancellationToken cancellationToken)
+        float[]? query, IReadOnlyList<ArchivePair> index, CancellationToken cancellationToken)
     {
-        if (!_embeddings.Available || string.IsNullOrWhiteSpace(text) || _passageOptions.TopK <= 0)
+        if (query is null || _passageOptions.TopK <= 0)
         {
             return [];
         }
 
-        var query = await _embeddings.EmbedAsync([text], cancellationToken).ConfigureAwait(false);
-        if (query.Count == 0)
-        {
-            return [];
-        }
-
-        var hits = await _passages.SearchAsync(query[0], _passageOptions.TopK, _passageOptions.MinScore, cancellationToken).ConfigureAwait(false);
+        var hits = await _passages.SearchAsync(query, _passageOptions.TopK, _passageOptions.MinScore, cancellationToken).ConfigureAwait(false);
         if (hits.Count == 0)
         {
             return [];
@@ -289,6 +326,31 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         return pairs;
     }
 
+
+    /// <summary>
+    /// This turn as a vector, or null when there is nothing to embed or
+    /// nothing to embed with. Null is a normal answer, not a failure: the
+    /// offline tier has no embedder at all and every caller below is written
+    /// to carry on without one.
+    /// </summary>
+    private async Task<float[]?> EmbedQueryAsync(string? text, CancellationToken cancellationToken)
+    {
+        if (!_embeddings.Available || string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        try
+        {
+            var vectors = await _embeddings.EmbedAsync([text], EmbeddingKind.Query, cancellationToken).ConfigureAwait(false);
+            return vectors.Count == 0 ? null : vectors[0];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "{Agent} could not embed the turn; continuing without vector leads", Name);
+            return null;
+        }
+    }
 
     /// <summary>Selection first, passage leads after, no duplicates — the LLM saw the whole index, a passage saw one past turn.</summary>
     private static IReadOnlyList<ArchivePair> Merge(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> remembered) =>

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using EciCas.Agents.Recall;
 using EciCas.Core;
 using Parquet.Serialization;
@@ -407,5 +407,54 @@ public class ParquetArchiveStoreTests : IDisposable
 
         Assert.Equal(["oslo", "0.1"], (await store.RecentAsync("ada", 10, CancellationToken.None)).Select(r => r.Value));
         Assert.Equal(["0.1"], (await store.RecentAsync(null, 10, CancellationToken.None)).Select(r => r.Value));
+    }
+
+    /// <summary>
+    /// A vector survives the file. Stored as base64 over the raw float bytes
+    /// in a scalar column, so this is checking the codec as much as the
+    /// schema - a vector that came back rounded or reordered would rank
+    /// plausibly and wrongly rather than failing.
+    /// </summary>
+    [Fact]
+    public async Task AVector_SurvivesTheRoundTrip()
+    {
+        var store = new ParquetArchiveStore(_directory, null);
+        var row = new ArchiveRecord("person", "family", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)
+        {
+            Embedding = [0.5f, -0.25f, 0.125f],
+            EmbeddingModelId = "onnx:test",
+            EmbeddingHash = "abc123",
+        };
+
+        await store.WriteAsync([row], null, CancellationToken.None);
+
+        var reread = await ParquetArchiveStore.ReadRecordsAsync(
+            ParquetArchiveStore.PairPathFor(_directory, new ArchivePair("person", "family")), CancellationToken.None);
+
+        var back = Assert.Single(reread);
+        Assert.Equal([0.5f, -0.25f, 0.125f], back.Embedding!);
+        Assert.Equal("onnx:test", back.EmbeddingModelId);
+        Assert.Equal("abc123", back.EmbeddingHash);
+    }
+
+    /// <summary>
+    /// An unembedded row reads back as null rather than as an empty vector.
+    /// The whole coverage rule keys off that difference: a row embedded to
+    /// nothing would make its pair look sweepable and rank against noise.
+    /// </summary>
+    [Fact]
+    public async Task AnUnembeddedRow_ReadsBackAsNoVector_NotAnEmptyOne()
+    {
+        var store = new ParquetArchiveStore(_directory, null);
+        await store.WriteAsync(
+            [new ArchiveRecord("person", "family", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)],
+            null, CancellationToken.None);
+
+        var reread = await ParquetArchiveStore.ReadRecordsAsync(
+            ParquetArchiveStore.PairPathFor(_directory, new ArchivePair("person", "family")), CancellationToken.None);
+
+        var back = Assert.Single(reread);
+        Assert.Null(back.Embedding);
+        Assert.False(back.HasVector("onnx:test"));
     }
 }

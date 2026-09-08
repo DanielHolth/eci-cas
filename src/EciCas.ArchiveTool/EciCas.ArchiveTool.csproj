@@ -3,6 +3,11 @@
   <ItemGroup>
     <ProjectReference Include="..\EciCas.Core\EciCas.Core.csproj" />
     <ProjectReference Include="..\EciCas.Agents\EciCas.Agents.csproj" />
+
+    <!-- For the embed command only: the backfill needs the same ONNX
+         provider the host runs, because a vector is only usable by the model
+         that made it. -->
+    <ProjectReference Include="..\EciCas.Substrates\EciCas.Substrates.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
