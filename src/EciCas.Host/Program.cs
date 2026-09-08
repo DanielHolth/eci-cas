@@ -20,6 +20,7 @@ using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Host;
 using EciCas.Host.TurnLog;
+using EciCas.Host.Telemetry;
 using EciCas.Substrates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -78,6 +79,7 @@ builder.Services.Configure<PassageOptions>(builder.Configuration.GetSection("Pas
 builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("Embedding"));
 builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
 builder.Services.Configure<TurnLogOptions>(builder.Configuration.GetSection("TurnLog"));
+builder.Services.Configure<TelemetryLogOptions>(builder.Configuration.GetSection("TelemetryLog"));
 
 builder.Services.AddSingleton<BusActivityTracker>();
 builder.Services.AddSingleton<IMessageBus, ChannelBus>();
@@ -346,6 +348,7 @@ RegisterAgent<ArchiveLogger>(builder.Services);
 RegisterAgent<ConsoleSubscriber>(builder.Services);
 RegisterAgent<SseBroadcaster>(builder.Services);
 RegisterAgent<TurnLogSubscriber>(builder.Services);
+RegisterAgent<TelemetryLogAgent>(builder.Services);
 
 var app = builder.Build();
 
