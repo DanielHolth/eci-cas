@@ -20,44 +20,48 @@ PATH = ROOT + "docs/vocabulary/v512.txt"
 
 # Applied in order, then cleared once they are in the file. Kept here rather
 # than applied by hand so a change is a diff of intent, not of layout.
+RENAMES = {
+    # `admin` was a generic word, and a generic word is a catch-all with a
+    # head start: anything vaguely official reads as admin to a writer and
+    # to a bi-encoder alike. It measured that way too (H 2.89, all ten
+    # shipped sources). Round 1 narrowed the contents; this narrows the
+    # name. A record is a thing that exists and can be produced on demand,
+    # which is exactly what the drawer now holds.
+    "admin": "record",
+}
+
+# Applied in order, then cleared once they are in the file. Kept here rather
+# than applied by hand so a change is a diff of intent, not of layout.
 EDITS = {
-    # Round 1, after five outside reviews and bleed_v5. Each change is here
-    # because a measurement backed it, not because a reviewer asked.
+    # Round 2. The rename forces two topics out.
     #
-    # admin was the measured catch-all: 45 rows drawn from all ten shipped
-    # categories with its largest source at 28%, the flattest source mix on
-    # the shelf. It was holding three different things -- records, dated
-    # obligations, and counterparties. Narrowed to records; the obligations
-    # go to plan, where a deadline was already going to live.
-    "admin": "passport licence identification certificate registration membership"
-             " contract renewal expiry record document will reference proof correspondence",
-    "plan": "intention plan-goal wish idea someday bucket-list saving-for waiting-on"
-            " pending research option appointment deadline commitment next-step",
+    # `record` as a topic inside a category called record says nothing --
+    # record/record is an address with no content. `correspondence` is the
+    # reconsideration the rename asked for: a letter is not a record of
+    # anything, it is the delivery of one, and it was the topic through
+    # which unrelated official-sounding rows entered the drawer in the
+    # first place. A letter about a renewal is the renewal; a letter about
+    # a bill is spending. Nothing needs a drawer for the envelope.
+    #
+    # In their place: `permit`, which was homeless (a parking permit, a
+    # burn permit, a work visa is travel but a residence permit is not),
+    # and `where-kept`, because "where is my passport" is a real question
+    # about a record and no other drawer answers it.
+    #
+    # `expiry` also goes, and it was measured out rather than argued out:
+    # 26 rows from 8 sources at 26% concentration, the single worst drawer
+    # left on the shelf. It is aspect-shaped -- a licence expires, so does
+    # a subscription, a course, a passport, a warranty -- so it collected
+    # the expiring of things that live elsewhere. `deed` replaces it and
+    # the category falls 104 rows to 86, H 2.85 to 2.74. Renewal stays:
+    # renewing is something you do TO a record you hold.
+    "record": "passport licence identification certificate registration membership"
+              " contract renewal deed permit document will reference proof where-kept",
 
-    # work and worklife were second and third worst (H 2.75 and 2.64), which
-    # is the reviewers' "split by aspect, not by subject" showing up as a
-    # number. Re-cut so the boundary is the post versus the working week:
-    # terms of employment stay in work, everything about doing the week
-    # moves to worklife.
-    "work": "employer role title duty team department workplace start-date contract"
-            " hours responsibility policy benefit work-history pay-band",
-    "worklife": "schedule shift remote leave work-holiday sick-day overtime meeting"
-                " workload balance friction work-travel tool process wellbeing",
-
-    # device/digital, asked for independently by three reviewers and visible
-    # here as digital at H 2.36 over eight sources. The boundary is now
-    # physical hardware versus data and accounts, so app and backup move.
-    "device": "phone computer tablet watch camera console printer router speaker"
-              " peripheral setup fault upgrade accessory charger",
-    "digital": "account login service subscription app file photo email profile"
-               " privacy storage sync backup credential notification",
-
-    # moment was the loudest consensus flag and the corpus did not convict
-    # it -- H 1.73 at 60% concentration, mid-table. It keeps its acquittal
-    # but loses the two topics that were aspect-shaped rather than
-    # subject-shaped, and that overlapped plan outright.
-    "moment": "milestone memory anecdote first loss achievement regret turning-point"
-              " story photo place year lesson era retelling",
+    # identity/record is now ambiguous against the category of the same
+    # name. `gender` was missing from identity anyway, next to pronoun.
+    "identity": "name nickname age birthdate origin nationality language pronoun"
+                " appearance height handedness marital gender signature document-name",
 }
 
 GROUPS = [
@@ -68,7 +72,7 @@ GROUPS = [
     ("people", ["family", "social", "occasion", "pet"]),
     ("work", ["work", "worklife", "project", "career", "learning"]),
     ("money", ["income", "spending", "finance"]),
-    ("time", ["travel", "admin"]),
+    ("time", ["travel", "record"]),
     ("everything a life is actually made of", ["leisure", "media", "moment", "plan"]),
 ]
 
@@ -116,6 +120,10 @@ def write(cats, path=PATH):
 
 def main():
     cats = parse()
+    for old, new in RENAMES.items():
+        if old in cats:
+            assert new not in cats, "rename target %r already exists" % new
+            cats = {(new if c == old else c): t for c, t in cats.items()}
     for c, topics in EDITS.items():
         assert c in cats, "EDITS names an unknown category %r" % c
         cats[c] = topics.split() + ["other"]

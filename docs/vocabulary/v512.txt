@@ -37,7 +37,28 @@
 #
 # Confirmed and acted on: `admin` was the flattest source mix on the shelf
 # (45 rows from all ten shipped categories, largest source 28%) and has been
-# narrowed to records, with dated obligations moved to `plan`. `work` and
+# narrowed to records, with dated obligations moved to `plan`. In round 2 it
+# was also RENAMED to `record`. A generic word is a catch-all with a head
+# start -- anything vaguely official reads as "admin" to a writer and to a
+# bi-encoder alike -- and narrowing the contents without narrowing the name
+# leaves the pull in place. A record is a thing that exists and can be
+# produced on demand, which is what the drawer now holds. Two topics fell
+# out with the name: `record` (record/record is an address with no content)
+# and `correspondence` (a letter is not a record, it is the delivery of one,
+# and it was the seam unrelated official-sounding rows came in through -- a
+# letter about a renewal is the renewal, a letter about a bill is spending).
+# In came `permit`, previously homeless, and `where-kept`, because "where is
+# my passport" is a real question no other drawer answers. `expiry` was
+# measured out as well -- 26 rows from 8 sources, the worst drawer left on
+# the shelf, because expiring is an aspect and everything does it; `deed`
+# took the slot and the category fell 104 rows to 86, H 2.85 to 2.74.
+# `record` stays the shelf's one FORM-shaped drawer, and deliberately: it
+# holds documents about every subject, so its mix will always read high.
+# The alternative is scattering documents into 32 subject drawers where
+# they compete with the subject itself, which answers no question anyone
+# asks. `identity` gave
+# up its own `record` topic for `gender`, to stop the two namespaces
+# colliding. `work` and
 # `worklife` were next, which is the reviewers' "split by aspect, not by
 # subject" as a number; the boundary is now the post versus the working
 # week. `device` and `digital` are now physical hardware versus data.
@@ -62,7 +83,7 @@
 
 # -- the person --------------------------------------------------------
 identity: name nickname age birthdate origin nationality language pronoun appearance
-  height handedness marital record signature document-name other
+  height handedness marital gender signature document-name other
 character: trait temperament humour strength weakness fear hope value principle
   religion politics quirk confidence patience outlook other
 mood: feeling stress worry joy grief anger calm energy overwhelm loneliness
@@ -135,9 +156,9 @@ finance: account bank card loan mortgage saving investment interest
 travel: trip destination holiday flight train accommodation booking itinerary
   companion luggage travel-document experience travel-taste return visa
   other
-admin: passport licence identification certificate registration membership
-  contract renewal expiry record document will reference proof
-  correspondence other
+record: passport licence identification certificate registration membership
+  contract renewal deed permit document will reference proof where-kept
+  other
 
 # -- everything a life is actually made of -----------------------------
 leisure: hobby craft game outdoor gardening collecting club event routine activity
