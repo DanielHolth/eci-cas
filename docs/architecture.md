@@ -746,6 +746,13 @@ Two speeds, deliberately far apart:
   whole batch of concluded turns. Reflection owns this because it already
   reasons across a batch; Archivist stays a per-turn fact extractor.
 
+A third thing happens on turns that appraise nothing: the state closes a fifth
+of its distance to the defaults, snapping home under 0.01 so it settles rather
+than halving forever, and writing nothing once it is there. Not a third
+magnitude — no one nudged — it is time passing showing up in the state. Without
+it urgency, which has no downward trigger, strands a profile at `alert` for good
+after one message saying "urgent".
+
 The magnitude gap *is* the distinction between the two mechanisms — a test
 asserts every slow delta stays under every instant one, comparing the tables
 rather than pinned literals so both stay tunable.

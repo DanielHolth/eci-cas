@@ -2,9 +2,7 @@ namespace EciCas.Agents.Impulse;
 
 /// <summary>
 /// Persona drive-vector state, ported from the Python prototype's
-/// Impulse.DEFAULT_VECTORS (agents/impulse/agent.py). Deliberately smaller
-/// than the Python original: no drift-toward-baseline machinery here — see
-/// gap-analysis.md, that stays a separate follow-up.
+/// Impulse.DEFAULT_VECTORS (agents/impulse/agent.py).
 /// Serialized as JSON into ArchiveRecord.Content at ImpulseAgent.DrivePath.
 /// </summary>
 public sealed record DriveVectors(
@@ -31,6 +29,45 @@ public sealed record DriveVectors(
         Urgency + delta.Urgency,
         SocialDrive + delta.SocialDrive,
         Temperature + delta.Temperature).Clamp();
+
+    /// <summary>
+    /// Where a drive returns to when nothing is happening to it. The record's
+    /// own defaults, so there is one statement of what unmoved feels like.
+    /// </summary>
+    public static readonly DriveVectors Baseline = new();
+
+    /// <summary>
+    /// How much of the remaining distance to baseline a quiet turn closes.
+    /// Proportional rather than a fixed step: a state knocked far out comes
+    /// back quickly and one already near home barely moves, which is how
+    /// settling down actually feels. At 0.2 a full Critical urgency of 0.45
+    /// is back under the "alert" edge in three quiet turns and effectively
+    /// home in ten.
+    /// </summary>
+    private const double DriftRate = 0.2;
+
+    /// <summary>Below this a drive is at baseline, not approaching it — otherwise it halves forever and the state file never settles.</summary>
+    private const double DriftSnap = 0.01;
+
+    /// <summary>
+    /// One quiet turn's worth of settling. Applied when a turn moved nothing:
+    /// a persona that stays alarmed forever because one message said "urgent"
+    /// is not a mood, it is a stuck gauge, and urgency in particular has no
+    /// nudge that lowers it.
+    ///
+    /// This is not a third magnitude to tune against the other two. It is not
+    /// a nudge at all -- nothing appraised anything -- it is the absence of
+    /// one showing up in the state.
+    /// </summary>
+    public DriveVectors Drift() => new(
+        Toward(Curiosity, Baseline.Curiosity),
+        Toward(Fatigue, Baseline.Fatigue),
+        Toward(Urgency, Baseline.Urgency),
+        Toward(SocialDrive, Baseline.SocialDrive),
+        Toward(Temperature, Baseline.Temperature));
+
+    private static double Toward(double value, double baseline) =>
+        Math.Abs(value - baseline) < DriftSnap ? baseline : value + (baseline - value) * DriftRate;
 
     /// <summary>Five drive vectors collapsed into three legible appraisal axes — fixed linear combinations, ported verbatim from Python's Impulse._axes().</summary>
     public double Alertness => Math.Clamp(Urgency - 0.3 * Fatigue, 0.0, 1.0);

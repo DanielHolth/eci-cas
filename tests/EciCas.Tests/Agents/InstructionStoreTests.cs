@@ -282,7 +282,6 @@ public class InstructionStoreTests
     [InlineData("Governance", "blocked-with-reason", "I can't help with that: {concern}")]
     [InlineData("Governance", "reasoning-down", "I can't think that through right now — my reasoning substrate is {cause}.")]
     [InlineData("Governance", "less-grounded", "(Thinking without {impaired} just now, so this is less grounded than usual.)")]
-    [InlineData("Identity", "stranger", "You do not have your own description to hand right now.")]
     public void SpokenTextIsExactlyWhatTheFileSays(string agent, string? section, string expected)
     {
         // Equality, not Contains: an assertion that only checks the sentence

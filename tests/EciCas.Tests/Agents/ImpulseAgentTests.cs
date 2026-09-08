@@ -96,6 +96,69 @@ public class ImpulseAgentTests
         Assert.Empty(await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None));
     }
 
+    /// <summary>
+    /// Time passing is not nothing happening. A persona that stays alarmed
+    /// forever because one message said "urgent" is a stuck gauge rather than
+    /// a mood -- urgency in particular has no nudge that lowers it -- so the
+    /// turns that appraise nothing are the turns the state settles on.
+    /// </summary>
+    [Fact]
+    public async Task AfterAnAppraisal_RoutineTurnsSettleTowardBaseline()
+    {
+        var (agent, _, _, store) = Create();
+        var baseline = new DriveVectors();
+
+        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+        var alarmed = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
+        Assert.True(alarmed.Urgency > baseline.Urgency);
+
+        await agent.HandleAsync(Perceive("what's the weather", null), CancellationToken.None);
+        var settling = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
+
+        Assert.True(settling.Urgency < alarmed.Urgency);
+        Assert.True(settling.Urgency > baseline.Urgency);
+        Assert.True(settling.Fatigue < alarmed.Fatigue);
+    }
+
+    /// <summary>
+    /// Drift is what the absence of an appraisal looks like, so it does not
+    /// land beside one: a turn that nudged would otherwise spend part of the
+    /// nudge arguing with the drift applied in the same breath.
+    /// </summary>
+    [Fact]
+    public async Task AnAppraisedTurn_DoesNotAlsoDrift()
+    {
+        var (agent, _, _, store) = Create();
+
+        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
+        var once = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
+
+        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
+        var twice = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
+
+        var first = once.Temperature - new DriveVectors().Temperature;
+        var second = twice.Temperature - once.Temperature;
+        Assert.Equal(first, second, 9);
+    }
+
+    /// <summary>
+    /// Settling has to end. Proportional drift halves forever, so a state
+    /// close enough to home is called home and the writes stop.
+    /// </summary>
+    [Fact]
+    public async Task QuietTurns_ArriveAtBaselineRatherThanApproachingItForever()
+    {
+        var (agent, _, _, store) = Create();
+        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+
+        for (var i = 0; i < 100; i++)
+        {
+            await agent.HandleAsync(Perceive("what's the weather", null), CancellationToken.None);
+        }
+
+        Assert.Equal(new DriveVectors(), await ReadDriveAsync(store, ImpulseAgent.DrivePath));
+    }
+
     private static Envelope Perceive(string text, string? profileId)
     {
         var meta = MetaBag.Empty.With(PerceptionAgent.TextKey, text);
@@ -174,8 +237,13 @@ public class ImpulseAgentTests
         Assert.True(vectors.Temperature < baseline.Temperature);
     }
 
+    /// <summary>
+    /// A routine turn drifts, but a state already at baseline drifts to
+    /// itself, and writing that would append a line per turn forever and hand
+    /// Reflection's trend window a history of nothing changing.
+    /// </summary>
     [Fact]
-    public async Task WhenTextIsRoutine_DoesNotWriteDriveVectors()
+    public async Task WhenTextIsRoutine_AndTheStateIsAlreadyHome_WritesNothing()
     {
         var (agent, _, _, store) = Create();
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,

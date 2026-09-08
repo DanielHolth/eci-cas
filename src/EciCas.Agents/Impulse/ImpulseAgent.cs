@@ -196,13 +196,32 @@ public sealed class ImpulseAgent : AgentBase
             await NudgeAsync(CriticalNudge, profileId, cancellationToken).ConfigureAwait(false);
         }
 
+        var appraised = isCritical;
+
         if (PositiveTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
         {
             await NudgeAsync(PositiveNudge, profileId, cancellationToken).ConfigureAwait(false);
+            appraised = true;
         }
         else if (NegativeTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
         {
             await NudgeAsync(NegativeNudge, profileId, cancellationToken).ConfigureAwait(false);
+            appraised = true;
+        }
+
+        // An ordinary turn is not nothing happening: it is time passing, and
+        // the state settles by that much. Only on turns no trigger fired --
+        // drift is what the absence of an appraisal looks like, so applying it
+        // beside one would be arguing with the nudge that just landed.
+        //
+        // Reflection's slow colouring lands on system.control and is not
+        // drifted against for the same reason. It is deliberately an order of
+        // magnitude below an instant nudge, and drift closes a fifth of the
+        // remaining gap, so a batch colouring on top of quiet turns still
+        // reads as a lean rather than a spike.
+        if (!appraised)
+        {
+            await SettleAsync(profileId, cancellationToken).ConfigureAwait(false);
         }
 
         // Advisory goes out last so the face it carries is the one this turn
@@ -215,11 +234,25 @@ public sealed class ImpulseAgent : AgentBase
         _bus.Publish(Topics.Advisories, advisory);
     }
 
-    private async Task NudgeAsync(DriveVectors nudge, string? profileId, CancellationToken cancellationToken)
+    private Task NudgeAsync(DriveVectors nudge, string? profileId, CancellationToken cancellationToken) =>
+        UpdateAsync(profileId, current => current.Add(nudge), cancellationToken);
+
+    private Task SettleAsync(string? profileId, CancellationToken cancellationToken) =>
+        UpdateAsync(profileId, current => current.Drift(), cancellationToken);
+
+    private async Task UpdateAsync(string? profileId, Func<DriveVectors, DriveVectors> change, CancellationToken cancellationToken)
     {
         var path = DrivePathFor(profileId);
         var current = await GetVectorsAsync(path, cancellationToken).ConfigureAwait(false);
-        var updated = current.Add(nudge);
+        var updated = change(current);
+
+        // A state already at baseline drifts to itself. Writing that would
+        // append a line per turn to the state file forever and hand
+        // Reflection's trend window a history of nothing changing.
+        if (updated == current)
+        {
+            return;
+        }
 
         await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

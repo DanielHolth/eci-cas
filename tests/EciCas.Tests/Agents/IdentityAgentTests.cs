@@ -29,6 +29,23 @@ public class IdentityAgentTests
     /// that line comes back, so the tests for it supply their own body rather
     /// than reading whichever way the prose currently leans.
     /// </summary>
+    /// <summary>
+    /// A state file holding a persona. The shipped instructions describe
+    /// nobody -- identity.txt's blocks are commented out and a persona is
+    /// something a profile gives its companion, not something it boots
+    /// holding -- so a test about what a described persona does has to
+    /// write the description first.
+    /// </summary>
+    private static async Task<string> Described()
+    {
+        var state = Path.GetTempFileName();
+        await new JsonlAgentStateStore(state).WriteAsync(
+            [new AgentStateRecord(IdentityAgent.IdentityPath, "You are warm, unhurried, plain-spoken.",
+                DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
+            CancellationToken.None);
+        return state;
+    }
+
     private static IInstructionStore WithNameSection(string body)
     {
         var dir = Directory.CreateTempSubdirectory().FullName;
@@ -56,7 +73,7 @@ public class IdentityAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var advisories = bus.Subscribe(Topics.Advisories);
-        var agent = CreateAgent(bus, activity);
+        var agent = CreateAgent(bus, activity, tempFile: await Described());
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
         await agent.HandleAsync(perception, CancellationToken.None);
@@ -120,7 +137,7 @@ public class IdentityAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var advisories = bus.Subscribe(Topics.Advisories);
-        var agent = CreateAgent(bus, activity, instructions: WithNameSection(string.Empty));
+        var agent = CreateAgent(bus, activity, tempFile: await Described(), instructions: WithNameSection(string.Empty));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral), CancellationToken.None);
 
