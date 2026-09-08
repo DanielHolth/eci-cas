@@ -40,3 +40,53 @@ model whose facts these are before it answers a question about "yourself".
 is a scope, and hindsight is not a lookup"), so there's no symmetric mistake
 in the other direction — but a `user`-scoped row still needs to read as
 Daniel's fact, not the persona's, once it's in Intent's context.
+
+## Archivist
+
+**A question about a daughter filed under `pet`.** Asked whether the persona
+would play hide and seek with a child, Archivist wrote the turn away into a
+category nothing in it names:
+
+```
+Perception:
+My daughter is asking if we can play hide and seek with you
+Impulse:
+no immediate concern
+Librarian-1:
+family/child
+Recall-1:
+family/child/daughters/user/youngest daughter name = Susana
+Recall-2:
+family/child/identity/user/daughters name = Maria Benita
+Recall-3:
+family/child/nickname/user/daughter name = Maia
+Recall-4:
+family/child/daughters/user/number of daughters = two
+Recall-5:
+assistant/reflection/tier/assistant/answer quality = remarkable
+Recall-6:
+assistant/other/identity/assistant/description = prototype companion
+Recall-7:
+assistant/other/identity/assistant/nature = emergent cognitive identity
+Recall-8:
+assistant/other/identity/assistant/structure = faculties of a mind
+Intent:
+I'd love to play hide and seek with Susana, but since I don't have a
+physical body, I'll have to be the one to hide instead.
+Archivist-1:
+pet/other/interaction/user/question = playing hide and seek
+```
+
+Read alone the row is nearly reasonable -- "playing" is a thing one does with
+a pet -- but the turn had already been read as `family/child` by Librarian and
+answered about a named daughter by Intent, so the closed vocabulary was not
+the constraint that failed. Worth noting the row is also weak on its own
+terms: the fact recorded is that a question was asked, which is a turn, not
+something that stays true about anybody.
+
+Two things to check before calling it a prompt problem. Whether the write-side
+call sees what the read side saw -- if the pair Librarian selected does not
+reach Archivist, it is categorising the sentence cold. And whether `x/other`
+is doing the damage it was measured not to do: "other" is a write-side valve,
+so `pet/other` is the shape a category takes when nothing under it fits, which
+means the miss was `pet` and the valve only made it storable.
