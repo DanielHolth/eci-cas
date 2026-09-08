@@ -53,12 +53,13 @@ export interface ConsolidationEpoch {
 }
 
 /** One full conversational turn, staged the way the UI sequences it on
- * screen: thinking -> (optional security loop) -> speaking -> doodle.
+ * screen: thinking -> (optional security loop) -> speaking -> done, the last
+ * set when Governance concludes the event.
  * `impulse`/`output` start undefined and fill in as envelopes arrive live —
  * see lib/useEciStream.ts, which is what actually produces these now. */
 export interface TurnEvent {
   turnId: string;
-  stage: "thinking" | "verdict" | "speaking";
+  stage: "thinking" | "verdict" | "speaking" | "done";
   /** What the person actually said — echoed back so a turn on screen is a
    * exchange, not a reply with no question. */
   input?: string;

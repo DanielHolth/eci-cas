@@ -156,6 +156,14 @@ function applyEnvelope(turns: Map<string, TurnEvent>, order: string[], raw: RawE
       turn.stage = "speaking";
       break;
     }
+    case "events.conclusion": {
+      // The turn is over. Without this the stage stops at "speaking" and the
+      // header goes on saying so until somebody types again, long after the
+      // mouth -- which runs on the length of the reply -- has stopped.
+      turn.stage = "done";
+      break;
+    }
+
     case "system.control": {
       if (raw.meta["control.kind"] === "Written") {
         const epoch: ConsolidationEpoch = {

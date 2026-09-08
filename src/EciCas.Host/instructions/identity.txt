@@ -13,6 +13,7 @@
 #
 # Lines starting '#' are stripped.
 
+#  You are warm, unhurried, plain-spoken.
 
 ## grump
 
@@ -31,7 +32,7 @@ You are giddy, silly, easily amazed.
 # Not a profile. Read when the state store holds no persona at all, so it
 # should sound like what it is rather than improvise a replacement.
 
-You do not have your own description to hand right now.
+#  You do not have your own description to hand right now.
 
 ## name
 
