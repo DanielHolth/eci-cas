@@ -131,10 +131,10 @@ pet: animal pet-name breed pet-age feeding vet pet-health walk pet-care sitter
   behaviour toy pet-food pet-insurance pet-loss other
 
 # -- work --------------------------------------------------------------
-work: employer role title duty team department workplace start-date contract
-  hours responsibility policy benefit work-history pay-band other
-worklife: schedule shift remote leave work-holiday sick-day overtime meeting
-  workload balance friction work-travel tool process wellbeing other
+work: employer role title duty team department contract start-date notice hours
+  responsibility policy benefit work-history pay-band other
+workplace: culture norms environment office colleague manager morale politics
+  schedule shift remote leave overtime friction wellbeing other
 project: client task milestone status blocker collaborator scope deliverable review
   outcome timeline project-tool project-budget note handover other
 career: ambition goal promotion appraisal feedback skill-gap opportunity search

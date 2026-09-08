@@ -28,6 +28,20 @@ RENAMES = {
     # name. A record is a thing that exists and can be produced on demand,
     # which is exactly what the drawer now holds.
     "admin": "record",
+
+    # Round 3. `worklife` was forced, and the probe that showed it: ask the
+    # shelf where "work-culture", "work-norms", "work-environment" and
+    # "work-social" belong and every one of them tied at the noise floor
+    # (worklife/work-travel 0.875, worklife/work-holiday 0.870,
+    # worklife/other 0.865, work/workplace 0.864 -- nine millipoints across
+    # four unrelated drawers). "My office is open-plan and noisy" landed on
+    # plan/appointment. The character of a workplace had no address.
+    #
+    # The cause is that worklife was three things in a bag: the calendar,
+    # the load, and the doing. Re-cut so the axis is the CONTRACT versus
+    # the PLACE. Same probes after: 0.902, 0.910, 0.896, and the office
+    # sentence at 0.845 -- separation instead of ties.
+    "worklife": "workplace",
 }
 
 # Applied in order, then cleared once they are in the file. Kept here rather
@@ -62,6 +76,21 @@ EDITS = {
     # name. `gender` was missing from identity anyway, next to pronoun.
     "identity": "name nickname age birthdate origin nationality language pronoun"
                 " appearance height handedness marital gender signature document-name",
+
+    # Round 3, with the worklife -> workplace rename above.
+    #
+    # work/workplace goes because the category now carries the name -- the
+    # same namespace collision the record rename produced. `notice` takes
+    # the slot: it is a term of the post and nothing else held it.
+    "work": "employer role title duty team department contract start-date notice"
+            " hours responsibility policy benefit work-history pay-band",
+
+    # What LEFT rather than moved here: work-holiday and work-travel to
+    # travel, sick-day to health, meeting/tool/process to project (which
+    # already holds project-tool), workload and balance folded into
+    # friction and wellbeing, which is what they were describing anyway.
+    "workplace": "culture norms environment office colleague manager morale politics"
+                 " schedule shift remote leave overtime friction wellbeing",
 }
 
 GROUPS = [
@@ -70,7 +99,7 @@ GROUPS = [
     ("the dwelling", ["food", "home", "upkeep", "belongings"]),
     ("machines", ["vehicle", "device", "digital"]),
     ("people", ["family", "social", "occasion", "pet"]),
-    ("work", ["work", "worklife", "project", "career", "learning"]),
+    ("work", ["work", "workplace", "project", "career", "learning"]),
     ("money", ["income", "spending", "finance"]),
     ("time", ["travel", "record"]),
     ("everything a life is actually made of", ["leisure", "media", "moment", "plan"]),
