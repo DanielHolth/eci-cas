@@ -28,8 +28,23 @@ function money(total: number | null): string {
  * turn actually took. */
 function latency(calls: SubstrateCall[], wallClockMs: number): string {
   const addends = calls.map((c) => Math.round(c.latencyMs)).join(" + ");
-  const total = `${Math.round(wallClockMs)} ms wall-clock`;
+  const total = `${Math.round(wallClockMs)} ms`;
   return addends ? `${addends} → ${total}` : total;
+}
+
+/** Cost read the way latency does: what each call spent, then the turn.
+ *
+ * It used to be three totals and a parenthesised roster of call labels,
+ * which named eleven calls without saying what any of them cost -- so the
+ * one expensive call in a turn was invisible next to ten cheap ones. Same
+ * order as the latency line, so the two read as columns of one table.
+ *
+ * No dollar sign on the addends and four decimals throughout: a column of
+ * numbers is easier to scan than a column of prices, and the total carries
+ * the unit. A call nothing priced is an em dash rather than a zero. */
+function costs(calls: SubstrateCall[], total: number | null): string {
+  const addends = calls.map((c) => (c.cost === null ? "—" : c.cost.toFixed(4))).join(" + ");
+  return addends ? `${addends} → ${money(total)}` : money(total);
 }
 
 function Line({ agent, children }: { agent: string; children: React.ReactNode }) {
@@ -156,14 +171,12 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
 
           {record.calls.length > 0 && (
             <>
-              <Line agent="Cost">
+              <Line agent="Cost">{costs(record.calls, record.cost)}</Line>
+              <Line agent="Totals">
                 <span className="text-neutral-800 dark:text-neutral-200">event {money(record.cost)}</span>
                 <span className="text-neutral-400 dark:text-neutral-500">
                   {" · "}session {money(record.sessionCost)}
                   {" · "}total {money(record.totalCost)}
-                </span>
-                <span className="ml-1 text-neutral-400 dark:text-neutral-500">
-                  ({record.calls.map((c) => c.label ?? c.agent).join(", ")})
                 </span>
               </Line>
               <Line agent="Latency">{latency(record.calls, record.wallClockMs)}</Line>

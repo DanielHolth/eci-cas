@@ -58,10 +58,16 @@ export function ThoughtsPanel({
   onOpen: (correlationId: string) => void;
 }) {
   const thoughts = thoughtsOf(records);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Collapsed, not expanded: the set names the exceptions, so a thought
+  // arrives open the way an event on the right does. A truncated row is a
+  // category and a first clause -- enough to know a fact was recalled and
+  // not enough to know which -- which made reading the panel a click per
+  // line.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   function toggle(id: string) {
-    setExpanded((current) => {
+    setCollapsed((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -79,7 +85,7 @@ export function ThoughtsPanel({
         )}
         {thoughts.map((t) => {
           const style = KIND_STYLE[t.kind];
-          const isOpen = expanded.has(t.id);
+          const isOpen = !collapsed.has(t.id);
           return (
             <li key={t.id} className="rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
               <button
