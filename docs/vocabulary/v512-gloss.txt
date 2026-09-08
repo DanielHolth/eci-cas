@@ -1,0 +1,565 @@
+# Glosses for the 512-pair vocabulary. One line per pair, same order as
+# v512.txt. Validated by tools/retrieval-bench/build_gloss.py.
+#
+# WHY SENTENCES AND NOT KEYWORDS. batch 17 measured it, and round 4 of the
+# v512 review made it unarguable: `leisure` matched 1 of 11 hobby sentences
+# on bare paths and 10 of 11 once its drawers carried three-word glosses,
+# with the same topic list both times. A bi-encoder compares a sentence to
+# a sentence. The path `leisure/making` is not one; "I finished the oak
+# bookshelf I was building" is, and that is what a row will look like.
+#
+# So each line is written as the row it wants to attract, in the first
+# person, using the words a person would actually write -- not a
+# definition of the topic and not a list of synonyms. Where two drawers
+# are neighbours the gloss is written to be DIFFERENT from its neighbour
+# rather than to be complete: record/certificate says the words a
+# certificate row says, learning/qualification says the words a
+# qualification row says, and the gap between them is the point.
+#
+# `other` lines are the write-side valve and are deliberately weak. They
+# should lose to any real drawer; they exist so a writer has somewhere to
+# put a row rather than forcing it.
+
+identity/name: my full legal name is written out on my documents
+identity/nickname: everyone calls me by a shortened version of my name
+identity/age: I am forty-two years old
+identity/birthdate: I was born on the ninth of a summer month
+identity/origin: I grew up in a small town before moving away
+identity/nationality: I hold citizenship of one country and residency in another
+identity/language: I speak two languages fluently and a third badly
+identity/pronoun: the pronouns I use for myself are these
+identity/appearance: I have dark hair and wear glasses most of the time
+identity/height: I am a little under six foot
+identity/handedness: I am left-handed and always have been
+identity/marital: I have been married for a number of years
+identity/gender: how I describe my own gender
+identity/signature: how I sign my name on paper
+identity/document-name: my name appears differently on some official papers
+identity/other: something about who I am that fits none of the above
+
+character/trait: people say I am stubborn once I decide on something
+character/temperament: I am even-tempered and slow to be rattled
+character/humour: the sort of jokes that make me laugh
+character/strength: what I am genuinely good at as a person
+character/weakness: I know I am impatient and it costs me
+character/fear: heights make me freeze up completely
+character/hope: what I quietly hope will turn out well
+character/value: honesty matters more to me than being liked
+character/principle: a line I will not cross whatever the reason
+character/religion: what I believe, or that I believe nothing in particular
+character/politics: roughly where I sit politically
+character/quirk: an odd little habit of mine that people notice
+character/confidence: I second-guess myself far more than I let on
+character/patience: I can wait a long time for something that matters
+character/outlook: I tend to expect things to work out in the end
+character/other: something about my character that fits none of the above
+
+mood/feeling: I have felt flat all week for no clear reason
+mood/stress: I am carrying a lot at the moment and it shows
+mood/worry: something keeps circling in my head at night
+mood/joy: today genuinely lifted me
+mood/grief: I am still missing someone I lost
+mood/anger: that conversation left me furious
+mood/calm: I felt properly settled for the first time in weeks
+mood/energy: I have had no fuel in the tank lately
+mood/overwhelm: there is too much at once and I cannot see the top of it
+mood/loneliness: the house is very quiet and I feel it
+mood/motivation: I cannot make myself start the thing I care about
+mood/spirits: my mood has lifted since the weather turned
+mood/trigger: what reliably tips me into a bad state
+mood/relief: the thing I was dreading is over and I can breathe
+mood/pattern: my mood always dips at the same point in the week
+mood/other: something about how I feel that fits none of the above
+
+health/condition: I have a long-standing condition I manage day to day
+health/symptom: I have had a dull ache on one side for a few days
+health/injury: I did something to my shoulder lifting badly
+health/illness: I came down with something and it knocked me flat
+health/pain: the pain is worse in the mornings
+health/allergy: I react badly to shellfish
+health/chronic: this is something I will have for life, not something that passes
+health/diagnosis: they told me what it actually is
+health/recovery: I am slowly getting back to normal after it
+health/risk: I am more likely than most to develop this
+health/family-history: it runs on my mother side of the family
+health/checkup: I had my routine check and everything was fine
+health/screening: I am due for the screening they invite you to
+health/vaccination: which vaccinations I have had and whether my boosters are up to date
+health/weight: my weight has shifted over the past year
+health/other: something about my health that fits none of the above
+
+care/medication: the medicine I am prescribed and take for my condition
+care/dose: I went up to a higher amount after the last review
+care/pharmacy: I collect it from the chemist on the corner
+care/doctor: I saw my GP about it
+care/dentist: I had a filling replaced
+care/therapist: I see someone to talk things through
+care/specialist: I was sent to a consultant for it
+care/appointment: I have an appointment booked at the surgery
+care/treatment: the course of treatment I am on
+care/referral: my doctor referred me on to someone else
+care/prescription: I need a repeat prescription for my medication from the surgery
+care/clinic: the clinic I attend for it
+care/advice: what they told me to do about it
+care/followup: they want to see me again in three months
+care/care-cost: what the treatment costs me
+care/other: something about my medical care that fits none of the above
+
+fitness/exercise: I try to move properly a few times a week
+fitness/sport: I play a sport regularly
+fitness/training: I am working towards something and training for it
+fitness/routine: my usual weekly pattern of sessions
+fitness/gym: I go to the gym near me
+fitness/running: I went for a run this morning
+fitness/cycling: I ride most weekends
+fitness/swimming: I swim lengths at the pool
+fitness/strength-training: I lift weights twice a week
+fitness/stretching: I do mobility work because of my back
+fitness/goal: what I am trying to get my body to do
+fitness/progress: I am fitter than I was three months ago
+fitness/equipment: the kit I use to train
+fitness/limit: what my body will not let me do
+fitness/class: I go to a class on Tuesday evenings
+fitness/other: something about my fitness that fits none of the above
+
+rest/sleep: I slept badly again last night
+rest/bedtime: I go to bed later than I should
+rest/waking: I wake before my alarm most days
+rest/nap: I nap in the afternoon when I can
+rest/dream: I had a vivid dream I still remember
+rest/insomnia: I lie awake for hours unable to drop off
+rest/energy-level: I flag badly in the middle of the afternoon
+rest/fatigue: I am tired in a way sleep does not fix
+rest/relaxation: what actually unwinds me
+rest/breathing: I do breathing exercises to settle down
+rest/screen-time: I am on my phone far too late at night
+rest/caffeine: I stop drinking coffee after midday
+rest/recovery: I need a proper day off to recover
+rest/wind-down: what I do in the hour before bed
+rest/quality: I sleep through but never wake up rested
+rest/other: something about my rest that fits none of the above
+
+food/diet: the way I eat generally
+food/restriction: I do not eat meat
+food/intolerance: dairy does not agree with me
+food/dish: a particular dish I love
+food/ingredient: I always have this in the cupboard
+food/recipe: the recipe I use for it
+food/cooking: I cooked properly from scratch tonight
+food/meal: what I ate today
+food/breakfast: what I have first thing
+food/lunch: what I eat in the middle of the day
+food/dinner: what we had in the evening
+food/snack: what I pick at between meals
+food/drink: what I drink through the day
+food/groceries: the weekly shop and what goes in it
+food/eating-out: we ate at a restaurant
+food/other: something about food that fits none of the above
+
+home/address: where I live, the street and the number
+home/dwelling: the kind of place it is, a flat or a house
+home/room: a particular room and what it is used for
+home/layout: how the rooms sit in relation to each other
+home/garden: the garden that comes with the property
+home/neighbourhood: the area I live in and what it is like
+home/move: we moved here from somewhere else
+home/ownership: I own this place outright or with a mortgage
+home/rent: what I pay in rent each month
+home/landlord: the person I rent from
+home/lease: the terms of my tenancy and when it ends
+home/size: how big the place is
+home/access: how you get in, parking, the door
+home/view: what you can see out of the window
+home/security: the locks, the alarm and the security of the building
+home/other: something about my home that fits none of the above
+
+upkeep/repair: something broke and I had it fixed
+upkeep/maintenance: the regular jobs that keep the place going
+upkeep/appliance: the washing machine or the fridge
+upkeep/heating: the boiler and how the place is heated
+upkeep/plumbing: a tap, a leak, the pipes
+upkeep/electrical: the wiring, the sockets, the fuse box
+upkeep/roof: the roof, the gutters, the chimney
+upkeep/damp: damp, mould, condensation in the house
+upkeep/pest: mice, wasps, something in the loft
+upkeep/cleaning: how the house gets cleaned and by whom
+upkeep/contractor: the tradesman I use for it
+upkeep/warranty: it is covered until a certain date
+upkeep/schedule: when a job on the house is due
+upkeep/cost: what the work on the house came to
+upkeep/meter: the meter reading and which supplier I am with
+upkeep/other: something about maintaining the place that fits none of the above
+
+belongings/furniture: a piece of furniture I own
+belongings/decor: how a room is decorated
+belongings/clothing: what I wear and what I own to wear
+belongings/tool: a tool I keep for jobs around the place
+belongings/equipment: a piece of kit I own
+belongings/storage: where I keep things I am not using
+belongings/collection: a set of things I own that belong together
+belongings/valuables: the things worth real money
+belongings/inventory: a list of what I own
+belongings/replacement: this is worn out and needs replacing
+belongings/disposal: I got rid of it
+belongings/loan: I lent it to someone or borrowed it
+belongings/gift: something I was given or gave
+belongings/acquisition: I acquired this and where it came from
+belongings/sentimental: it has no value but I would never part with it
+belongings/other: something I own that fits none of the above
+
+vehicle/car: the car I drive
+vehicle/bicycle: the bike I ride
+vehicle/model: the make, model and year of it
+vehicle/registration: the number plate and the logbook
+vehicle/vehicle-insurance: the cover on the car and what it costs
+vehicle/service: it went in for its service
+vehicle/inspection: the annual roadworthiness test
+vehicle/tyre: the tyres and their condition
+vehicle/fuel: what it costs to fill up and how far that goes
+vehicle/mileage: how many miles it has done
+vehicle/vehicle-repair: something went wrong with the car and was fixed
+vehicle/parking: where I park it and what that costs
+vehicle/driving-licence: my licence, its categories and its endorsements
+vehicle/commute: how I get to work and how long it takes
+vehicle/journey: a drive I made and what the road was like
+vehicle/other: something about my vehicle that fits none of the above
+
+device/phone: the handset I carry
+device/computer: my laptop or desktop machine
+device/tablet: the tablet I use
+device/watch: the watch on my wrist
+device/camera: the camera I take pictures with
+device/console: the games machine
+device/printer: the printer and its cartridges
+device/router: the box the internet comes through
+device/speaker: the speakers or the headphones
+device/peripheral: the keyboard, the mouse, the screen
+device/setup: how my machines are arranged and connected
+device/fault: the device has developed a fault
+device/upgrade: I replaced it with a newer one
+device/accessory: a case, a stand, a cable for it
+device/charger: charging it and how long the battery lasts
+device/other: something about my devices that fits none of the above
+
+digital/account: an account I hold with an online service
+digital/login: the username I sign in with
+digital/service: an online service I use
+digital/subscription: a service I pay for monthly
+digital/app: an application I have installed
+digital/file: a document or folder I keep
+digital/photo: the pictures I have stored
+digital/email: my email address and my inbox
+digital/profile: my profile on a site and what is on it
+digital/privacy: what I share and what I keep locked down
+digital/storage: how much space I have and what is using it
+digital/sync: keeping the same things on more than one machine
+digital/backup: copies of my data in case something is lost
+digital/credential: how I keep my passwords and codes
+digital/notification: what is allowed to interrupt me
+digital/other: something digital that fits none of the above
+
+family/partner: the person I am with
+family/spouse: my husband or wife
+family/child: my son or my daughter
+family/parent: my mother or my father
+family/sibling: my brother or my sister
+family/grandparent: my grandmother or grandfather
+family/relative: an aunt, uncle or cousin of mine
+family/in-law: a relative by marriage
+family/household-member: someone else who lives here with me
+family/relation: how we are related and how close we are
+family/care: looking after a family member who needs it
+family/contact: how often we speak and how we keep in touch
+family/history: where the family came from and what happened to it
+family/conflict: a fallout in the family that is still there
+family/family-milestone: a birth, a wedding, a death in the family
+family/other: something about my family that fits none of the above
+
+social/friend: a friend of mine
+social/group: a group of people I see together
+social/circle: the wider set of people around me
+social/neighbour: the people who live next door
+social/colleague: someone I know through work as a person
+social/acquaintance: someone I know slightly
+social/community: the local community I am part of
+social/club: a club I belong to for the people in it
+social/introduction: how I met someone and who introduced us
+social/support: who I turn to when things are hard
+social/distance: we have drifted apart
+social/reunion: we got back in touch after years
+social/favour: something someone did for me or I did for them
+social/shared-interest: what we have in common
+social/news-of: what I heard is going on with them
+social/other: something social that fits none of the above
+
+occasion/birthday: whose birthday it is and when
+occasion/anniversary: the date we mark every year
+occasion/wedding: a wedding I am going to or went to
+occasion/funeral: a funeral and who it was for
+occasion/holiday: the public holiday and how we spend it
+occasion/celebration: we marked something together
+occasion/tradition: what we always do at this time of year
+occasion/gift: what I gave or was given for the occasion
+occasion/card: the card I sent or received
+occasion/visit: someone came to stay or I went to them
+occasion/host: I am having people over
+occasion/invitation: I was invited to something
+occasion/date: when the thing is happening
+occasion/arrangement: who is bringing what and how it is organised
+occasion/occasion-photo: the photographs from the day
+occasion/other: something about an occasion that fits none of the above
+
+pet/animal: the animal I keep
+pet/pet-name: what the animal is called
+pet/breed: what breed or type it is
+pet/pet-age: how old the animal is
+pet/feeding: when and how much the animal is fed
+pet/vet: the veterinary practice we use
+pet/pet-health: the animal is unwell or has a condition
+pet/walk: taking the dog out and where we go
+pet/pet-care: grooming, claws, the day-to-day looking after
+pet/sitter: who looks after the animal when I am away
+pet/behaviour: how the animal acts and what it will not do
+pet/toy: what the animal plays with
+pet/pet-food: what I buy for it to eat
+pet/pet-insurance: the cover on the animal
+pet/pet-loss: the animal died
+pet/other: something about my animal that fits none of the above
+
+work/employer: the company I work for
+work/role: what my job actually involves
+work/title: what my job is called on paper
+work/duty: a specific thing I am responsible for doing
+work/team: the team I sit in
+work/department: the part of the organisation I belong to
+work/contract: the terms I am employed on
+work/start-date: when I started there
+work/notice: how much notice either side has to give
+work/hours: the hours I am contracted to work
+work/responsibility: what I am accountable for
+work/policy: a rule the employer applies to everyone
+work/benefit: what comes with the job beyond the pay
+work/work-history: where I have worked before this
+work/pay-band: the grade or band I sit on
+work/other: something about my post that fits none of the above
+
+workplace/culture: what it is actually like to work there
+workplace/norms: the unwritten rules everyone follows
+workplace/environment: the physical conditions, noise, light, space
+workplace/office: the building and the desk I work at
+workplace/colleague: the people I work alongside day to day
+workplace/manager: the person I report to and how they operate
+workplace/morale: how everyone is feeling about the place
+workplace/politics: who has influence and how things really get decided
+workplace/schedule: the shape of my working week
+workplace/shift: the shift pattern I am on
+workplace/remote: which days I work from home
+workplace/leave: booking time off and how much I have left
+workplace/overtime: the extra hours I put in
+workplace/friction: what makes the job harder than it needs to be
+workplace/wellbeing: how the job is affecting me
+workplace/other: something about the place I work that fits none of the above
+
+project/client: who the work is for
+project/task: a piece of work I have to do
+project/milestone: the point the project has to reach by a date
+project/status: where the work has got to
+project/blocker: what is stopping the work moving
+project/collaborator: who I am doing this piece of work with
+project/scope: what is in the work and what is not
+project/deliverable: the thing that has to be handed over
+project/review: the work was looked at and commented on
+project/outcome: how the piece of work turned out
+project/timeline: the dates the work runs between
+project/project-tool: the software or kit the work is done with
+project/project-budget: what the work is allowed to cost
+project/note: a working note I made about the work
+project/handover: passing the work to someone else
+project/other: something about a piece of work that fits none of the above
+
+career/ambition: where I want to end up eventually
+career/goal: what I am trying to reach in my working life
+career/promotion: moving up a level
+career/appraisal: the formal review of how I am doing
+career/feedback: what I was told about my performance
+career/skill-gap: what I would need to learn to get there
+career/opportunity: a chance that has come up
+career/search: I am looking for something else
+career/application: I applied for a position
+career/interview: I was interviewed for it
+career/offer: they offered me the job
+career/change: I am changing direction entirely
+career/mentor: someone who advises me on my career
+career/reputation: how I am regarded in my field
+career/career-network: the contacts I have built up professionally
+career/other: something about my career that fits none of the above
+
+learning/school: the school I went to
+learning/university: the university I attended
+learning/course: a course I am taking
+learning/degree: the degree I hold
+learning/subject: the subject I studied
+learning/qualification: the qualification I came away with
+learning/exam: the exam I sat
+learning/grade: the mark I got
+learning/teacher: the person who taught me
+learning/institution: the body that runs the teaching
+learning/skill: something I have learned to do
+learning/practice: putting in the hours to get better at it
+learning/resource: the book, site or course I learn from
+learning/progress: how far I have got with learning it
+learning/language-learning: learning to speak another language
+learning/other: something about my learning that fits none of the above
+
+income/salary: what I am paid a year
+income/payday: when the money comes in
+income/rate: what I charge or am paid per hour or day
+income/bonus: an extra payment on top
+income/benefit: money I receive from the state
+income/pension: my pension and what goes into it
+income/freelance: money from work I do for myself
+income/side-income: money from something on the side
+income/grant: a sum awarded to me
+income/allowance: a regular amount I am given
+income/payslip: the slip showing what I was paid
+income/raise: my pay went up
+income/deduction: what comes off before I see it
+income/source: where a stream of money comes from
+income/expectation: what I expect to come in
+income/other: money coming in that fits none of the above
+
+spending/expense: something I paid for
+spending/bill: a bill that comes in regularly
+spending/paid-subscription: a recurring payment I could cancel
+spending/purchase: something I bought
+spending/price: what the thing cost
+spending/budget: what I have allowed myself to spend
+spending/habit: what I always end up spending on
+spending/large-buy: a big one-off purchase
+spending/refund: I got the money back
+spending/receipt: the proof of what I paid
+spending/saving-target: what I am putting money aside for
+spending/running-cost: what a thing costs me to keep going
+spending/category: how my spending breaks down
+spending/overspend: I went over what I meant to spend
+spending/utility-bill: the gas, electricity, water or council bill
+spending/other: money going out that fits none of the above
+
+finance/account: the account the money sits in
+finance/bank: the bank I am with
+finance/card: my debit or credit card
+finance/loan: money I have borrowed and am paying back
+finance/mortgage: the loan on the property
+finance/saving: money I have put by
+finance/investment: money I have put into something to grow
+finance/interest: the rate I earn or pay
+finance/insurance-policy: a policy I hold and what it covers
+finance/provider: the company that provides a financial product to me
+finance/balance: how much is in there right now
+finance/advisor: who advises me about money
+finance/statement: the statement showing what went in and out
+finance/money-plan: the longer plan for my money
+finance/tax: what I owe and my return
+finance/other: something financial that fits none of the above
+
+travel/trip: a trip I took or am taking
+travel/destination: where I went or am going
+travel/holiday: the holiday itself and how long it was
+travel/flight: the flight and the airline
+travel/train: the train journey
+travel/accommodation: where I stayed
+travel/booking: the reservation and its reference
+travel/itinerary: the plan for each day of the trip
+travel/companion: who I travelled with
+travel/luggage: what I packed and how much I took
+travel/travel-document: the papers I need to travel
+travel/experience: what the place was actually like
+travel/travel-taste: the kind of travelling I enjoy
+travel/return: getting back and what it was like
+travel/visa: the entry permission I needed
+travel/other: something about travelling that fits none of the above
+
+record/passport: my passport, its number and where it is
+record/licence: a licence I hold and what it lets me do
+record/identification: my id card or proof of who I am
+record/certificate: I hold a birth or marriage certificate
+record/registration: I am on a register or enrolled with a body
+record/membership: a membership I hold and its number
+record/contract: an agreement I have signed and its terms
+record/renewal: this has to be renewed and by when
+record/deed: the title or deed to something I own
+record/permit: a permit I hold, parking, residence or work
+record/document: I filed the paperwork and keep the official papers and forms
+record/will: my will and what I have left to whom
+record/reference: a reference number or case id for something official
+record/proof: evidence I can produce of my status or entitlement
+record/where-kept: where a document of mine is physically stored
+record/other: an official record of mine that fits none of the above
+
+leisure/hobby: the thing I do for the love of it, birdwatching, chess, model railways
+leisure/craft: I took up knitting, pottery or woodwork and make things by hand
+leisure/game: a game I play, chess, cards, a board game
+leisure/puzzle: I do the crossword and jigsaws
+leisure/outdoor: walking, climbing, being out in it for pleasure
+leisure/gardening: I grow things in the greenhouse and on the allotment
+leisure/collecting: my collection and what I am still hunting for
+leisure/making: I built it myself and finished it at the weekend
+leisure/club: the club I belong to and when it meets
+leisure/event: the show, the fair, the meet I went to
+leisure/competition: I entered and how I placed
+leisure/equipment: the kit I use for my hobby
+leisure/technique: how I do it and what I am getting better at
+leisure/volunteering: I give my time to something unpaid
+leisure/interest: a subject I am fascinated by and read about
+leisure/other: something I do for pleasure that fits none of the above
+
+media/book: a book I read
+media/film: a film I watched
+media/television: a programme or series I follow
+media/music: music I listen to
+media/podcast: a podcast I follow
+media/news: where I get the news and what I read
+media/video-game: a video game I play
+media/artist: a musician, painter or performer I follow
+media/author: a writer whose work I read
+media/series: the run of episodes or books I am working through
+media/recommendation: something I was told to read or watch
+media/review: what I thought of it
+media/taste: the kind of thing I like
+media/watchlist: what I mean to get to
+media/quote: a line from it that stayed with me
+media/other: something I read or watched that fits none of the above
+
+moment/milestone: a point in my life that marked a change
+moment/memory: something I remember clearly from years back
+moment/anecdote: the story I tell about that time
+moment/first: the first time I ever did it
+moment/loss: something or someone I lost
+moment/achievement: the thing I am proudest of doing
+moment/regret: what I wish I had done differently
+moment/turning-point: the moment everything went a different way
+moment/story: a longer account of something that happened to me
+moment/photo: a picture from then and what it shows
+moment/place: somewhere that means something to me
+moment/year: the year that stands out and what happened in it
+moment/lesson: what that taught me
+moment/era: that whole period of my life
+moment/retelling: how I usually tell it
+moment/other: something from my past that fits none of the above
+
+plan/intention: what I mean to do
+plan/plan-goal: what I am aiming at
+plan/wish: what I would like if it were possible
+plan/idea: a thought I had about doing something
+plan/someday: one day, but not soon
+plan/bucket-list: the thing I want to do before I die
+plan/saving-for: what I am putting money aside towards
+plan/waiting-on: I cannot move until something else happens
+plan/pending: it is in progress and not settled
+plan/research: I am looking into it before deciding
+plan/option: one of the choices I am weighing
+plan/appointment: the thing I have booked in the diary
+plan/deadline: it has to be done by this date
+plan/commitment: I have said I will do it
+plan/next-step: the next thing I have to do about it
+plan/other: something planned that fits none of the above

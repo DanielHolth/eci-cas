@@ -46,6 +46,24 @@ def entropy(counter):
     return -sum((n / total) * math.log2(n / total) for n in counter.values())
 
 
+def summarise(pairs):
+    """Bare path or gloss, and the difference is the whole point.
+
+    Round 4 measured a shelf twice with the same topics and got 10 of 20
+    against 18 of 20, because a bi-encoder compares a sentence to a
+    sentence and `leisure/making` is not one. Every number this file
+    printed before the gloss block existed was therefore a floor. Falls
+    back to the bare path if the gloss file is absent, so the old
+    behaviour is still reachable and still comparable.
+    """
+    try:
+        from build_gloss import load_gloss
+        g = load_gloss()
+    except Exception:
+        return [p.replace("/", " / ") for p in pairs]
+    return ["%s: %s" % (p, g[p]) if p in g else p.replace("/", " / ") for p in pairs]
+
+
 def main(path=None):
     path = path or (ROOT + "docs/vocabulary/v512.txt")
     cats = parse(path)
@@ -60,7 +78,7 @@ def main(path=None):
 
     e = Embedder()
     R = e.encode([rb.embed_text(r) for r in flat], kind="passage")
-    P = e.encode([q.replace("/", " / ") for q in pairs], kind="passage")
+    P = e.encode(summarise(pairs), kind="passage")
     labels = np.argmax(R @ P.T, axis=1)
 
     mix = collections.defaultdict(collections.Counter)
