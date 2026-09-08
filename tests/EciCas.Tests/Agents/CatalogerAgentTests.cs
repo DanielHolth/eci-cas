@@ -81,10 +81,10 @@ public class CatalogerAgentTests
         var bus = new ChannelBus(activity);
         var store = new InMemoryArchiveStore();
 
-        await Agent(bus, activity, store, Answers("household", "conservatory"))
+        await Agent(bus, activity, store, Answers("upkeep", "conservatory"))
             .HandleAsync(Facts("the conservatory leaks", [Unfiled("house", "conservatory", "leaks")]), CancellationToken.None);
 
-        Assert.Equal(new ArchivePair("household", "other"), Assert.Single(store.IndexFor(null)));
+        Assert.Equal(new ArchivePair("upkeep", "other"), Assert.Single(store.IndexFor(null)));
     }
 
     /// <summary>
@@ -209,12 +209,15 @@ public class CatalogerAgentTests
     {
         var vocabulary = ClosedVocabulary.Parse(ShippedInstructions.Store.For("Cataloger", "vocabulary"));
 
-        Assert.Equal(10, vocabulary.Categories.Count);
+        Assert.Equal(32, vocabulary.Categories.Count);
         Assert.All(vocabulary.Categories, c => Assert.Contains("other", vocabulary.TopicsIn(c)));
 
-        // 15-20 folders a drawer: fewer and the near-misses pile up in other,
-        // more and the pick stops fitting in one short prompt.
-        Assert.All(vocabulary.Categories, c => Assert.InRange(vocabulary.TopicsIn(c).Count, 15, 20));
+        // Exactly 16 a drawer, and exact rather than a range because the v512
+        // shelf is generated: build_v512.py asserts the shape before writing
+        // and wire_v512.py copies it here, so a category with 15 means the
+        // generator was bypassed by a hand edit, which is the failure worth
+        // catching. Fifteen folders plus the "other" valve.
+        Assert.All(vocabulary.Categories, c => Assert.Equal(16, vocabulary.TopicsIn(c).Count));
     }
 
     /// <summary>
