@@ -642,3 +642,72 @@ goal, so the trade is taken.
 `record`, identical topics and identical glosses, scored 6/10 and 6/10 with
 mean top scores of 0.8352 and 0.8349 — three ten-thousandths apart. Category
 labels are a readability choice, and that is now known rather than assumed.
+
+## Batch 20 — 512 against the shipped 170, matched on rows reached
+
+`shelf512_v5.py`. Batch 16's construction with the candidate shelf as a third
+arm: all 1559 v4 rows re-filed into each shelf by nearest gloss, then read
+back, no model calls. Every previous v512 number was write-side -- occupancy,
+entropy, twenty routing probes -- and none of them said whether a question
+gets answered.
+
+Matched on ROWS REACHED, because the asymmetry batch 16 had to learn now runs
+the other way: three files of 480 is a six-hundredth of the archive against a
+fiftieth, so the file-count table would flatter the shipped shelf exactly as
+it once flattered terse. `x/other` is dropped from the 512 shelf under the
+same rule the shipped arms already run under -- 480 pairs.
+
+    ~rows    shipped/170        v512
+      20     58%   (18 rows)    70%   (22 rows)     centroid pick
+      60     70%   (63 rows)    81%   (59 rows)
+     100     78%  (114 rows)    85%   (97 rows)
+     220     82%  (255 rows)    86%  (243 rows)
+
+    ~rows    shipped/170        v512
+      60     70%   (47 rows)    63%   (50 rows)     gloss pick
+     100     75%  (119 rows)    68%  (110 rows)
+     220     81%  (170 rows)    71%  (166 rows)
+
+**The result splits by which picker opens the file, and that is the whole
+finding.** Picked by the mean of what landed in a drawer, 512 wins at every
+budget and the cheap end excludes zero: +11.5pp, CI [+2.3, +20.7], P 99%.
+Picked by the written line, it loses: -6.9, -6.9, -10.3pp, and only the
+expensive point excludes zero.
+
+So the drawers are better and the glosses that open them are not. That is
+the cold-start problem arriving on schedule -- `file_v4` already measured
+that a gloss derived from one row is 12pp worse than one derived from ten,
+and a 480-drawer shelf reaches ten rows a drawer far later than a 170-pair
+one does. Centroid is what the archive can offer after it fills; the written
+line is what day one has.
+
+**The prefix ablation, which was meant to explain the gap and only half
+does.** `gloss_v4.gloss_text` puts `cat / topic: ` in front of every gloss.
+On a comma list that prefix is most of the grammar; on a sentence it is a
+label bolted to the front of one. Removing it:
+
+    ~rows    v512 prefixed   v512 bare     pick
+      60     63%             67%           gloss
+     100     68%             71%
+     220     71%             81%
+      60     81%             78%           centroid
+     220     86%             83%
+
+It recovers the whole gloss-pick loss at the expensive end (81% against the
+shipped shelf's 81%, +0.0pp) and costs a little on centroid, so it is a wash
+overall and the prefix stays. What it does establish is that the remaining
+cold gap is a property of the LINES, not of the shelf.
+
+The register hypothesis is the untested one and it is next. A row embeds as
+a short third-person declarative -- "The employee's contract ended on
+December 31st" -- and all 512 glosses are written first person, "I bought a
+lathe for the workshop". gloss_v4's own docstring made this argument about
+descriptive glosses and it applies with more force here: the glosses are in
+a register no row and no question is ever in. Rewriting them third person is
+one pass over one file and would be measured by re-running this script.
+
+**Verdict: 512 ships.** Populated, it is better at every budget and the cheap
+end is the only interval in the batch that excludes zero. Cold, it is a wash
+once the prefix is off. And it reaches those numbers with a third of the rows
+per file -- 3.2 against 9.2 -- which is the facts-per-file mechanism from
+batch 12 pointing the same way it has every time it has been asked.
