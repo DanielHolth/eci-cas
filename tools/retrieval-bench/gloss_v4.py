@@ -64,6 +64,36 @@ Prose is worth about 3pp where the gloss is doing the picking, which is the
 direction the embedder argument predicts, and nothing beyond noise elsewhere.
 It is a real but small effect, not a different regime.
 
+**Examples beat both, and that is Daniel's point.** A row embeds as
+`line + sentence`, and the sentence is a short third-person declarative --
+"The employee's contract ended on December 31st." A descriptive gloss is a
+different register from every row in the archive and every question asked of
+it, so it sits in its own corner of the space however well it is written.
+`terse_examples.py` writes four example sentences per pair in the register the
+Archivist actually uses, averaged into one vector -- the construction
+`file_v4`'s by-gloss uses on padding, except written rather than drawn from
+the archive:
+
+    terse/34, strict       1 file   3 files   5 files   8 files
+    keywords, centroid       51%      75%       82%       83%
+    sentences, centroid      55%      68%       ...       85%
+    examples, centroid       54%      77%       79%       85%
+    examples, gloss-pick     54%      71%       81%       82%
+
+Examples are the best or tied-best terse format at every file count and are
+the only one that beats keywords on the gloss-pick at the cheap end, where the
+gloss is doing all the work.
+
+But the shipped shelf says the opposite, and the two together give the
+mechanism. `file_v4` already measured examples on the 170-pair shelf --
+by-gloss is the mean of a file's padding, which is exactly example sentences
+-- and there it scores 73% strict against the written keyword gloss's 73%. A
+dead tie. Examples help a *broad* drawer and add nothing to a narrow one: a
+34-pair shelf has drawers too wide for four keywords to describe, while
+`identity/nationality` is nearly its own description and examples of it are
+redundant. So the format question and the shelf question are the same
+question, and the shelf that needs examples least is the one that wins.
+
 It does not rescue the shelf, and at the expensive end it makes things worse:
 matched on reach, sentences move terse from 51% to 55% at the cheap end
 against the shipped shelf's 70%, and from 75% to 68% at the expensive end.
@@ -72,9 +102,14 @@ arm is still keywords, the *weaker* format, so terse is now being given the
 better one and still losing at every budget. The confound runs against the
 conclusion rather than for it, which strengthens it.
 
-What is not yet known is whether the 170-pair shelf would gain the same 3pp
-from prose. That needs 160 sentences written and is worth doing, since the
-written gloss is what would actually ship as the filer.
+Matched on reach, examples change nothing about the conclusion: 54% at the
+cheap end against the shipped shelf's 70%, and -3.4pp (CI [-11.5, +4.6], P
+16%) at the expensive end -- a tie bought with extra rows, again.
+
+What is not yet written is a set of *written* examples for the 170-pair shelf.
+The archive-drawn stand-in ties there, which is the reason not to rush it, but
+the written version is the artifact that would ship and it is the one arm this
+file cannot yet report.
 
 A paired bootstrap over the 87 questions, which is what separated the gloss
 sizes in `file_v4` and is owed here too:
@@ -117,6 +152,7 @@ import read_bench as rb
 import retrieval_v4 as corpus
 import terse_vocab
 import terse_sentence
+import terse_examples
 from answers_v4 import ANSWERS
 from embed import Embedder
 from arms_v4 import CACHE, shape
@@ -150,7 +186,23 @@ def gloss_text(pair, words):
 def evaluate(e, rowsv, rows_flat, gold_stmt, shelf, qv, qs, k, files):
     """File every row into `shelf` by nearest gloss, then read it back."""
     pairs = sorted(shelf)
-    G = e.encode([gloss_text(p, shelf[p]) for p in pairs], kind="passage")
+    if isinstance(shelf[pairs[0]], list):
+        # Examples: one vector per example, averaged per pair. Same
+        # construction file_v4's by-gloss uses on padding rows, except these
+        # are written rather than drawn from the archive. No pair prefix --
+        # a row does not carry one in its sentence field, and the whole point
+        # of an example is to sit where the rows sit.
+        flatex = [x for p in pairs for x in shelf[p]]
+        E = e.encode(flatex, kind="passage")
+        G, off = [], 0
+        for p in pairs:
+            n = len(shelf[p])
+            G.append(E[off:off + n].mean(0))
+            off += n
+        G = np.vstack(G)
+        G /= np.maximum(np.linalg.norm(G, axis=1, keepdims=True), 1e-9)
+    else:
+        G = e.encode([gloss_text(p, shelf[p]) for p in pairs], kind="passage")
     owner = np.argmax(rowsv @ G.T, axis=1)
 
     cent = np.vstack([rowsv[owner == i].mean(0) if (owner == i).any()
@@ -197,7 +249,8 @@ def main(k=5):
     # so shelf and gloss format were confounded in the first run. Holding the
     # shelf fixed isolates the format.
     shelves = [("shipped/170", shipped_gloss()), ("terse/34", terse_gloss()),
-               ("terse/34 sent", dict(terse_sentence.TERSE_SENTENCE))]
+               ("terse/34 sent", dict(terse_sentence.TERSE_SENTENCE)),
+               ("terse/34 exam", dict(terse_examples.TERSE_EXAMPLES))]
     for name, shelf in shelves:
         missing = [p for p in rb.all_pairs() if p not in shelf] if "170" in name else []
         print("%-12s %d pairs glossed%s" % (
@@ -226,15 +279,14 @@ def main(k=5):
     # being handed four times as many rows to rank has not shown that its
     # folders are better, it has shown that a bigger slice is easier.
     print("\n  matched on rows reached, centroid pick, nearest sweep point:")
-    print("    %8s   %-22s %-22s %-22s"
-          % ("~rows", "shipped/170", "terse/34", "terse/34 sent"))
+    print("    %8s   " % "~rows" + " ".join("%-22s" % nm for nm, _ in shelves))
     for target in (20, 60, 100, 220):
         cells = []
         for nm, _ in shelves:
             cand = [r for r in swept if r[2] == "centroid" and r[0] == nm]
             b = min(cand, key=lambda r: abs(r[3] - target))
             cells.append("%3d%% (%d files, %3.0f rows)" % (b[4], b[1], b[3]))
-        print("    %8d   %-22s %-22s %-22s" % (target, cells[0], cells[1], cells[2]))
+        print("    %8d   " % target + " ".join("%-22s" % c for c in cells))
 
     # 87 questions makes a 5pp gap four questions wide, so the file-count
     # table cannot be read as a win for either shelf on its own. Paired over
@@ -246,7 +298,9 @@ def main(k=5):
     for arm, lo, hi, why in (("terse/34", 3, 1, "63 vs 80 rows"),
                              ("terse/34", 8, 3, "176 vs 214 rows"),
                              ("terse/34 sent", 3, 1, "63 vs 80 rows"),
-                             ("terse/34 sent", 8, 3, "176 vs 214 rows")):
+                             ("terse/34 sent", 8, 3, "176 vs 214 rows"),
+                             ("terse/34 exam", 3, 1, "63 vs 80 rows"),
+                             ("terse/34 exam", 8, 3, "176 vs 214 rows")):
         d = PERQ[(arm, hi, "centroid")] - PERQ[("shipped/170", lo, "centroid")]
         boot = d[rng.integers(0, len(d), (5000, len(d)))].mean(1)
         print("    shipped@%d vs %-13s@%d (%s)  %+5.1fpp  95%% CI [%+5.1f, %+5.1f]"
