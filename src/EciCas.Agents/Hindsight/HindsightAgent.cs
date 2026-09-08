@@ -86,15 +86,29 @@ public sealed class HindsightAgent : AgentBase
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        // Waking notes on every human turn meant an embed-and-search call
-        // (network latency, unlike everything else here) sat on the fast
-        // path of every single reply. Reflection's own reposted ideas arrive
-        // back through events.perception exactly like a human turn (see
-        // ArchivistAgent's matching skip) — that repost is the one moment
-        // the ring (Hindsight -> Intent -> reply -> note -> Hindsight) is
-        // actually being closed, so it is the only trigger Hindsight needs.
-        var woken = envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self"
-            ? await WakeAsync(PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey)), cancellationToken).ConfigureAwait(false)
+        // Two triggers, and neither is "every turn". Waking notes on every
+        // human turn meant an embed-and-search call (network latency, unlike
+        // everything else here) sat on the fast path of every single reply.
+        //
+        // The first is Reflection's own reposted ideas, which arrive back
+        // through events.perception exactly like a human turn (see
+        // ArchivistAgent's matching skip). That repost is the one moment the
+        // ring (Hindsight -> Intent -> reply -> note -> Hindsight) is
+        // actually being closed.
+        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+        var selfTriggered = envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self";
+
+        // The second trigger, and the reason it is affordable: a turn that
+        // says "you" is asking the persona for its own view, and there is no
+        // row anywhere in the archive that answers one. Retrieval measured
+        // this directly (tools/retrieval-bench/refl_v4.py): routing such a
+        // turn by similarity puts 1 of 16 in an assistant drawer while 6 of 6
+        // human controls stay correctly out, because a bi-encoder has nowhere
+        // to encode WHOSE fact this is. So the fact shelf cannot serve these
+        // turns at all, and the notes are the only thing that can.
+        var addressed = _options.WakeWhenAddressed && Addressed(text);
+        var woken = selfTriggered || addressed
+            ? await WakeAsync(text, cancellationToken).ConfigureAwait(false)
             : [];
 
         // Published even when empty, and even when there is no embedder at
@@ -112,6 +126,31 @@ public sealed class HindsightAgent : AgentBase
 
         _bus.Publish(Topics.Advisories, envelope.Derive(Topics.Advisories, Name, envelope.Severity, meta));
     }
+
+    /// <summary>
+    /// Second person, and nothing cleverer. Whole words so "your" matches and
+    /// "yourself" matches but "yourk" does not, and so a sentence merely
+    /// containing the letters is not mistaken for one addressed to anybody.
+    ///
+    /// Deliberately a regex rather than a model call. It has to be free, or
+    /// it reintroduces on every turn exactly the cost the trigger narrowing
+    /// removed. Measured at 21 of 22 on hand-written turns, which says a
+    /// cheap signal exists here — not that this is an accuracy figure.
+    ///
+    /// Its one known miss is "Any thoughts?", whose subject lives in the
+    /// previous turn. Reaching that means reading conversation state rather
+    /// than the string, which is a different and larger change; a bare
+    /// anaphoric question simply wakes no notes, and the persona answers from
+    /// the turn in front of it like anyone would.
+    /// </summary>
+    private static bool Addressed(string? text) =>
+        !string.IsNullOrWhiteSpace(text) && SecondPerson.IsMatch(text);
+
+    private static readonly System.Text.RegularExpressions.Regex SecondPerson =
+        new(@"\b(you|your|yours|yourself)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            | System.Text.RegularExpressions.RegexOptions.CultureInvariant
+            | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
     /// No embedder is a normal state, not a degradation — the persona is

@@ -281,6 +281,75 @@ public class PassageMemoryTests
         Assert.Null(advisory!.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey));
     }
 
+    /// <summary>
+    /// The second trigger. A turn addressed to the persona wakes notes even
+    /// though Reflection did not repost it, because there is no row anywhere
+    /// in the fact archive that answers "what do you think" — refl_v4 put 1
+    /// of 16 such turns in an assistant drawer while 6 of 6 human controls
+    /// stayed correctly out. Notes are the only thing that can serve them.
+    ///
+    /// The third case is the one that keeps this affordable: a turn about the
+    /// human, with no second person in it, must still wake nothing, or the
+    /// embed-and-search is back on the fast path of every reply.
+    /// </summary>
+    [Theory]
+    [InlineData("do you have any thoughts about that?", true)]
+    [InlineData("what is your name?", true)]
+    [InlineData("when does my passport expire?", false)]
+    [InlineData("Any thoughts?", false)]
+    public async Task Hindsight_WakesOnASecondPersonTurn_AndOnlyOnOne(string text, bool expected)
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+
+        var passages = new InMemoryPassageStore();
+        await passages.WriteAsync(
+            [new Passage("a", "it answers about people more warmly than about dates",
+                [new ArchivePair("person", "family")], DateTimeOffset.UtcNow, Unit(0))],
+            null, CancellationToken.None);
+
+        var agent = new HindsightAgent(bus, activity, NullLogger<HindsightAgent>.Instance,
+            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()));
+
+        // No TriggeredByKey: this is a plain human turn, the case the old
+        // condition declined outright.
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, text)), CancellationToken.None);
+
+        Assert.True(advisories.TryRead(out var advisory));
+        Assert.Equal(expected, advisory!.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey) is not null);
+    }
+
+    /// <summary>
+    /// The knob off is the agent exactly as it was: self-triggered only. It
+    /// is a setting rather than a branch because the cost of waking depends
+    /// on the embedder — local ONNX finishes well inside Librarian plus
+    /// Recall, a remote embedding endpoint might not — and that is a
+    /// deployment fact this code cannot know.
+    /// </summary>
+    [Fact]
+    public async Task Hindsight_WakesNothingOnAnAddressedTurn_WhenTheGateIsOff()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+
+        var passages = new InMemoryPassageStore();
+        await passages.WriteAsync(
+            [new Passage("a", "a thought", [], DateTimeOffset.UtcNow, Unit(0))], null, CancellationToken.None);
+
+        var agent = new HindsightAgent(bus, activity, NullLogger<HindsightAgent>.Instance,
+            new StubEmbeddings(_ => Unit(0)), passages,
+            Options.Create(new PassageOptions { WakeWhenAddressed = false }));
+
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "do you have any thoughts about that?")), CancellationToken.None);
+
+        Assert.True(advisories.TryRead(out var advisory));
+        Assert.Null(advisory!.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey));
+    }
+
     [Fact]
     public async Task Reflection_WritesTheBatchNote_AndTheRevisitReplacesThePreviousOne()
     {
