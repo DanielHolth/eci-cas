@@ -37,6 +37,9 @@ export interface Knobs {
   // dragged value from a stored one instead of always offering to write.
   savedRecallDepth: number;
   savedRecallThreads: number;
+  savedMaxSentences: number;
+  savedReflectionEvery: number;
+  savedMood: string;
   mood: string;
   moods: string[];
 }
@@ -69,8 +72,8 @@ export const setRecallThreads = (recallThreads: number) => postKnobs({ recallThr
 export const setMood = (mood: string) => postKnobs({ mood });
 export const setTier = (tier: string) => postKnobs({ tier });
 
-/** Writes the live Recall knobs into the active tier's appsettings file --
- * both the source tree's copy and the one the binary loads -- so a setting
+/** Writes every live knob into the active tier's appsettings file -- both
+ * the source tree's copy and the one the binary loads -- so a setting
  * arrived at by dragging outlives the process that found it. */
 export async function saveKnobs(): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs/save`, { method: "POST" });

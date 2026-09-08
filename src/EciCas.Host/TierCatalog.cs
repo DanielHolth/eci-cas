@@ -42,11 +42,12 @@ public sealed class TierCatalog
     private readonly RecallOptions _recall;
     private readonly LibrarianOptions _librarian;
     private readonly RuntimeKnobs _knobs;
+    private readonly KnobDefaults _knobDefaults;
     private readonly object _switchLock = new();
 
     public TierCatalog(IEnumerable<TierPreset> presets, SubstrateOptions substrates,
         AgentSubstrateManifest agentSubstrates, RecallOptions recall, LibrarianOptions librarian,
-        RuntimeKnobs knobs, string active)
+        RuntimeKnobs knobs, KnobDefaults knobDefaults, string active)
     {
         _ordered = presets.ToList();
         _presets = _ordered.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
@@ -55,6 +56,7 @@ public sealed class TierCatalog
         _recall = recall;
         _librarian = librarian;
         _knobs = knobs;
+        _knobDefaults = knobDefaults;
 
         // Normalised to the preset's own casing, not whatever --Tier typed:
         // the dropdown's <option value> is preset.Name, and a raw "minimal"
@@ -114,6 +116,17 @@ public sealed class TierCatalog
             _knobs.RecallDepth = preset.Recall.MaxPickedPerWorker;
             _knobs.RecallThreads = preset.Recall.Threads;
 
+            // Same re-seeding, same reason: MaxSentences, ReflectionEvery and
+            // Mood are live knobs too, and leaving a hand-dragged value in
+            // place across a switch would run the new tier under the old
+            // tier's session experiment.
+            _knobs.MaxSentences = preset.Knobs.MaxSentences;
+            _knobs.ReflectionEvery = preset.Knobs.ReflectionEvery;
+            _knobs.Mood = preset.Knobs.Mood;
+            _knobDefaults.MaxSentences = preset.Knobs.MaxSentences;
+            _knobDefaults.ReflectionEvery = preset.Knobs.ReflectionEvery;
+            _knobDefaults.Mood = preset.Knobs.Mood;
+
             Active = preset.Name;
         }
 
@@ -135,6 +148,7 @@ public sealed class TierPreset
     public required Dictionary<string, AgentSubstrateEntry> Agents { get; init; }
     public required RecallOptions Recall { get; init; }
     public required LibrarianOptions Librarian { get; init; }
+    public required KnobDefaults Knobs { get; init; }
 
     /// <summary>
     /// Where this tier sits on the one axis tiers actually have: base 0

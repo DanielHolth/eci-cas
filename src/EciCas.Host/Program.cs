@@ -82,6 +82,7 @@ builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("E
 builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
 builder.Services.Configure<TurnLogOptions>(builder.Configuration.GetSection("TurnLog"));
 builder.Services.Configure<TelemetryLogOptions>(builder.Configuration.GetSection("TelemetryLog"));
+builder.Services.Configure<KnobDefaults>(builder.Configuration.GetSection("Knobs"));
 
 builder.Services.AddSingleton<BusActivityTracker>();
 builder.Services.AddSingleton<IMessageBus, ChannelBus>();
@@ -319,12 +320,16 @@ builder.Services.AddSingleton(sp => new TierCatalog(
     sp.GetRequiredService<IOptions<RecallOptions>>().Value,
     sp.GetRequiredService<IOptions<LibrarianOptions>>().Value,
     sp.GetRequiredService<RuntimeKnobs>(),
+    sp.GetRequiredService<IOptions<KnobDefaults>>().Value,
     tier));
 
 builder.Services.AddSingleton(sp => new RuntimeKnobs
 {
     RecallDepth = sp.GetRequiredService<IOptions<RecallOptions>>().Value.MaxPickedPerWorker,
     RecallThreads = sp.GetRequiredService<IOptions<RecallOptions>>().Value.Threads,
+    MaxSentences = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.MaxSentences,
+    ReflectionEvery = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ReflectionEvery,
+    Mood = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Mood,
 });
 
 RegisterAgent<PerceptionAgent>(builder.Services);
@@ -400,10 +405,10 @@ app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.Lis
 
 // The Debug panel's sliders — live, in-memory, and reset on restart. Read
 // on every Intent prompt, so a drag takes effect on the very next turn.
-app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall) =>
-    Results.Json(ToKnobsPayload(knobs, tiers, recall.Value), jsonOptions));
+app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults) =>
+    Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions));
 
-app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall) =>
+app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults) =>
 {
     // First, because it re-seeds RecallDepth: a request that sets both
     // should end with the explicit depth, not with the tier's answer to it.
@@ -437,20 +442,20 @@ app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog
         knobs.Mood = mood;
     }
 
-    return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value), jsonOptions);
+    return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions);
 });
 
-// Writes the two live Recall knobs back into the active tier's file, so a
-// setting found by dragging survives the restart that found it. Both copies
-// get it: the source tree's file is the one a human and git read, and the
-// one under the binary is the one the next boot actually loads -- writing
-// only the source means the next run silently ignores the save, and writing
-// only the build output means the next `dotnet build` silently reverts it.
+// Writes every live knob back into the active tier's file, so a setting
+// found by dragging survives the restart that found it. Both copies get it:
+// the source tree's file is the one a human and git read, and the one under
+// the binary is the one the next boot actually loads -- writing only the
+// source means the next run silently ignores the save, and writing only the
+// build output means the next `dotnet build` silently reverts it.
 //
 // Read-modify-write of the parsed JSON rather than a re-serialise of
-// RecallOptions: a tier file carries Classes, Agents and Rank too, and
-// nothing here has any business rewriting those.
-app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall) =>
+// RecallOptions/KnobDefaults: a tier file carries Classes, Agents and Rank
+// too, and nothing here has any business rewriting those.
+app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults) =>
 {
     var file = $"appsettings.{tiers.Active}.json";
     var targets = new[]
@@ -469,9 +474,12 @@ app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<
 
         var text = File.ReadAllText(path);
         if (!TryWriteNumber(ref text, "MaxPickedPerWorker", knobs.RecallDepth)
-            || !TryWriteNumber(ref text, "Threads", knobs.RecallThreads))
+            || !TryWriteNumber(ref text, "Threads", knobs.RecallThreads)
+            || !TryWriteNumber(ref text, "MaxSentences", knobs.MaxSentences)
+            || !TryWriteNumber(ref text, "ReflectionEvery", knobs.ReflectionEvery)
+            || !TryWriteString(ref text, "Mood", knobs.Mood.ToString()))
         {
-            return Results.Problem($"{file} has no Recall:MaxPickedPerWorker or Recall:Threads to write.");
+            return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Recall:Threads, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:Mood.");
         }
 
         // Parsed to prove the edit, not to produce it. Round-tripping through
@@ -496,11 +504,14 @@ app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<
     // to move with the file or the Save button stays lit after a good save.
     recall.Value.MaxPickedPerWorker = knobs.RecallDepth;
     recall.Value.Threads = knobs.RecallThreads;
+    knobDefaults.Value.MaxSentences = knobs.MaxSentences;
+    knobDefaults.Value.ReflectionEvery = knobs.ReflectionEvery;
+    knobDefaults.Value.Mood = knobs.Mood;
 
-    return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value), jsonOptions);
+    return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions);
 });
 
-static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOptions recall) => new
+static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOptions recall, KnobDefaults knobDefaults) => new
 {
     tier = tiers.Active,
     tiers = tiers.Presets.Select(p => new { name = p.Name, missingKeys = p.MissingKeys }),
@@ -512,6 +523,9 @@ static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOption
     // button rather than having to guess whether a drag is unsaved.
     savedRecallDepth = recall.MaxPickedPerWorker,
     savedRecallThreads = recall.Threads,
+    savedMaxSentences = knobDefaults.MaxSentences,
+    savedReflectionEvery = knobDefaults.ReflectionEvery,
+    savedMood = knobDefaults.Mood.ToString(),
     mood = knobs.Mood.ToString(),
     moods = Enum.GetNames<Mood>(),
 };
@@ -720,6 +734,19 @@ static bool TryWriteNumber(ref string json, string key, int value)
     }
 
     json = pattern.Replace(json, m => m.Groups[1].Value + value.ToString(CultureInfo.InvariantCulture), 1);
+    return true;
+}
+
+/// <summary>Same trade as <see cref="TryWriteNumber"/>, for a quoted string value.</summary>
+static bool TryWriteString(ref string json, string key, string value)
+{
+    var pattern = new Regex($@"(""{Regex.Escape(key)}""\s*:\s*)""[^""]*""");
+    if (!pattern.IsMatch(json))
+    {
+        return false;
+    }
+
+    json = pattern.Replace(json, m => m.Groups[1].Value + "\"" + value + "\"", 1);
     return true;
 }
 

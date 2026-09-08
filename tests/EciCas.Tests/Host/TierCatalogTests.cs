@@ -25,8 +25,9 @@ public class TierCatalogTests
         var recall = new RecallOptions();
         var librarian = new LibrarianOptions();
         var knobs = new RuntimeKnobs();
+        var knobDefaults = new KnobDefaults();
         var catalog = new TierCatalog(TierCatalogLoader.Load(TierDirectory), substrates, agents, recall, librarian,
-            knobs, "Mock");
+            knobs, knobDefaults, "Mock");
         return (catalog, substrates, agents, recall, librarian, knobs);
     }
 

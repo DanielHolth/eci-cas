@@ -5,6 +5,7 @@ obj/
 
 # Runtime output
 archive.jsonl
+src/EciCas.Host/telemetry/
 
 # Secrets — manifest references env var NAMES only, never values.
 # Real keys live in .env, which is never committed.

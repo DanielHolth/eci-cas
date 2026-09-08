@@ -14,9 +14,10 @@ import {
 } from "@/lib/api";
 
 /**
- * Live session experiments, not configuration: every value here resets to
- * its default on a host restart (see EciCas.Core.RuntimeKnobs). A drag
- * takes effect on the very next turn — no restart, no redeploy.
+ * Live session experiments that can become configuration: a drag takes
+ * effect on the very next turn, no restart needed, and resets to the active
+ * tier's file on the next restart unless Save writes it there first (see
+ * EciCas.Core.RuntimeKnobs / KnobDefaults).
  */
 export function KnobsPanel() {
   const [knobs, setKnobs] = useState<Knobs | null>(null);
@@ -62,12 +63,16 @@ export function KnobsPanel() {
     }
   }
 
-  // Only the two Recall knobs are written back: the rest are session
-  // experiments by design (see RuntimeKnobs), and offering to persist a mood
-  // would imply a tier file has somewhere to put it.
+  // Every knob is written back now: each tier file carries a Knobs section
+  // (see KnobDefaults) alongside Recall's, so a drag on any slider can
+  // become the tier's own default, not just the two Recall ones.
   const dirty =
     knobs !== null &&
-    (knobs.recallDepth !== knobs.savedRecallDepth || knobs.recallThreads !== knobs.savedRecallThreads);
+    (knobs.recallDepth !== knobs.savedRecallDepth ||
+      knobs.recallThreads !== knobs.savedRecallThreads ||
+      knobs.maxSentences !== knobs.savedMaxSentences ||
+      knobs.reflectionEvery !== knobs.savedReflectionEvery ||
+      knobs.mood !== knobs.savedMood);
 
   async function save() {
     if (!dirty || saving) return;

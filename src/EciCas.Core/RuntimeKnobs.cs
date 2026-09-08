@@ -3,12 +3,12 @@ namespace EciCas.Core;
 /// <summary>
 /// Live-tunable numbers the companion UI's Debug panel exposes as sliders —
 /// a session experiment a person can nudge without a restart or an
-/// appsettings edit. Deliberately in-memory only and deliberately not an
-/// instruction file: these are numbers (and one closed vocabulary), not
-/// prose, so they have no business in `instructions/*.txt` (see AGENTS.md
-/// "Instructions are prose, not code"). A restart resets every knob to its
-/// default, which matches the tier's own static config default so an
-/// untouched slider changes nothing.
+/// appsettings edit. A drag is in-memory only and takes effect on the very
+/// next turn; Save writes the current values back into the active tier's
+/// <see cref="KnobDefaults"/> section (see Program.cs's /api/knobs/save), so
+/// what started as a session experiment can become the tier's own default.
+/// A restart resets every knob to whatever the active tier's file says,
+/// which is <see cref="KnobDefaults"/>'s job to carry.
 /// </summary>
 public sealed class RuntimeKnobs
 {
@@ -135,5 +135,19 @@ public enum Mood
     Neutral,
     Helpful,
     Ecstatic,
+}
+
+/// <summary>
+/// The tier file's answer to what <see cref="RuntimeKnobs"/> should boot
+/// with and what Save writes back to -- the same role <c>RecallOptions</c>
+/// plays for Recall's own knobs. Bound from each tier's "Knobs" section,
+/// with the un-overridden base values (2, 5, Neutral) as the floor every
+/// tier without its own opinion falls back to.
+/// </summary>
+public sealed class KnobDefaults
+{
+    public int MaxSentences { get; set; } = 2;
+    public int ReflectionEvery { get; set; } = 5;
+    public Mood Mood { get; set; } = Mood.Neutral;
 }
 

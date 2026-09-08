@@ -1,6 +1,7 @@
 using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
 using EciCas.Bus;
+using EciCas.Core;
 using EciCas.Substrates;
 using Microsoft.Extensions.Configuration;
 
@@ -59,6 +60,7 @@ public static class TierCatalogLoader
         var agents = configuration.GetSection("AgentSubstrates").Get<AgentSubstrateManifest>() ?? new AgentSubstrateManifest();
         var recall = configuration.GetSection("Recall").Get<RecallOptions>() ?? new RecallOptions();
         var librarian = configuration.GetSection("Librarian").Get<LibrarianOptions>() ?? new LibrarianOptions();
+        var knobs = configuration.GetSection("Knobs").Get<KnobDefaults>() ?? new KnobDefaults();
 
         // Validated here rather than on selection, so a broken tier file
         // stops the host at boot with every other tier's problems listed
@@ -107,6 +109,7 @@ public static class TierCatalogLoader
             Agents = agents.Agents,
             Recall = recall,
             Librarian = librarian,
+            Knobs = knobs,
             Rank = configuration.GetValue<int>("Tier:Rank"),
             MissingKeys = missing,
         };
