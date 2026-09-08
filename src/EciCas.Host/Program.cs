@@ -1,4 +1,6 @@
 ﻿using System.Net.Http.Headers;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
@@ -449,22 +451,23 @@ app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<
             continue;
         }
 
-        var node = JsonNode.Parse(File.ReadAllText(path))?.AsObject();
-        if (node is null)
+        var text = File.ReadAllText(path);
+        if (!TryWriteNumber(ref text, "MaxPickedPerWorker", knobs.RecallDepth)
+            || !TryWriteNumber(ref text, "Threads", knobs.RecallThreads))
         {
-            continue;
+            return Results.Problem($"{file} has no Recall:MaxPickedPerWorker or Recall:Threads to write.");
         }
 
-        if (node["Recall"] is not JsonObject section)
-        {
-            section = new JsonObject();
-            node["Recall"] = section;
-        }
+        // Parsed to prove the edit, not to produce it. Round-tripping through
+        // JsonNode reformatted the whole file -- every one-line object in it
+        // exploded to eight lines and the trailing newline went -- which
+        // turned a two-number save into a diff nobody can read. Editing the
+        // two numbers in place leaves the file exactly as its author wrote
+        // it, and this parse is what keeps that from being a licence to emit
+        // broken JSON.
+        JsonNode.Parse(text);
 
-        section["MaxPickedPerWorker"] = knobs.RecallDepth;
-        section["Threads"] = knobs.RecallThreads;
-
-        File.WriteAllText(path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(path, text);
         written.Add(path);
     }
 
@@ -685,6 +688,25 @@ await app.StopAsync();
 /// by the next build -- and there is no configuration entry for "where did
 /// this come from", only the layout.
 /// </summary>
+/// <summary>
+/// Replaces one numeric JSON property's value in place, leaving every byte
+/// around it alone. Returns false if the key is not there, which the caller
+/// treats as a refusal rather than an invitation to add it: a tier file that
+/// does not mention a knob is a tier file whose author left it to the base
+/// layer, and quietly writing one in would change what the tier means.
+/// </summary>
+static bool TryWriteNumber(ref string json, string key, int value)
+{
+    var pattern = new Regex($@"(""{Regex.Escape(key)}""\s*:\s*)-?\d+");
+    if (!pattern.IsMatch(json))
+    {
+        return false;
+    }
+
+    json = pattern.Replace(json, m => m.Groups[1].Value + value.ToString(CultureInfo.InvariantCulture), 1);
+    return true;
+}
+
 static string SourceTierDirectory()
 {
     var dir = new DirectoryInfo(AppContext.BaseDirectory);
