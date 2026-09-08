@@ -711,3 +711,42 @@ end is the only interval in the batch that excludes zero. Cold, it is a wash
 once the prefix is off. And it reaches those numbers with a third of the rows
 per file -- 3.2 against 9.2 -- which is the facts-per-file mechanism from
 batch 12 pointing the same way it has every time it has been asked.
+
+## Batch 21 — the register hypothesis, and it does not survive
+
+`register_v5.py`. Batch 20 named one explanation for v512's weak cold pick:
+all 512 glosses are first person while every row embeds as a third-person
+declarative. Rewriting 480 lines by hand is a large write, so the cheap
+version ran first -- a mechanical pronoun swap, plus an arm that drops the
+`cat / topic:` prefix for `cat topic. ` so the gloss has the exact shape of
+`read_bench.embed_text`.
+
+    arm                open   gloss   centroid   reach
+    1st, prefixed         3     56%       79%       20
+    1st, prefixed         5     60%       81%       33
+    1st, prefixed         8     63%       85%       50
+    1st, prefixed        20     68%       86%      110
+    3rd, prefixed         3     48%       74%       20
+    3rd, prefixed         5     51%       80%       35
+    3rd, prefixed         8     58%       82%       54
+    3rd, prefixed        20     68%       87%      108
+    3rd, row-shaped       3     52%       74%       16
+    3rd, row-shaped       5     57%       81%       26
+    3rd, row-shaped       8     60%       82%       39
+    3rd, row-shaped      20     72%       92 rows  <- best gloss point
+
+Third person is WORSE or level at every point on both pickers. The one
+number that beats the first-person arm is row-shaped at 20 files, 72%
+against 68%, and it gets there on 92 rows against 110 -- inside noise on 87
+questions, and the same arm is 3pp down on centroid.
+
+The caveat, and it cuts one way: the conversion emits "the person" 480
+times where a real row says "the employee" or "the student", so it adds a
+constant token a hand rewrite would not have. So this does not prove
+register cannot matter. It does say the large effect predicted in batch 20
+is not there to collect, and a 480-line hand rewrite is no longer justified
+by a measurement -- only by taste, which is the thing this log exists to
+not spend on.
+
+The prediction was mine and it was wrong. v512 ships with the first-person
+glosses as written.
