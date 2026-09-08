@@ -54,6 +54,42 @@ from" stops being a cost, and the ~340-pair shelf this table points at becomes
 writable. The remaining cost of going finer is human, not model -- 340 pairs
 is 340 glosses to write and a folder tree a person still has to recognise.
 
+**Is 340 parquet files a problem? It is cheaper than 171, on both IO axes.**
+`ParquetArchiveStore` is one file per pair, created lazily, with the file name
+as the index. The cost of a read is the files it opens; the cost of a write is
+rewriting one whole file. Measured at the budget that reaches 85%:
+
+        K   files opened   rows read   p95 file
+       85        12           272         36
+      171        20           235         21
+      342         8            61         10
+      680        12            45          5
+
+Going finer *reduces* file opens, because a sharper file needs fewer of them
+to cover the answer -- 8 opens at K=342 against 20 at K=171. It halves the
+write cost too, since a rewrite is proportional to file size and p95 goes from
+21 rows to 10. And 340 files of ~5KB is about 1.7MB of directory, which is
+nothing. The scale objection to a finer shelf is a read-model objection, not a
+storage one, and the read model gets better.
+
+**Category-then-topic, or one flat pick?** One flat pick. `shelf_v4` measured
+the staging directly with centroids at both levels, so only the staging
+varies: keeping the top 3 categories scores 65% against 72% for ranking all
+files at once, and the staged arm is monotone up to the flat arm and never
+past it. A gate can only discard what the second stage would have ranked, and
+a category centroid is a blurrier vector than any file centroid inside it.
+
+That answer holds at 342 because the flat pick is 342 dot products against a
+384-dim vector -- microseconds, and far below the cost of opening one parquet
+file. Staging exists to avoid scoring every file, and there is still nothing
+to avoid. It would become a real question at 100k pairs, and `shelf_v4`'s
+table is the price list for that day.
+
+Worth separating: the *directory layout* stays hierarchical either way. Files
+are named category~topic and a person still browses them as a tree. Nothing
+about picking flatly requires storing flatly, and the pick order is not the
+folder order.
+
 Two things this cannot say. The files here have no names, so it does not
 follow that a *hand-written* 340-pair vocabulary would cut the same way -- the
 clusters are optimal for the embedder by construction. And 1559 is the flat
