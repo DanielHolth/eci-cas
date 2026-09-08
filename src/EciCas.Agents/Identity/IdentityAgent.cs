@@ -42,6 +42,14 @@ public sealed class IdentityAgent : AgentBase
     /// <summary>How the persona's own name is phrased to Intent. Prose, so revising it is not a rebuild.</summary>
     public const string NameSection = "name";
 
+    /// <summary>
+    /// Below this many characters an advisory is not an advisory. A persona
+    /// described in two characters says nothing Intent can be coloured by, and
+    /// an empty bracket in the prompt is worse than no bracket: the model reads
+    /// it as a slot it is expected to fill.
+    /// </summary>
+    public const int MinAdviceLength = 3;
+
     private readonly IMessageBus _bus;
     private readonly IAgentStateStore _store;
     private readonly IInstructionStore _instructions;
@@ -93,9 +101,15 @@ public sealed class IdentityAgent : AgentBase
         // What it is called is in the archive once anyone has named it, which
         // is where Recall can reach it on the turns that actually ask.
         var named = InstructionFile.Fill(_instructions.For(Name, NameSection), ("name", name));
-        var advice = named.Length == 0 ? identity : $"{identity} {named}";
+        var advice = $"{identity} {named}".Trim();
 
-        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, MetaBag.Empty.With(AdviceKey, advice));
+        // Nothing worth saying is said as nothing at all. The advisory itself
+        // is not optional -- Identity is on Governance's bundle roster, and a
+        // turn where it stays silent is a turn that waits out the bundle
+        // timeout -- so what drops is the key, not the message.
+        var meta = advice.Length < MinAdviceLength ? MetaBag.Empty : MetaBag.Empty.With(AdviceKey, advice);
+
+        var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, meta);
         _bus.Publish(Topics.Advisories, advisory);
     }
 
@@ -138,8 +152,12 @@ public sealed class IdentityAgent : AgentBase
                 return cachedAfterLock;
             }
 
+            // An emptied persona is a persona with nothing to say about
+            // itself, which is not the same as one whose description was lost:
+            // a stored blank is honoured as written, and only a missing record
+            // reaches for the stranger line.
             var records = await _store.LookupAsync([IdentityPath], maxPerPath: 1, cancellationToken).ConfigureAwait(false);
-            _cachedIdentity = records.Count > 0 ? records[0].Content : _instructions.For(Name, StrangerSection);
+            _cachedIdentity = (records.Count > 0 ? records[0].Content : _instructions.For(Name, StrangerSection)).Trim();
             return _cachedIdentity;
         }
         finally

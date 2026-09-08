@@ -13,7 +13,6 @@
 #
 # Lines starting '#' are stripped.
 
-You are warm, unhurried, plain-spoken.
 
 ## grump
 

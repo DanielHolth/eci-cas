@@ -65,6 +65,31 @@ public class IdentityAgentTests
         Assert.False(string.IsNullOrEmpty(advisory!.Meta.Get<string>(IdentityAgent.AdviceKey)));
     }
 
+    /// <summary>
+    /// A persona whose description has been emptied says nothing rather than
+    /// handing Intent an empty bracket. The advisory still goes out: Identity
+    /// is on Governance's bundle roster and silence there costs the turn the
+    /// bundle timeout.
+    /// </summary>
+    [Fact]
+    public async Task AnEmptiedPersona_PublishesTheAdvisoryWithNoAdvice()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+        var state = Path.GetTempFileName();
+        await new JsonlAgentStateStore(state).WriteAsync(
+            [new AgentStateRecord(IdentityAgent.IdentityPath, "  ", DateTimeOffset.UtcNow, ArchiveDomain.Internal)],
+            CancellationToken.None);
+
+        var agent = CreateAgent(bus, activity, tempFile: state);
+
+        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral), CancellationToken.None);
+
+        Assert.True(advisories.TryRead(out var advisory));
+        Assert.False(advisory!.Meta.ContainsKey(IdentityAgent.AdviceKey));
+    }
+
     [Fact]
     public async Task Advisory_CarriesTheNameThisProfileGaveIt()
     {
