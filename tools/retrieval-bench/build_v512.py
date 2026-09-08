@@ -91,6 +91,15 @@ EDITS = {
     # friction and wellbeing, which is what they were describing anyway.
     "workplace": "culture norms environment office colleague manager morale politics"
                  " schedule shift remote leave overtime friction wellbeing",
+
+    # Round 4, and it is a SMALL edit on purpose -- see the header note on
+    # what the gloss test found. `routine` and `activity` were vacuous
+    # aspect words that no sentence ever contains; `rest-day` is rest;
+    # `hobby-skill` was a duplicate of `hobby` that beat it on the one
+    # probe leisure won. In their place four nouns people actually write:
+    # competition, equipment, technique, puzzle.
+    "leisure": "hobby craft game puzzle outdoor gardening collecting making club"
+               " event competition equipment technique volunteering interest",
 }
 
 GROUPS = [

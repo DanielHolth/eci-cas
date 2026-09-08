@@ -74,6 +74,28 @@
 # rejected: folding `media` into `leisure`, which merges a high-volume
 # drawer into another and moves away from flat, not toward it.
 #
+# THE GLOSS BLOCK IS NOT OPTIONAL, and round 4 is where that stopped
+# being an opinion. `leisure` was suspected of being too broad, so it was
+# probed with eleven hobby sentences. It won ONE of them. The rest went to
+# project, media, home, occasion, work and food -- because a hobby
+# sentence names the hobby, and the other 31 categories own those nouns
+# ("greenhouse" is home, "film" is media, "bookshelf" is project, "club"
+# is social). Two different topic re-cuts, one aspect-shaped and one
+# subject-shaped, changed the score by nothing at all: 1 of 11 either way.
+# Then the SAME topic list was given three-word glosses, and its named
+# competitors comparable ones, and it scored 10 of 11 -- "bought a new
+# lathe" moving from project/project-tool 0.820 to leisure/making 0.869.
+#
+# So leisure was never too broad. It was unreachable, and every number
+# anywhere in this file that was measured on bare paths is a floor rather
+# than a result. Only a partial gloss set was under test, so the size of
+# the effect is indicative; its direction is not in doubt.
+#
+# STILL CARRIED BY THE OLD SHELF: the shipped 170-pair vocabulary in
+# src/EciCas.Host/instructions/cataloger.txt still has an `admin`
+# category. Renaming it there is an archive migration, not an edit, and
+# is deliberately not done here.
+#
 # NOT YET WRITTEN: the gloss block. cataloger.txt carries one gloss line per
 # pair, written as the words a question would use. 512 of those is the next
 # artifact, and batch 17 says the format should be example sentences rather
@@ -161,8 +183,8 @@ record: passport licence identification certificate registration membership
   other
 
 # -- everything a life is actually made of -----------------------------
-leisure: hobby craft game outdoor gardening collecting club event routine activity
-  making volunteering rest-day interest hobby-skill other
+leisure: hobby craft game puzzle outdoor gardening collecting making club event
+  competition equipment technique volunteering interest other
 media: book film television music podcast news video-game artist author series
   recommendation review taste watchlist quote other
 moment: milestone memory anecdote first loss achievement regret turning-point
