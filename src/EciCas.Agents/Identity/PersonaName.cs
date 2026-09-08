@@ -41,14 +41,6 @@ public sealed class PersonaName
     public const string Subject = "assistant";
     public const string NameKey = "name";
 
-    /// <summary>
-    /// Who a fact has to be about before it can rename anything. Archivist
-    /// is told the message is the person speaking and that their own facts
-    /// take subject=user, so these words are what is left when the fact is
-    /// about the thing being spoken to.
-    /// </summary>
-    private static readonly string[] Selves = ["assistant", "you", "yourself"];
-
     private readonly IArchiveStore _archive;
     private readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.Ordinal);
 
@@ -108,7 +100,7 @@ public sealed class PersonaName
     /// </summary>
     public static ArchiveRecord? Rename(ArchiveRecord fact)
     {
-        if (!Selves.Contains(fact.Subject.Trim(), StringComparer.OrdinalIgnoreCase) || fact.Value.Trim().Length == 0)
+        if (!AssistantScope.IsSelf(fact.Subject) || fact.Value.Trim().Length == 0)
         {
             return null;
         }

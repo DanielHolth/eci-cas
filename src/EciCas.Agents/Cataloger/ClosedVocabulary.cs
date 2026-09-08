@@ -21,6 +21,23 @@ public sealed class ClosedVocabulary
 {
     public const string OtherTopic = "other";
 
+    /// <summary>
+    /// Where a fact goes when the drawer call names nothing on the list.
+    ///
+    /// The topic call has never been allowed to lose a fact -- see MatchTopic,
+    /// "an unlisted answer becomes other rather than a dropped fact" -- and
+    /// the same sentence holds one level up. A dropped fact is not a fact
+    /// filed cautiously, it is a fact that was stated and is now gone.
+    ///
+    /// Its topic is "unfiled" rather than "other" on purpose: Librarian hides
+    /// every "other" topic from the selector and opens it in code beside its
+    /// parent, so an unfiled/other would be a file nothing ever selects and
+    /// nothing ever opens alongside -- unreachable, which is the one thing
+    /// this fallback exists to avoid. As a visible pair it can be picked, and
+    /// a run of rows in it is the vocabulary telling you what it is missing.
+    /// </summary>
+    public static readonly ArchivePair Unfiled = new("unfiled", "unfiled");
+
     private readonly Dictionary<string, string[]> _topics;
 
     private ClosedVocabulary(Dictionary<string, string[]> topics) => _topics = topics;
@@ -98,9 +115,16 @@ public sealed class ClosedVocabulary
     /// dropped fact — the category was already decided, and a fact in the
     /// right drawer with the wrong folder is still reachable.
     /// </summary>
-    public string MatchTopic(string category, string reply)
+    public string MatchTopic(string category, string reply) => MatchTopic(_topics[category], reply);
+
+    /// <summary>
+    /// The same match against a list held somewhere other than the parsed
+    /// vocabulary — the assistant's own shelf is declared in AssistantScope,
+    /// because it is a scope decided before ranking rather than a drawer
+    /// ranked against the others.
+    /// </summary>
+    public static string MatchTopic(IReadOnlyList<string> listed, string reply)
     {
-        var listed = _topics[category];
         var words = reply.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(w => w.Trim('.', ',', '"', '\'', '*', '-', ':'));
 

@@ -161,31 +161,68 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
             // the field names.
             var line = $"{fact.Subtopic} {fact.Subject} {fact.Key} = {fact.Value}";
 
-            var reply = await AskAsync(envelope, substrateClass,
-                InstructionFile.Fill(_instructions.For(Name, CategorySection), ("text", text), ("fact", line)),
-                cancellationToken).ConfigureAwait(false);
+            // The persona's shelf is chosen by who the fact is about, not by
+            // ranking it against a vocabulary that describes the user's
+            // domain. One call instead of two, and `assistant` never has to
+            // win a similarity contest against `household` — measured 1 of
+            // 16 the other way (tools/retrieval-bench/refl_v4.py).
+            //
+            // The drawer inside it is still picked by the model, from a
+            // closed list, by the same prompt every other fact uses. Nothing
+            // was added to an instruction file for this: the subject field
+            // Archivist already fills is the whole routing rule.
+            var self = AssistantScope.IsSelf(fact.Subject);
+            string category;
 
-            if (reply is null || _vocabulary.Value.MatchCategory(reply) is not { } category)
+            if (self)
             {
-                // Nothing sensible to do with a fact that has no drawer: the
-                // file name is the whole index in this store, so an invented
-                // one is a file nobody ever opens. Logged loudly because a
-                // run of these means the vocabulary is missing something real.
-                _logger.LogWarning("{Agent} found no category for '{Fact}' (answer: {Reply}) — fact dropped",
-                    Name, line, reply ?? "call failed");
-                continue;
+                category = AssistantScope.Name;
+            }
+            else
+            {
+                var answer = await AskAsync(envelope, substrateClass,
+                    InstructionFile.Fill(_instructions.For(Name, CategorySection), ("text", text), ("fact", line)),
+                    cancellationToken).ConfigureAwait(false);
+
+                if (answer is not null && _vocabulary.Value.MatchCategory(answer) is { } named)
+                {
+                    category = named;
+                }
+                else
+                {
+                    // Not a drop. A stated fact with nowhere obvious to go is
+                    // still a stated fact, and the topic call has never been
+                    // allowed to lose one — see ClosedVocabulary.Unfiled for
+                    // why the fallback is a visible pair rather than an
+                    // "other". Still logged loudly: a run of these means the
+                    // vocabulary is missing something real.
+                    _logger.LogWarning("{Agent} found no category for '{Fact}' (answer: {Reply}) — filed at {Pair}",
+                        Name, line, answer ?? "call failed", ClosedVocabulary.Unfiled);
+                    addressed.Add(fact with
+                    {
+                        Category = ClosedVocabulary.Unfiled.Category,
+                        Topic = ClosedVocabulary.Unfiled.Topic,
+                    });
+                    continue;
+                }
             }
 
-            var options = string.Join("  ", _vocabulary.Value.TopicsIn(category));
-            reply = await AskAsync(envelope, substrateClass,
+            // "other" ends every list, here as in the vocabulary file: the
+            // valve is what keeps a fact that fits no folder from being
+            // forced into a loose one.
+            IReadOnlyList<string> topics = self
+                ? [.. AssistantScope.Topics, ClosedVocabulary.OtherTopic]
+                : _vocabulary.Value.TopicsIn(category);
+
+            var reply = await AskAsync(envelope, substrateClass,
                 InstructionFile.Fill(_instructions.For(Name, TopicSection),
-                    ("cat", category), ("topics", options), ("text", text), ("fact", line)),
+                    ("cat", category), ("topics", string.Join("  ", topics)), ("text", text), ("fact", line)),
                 cancellationToken).ConfigureAwait(false);
 
             // A failed topic call still has a drawer, and "other" is a real
             // folder in every drawer — better than losing the fact over the
             // cheaper of the two decisions.
-            var topic = reply is null ? ClosedVocabulary.OtherTopic : _vocabulary.Value.MatchTopic(category, reply);
+            var topic = reply is null ? ClosedVocabulary.OtherTopic : ClosedVocabulary.MatchTopic(topics, reply);
 
             addressed.Add(fact with { Category = category, Topic = topic });
         }

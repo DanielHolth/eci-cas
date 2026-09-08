@@ -339,7 +339,7 @@ index of its own — the address is always a `(Category, Topic)` pair handed to
 |---|---|---|---|
 | Librarian | listing the index for the turn's profile | pair names only | — |
 | Recall | the pairs Librarian selected, plus the lane | rows | — |
-| Cataloger | the closed vocabulary, per fact | — | rows |
+| Cataloger | the closed vocabulary, per fact; `assistant/*` by subject | — | rows |
 | Reflection | the closed vocabulary, `assistant/reflection` | — | rows |
 | PersonaName | a fixed pair, `persona/name` | one row | — |
 | ArchiveTool | the directory listing, directly | rows | rows, deletes |
@@ -357,10 +357,36 @@ nothing.
 
 **Cataloger** is the only writer of turn facts. Archivist extracts
 `subtopic/subject/key=value` and publishes them; Cataloger asks the substrate
-for a category and then a topic, matching both against
-`ClosedVocabulary` — an unmatched category drops the fact, an unmatched topic
-becomes `{category}/other`. It groups the batch by profile and calls
+for a category and then a topic, matching both against `ClosedVocabulary` — an
+unmatched topic becomes `{category}/other`, and an unmatched category lands the
+fact at `unfiled/unfiled`. It groups the batch by profile and calls
 `WriteAsync` once per profile, which fans out to one append per pair.
+
+**Nothing that was stated is dropped.** Two addresses exist so that the closed
+vocabulary can stay closed without costing facts. `{category}/other` has always
+absorbed an unlisted topic; `unfiled/unfiled` now does the same one level up,
+where an unmatched category used to end the fact's life. Its topic is not
+`other` because Librarian hides every `other` topic from the selector and opens
+it in code beside its parent — an `unfiled/other` would be a file nothing ever
+selects and nothing ever opens alongside. As a visible pair it can be picked,
+and a run of rows accumulating in it is the vocabulary reporting what it is
+missing.
+
+**Facts about the persona skip the category call entirely.** If Archivist left
+a fact's subject on `assistant`, `you`, or `yourself`, it is a fact about the
+persona, and it is filed on the persona's own shelf — category `assistant`,
+topic chosen from `AssistantScope.Topics` (`persona`, `reflection`, `system`)
+plus `other`. This is the same argument as the read side (see below): whose
+fact a row is has to be decided *before* ranking, because a bi-encoder has
+nowhere to encode it. No instruction file asks for any of this — the subject
+field Archivist already fills is the whole routing rule. Because `assistant` is
+on the `Archive:SharedCategories` allowlist, these facts are per device rather
+than per profile.
+
+The one address that is taken before the shelf is `persona/name`: a rename is
+per profile, so it cannot live in a shared category. `PersonaName.Rename` reads
+it off the extracted fact — self subject, key whose last word is `name` — with
+no model call at all.
 
 **Reflection** writes its own ideas with `profileId: null` under
 `assistant/reflection`, so they land in the shared tier: what the persona

@@ -45,6 +45,32 @@ public static class AssistantScope
     public static readonly string[] Topics = [Persona, Reflection, System];
 
     /// <summary>
+    /// The words that mean "the thing being spoken to" in a fact's subject
+    /// field, and so the whole of the write-side routing rule.
+    ///
+    /// Archivist is told the message is the person speaking and that their
+    /// own facts take subject=user, so a fact left on one of these is a fact
+    /// about the persona. Nothing in any instruction file asks for that -- it
+    /// is the extraction that already happens, read for what it says.
+    ///
+    /// Deliberately not the persona's current name. A name is per profile and
+    /// changes on request; a routing rule that moved with it would file the
+    /// same sentence to two different shelves on either side of a rename.
+    /// </summary>
+    private static readonly string[] Selves = ["assistant", "you", "yourself"];
+
+    /// <summary>
+    /// True when a fact is about the persona rather than about a person.
+    ///
+    /// This is a scope decision, made BEFORE anything is ranked -- the same
+    /// argument the class comment makes for the read side. A fact about the
+    /// persona is never ranked against `household`; it is placed on this
+    /// shelf and then only its own drawers compete.
+    /// </summary>
+    public static bool IsSelf(string? subject) =>
+        Selves.Contains(subject?.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// True when a category belongs to the persona rather than to a person.
     /// Ordinal on purpose: these are addresses, not prose.
     /// </summary>

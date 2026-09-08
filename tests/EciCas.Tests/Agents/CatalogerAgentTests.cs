@@ -122,11 +122,17 @@ public class CatalogerAgentTests
     }
 
     /// <summary>
-    /// No drawer, no address, and no invented one either: the file name is the
-    /// whole index in this store, so a guess would be a file nobody opens.
+    /// No drawer named, and still no invented one — but no drop either. The
+    /// name is fixed, so the closed-vocabulary promise holds: the file name
+    /// is the whole index here, and one known fallback is a file that can be
+    /// opened while a guessed one is not.
+    ///
+    /// This used to assert the fact was dropped. It was the only place in the
+    /// pipeline that lost a stated fact outright, and it is what made the
+    /// entire assistant shelf unwritable from conversation.
     /// </summary>
     [Fact]
-    public async Task AFactWithNoCategoryIsDroppedRatherThanGuessedAt()
+    public async Task AFactWithNoCategory_IsFiledAtUnfiled_RatherThanDropped()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
@@ -136,9 +142,20 @@ public class CatalogerAgentTests
         await Agent(bus, activity, store, Answers("nonsense", "name"))
             .HandleAsync(Facts("...", [Unfiled()]), CancellationToken.None);
 
-        Assert.Empty(store.IndexFor(null));
-        Assert.False(control.TryRead(out _));
+        Assert.Equal(ClosedVocabulary.Unfiled, Assert.Single(store.IndexFor(null)));
+        Assert.True(control.TryRead(out _));
     }
+
+    /// <summary>
+    /// The fallback has to be selectable, which is the whole reason its topic
+    /// is not "other": Librarian hides every "other" topic from the selector
+    /// and opens it in code beside its parent category. An unfiled/other
+    /// would be a file nothing selects and nothing opens alongside — exactly
+    /// the unreachability the fallback exists to prevent.
+    /// </summary>
+    [Fact]
+    public void TheUnfiledPair_IsNotHiddenFromTheSelector() =>
+        Assert.NotEqual(ClosedVocabulary.OtherTopic, ClosedVocabulary.Unfiled.Topic);
 
     /// <summary>
     /// A failed topic call still has a drawer. Losing the fact over the
