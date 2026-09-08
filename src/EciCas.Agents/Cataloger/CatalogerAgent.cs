@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using EciCas.Agents.Archivist;
+using EciCas.Agents.Identity;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
@@ -79,12 +80,31 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
         var facts = envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ArchivistAgent.FactsKey) ?? [];
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty);
 
-        // A deterministic-by-configuration Cataloger files nothing. There is
-        // no keyword fallback and there should not be one: guessing an
-        // address is exactly the behaviour this agent exists to remove.
+        // Reserved addresses first, and outside the substrate switch on
+        // purpose. These are decided by who the fact is about rather than by
+        // ranking it against a vocabulary, so there is no call to make and
+        // nothing for a deterministic Cataloger to skip -- a rename works on
+        // a tier with no filing model at all.
+        var reserved = new List<ArchiveRecord>();
+        var open = new List<ArchiveRecord>();
+        foreach (var fact in facts)
+        {
+            if (PersonaName.Rename(fact) is { } renamed)
+            {
+                reserved.Add(renamed);
+            }
+            else
+            {
+                open.Add(fact);
+            }
+        }
+
+        // A deterministic-by-configuration Cataloger files nothing else.
+        // There is no keyword fallback and there should not be one: guessing
+        // an address is exactly the behaviour this agent exists to remove.
         IReadOnlyList<ArchiveRecord> filed = entry.UseSubstrate
-            ? await FileAsync(envelope, facts, text, entry.Class, cancellationToken).ConfigureAwait(false)
-            : [];
+            ? [.. reserved, .. await FileAsync(envelope, open, text, entry.Class, cancellationToken).ConfigureAwait(false)]
+            : reserved;
 
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         List<(string? ProfileId, ArchiveRecord Record)>? batch = null;
