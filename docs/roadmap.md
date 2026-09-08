@@ -683,6 +683,53 @@ rule that makes it safe: **a digest may summarise, but it must cite.** Every
 digest row carries the addresses it came from, so a summary is a table of
 contents and never a replacement.
 
+### The recency lane — a bundled cache beside the shelf
+
+Daniel's proposal: every row written to `category/topic.parquet` is also
+appended to one bundled `cache.parquet` holding the last N rows, ~10,000. On
+boot the oldest are dropped back to the threshold.
+
+**Worth building, and the reason is in batch 20 rather than in performance.**
+Calling it a cache undersells it — nothing here is slow enough to need one.
+It is a SECOND LANE into the archive that does not route through the shelf
+at all, and routing is where every measured loss in the read-side log lives.
+The shelf answers "what do we know about X"; the lane answers "what has been
+said lately", which has no drawer and never will, because recency is not a
+subject.
+
+It is also strongest exactly where the shelf is weakest, which is the part
+that makes it more than a nice-to-have. Batch 20: v512 wins on a centroid of
+what landed in a drawer (+11.5pp at the cheap end) and loses on the written
+gloss, because a 480-drawer shelf takes a long time to reach the ten rows a
+drawer that `file_v4` showed a derived gloss needs. That gap IS the young
+archive. And a young archive's cache is the entire archive — one flat scan,
+no routing, no cold start. The lane covers the shelf's cold months and then
+gracefully stops mattering as the drawers fill. Two mechanisms that fail at
+opposite ends is the good kind of redundancy.
+
+Cost is not the objection. 10,000 rows at 384 dims is 15 MB and a brute-force
+cosine over it is milliseconds; the dual write is one append. `Timestamp` is
+already on `ArchiveRecord`, so age-based trimming needs no schema change.
+
+**The one real design question is deletion, and it is not a footnote.** This
+would be the first place in the system where the same fact lives at two
+addresses, and the failure it invites is specific: a user asks to forget
+something, the row is removed from `category/topic.parquet`, and the lane
+serves it back for the next ten thousand rows. That is worse than never
+having built it. So a delete has to reach both, which means the lane needs a
+key it can be addressed by — `ArchiveRecord` has no id, so today that is
+`(Category, Topic, Key, Timestamp)` or `Rendered`, and a real id is probably
+the cleaner answer. Read-side dedupe against the shelf's own hits needs the
+same key.
+
+Note this does not contradict "Nothing is ever deleted" above. The lane is a
+DERIVED view: trimming it destroys nothing, because every row it drops still
+lives at its own address. It is a window, not a store, and it should be built
+so that deleting the whole file is a no-op you can do at any time.
+
+Threshold, and whether the lane is consulted at all, are config
+(`Archive:CacheRows`, default off) rather than code.
+
 ### Reflection is already the cross-event agent
 
 Archivist runs at `BatchSize: 1` — one turn, no history, structurally blind
