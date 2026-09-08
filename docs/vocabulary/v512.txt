@@ -1,0 +1,129 @@
+# The 512-pair vocabulary — DRAFT 1, for review. Not wired into anything.
+#
+# 32 categories x 16 topics. Fifteen topics plus "other", which ends every
+# line for the same reason it does in cataloger.txt: it is the write-side
+# pressure valve, never shown to the read path, opened in code alongside its
+# parent. So the shelf is 512 addresses of which 32 are the valve.
+#
+# WHAT THIS IS OPTIMISED FOR, and it is not readability. The goal is a FLAT
+# write distribution -- every drawer receiving roughly the same number of
+# rows over a real archive's life. Labels are a means to that; where a label
+# reads awkwardly and the split balances the vector space, the split wins.
+# Two consequences worth stating before anyone edits this by taste:
+#
+#   - Categories are broader than topics on purpose. A fat category can be
+#     cut in two later at the cost of one migration; a narrow category with
+#     awkward topics forced into it is debt that never comes out.
+#   - Some categories are here because of VOLUME, not because of taxonomy.
+#     `income`, `spending` and `finance` are one subject to a librarian and
+#     three drawers here, because money is written about far more often than
+#     vehicles are.
+#
+# WHAT IS DELIBERATELY ABSENT. There is no drawer for the ECI's own
+# reflections. `assistant` is a scope decided before ranking, not a category
+# ranked against `household` -- see roadmap.md, "The assistant is a scope,
+# and hindsight is not a lookup", and tools/retrieval-bench/refl_v4.py for
+# the 1-of-16 that settled it.
+#
+# There is also no `preference` category, though an earlier draft had one.
+# It is cross-cutting: a food preference, a travel preference and a
+# temperature preference have nothing in common in vector space, so the
+# drawer would fill from everywhere and match nothing. Preferences live
+# beside the thing preferred.
+#
+# NOT YET WRITTEN: the gloss block. cataloger.txt carries one gloss line per
+# pair, written as the words a question would use. 512 of those is the next
+# artifact, and batch 17 says the format should be example sentences rather
+# than keywords for drawers this broad.
+
+## vocabulary
+
+# -- the person --------------------------------------------------------
+identity: name nickname age birthdate origin nationality language pronoun appearance
+  height handedness marital record signature document-name other
+character: trait temperament humour strength weakness fear hope value principle
+  religion politics quirk confidence patience outlook other
+mood: feeling stress worry joy grief anger calm energy overwhelm loneliness
+  motivation spirits trigger relief pattern other
+
+# -- the body ----------------------------------------------------------
+health: condition symptom injury illness pain allergy chronic diagnosis recovery
+  risk family-history checkup screening vaccination weight other
+care: medication dose pharmacy doctor dentist therapist specialist appointment
+  treatment referral prescription clinic advice followup care-cost other
+fitness: exercise sport training routine gym running cycling swimming
+  strength-training stretching goal progress equipment limit class other
+rest: sleep bedtime waking nap dream insomnia energy-level fatigue relaxation
+  breathing screen-time caffeine recovery wind-down quality other
+
+# -- the dwelling ------------------------------------------------------
+food: diet restriction intolerance dish ingredient recipe cooking meal breakfast
+  lunch dinner snack drink groceries eating-out other
+home: address dwelling room layout garden neighbourhood move ownership rent
+  landlord lease size access view security other
+upkeep: repair maintenance appliance heating plumbing electrical roof damp pest
+  cleaning contractor warranty schedule cost meter other
+belongings: furniture decor clothing tool equipment storage collection valuables
+  inventory replacement disposal loan gift acquisition sentimental other
+
+# -- machines ----------------------------------------------------------
+vehicle: car bicycle model registration vehicle-insurance service inspection tyre
+  fuel mileage vehicle-repair parking driving-licence commute journey
+  other
+device: phone computer tablet watch camera console printer network router setup
+  fault upgrade backup accessory charger other
+digital: account login service subscription app file photo email profile privacy
+  storage sync credential data notification other
+
+# -- people ------------------------------------------------------------
+family: partner spouse child parent sibling grandparent relative in-law
+  household-member relation care contact history conflict family-milestone
+  other
+social: friend group circle neighbour colleague acquaintance community club
+  introduction support distance reunion favour shared-interest news-of
+  other
+occasion: birthday anniversary wedding funeral holiday celebration tradition gift
+  card visit host invitation date arrangement occasion-photo other
+pet: animal pet-name breed pet-age feeding vet pet-health walk pet-care sitter
+  behaviour toy pet-food pet-insurance pet-loss other
+
+# -- work --------------------------------------------------------------
+work: employer role title duty team department workplace start-date contract
+  hours responsibility tool process work-history pay-band other
+worklife: schedule shift remote leave work-holiday sick-day overtime meeting
+  deadline workload balance policy benefit friction work-travel other
+project: client task milestone status blocker collaborator scope deliverable review
+  outcome timeline project-tool project-budget note handover other
+career: ambition goal promotion appraisal feedback skill-gap opportunity search
+  application interview offer change mentor reputation career-network
+  other
+learning: school university course degree subject qualification exam grade teacher
+  institution skill practice resource progress language-learning other
+
+# -- money -------------------------------------------------------------
+income: salary payday rate bonus benefit pension freelance side-income grant
+  allowance payslip raise deduction source expectation other
+spending: expense bill paid-subscription purchase price budget habit large-buy
+  refund receipt saving-target running-cost category overspend
+  utility-bill other
+finance: account bank card loan mortgage saving investment interest
+  insurance-policy provider balance advisor statement money-plan tax other
+
+# -- time --------------------------------------------------------------
+travel: trip destination holiday flight train accommodation booking itinerary
+  companion luggage travel-document experience travel-taste return visa
+  other
+admin: passport licence identification contract registration membership renewal
+  expiry deadline admin-appointment provider reference document will
+  correspondence other
+
+# -- everything a life is actually made of -----------------------------
+leisure: hobby craft game outdoor gardening collecting club event routine activity
+  making volunteering rest-day interest hobby-skill other
+media: book film television music podcast news video-game artist author series
+  recommendation review taste watchlist quote other
+moment: milestone memory anecdote first loss achievement change decision regret
+  turning-point story photo place year lesson other
+plan: intention plan-goal wish idea someday bucket-list saving-for waiting-on
+  pending research option self-deadline commitment obstacle next-step
+  other
