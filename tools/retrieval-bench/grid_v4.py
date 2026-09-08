@@ -20,6 +20,37 @@ are not uniform -- this one has files of 74, 70 and 65 rows against a median
 of 3. Whether that uniformity costs anything is the question, and the free
 arm is the ceiling it is measured against.
 
+Result, and the first version of this docstring got it wrong. A single seed
+put grid-32x16 at 33 rows and every other 512-shape between 51 and 123, which
+read as the shape mattering enormously. It does not: k-means is seed-sensitive
+at this archive size and that spread was luck. Median of five seeds, rows read
+to reach 85% strict:
+
+    shelf         median   range      pairs
+    free-171        161    153-235     171
+    free-342         85     36-146     342
+    free-512         42     23-104     512
+    grid-32x16       51     32-137     512
+    grid-16x32       50     45-123     512
+
+Three things survive the seeds.
+
+**512 is worth going to.** It halves the price of 85% against 342 and cuts it
+to a quarter against the shipped shelf. That is the answer to whether the
+proposal picks a good number: it does, and by more than the gran_v4 knee
+suggested, because that table read one seed too.
+
+**The grid constraint is nearly free.** Forcing 16 topics under every category
+costs about 8 rows of median against optimal 512-means, well inside the seed
+range. Uniform resolution over a skewed archive is a real cost and it is a
+small one -- worth paying for a shape a person can hold in their head.
+
+**The 32/16 split is not determined by this data.** 32x16 and 16x32 are a row
+apart with overlapping ranges. What the seeds do separate is the far end:
+64x8 and 128x4 median 72 and 87, clearly worse. So categories should be broad
+enough to hold real topics, and anything from 8 to 32 of them looks the same
+here. Pick 32 for legibility, not because the bench chose it.
+
 Empty pairs are the other half. In `ParquetArchiveStore` an unused pair costs
 nothing on disk -- files are created lazily -- but it is not free to a vector
 filer: an empty pair still ships a gloss, still competes for a slot in the
@@ -94,7 +125,7 @@ def main(k=5):
     for K in (342, 512, 680):
         lab, C = gran_v4.kmeans(V, K)
         arms.append(("free-%d" % K, lab, C))
-    for cats, tops in ((32, 16), (16, 32), (24, 16)):
+    for cats, tops in ((32, 16), (16, 32), (64, 8), (128, 4)):
         lab, C = grid(V, cats, tops)
         arms.append(("grid-%dx%d" % (cats, tops), lab, C))
 
@@ -108,6 +139,9 @@ def main(k=5):
             f if f else "never", "%.0f" % r if r else "-",
             np.percentile(sizes[sizes > 0], 95)))
 
+    print("")
+    print("  ONE SEED. k-means is seed-sensitive here -- the docstring")
+    print("  carries medians of five, which is what any claim rests on.")
     print("\n  empty = pairs holding no rows. They cost nothing on disk but")
     print("          still ship a gloss and still compete for a pick slot.")
     print("  files/rows@85%% = cheapest budget reaching 85%% strict, k=%d." % k)
