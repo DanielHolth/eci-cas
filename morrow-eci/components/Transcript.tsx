@@ -21,11 +21,17 @@ export function Transcript({ turns }: { turns: TurnEvent[] }) {
   const bottom = useRef<HTMLDivElement>(null);
   const spoken = turns.filter((t) => t.input || t.output);
 
-  // Follows the newest line. The dependency is the count rather than the
-  // array, so a turn filling in its own bundle does not yank the view.
+  // Bubbles, not turns. A turn is created the moment the person speaks and
+  // the reply fills into that same turn, so counting turns scrolled for the
+  // question and then sat still for the answer -- the one line anybody is
+  // actually waiting to see. Counting what is rendered follows both, and
+  // still ignores a turn filling in the rest of its bundle (stage, cost,
+  // security), which is what the count was protecting against.
+  const bubbles = spoken.reduce((n, t) => n + (t.input ? 1 : 0) + (t.output ? 1 : 0), 0);
+
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [spoken.length]);
+  }, [bubbles]);
 
   // Not `null`: the composer below is pinned to the bottom by this element's
   // `flex-1`, so an empty transcript that renders nothing drags the input box

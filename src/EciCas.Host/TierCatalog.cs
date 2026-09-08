@@ -55,7 +55,12 @@ public sealed class TierCatalog
         _recall = recall;
         _librarian = librarian;
         _knobs = knobs;
-        Active = active;
+
+        // Normalised to the preset's own casing, not whatever --Tier typed:
+        // the dropdown's <option value> is preset.Name, and a raw "minimal"
+        // against an option value of "Minimal" is a match to no one but a
+        // human reading both.
+        Active = _presets.TryGetValue(active, out var initial) ? initial.Name : active;
     }
 
     /// <summary>Name of the tier in force. Starts as whatever <c>--Tier</c> said, or Mock.</summary>
