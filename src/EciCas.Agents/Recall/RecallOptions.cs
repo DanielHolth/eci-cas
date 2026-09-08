@@ -34,4 +34,17 @@ public sealed class RecallOptions
     /// reach Intent, and the ceiling is this times MaxConcurrentRecalls.
     /// </summary>
     public int MaxPickedPerWorker { get; set; } = 5;
+
+    /// <summary>
+    /// How many rows of the recency lane one turn puts in front of the
+    /// picking model. The lane spans a year, so this is what makes it a
+    /// prompt rather than a dump: the newest N, one dedicated call, always
+    /// made whatever Librarian selected.
+    ///
+    /// Sized like RowsPerWorker and for the same reason - it is one worker
+    /// is budget - but separately, because the lane is one call a turn while
+    /// the pairs are as many as their depth warrants.
+    /// </summary>
+    public int RecentRows { get; set; } = 30;
+
 }

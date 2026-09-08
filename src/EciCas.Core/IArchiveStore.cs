@@ -33,6 +33,20 @@ public interface IArchiveStore
     /// </summary>
     Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, string? profileId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The recency lane: the newest rows written anywhere in the archive,
+    /// Timestamp-descending, unioned across the shared tier and this
+    /// profile's own. Not a pair and not in the index — a second lane beside
+    /// the shelf, always read, whatever Librarian selected.
+    ///
+    /// It exists because the shelf is weakest exactly where "lately" is
+    /// asked: a fact filed an hour ago into a drawer no question names is
+    /// unreachable until a question names the drawer. The lane is a derived
+    /// view of rows the pair files already hold, so nothing here is the only
+    /// copy of anything.
+    /// </summary>
+    Task<IReadOnlyList<ArchiveRecord>> RecentAsync(string? profileId, int limit, CancellationToken cancellationToken);
+
     /// <summary>Writes to this profile's own tier, except for categories the store treats as shared.</summary>
     Task WriteAsync(IReadOnlyList<ArchiveRecord> records, string? profileId, CancellationToken cancellationToken);
 }

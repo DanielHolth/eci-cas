@@ -71,19 +71,28 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
         }
 
-        // Nothing selected and no-substrate-by-configuration land in the same
-        // place — no facts, and neither is a degradation.
-        if (pairs.Count == 0 || !entry.UseSubstrate)
+        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
+
+        // The recency lane, read whatever Librarian selected and even when it
+        // selected nothing. It is not a pair and is not in the index: it is
+        // the newest rows written anywhere, and the questions it answers
+        // ("what did I say about that", "what has been going on") name no
+        // drawer, so no selector can reach them.
+        var recent = await _store.RecentAsync(profileId, _options.RecentRows, cancellationToken).ConfigureAwait(false);
+
+        // No substrate by configuration: nothing can be picked, so the lane
+        // is handed over as it stands, newest first and cut to the same depth
+        // a picking call would have returned. A tier without a picking model
+        // still knows what was said lately.
+        if (!entry.UseSubstrate)
         {
-            Publish(envelope, [], degraded: null);
+            Publish(envelope, [.. recent.Take(_knobs.RecallDepth)], degraded: null);
             return;
         }
 
-        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
-
         // Phase one: read every selected pair at once. Distinct pairs are
         // distinct files, so these don't contend with each other.
-        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var loaded = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
 
         // When every loaded row would fit in a single worker's pick budget,
@@ -109,17 +118,26 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
                 string.Join(" | ", loaded.SelectMany(rows => rows).Select(Describe)));
         }
 
-        var total = loaded.Sum(rows => rows.Count);
+        var total = loaded.Sum(rows => rows.Count) + recent.Count;
         if (total <= _knobs.RecallDepth)
         {
-            Publish(envelope, [.. loaded.SelectMany(rows => rows).OrderByDescending(r => r.Importance)], degraded: null);
+            Publish(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent)), degraded: null);
             return;
         }
 
-        // Phase two: one flat set of workers over every chunk of every pair.
-        var chunks = Chunks(loaded);
+        // Phase two: one flat set of workers over every chunk of every pair,
+        // plus one for the lane. Appended after the fan-out cap rather than
+        // inside it, because the cap is a budget over the selected pairs and
+        // the lane is not one of them — a deep archive must not be able to
+        // spend the turn and leave the lane unread.
+        var chunks = new List<IReadOnlyList<ArchiveRecord>>(Chunks(loaded));
+        if (recent.Count > 0)
+        {
+            chunks.Add(recent);
+        }
+
         var results = await Task.WhenAll(chunks.Select(c => PickAsync(envelope, c, text, entry.Class, cancellationToken))).ConfigureAwait(false);
-        var picked = results.SelectMany(r => r.Facts).OrderByDescending(r => r.Importance).ToList();
+        var picked = Distinct(results.SelectMany(r => r.Facts));
 
         // Any worker failing means some of the archive went unread, so the
         // turn is grounded in less than it should have been — one failure is
@@ -172,6 +190,20 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
         return [.. chunks.Take(_options.MaxConcurrentRecalls)];
     }
+
+    /// <summary>
+    /// Importance order, one row per address. The lane holds copies of rows
+    /// the pair files also hold, so the same fact can be picked twice in one
+    /// turn — by its drawer and by its recency — and Intent should see it
+    /// once. The pair is part of the key: the lane spans every drawer, so
+    /// subtopic/subject/key alone is not an identity across it.
+    /// </summary>
+    private static IReadOnlyList<ArchiveRecord> Distinct(IEnumerable<ArchiveRecord> facts) =>
+        [.. facts
+            .GroupBy(r => (r.Category.ToLowerInvariant(), r.Topic.ToLowerInvariant(),
+                r.Subtopic.ToLowerInvariant(), r.Subject.ToLowerInvariant(), r.Key.ToLowerInvariant()))
+            .Select(g => g.First())
+            .OrderByDescending(r => r.Importance)];
 
     private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string? degraded)
     {

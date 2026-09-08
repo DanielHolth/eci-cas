@@ -31,6 +31,13 @@ public sealed class InMemoryArchiveStore : IArchiveStore
         return Task.FromResult(results);
     }
 
+    /// <summary>Write order is the fake's clock: newest last in, newest first out.</summary>
+    public Task<IReadOnlyList<ArchiveRecord>> RecentAsync(string? profileId, int limit, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ArchiveRecord> results = [.. _records.Select(r => r.Record).Reverse().Take(Math.Max(0, limit))];
+        return Task.FromResult(results);
+    }
+
     public Task WriteAsync(IReadOnlyList<ArchiveRecord> records, string? profileId, CancellationToken cancellationToken)
     {
         foreach (var record in records)

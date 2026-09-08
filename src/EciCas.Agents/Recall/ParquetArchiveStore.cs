@@ -51,6 +51,23 @@ public sealed class ParquetArchiveStore : IArchiveStore
     public const string ProfilesDirectoryName = "profiles";
 
     /// <summary>
+    /// The recency lane, one file per directory beside the pair files. The
+    /// name has no separator in it, so TryDecodeName rejects it and it can
+    /// never appear in the index or be mistaken for a pair - the same
+    /// property that makes the file listing safe to use as the index.
+    /// </summary>
+    public const string RecentFileName = "recent.parquet";
+
+    /// <summary>
+    /// How far back the lane reaches. Time, not rows: "lately" is a span,
+    /// and a row count makes the lane short in a busy month and long in a
+    /// quiet one. A year of an ordinary archive is a rounding error on disk,
+    /// and rows falling out of it are not lost - the pair file that owns
+    /// them is the long-term store, and this is a derived view of it.
+    /// </summary>
+    public static readonly TimeSpan RecentWindow = TimeSpan.FromDays(365);
+
+    /// <summary>
     /// Categories that stay in the shared tier however personal the turn
     /// was. One: "assistant", everything the persona knows about itself —
     /// its identity, the architecture it runs on, and what Reflection thinks
@@ -173,6 +190,133 @@ public sealed class ParquetArchiveStore : IArchiveStore
                 .GroupBy(r => r.Pair, PairComparer.Instance)
                 .Select(byPair => AppendAsync(byDirectory.Key, byPair.Key, [.. byPair], cancellationToken)));
         await Task.WhenAll(writes).ConfigureAwait(false);
+
+        // The lane is written after the shelf, not with it: a row is in the
+        // archive once its pair file holds it, and the lane is a view of
+        // that. If this half failed the fact would still be on file and
+        // still findable by its address, which is the weaker of the two to
+        // lose.
+        var lanes = records
+            .GroupBy(r => DirectoryFor(r.Category, profileId), StringComparer.OrdinalIgnoreCase)
+            .Select(byDirectory => AppendRecentAsync(byDirectory.Key, [.. byDirectory], cancellationToken));
+        await Task.WhenAll(lanes).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Appends to one directory's lane. Same read-merge-rewrite as a pair
+    /// file and the same per-path gate, but keyed on the full address:
+    /// within a pair the subtopic/subject/key is the whole identity, across
+    /// the lane it is not, and two drawers may each hold a cost for a
+    /// renewal.
+    /// </summary>
+    private async Task AppendRecentAsync(string directory, List<ArchiveRecord> newRecords, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, RecentFileName);
+        var gate = LockFor(path);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var merged = Merged(await CachedAsync(path, cancellationToken).ConfigureAwait(false), newRecords, LaneKey);
+            await WriteRecordsAsync(path, merged, cancellationToken).ConfigureAwait(false);
+            _pairs[path] = merged;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<ArchiveRecord>> RecentAsync(string? profileId, int limit, CancellationToken cancellationToken)
+    {
+        if (limit <= 0)
+        {
+            return [];
+        }
+
+        IEnumerable<ArchiveRecord> rows = await LaneAsync(_directory, cancellationToken).ConfigureAwait(false);
+        if (profileId is not null)
+        {
+            var personal = await LaneAsync(ProfileDirectoryFor(_directory, profileId), cancellationToken).ConfigureAwait(false);
+
+            // The profile wins on collision, as it does for a pair: same
+            // address, same question, and the answer belonging to the person
+            // asking is the right one.
+            var claimed = personal.Select(LaneKey).ToHashSet();
+            rows = personal.Concat(rows.Where(r => !claimed.Contains(LaneKey(r))));
+        }
+
+        // Trimmed at boot, but filtered here too: a process left running for
+        // a year would otherwise keep serving rows the window has passed.
+        var cutoff = DateTimeOffset.UtcNow - RecentWindow;
+        return [.. rows.Where(r => r.Timestamp >= cutoff).OrderByDescending(r => r.Timestamp).Take(limit)];
+    }
+
+    /// <summary>One directory's lane, through the same cache and gate a pair read uses.</summary>
+    private async Task<IReadOnlyList<ArchiveRecord>> LaneAsync(string directory, CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(directory, RecentFileName);
+        if (_pairs.TryGetValue(path, out var cached))
+        {
+            return cached;
+        }
+
+        var gate = LockFor(path);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await CachedAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Drops everything older than RecentWindow from every lane in the
+    /// archive. Called once at startup rather than on every write: the lane
+    /// is bounded by a year of one person's facts either way, and trimming
+    /// on write would rewrite the whole lane to remove nothing on all but
+    /// one turn a day.
+    /// </summary>
+    public async Task TrimRecentAsync(CancellationToken cancellationToken)
+    {
+        var cutoff = DateTimeOffset.UtcNow - RecentWindow;
+        var profiles = Path.Combine(_directory, ProfilesDirectoryName);
+        var directories = new List<string> { _directory };
+        if (Directory.Exists(profiles))
+        {
+            directories.AddRange(Directory.EnumerateDirectories(profiles));
+        }
+
+        foreach (var directory in directories)
+        {
+            var path = Path.Combine(directory, RecentFileName);
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var gate = LockFor(path);
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var rows = await CachedAsync(path, cancellationToken).ConfigureAwait(false);
+                var kept = rows.Where(r => r.Timestamp >= cutoff).ToList();
+                if (kept.Count == rows.Count)
+                {
+                    continue;
+                }
+
+                await WriteRecordsAsync(path, kept, cancellationToken).ConfigureAwait(false);
+                _pairs[path] = kept;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
     }
 
     private async Task AppendAsync(string directory, ArchivePair pair, List<ArchiveRecord> newRecords, CancellationToken cancellationToken)
@@ -211,18 +355,22 @@ public sealed class ParquetArchiveStore : IArchiveStore
     /// jumping to the end — reads sort by importance anyway, but a stable
     /// file makes a diff readable.
     /// </summary>
-    private static List<ArchiveRecord> Merged(IReadOnlyList<ArchiveRecord> existing, IReadOnlyList<ArchiveRecord> incoming)
+    private static List<ArchiveRecord> Merged(
+        IReadOnlyList<ArchiveRecord> existing,
+        IReadOnlyList<ArchiveRecord> incoming,
+        Func<ArchiveRecord, object>? identity = null)
     {
+        var address = identity ?? (r => RowKey(r));
         var merged = new List<ArchiveRecord>(existing);
-        var positions = new Dictionary<(string, string, string), int>();
+        var positions = new Dictionary<object, int>();
         for (var i = 0; i < merged.Count; i++)
         {
-            positions[RowKey(merged[i])] = i;
+            positions[address(merged[i])] = i;
         }
 
         foreach (var record in incoming)
         {
-            var key = RowKey(record);
+            var key = address(record);
             if (positions.TryGetValue(key, out var at))
             {
                 merged[at] = record;
@@ -296,6 +444,11 @@ public sealed class ParquetArchiveStore : IArchiveStore
     /// <summary>What makes two rows in one pair the same fact: the rest of the address, everything the pair itself doesn't carry.</summary>
     private static (string Subtopic, string Subject, string Key) RowKey(ArchiveRecord record) =>
         (record.Subtopic.ToLowerInvariant(), record.Subject.ToLowerInvariant(), record.Key.ToLowerInvariant());
+
+    /// <summary>The same, plus the pair - the lane holds every drawer at once, so the pair is part of the address again.</summary>
+    private static object LaneKey(ArchiveRecord record) =>
+        (record.Category.ToLowerInvariant(), record.Topic.ToLowerInvariant(),
+            record.Subtopic.ToLowerInvariant(), record.Subject.ToLowerInvariant(), record.Key.ToLowerInvariant());
 
     private SemaphoreSlim LockFor(string path) => _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
 

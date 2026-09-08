@@ -99,7 +99,11 @@ public class RecallAgentTests
         var substrate = new StubSubstrate(prompt => prompt.Contains("drammen", StringComparison.OrdinalIgnoreCase)
             ? Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m))
             : throw new InvalidOperationException("down"));
-        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(), Options.Create(new RecallOptions()), ShippedInstructions.Store, new RuntimeKnobs());
+        // Lane off: this test is about one pair's call failing while another
+        // pair's survives, and the lane would add a third call holding rows
+        // from both.
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
+            Options.Create(new RecallOptions { RecentRows = 0 }), ShippedInstructions.Store, new RuntimeKnobs());
 
         await agent.HandleAsync(Selection(failing, working), CancellationToken.None);
 
@@ -136,7 +140,7 @@ public class RecallAgentTests
             return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m));
         });
         var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
-            Options.Create(new RecallOptions { RowsPerWorker = 10, MaxConcurrentRecalls = 10 }), ShippedInstructions.Store, new RuntimeKnobs());
+            Options.Create(new RecallOptions { RowsPerWorker = 10, MaxConcurrentRecalls = 10, RecentRows = 0 }), ShippedInstructions.Store, new RuntimeKnobs());
 
         await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics")), CancellationToken.None);
 
@@ -163,7 +167,7 @@ public class RecallAgentTests
             return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m));
         });
         var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
-            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 4 }), ShippedInstructions.Store, new RuntimeKnobs());
+            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 4, RecentRows = 0 }), ShippedInstructions.Store, new RuntimeKnobs());
 
         await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics")), CancellationToken.None);
 
@@ -192,7 +196,7 @@ public class RecallAgentTests
             return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m));
         });
         var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
-            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 3 }), ShippedInstructions.Store, new RuntimeKnobs());
+            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 3, RecentRows = 0 }), ShippedInstructions.Store, new RuntimeKnobs());
 
         await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics"), new ArchivePair("person", "family")), CancellationToken.None);
 
@@ -248,5 +252,86 @@ public class RecallAgentTests
         Assert.False(called);
         Assert.True(advisories.TryRead(out var advisory));
         Assert.Equal(2, advisory!.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey)!.Count);
+    }
+
+    /// <summary>
+    /// The lane is read whatever Librarian selected, including nothing: the
+    /// questions it answers name no drawer, so no selector can reach them.
+    /// </summary>
+    [Fact]
+    public async Task TheRecencyLaneIsRead_EvenWhenNoPairWasSelected()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+        var store = new InMemoryArchiveStore();
+        await store.WriteAsync([.. Enumerable.Range(0, 20).Select(i => Row("science", "thermodynamics", i))], null, CancellationToken.None);
+
+        var prompts = new List<string>();
+        var substrate = new StubSubstrate(prompt =>
+        {
+            lock (prompts) { prompts.Add(prompt); }
+            return Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m));
+        });
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
+            Options.Create(new RecallOptions { RecentRows = 10 }), ShippedInstructions.Store, new RuntimeKnobs());
+
+        await agent.HandleAsync(Selection(), CancellationToken.None);
+
+        Assert.Single(prompts);
+        Assert.True(advisories.TryRead(out var advisory));
+        Assert.Single(advisory!.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey)!);
+    }
+
+    /// <summary>
+    /// The fan-out cap is a budget over the selected pairs. The lane is not
+    /// one of them, so a deep archive cannot spend the turn and leave it
+    /// unread.
+    /// </summary>
+    [Fact]
+    public async Task TheFanOutCapNeverCostsTheLaneItsCall()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        bus.Subscribe(Topics.Advisories);
+        var store = new InMemoryArchiveStore();
+        await store.WriteAsync([.. Enumerable.Range(0, 100).Select(i => Row("science", "thermodynamics", i))], null, CancellationToken.None);
+
+        var calls = 0;
+        var substrate = new StubSubstrate(_ =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(new SubstrateResult("", TimeSpan.Zero, 5, 0m));
+        });
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
+            Options.Create(new RecallOptions { RowsPerWorker = 5, MaxConcurrentRecalls = 4, RecentRows = 10 }), ShippedInstructions.Store, new RuntimeKnobs());
+
+        await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics")), CancellationToken.None);
+
+        Assert.Equal(5, calls);
+    }
+
+    /// <summary>
+    /// A row picked from its drawer and again from the lane is one fact, and
+    /// Intent sees it once.
+    /// </summary>
+    [Fact]
+    public async Task AFactPickedFromBothTheShelfAndTheLaneReachesIntentOnce()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+        var store = new InMemoryArchiveStore();
+        await store.WriteAsync([.. Enumerable.Range(0, 20).Select(i => Row("science", "thermodynamics", i))], null, CancellationToken.None);
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0", TimeSpan.Zero, 5, 0m)));
+        var agent = new RecallAgent(bus, activity, NullLogger<RecallAgent>.Instance, store, substrate, Manifest(),
+            Options.Create(new RecallOptions { RowsPerWorker = 20, MaxConcurrentRecalls = 4, RecentRows = 20 }), ShippedInstructions.Store, new RuntimeKnobs());
+
+        await agent.HandleAsync(Selection(new ArchivePair("science", "thermodynamics")), CancellationToken.None);
+
+        Assert.True(advisories.TryRead(out var advisory));
+        var facts = advisory!.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey)!;
+        Assert.Equal(facts.Count, facts.DistinctBy(f => (f.Category, f.Topic, f.Subtopic, f.Subject, f.Key)).Count());
     }
 }

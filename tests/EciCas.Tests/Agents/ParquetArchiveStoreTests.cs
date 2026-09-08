@@ -24,6 +24,11 @@ public class ParquetArchiveStoreTests : IDisposable
         }
     }
 
+    /// <summary>Pair files only: every directory also holds the recency lane, which is a view rather than a pair.</summary>
+    private static IEnumerable<string> PairFiles(string directory) =>
+        Directory.EnumerateFiles(directory, "*.parquet")
+            .Where(f => !string.Equals(Path.GetFileName(f), ParquetArchiveStore.RecentFileName, StringComparison.Ordinal));
+
     private static ArchiveRecord Record(string category, string topic, string subtopic, string key, string value, double importance = 0.5) =>
         new(category, topic, subtopic, "subject", key, value, DateTimeOffset.UtcNow, ArchiveDomain.External, importance);
 
@@ -149,7 +154,7 @@ public class ParquetArchiveStoreTests : IDisposable
             Record("person", "work", "employer", "role", "engineer"),
         ], null, CancellationToken.None);
 
-        Assert.Equal(2, Directory.EnumerateFiles(_directory, "*.parquet").Count());
+        Assert.Equal(2, PairFiles(_directory).Count());
     }
 
     /// <summary>
@@ -223,8 +228,8 @@ public class ParquetArchiveStoreTests : IDisposable
         ], "daniel", CancellationToken.None);
 
         var profileDirectory = ParquetArchiveStore.ProfileDirectoryFor(_directory, "daniel");
-        Assert.Single(Directory.EnumerateFiles(profileDirectory, "*.parquet"));
-        Assert.Single(Directory.EnumerateFiles(_directory, "*.parquet"));
+        Assert.Single(PairFiles(profileDirectory));
+        Assert.Single(PairFiles(_directory));
         Assert.Contains(new ArchivePair("person", "family"), ParquetArchiveStore.PairsIn(profileDirectory));
         Assert.Contains(new ArchivePair("assistant", "identity"), ParquetArchiveStore.PairsIn(_directory));
     }
@@ -303,5 +308,104 @@ public class ParquetArchiveStoreTests : IDisposable
 
         var rows = await store.LookupAsync(new ArchivePair("person", "daniel"), null, CancellationToken.None);
         Assert.Equal("bergen", Assert.Single(rows).Value);
+    }
+
+    /// <summary>
+    /// The lane is written by the same call that writes the shelf, spans
+    /// every drawer, and survives a restart the way a pair file does.
+    /// </summary>
+    [Fact]
+    public async Task EveryWriteAlsoLandsInTheLane_NewestFirst()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        var now = DateTimeOffset.UtcNow;
+        await store.WriteAsync(
+        [
+            new ArchiveRecord("person", "family", "son", "marcus", "birthdate", "2020-08-28", now.AddDays(-2)),
+            new ArchiveRecord("record", "passport", "renewal", "daniel", "expiry", "2027-03", now),
+        ], null, CancellationToken.None);
+
+        var reopened = new ParquetArchiveStore(_directory);
+        var rows = await reopened.RecentAsync(null, 10, CancellationToken.None);
+        Assert.Equal(["2027-03", "2020-08-28"], rows.Select(r => r.Value));
+    }
+
+    /// <summary>
+    /// Two drawers may hold the same subtopic/subject/key, and within the
+    /// lane those are different facts. If the lane used the pair file's row
+    /// key one of them would overwrite the other.
+    /// </summary>
+    [Fact]
+    public async Task TheLaneKeepsTheSameRowKeyFromTwoDifferentPairs()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        var now = DateTimeOffset.UtcNow;
+        await store.WriteAsync(
+        [
+            new ArchiveRecord("vehicle", "service", "renewal", "daniel", "cost", "4000", now),
+            new ArchiveRecord("record", "passport", "renewal", "daniel", "cost", "1300", now),
+        ], null, CancellationToken.None);
+
+        var rows = await store.RecentAsync(null, 10, CancellationToken.None);
+        Assert.Equal(2, rows.Count);
+    }
+
+    /// <summary>A restated fact is not a second fact in the lane either.</summary>
+    [Fact]
+    public async Task RestatingAFactReplacesItInTheLane()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        var now = DateTimeOffset.UtcNow;
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now.AddDays(-1))], null, CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "bergen", now)], null, CancellationToken.None);
+
+        var rows = await store.RecentAsync(null, 10, CancellationToken.None);
+        Assert.Equal("bergen", Assert.Single(rows).Value);
+    }
+
+    /// <summary>
+    /// A year is the window, the trim runs at boot, and the pair file keeps
+    /// what the lane drops — the lane is a view, never the only copy.
+    /// </summary>
+    [Fact]
+    public async Task TheBootTrimDropsRowsOlderThanAYear_AndThePairFileKeepsThem()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        var pair = new ArchivePair("person", "daniel");
+        await store.WriteAsync(
+        [
+            new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow - ParquetArchiveStore.RecentWindow.Add(TimeSpan.FromDays(1))),
+            new ArchiveRecord("person", "daniel", "work", "daniel", "role", "builder", DateTimeOffset.UtcNow),
+        ], null, CancellationToken.None);
+
+        var reopened = new ParquetArchiveStore(_directory);
+        await reopened.TrimRecentAsync(CancellationToken.None);
+
+        Assert.Equal("builder", Assert.Single(await reopened.RecentAsync(null, 10, CancellationToken.None)).Value);
+        Assert.Equal(2, (await reopened.LookupAsync(pair, null, CancellationToken.None)).Count);
+    }
+
+    /// <summary>The lane file is not a pair, so nothing may find it through the index.</summary>
+    [Fact]
+    public async Task TheLaneFileNeverAppearsInTheIndex()
+    {
+        var store = new ParquetArchiveStore(_directory);
+        await store.WriteAsync([Record("person", "family", "son", "birthdate", "2020-08-28")], null, CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(_directory, ParquetArchiveStore.RecentFileName)));
+        Assert.Equal([new ArchivePair("person", "family")], new ParquetArchiveStore(_directory).IndexFor(null));
+    }
+
+    /// <summary>A profile's own facts stay in its own lane, and it reads both.</summary>
+    [Fact]
+    public async Task AProfilesLaneIsItsOwn_AndUnionsWithTheSharedOne()
+    {
+        var store = new ParquetArchiveStore(_directory, ["assistant"]);
+        var now = DateTimeOffset.UtcNow;
+        await store.WriteAsync([new ArchiveRecord("assistant", "system", "eci", "this", "version", "0.1", now.AddDays(-1))], "ada", CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now)], "ada", CancellationToken.None);
+
+        Assert.Equal(["oslo", "0.1"], (await store.RecentAsync("ada", 10, CancellationToken.None)).Select(r => r.Value));
+        Assert.Equal(["0.1"], (await store.RecentAsync(null, 10, CancellationToken.None)).Select(r => r.Value));
     }
 }

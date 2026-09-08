@@ -253,6 +253,12 @@ if (seedNeeded)
     await archiveStore.WriteAsync([seedRecord], profileId: null, CancellationToken.None);
 }
 
+// The recency lane reaches back a year, and the trim is a boot-time job so
+// no turn pays for it: a write appends, and only a restart drops what has
+// aged out. Nothing is lost by it - the lane is a view of rows the pair
+// files still hold.
+await archiveStore.TrimRecentAsync(CancellationToken.None);
+
 builder.Services.AddSingleton<IArchiveStore>(archiveStore);
 
 // Built above, because the persona seed reads from it. Registered here so
