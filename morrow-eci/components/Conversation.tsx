@@ -141,11 +141,14 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
         </div>
 
         {/* The column stops widening past a readable measure; the drawers get
-            the rest of a wide screen, and on a narrow one this is a no-op. */}
+            the rest of a wide screen, and on a narrow one this is a no-op.
+            5xl rather than 3xl: with both drawers open on a wide monitor the
+            3xl cap left the conversation a narrow ribbon down the middle of
+            its own region, with more empty gutter than text. */}
         {/* min-h-0 flex-1, not h-full: h-full asks for main's whole height
             regardless of the header above it, so a long transcript pushed the
             input off the bottom of the screen instead of scrolling. */}
-        <div className="flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center gap-2">
+        <div className="flex min-h-0 w-full max-w-5xl flex-1 flex-col items-center gap-2">
           <Avatar
             expression={turn?.impulse?.expression ?? "neutral"}
             speaking={speaking}
