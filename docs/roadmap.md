@@ -727,32 +727,27 @@ DERIVED view: trimming it destroys nothing, because every row it drops still
 lives at its own address. It is a window, not a store, and it should be built
 so that deleting the whole file is a no-op you can do at any time.
 
-**Two lanes rather than one, which is Daniel's refinement and mostly right.**
-The proposal is `recent.parquet` at 5,000 rows or thirty days, and
-`fatMemory.parquet` at 100,000 rows kept lean. The instinct to separate them
-is good, but the test to hold it to is whether they differ in KIND rather
-than in size: two flat cosine scans at 5k and 100k are one mechanism twice,
-and the same effect is available from a single file with a recency term in
-the score, at one deletion path instead of two.
+**One lane, bounded by a year.** A second fat lane was considered and
+dropped: the pair files ALREADY are the long-term store, so a 100k-row
+`fatMemory.parquet` would be a third copy of what two places already hold,
+and two flat cosine scans at two sizes are one mechanism twice rather than
+two mechanisms. What is left is `recent.parquet` with everything older than
+twelve months dropped at boot.
 
-What would make them differ in kind is the access method, and that is where
-"rows only, to avoid bloat" needs pinning down. A vector lane needs stored
-vectors; without them 100,000 rows must be embedded at query time, which is
-seconds on a CPU rather than the milliseconds the lane is worth. And the
-bloat being avoided is smaller than it looks -- 100k at 384 dims is 153 MB,
-which is not the constraint the "Nothing is ever deleted" section already
-established storage never is. So either the fat lane stores its vectors and
-is a real second scan, or it is reached some other way entirely (exact key
-match, or a keyword index), and THAT is the version that is different in
-kind and worth two files.
+A year rather than a month, and the unit is TIME rather than rows on
+purpose. "Lately" is what the lane means, and a row cap only approximates it
+at a fixed conversation rate -- a quiet fortnight and a busy one should not
+reach back equally far. At a hundred turns a day a year is roughly 100k rows
+and 150 MB of vectors, which is a rounding error against the 1.5 GB the
+"Nothing is ever deleted" section already accepts for sixty years, and a
+brute-force cosine over it is still milliseconds. So the cost of the longer
+reach is nothing, and the reason not to make it longer still is meaning
+rather than money: past a year the lane stops being recency and becomes a
+second, worse copy of the archive.
 
-Size units should differ too, and for a reason: `recent` should be bounded by
-TIME, because "lately" is what it means and a row count only approximates it
-at a fixed conversation rate. `fatMemory` should be bounded by ROWS, because
-there the cap is a resource bound and not a meaning.
-
-Two derived copies make the deletion problem above worse, not better, and it
-is the same fix: an id on the row, so a forget reaches every copy.
+Trimming at boot rather than on write is right and worth keeping: it is one
+pass at a moment nothing is waiting on, and it means a long-running session
+never pays for it.
 
 Threshold, and whether the lane is consulted at all, are config
 (`Archive:CacheRows`, default off) rather than code.
