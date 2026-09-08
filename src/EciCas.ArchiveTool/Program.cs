@@ -119,17 +119,17 @@ while (true)
     }
 }
 
-// Backfill. Rows written before the embedder existed, or while it was down,
-// make their whole pair fall back to the pre-vector read path - a pair is
-// only swept by cosine when every row in it carries a current vector, so one
-// bare row costs the file its ranking. This is what turns an existing
-// archive on.
+// Backfill, for an archive no host is booting: the same job runs at startup
+// against the embedder the host resolved, so a running deployment never needs
+// this. What it is still for is the other archive -- a copy under test, one
+// restored from a backup, one whose weights you want to change without
+// starting the thing.
 //
-// The model path is asked for rather than guessed, and it matters exactly:
-// the vector is stamped with "onnx:<path>" and the reader compares that
-// string to what the host has configured. Backfilling with a copy of the same
-// weights under a different path produces vectors that are correct and
-// ignored.
+// Which is why the model path is asked for rather than guessed, and why it
+// matters exactly: the vector is stamped with "onnx:<path>" and the reader
+// compares that string to what the host has configured. Backfilling with a
+// copy of the same weights under a different path produces vectors that are
+// correct and ignored.
 static async Task EmbedAsync(string directory, string modelPath, string vocabPath)
 {
     using var provider = new OnnxEmbeddingProvider(
@@ -142,56 +142,15 @@ static async Task EmbedAsync(string directory, string modelPath, string vocabPat
         return;
     }
 
-    var modelId = provider.ModelId;
-    Console.WriteLine($"Embedding with {modelId}");
+    Console.WriteLine($"Embedding with {provider.ModelId}");
 
-    // Every directory, because a profile tier is a directory of pair files
-    // like any other and its rows need vectors just as much.
-    var files = Directory.GetFiles(directory, "*.parquet", SearchOption.AllDirectories);
-    var embedded = 0;
-    var touched = 0;
+    var (rows, files) = await ArchiveBackfill.RunAsync(
+        directory,
+        provider,
+        onFile: (file, count) => Console.WriteLine($"  {Path.GetFileName(file)}: {count} row(s)"),
+        CancellationToken.None);
 
-    foreach (var file in files)
-    {
-        var rows = await ParquetArchiveStore.ReadRecordsAsync(file, CancellationToken.None);
-        var pending = rows
-            .Select((r, i) => (Record: r, Index: i))
-            .Where(x => !x.Record.HasVector(modelId))
-            .ToList();
-
-        if (pending.Count == 0)
-        {
-            continue;
-        }
-
-        var vectors = await provider.EmbedAsync(
-            [.. pending.Select(x => x.Record.EmbeddedText)], EmbeddingKind.Passage, CancellationToken.None);
-
-        if (vectors.Count != pending.Count)
-        {
-            Console.WriteLine($"  {Path.GetFileName(file)}: embedder returned {vectors.Count} vector(s) for {pending.Count} row(s), skipped");
-            continue;
-        }
-
-        var updated = rows.ToList();
-        for (var i = 0; i < pending.Count; i++)
-        {
-            var text = pending[i].Record.EmbeddedText;
-            updated[pending[i].Index] = pending[i].Record with
-            {
-                Embedding = vectors[i],
-                EmbeddingModelId = modelId,
-                EmbeddingHash = ArchiveEmbedding.HashOf(text),
-            };
-        }
-
-        await ParquetArchiveStore.WriteRecordsAsync(file, updated, CancellationToken.None);
-        Console.WriteLine($"  {Path.GetFileName(file)}: {pending.Count} row(s)");
-        embedded += pending.Count;
-        touched++;
-    }
-
-    Console.WriteLine($"Embedded {embedded} row(s) across {touched} file(s); {files.Length - touched} file(s) were already current.");
+    Console.WriteLine($"Embedded {rows} row(s) across {files} file(s); everything else was already current.");
 }
 
 // The directory listing IS the index — there is no index file to consult or

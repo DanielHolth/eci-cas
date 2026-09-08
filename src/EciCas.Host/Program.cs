@@ -258,12 +258,6 @@ if (seedNeeded)
     await archiveStore.WriteAsync([seedRecord], profileId: null, CancellationToken.None);
 }
 
-// The recency lane reaches back a year, and the trim is a boot-time job so
-// no turn pays for it: a write appends, and only a restart drops what has
-// aged out. Nothing is lost by it - the lane is a view of rows the pair
-// files still hold.
-await archiveStore.TrimRecentAsync(CancellationToken.None);
-
 // Wrapped, not replaced: the parquet store still owns the files, and the
 // decorator only stamps a vector on rows on their way into it. Registered as
 // a factory so it picks up whichever embedder the tier configured - on the
@@ -372,6 +366,28 @@ Console.WriteLine($"Tiers loadable live: {string.Join(", ", tiers.Presets.Select
 // A model swap is the one event that can take a note away, and it does it
 // without a log line — so it is checked here, before anything searches.
 var embedder = app.Services.GetRequiredService<IEmbeddingProvider>();
+
+// Rows the embedder never saw make their whole pair fall back to
+// chunk-and-pick, and nothing announces it. The fix is a maintenance job in
+// the ordinary sense — run it at boot, before anything searches, using the
+// embedder this host resolved rather than a path repeated in a launcher
+// script that can disagree with the tier. Free on a warm archive.
+var backfilled = await ArchiveBackfill.RunAsync(archiveDirectory, embedder, onFile: null, CancellationToken.None);
+if (backfilled.Files > 0)
+{
+    // The store has been reading these same files; what it cached before the
+    // rewrite is now the stale copy.
+    archiveStore.Invalidate();
+    Console.WriteLine($"Archive vectors: embedded {backfilled.Rows} row(s) across {backfilled.Files} file(s) with {embedder.ModelId}.");
+}
+
+// The recency lane reaches back a year, and the trim is a boot-time job so
+// no turn pays for it: a write appends, and only a restart drops what has
+// aged out. Nothing is lost by it - the lane is a view of rows the pair
+// files still hold. After the backfill, so the lane it caches is the
+// vectored one.
+await archiveStore.TrimRecentAsync(CancellationToken.None);
+
 PassageCorpus.EnsureModelAgreement(
     await app.Services.GetRequiredService<IPassageStore>().StampedModelsAsync(CancellationToken.None),
     embedder.ModelId);

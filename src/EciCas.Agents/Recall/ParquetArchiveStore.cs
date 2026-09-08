@@ -447,6 +447,20 @@ public sealed class ParquetArchiveStore : IArchiveStore
             ? _directory
             : ProfileDirectoryFor(_directory, profileId);
 
+    /// <summary>
+    /// Forgets everything read so far. For one caller and one moment: the
+    /// boot-time backfill rewrites pair files underneath this store, and a
+    /// row cached before it ran would stay vectorless in memory for the whole
+    /// process while the file on disk was already fixed -- the pair silently
+    /// cold until the next restart. Safe only because nothing is serving
+    /// turns yet; it is not a general eviction and there is no lock here.
+    /// </summary>
+    public void Invalidate()
+    {
+        _pairs.Clear();
+        _indexes.Clear();
+    }
+
     /// <summary>Decoded once per directory and kept: the file listing IS the index, so it only has to be read the first time that directory is touched.</summary>
     private HashSet<ArchivePair> IndexIn(string directory)
     {

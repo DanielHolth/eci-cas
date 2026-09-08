@@ -150,6 +150,12 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
     /// the same configured path work from `dotnet run`, from bin, and from
     /// a published layout, where the weights sit beside the binary and the
     /// first probe hits.
+    ///
+    /// The working directory is walked too, because a relative path typed at
+    /// a prompt means what it means in the shell that typed it. A build whose
+    /// output lives somewhere else entirely -- an artifacts path, a temp
+    /// directory -- shares no ancestor with the repo, so the binary's own
+    /// chain never reaches the weights however far up it climbs.
     /// </summary>
     private static string Resolve(string path)
     {
@@ -158,12 +164,15 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
             return path;
         }
 
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        foreach (var root in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
         {
-            var candidate = Path.Combine(dir.FullName, path);
-            if (File.Exists(candidate))
+            for (var dir = new DirectoryInfo(root); dir is not null; dir = dir.Parent)
             {
-                return candidate;
+                var candidate = Path.Combine(dir.FullName, path);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
             }
         }
 
