@@ -86,12 +86,23 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// bracket-tag way every other advisory is. Since intent.txt's own
     /// sentence rule came out, this is the only thing that states a length,
     /// so it is always appended rather than only when it differs.
+    ///
+    /// It states a floor as well as a ceiling: given "1-6 sentences" the model
+    /// answers in two and ignores the rest of the range, so raising the slider
+    /// bought nothing. Half the cap, rounded down, is the floor instead, and
+    /// the terseness nudge only rides along while the cap is genuinely short.
     /// </summary>
     private static void AppendLengthLimit(StringBuilder prompt, int maxSentences)
     {
+        var floor = Math.Max(1, maxSentences / 2);
+
         prompt.Append(" [Length: ")
-            .Append(maxSentences == 1 ? "1 sentence" : $"1-{maxSentences} sentences")
-            .Append(". Keep it terse.]");
+            .Append(floor == maxSentences
+                ? maxSentences == 1 ? "1 sentence" : $"{maxSentences} sentences"
+                : $"{floor}-{maxSentences} sentences")
+            .Append(maxSentences <= 2
+                ? ". Keep it terse.]"
+                : ". Use the whole range — do not stop short of it.]");
     }
 
     /// <summary>
