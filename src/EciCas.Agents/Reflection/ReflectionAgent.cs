@@ -61,8 +61,8 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     // for both means the pair label reads as an address rather than as a
     // mood. The pair is still its own file — the archive is pair-addressed,
     // so assistant~reflection.parquet never touches assistant~identity.parquet.
-    private const string FixedCategory = "assistant";
-    private const string FixedTopic = "reflection";
+    private const string FixedCategory = AssistantScope.Name;
+    private const string FixedTopic = AssistantScope.Reflection;
     private const string FixedSubject = "self";
     private const string FixedKey = "insight";
     private const double QuietImportance = 0.1;

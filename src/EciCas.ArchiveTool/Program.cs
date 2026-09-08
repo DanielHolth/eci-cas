@@ -182,10 +182,10 @@ static async Task ResetAsync(string directory)
     }
 
     var record = new ArchiveRecord(
-        "assistant", "system", "eci", "this", "version", "0.1",
+        AssistantScope.Name, AssistantScope.System, "eci", "this", "version", "0.1",
         DateTimeOffset.UtcNow, ArchiveDomain.Internal, 1.0);
 
-    var path = ParquetArchiveStore.PairPathFor(directory, new ArchivePair("assistant", "system"));
+    var path = ParquetArchiveStore.PairPathFor(directory, new ArchivePair(AssistantScope.Name, AssistantScope.System));
     await ParquetArchiveStore.WriteRecordsAsync(path, [record], CancellationToken.None);
     Console.WriteLine("Parquet reset.");
 }

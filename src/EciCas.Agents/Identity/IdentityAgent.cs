@@ -34,7 +34,7 @@ public sealed class IdentityAgent : AgentBase
     /// away from "self" was for. This is the snippet, in the JSONL agent
     /// state store; the facts are rows, in parquet.
     /// </summary>
-    public const string IdentityPath = "assistant/persona";
+    public const string IdentityPath = AssistantScope.Name + "/" + AssistantScope.Persona;
 
     /// <summary>What a persona that has lost its own description says instead.</summary>
     public const string StrangerSection = "stranger";

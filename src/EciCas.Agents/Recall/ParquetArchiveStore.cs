@@ -57,8 +57,12 @@ public sealed class ParquetArchiveStore : IArchiveStore
     /// under assistant/reflection. None of it belongs to any one person on a
     /// shared device. It was two until "self" was folded in; the pair
     /// addressing keeps the files apart without needing a second category.
+    ///
+    /// Named from AssistantScope rather than spelled here, because this
+    /// string and the ones the writing agents use have to be the same
+    /// string or a row is filed per-profile by accident.
     /// </summary>
-    public static readonly string[] DefaultSharedCategories = ["assistant"];
+    public static readonly string[] DefaultSharedCategories = [AssistantScope.Name];
 
     private sealed class RecordRow
     {
