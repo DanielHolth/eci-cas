@@ -134,8 +134,43 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
         return VectorMath.Normalize(pooled);
     }
 
-    private static string Resolve(string path) =>
-        Path.IsPathRooted(path) ? path : Path.Combine(AppContext.BaseDirectory, path);
+    /// <summary>
+    /// A relative weights path, resolved against the binary and then against
+    /// each directory above it until the file turns up.
+    ///
+    /// Joining to AppContext.BaseDirectory alone was wrong in the ordinary
+    /// case: the weights live at the repo root, nothing copies 90MB of them
+    /// into bin/Debug on every build, and nobody wants a build that does.
+    /// So the path pointed at a file that had never existed, the provider
+    /// warned once, and every vector path in the system went quietly off --
+    /// pair sweeps, row narrowing and Hindsight's wake alike -- while the
+    /// weights sat four directories up.
+    ///
+    /// Walking up costs a few File.Exists calls once at startup and makes
+    /// the same configured path work from `dotnet run`, from bin, and from
+    /// a published layout, where the weights sit beside the binary and the
+    /// first probe hits.
+    /// </summary>
+    private static string Resolve(string path)
+    {
+        if (Path.IsPathRooted(path))
+        {
+            return path;
+        }
+
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, path);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        // Nothing found: hand back the binary-relative reading, so the
+        // warning names the path an operator would expect to see.
+        return Path.Combine(AppContext.BaseDirectory, path);
+    }
 
     public void Dispose() => _session?.Dispose();
 }

@@ -132,8 +132,18 @@ if ($needsOpenAi -and -not $env:OPENAI_API_KEY) {
 # The embedder is in-process ONNX, so there is no server to start -- only
 # weights that may not be there. Without them the swarm runs unembedded,
 # which is a supported state, not a fault.
-if ($Tier -ne 'Minimal' -and -not (Test-Path (Join-Path $repo 'models/embedding/model.onnx'))) {
-    Write-Host 'note: no local embedding weights. Vectors are off unless the tier uses an API embedder.'
+#
+# Every tier, not every tier but Minimal: the exemption dated from when
+# Minimal had no embedder of its own, and it outlived that by long enough to
+# hide a real outage.
+#
+# Both files, not just the model: a vocab.txt that did not come down with the
+# weights fails the host's own check and produces exactly the same silence.
+$weights = @('models/embedding/model.onnx', 'models/embedding/vocab.txt')
+$missing = @($weights | Where-Object { -not (Test-Path (Join-Path $repo $_)) })
+if ($missing.Count -gt 0) {
+    Write-Host "note: no local embedding weights ($($missing -join ', '))."
+    Write-Host '      Vectors are off: no pair sweep, no row narrowing, no woken notes.'
     Write-Host '      ./scripts/get-embedding-model.ps1'
 }
 
