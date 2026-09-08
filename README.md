@@ -31,7 +31,21 @@ morrow-eci/           Next.js companion UI
 
 ## Run it
 
-Two terminals. The host serves the bus and the SSE feed on `:5179`; the
+One command, if you want the lazy path:
+
+```powershell
+./start.cmd -Tier Default
+```
+
+It reads the tier file to decide what that tier actually needs, starts
+llama-server (only for tiers routing a class at `local`), the host and the
+surface in windows of their own, waits for both ports and opens the browser.
+Nothing heavy is installed behind your back: missing weights, a missing
+llama-server and a missing API key are each reported with the one command that
+fixes them. `-WhatIfOnly` prints what it would start; `-NoUi`, `-NoLlm` and
+`-NoBrowser` leave a part out.
+
+By hand it is two terminals. The host serves the bus and the SSE feed on `:5179`; the
 surface talks to it from `:3000`.
 
 ```powershell
