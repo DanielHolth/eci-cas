@@ -574,13 +574,50 @@ costs the behaviour: it returns a household fact with confidence, and Morrow
 reports a boiler instead of thinking. Reflection and Hindsight therefore stay
 untouched by the vocabulary work.
 
-This also pays down existing debt rather than adding to it. `assistant` is
-today an undeclared eleventh category: known to `ParquetArchiveStore`, written
-by `ReflectionAgent` and `IdentityAgent`, absent from `cataloger.txt`, and
-worked around defensively in both `LibrarianAgent` and `RecallAgent` because
-assistant rows outrank human ones on content. A declared scope with three or
-four coarse drawers deletes both workarounds. A finer vocabulary leaves them,
-now defending against 512 drawers instead of 170.
+This also pays down existing debt rather than adding to it. `assistant` was
+an undeclared eleventh category: known to `ParquetArchiveStore`, written by
+`ReflectionAgent` and `IdentityAgent`, absent from `cataloger.txt`, and
+spelled as a bare string in each of the four files that touch it.
+
+**Done.** `EciCas.Core.AssistantScope` declares the scope and its three
+coarse drawers -- what the persona is, what it has thought, what it runs on
+-- and the four literals now name it. Coarse on purpose: the 512-pair
+vocabulary is the user's domain and nothing on this shelf is ranked against
+it, so a fourth drawer needs an argument rather than a slot.
+
+One prediction in this section was wrong and is corrected rather than
+quietly dropped. It said a declared scope would delete "defensive
+workarounds" in `LibrarianAgent` and `RecallAgent`. There are none. Both
+sites carry the turn's own text into the picking prompt so that ranking is
+relevance to THIS question rather than importance in general, and an
+assistant row outranking a person's is only the example the comments use.
+Carrying the text is correct for its own reasons and stays.
+
+### The summary is the retrieval, not the taxonomy
+
+Batch 19 measured the same 512-pair shelf twice, changing only how each pair
+was summarised for the embedder: 10 of 20 probes on bare paths, 18 of 20 on
+one-sentence glosses. `leisure` alone went 1 of 11 to 10 of 11 -- and two
+different topic re-cuts of it, one aspect-shaped and one subject-shaped, had
+each scored exactly 1 of 11 first. The drawer was unreachable, not broad. A
+hobby sentence names the hobby, and the other 31 categories own those nouns.
+
+The consequence for everything else in this document: any retrieval number
+measured against a candidate shelf summarised by its bare paths is a floor,
+not a result. `docs/vocabulary/v512-gloss.txt` holds the 512 sentences,
+`tools/retrieval-bench/build_gloss.py` validates them against the vocabulary
+before measuring, and `flat_v5`/`bleed_v5` now summarise through them.
+
+Two things that cost measurements to learn. Aspect-shaped topics work only
+when the aspect words are words people actually say -- `culture` and `office`
+land, `session` and `kit` do not. And a gloss carrying a common temporal
+phrase becomes a magnet regardless of subject: "I had the jab last autumn"
+pulled "I took up knitting last winter"; "every morning for it" pulled "I do
+the crossword every morning". Concrete nouns, no calendar words.
+
+Glossing also made the write distribution slightly less flat (`live10%` 41%
+to 39%, p95 14 to 15), because a good gloss is a stronger magnet. Flatness
+was always the proxy; landing the row in the right drawer is the goal.
 
 ### Union, not replacement
 

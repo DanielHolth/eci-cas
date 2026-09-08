@@ -562,3 +562,83 @@ Ties llm on the bootstrap (+1.1pp, P 53%) exactly as the derived gloss does,
 and wins on both caveats carried against it: agreement triples and spread goes
 to 60 pairs, wider than the Cataloger's 54, so the concentration worry inverts
 rather than shrinking. This is the arm to ship.
+
+## Batch 17 — pricing granularity, and batch 18 — building the grid
+
+`gran_v4.py` prices the read: how many pairs must be opened to reach 85% of
+the answerable questions, as a curve over shelf size. `grid_v4.py` builds a
+candidate shelf two-level, by spherical k-means over the corpus rather than
+by taxonomy, so a shelf can be proposed from the vector space instead of
+argued into existence. Both are numpy only, no sklearn.
+
+The finding that carried forward was not a shelf but a format: for drawers
+broad enough to need one, an example sentence beats a keyword list as the
+pair's summary. That is what the gloss block below tests at full scale.
+
+## flat_v5 and bleed_v5 — two questions about a candidate shelf
+
+`flat_v5.py` files all 1559 v4 rows into a vocabulary by cosine and reports
+the occupancy histogram. The metric to read is `top10%` — the share of rows
+in the fattest tenth of drawers, which reads 10% for a perfectly flat shelf
+at any size, so shelves of 170 and 512 pairs are comparable. `live10%` is the
+same over non-empty drawers. `gini` counts empty drawers and therefore
+penalises the bigger shelf for subjects this one synthetic household simply
+lacks; it is reported, not steered by.
+
+`bleed_v5.py` asks the other question: is a drawer a catch-all? For each
+candidate drawer it takes the Shannon entropy of the SHIPPED categories its
+rows came from. A subject drawer draws from one or two sources and sits near
+0–1 bits; a catch-all draws from many and approaches the 3.32-bit ceiling.
+Volume AND high entropy together are the defect — high entropy on three rows
+is noise, so nothing under eight rows is reported.
+
+Both caveats apply to every number either script prints. The corpus is one
+synthetic household written against the 170-pair shelf, so a candidate drawer
+for a subject the corpus lacks can be acquitted but never convicted. And both
+scripts now summarise pairs through the gloss block; before that they
+summarised by bare path, which is why every figure recorded against a
+candidate shelf before batch 19 is a floor rather than a result.
+
+## Batch 19 — the gloss block, and the largest single effect in the log
+
+Twenty probe sentences, run against the 512-pair shelf twice with the same
+topics and only the summary changed:
+
+    bare paths   10/20
+    glossed      18/20
+
+`leisure` alone went 1 of 11 to 10 of 11. Two different topic re-cuts had
+already been tried on it — one aspect-shaped, one subject-shaped — and both
+scored exactly 1 of 11, which is what says the defect was never taxonomy. A
+hobby sentence names the hobby, and the other 31 categories own those nouns:
+"greenhouse" is home, "film" is media, "bookshelf" is project, "club" is
+social. The drawer was unreachable, not broad.
+
+Two second-order findings, both of which cost real measurements to learn:
+
+**Aspect-shaped topics only work when the aspect words are words people
+say.** `culture`, `norms` and `office` land, which is why the work/workplace
+re-cut succeeded. `session`, `practice` and `kit` do not, and the aspect
+version of `leisure` was worse in kind than the subject one — "birdwatching
+is my main hobby" fell from `leisure/hobby-skill` to `device/watch`.
+
+**A gloss carrying a common temporal or vague phrase is a magnet regardless
+of its subject.** "I had the jab last autumn" pulled "I took up knitting last
+winter" into `health/vaccination`. "I take something every morning for it"
+pulled "I do the crossword every morning" into `care/medication`. "How safe
+the place feels" pulled 45 rows into `home/security`. Concrete nouns, no
+calendar words.
+
+And the trade, stated rather than hidden: glossing improved routing sharply
+and made the write distribution slightly LESS flat, because a good gloss is a
+stronger magnet and strong magnets concentrate.
+
+    live10%  41% -> 39%     p95  14 -> 15     fill  59% -> 51%
+
+Flatness was always the proxy. Landing the row in the right drawer is the
+goal, so the trade is taken.
+
+**The category name barely matters once a drawer is glossed.** `admin` versus
+`record`, identical topics and identical glosses, scored 6/10 and 6/10 with
+mean top scores of 0.8352 and 0.8349 — three ten-thousandths apart. Category
+labels are a readability choice, and that is now known rather than assumed.
