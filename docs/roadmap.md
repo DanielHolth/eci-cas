@@ -683,6 +683,35 @@ rule that makes it safe: **a digest may summarise, but it must cite.** Every
 digest row carries the addresses it came from, so a summary is a table of
 contents and never a replacement.
 
+### Renaming Morrow — the write path that cannot be reached
+
+Telling the persona it is called something else does not stick, and the
+reason is structural rather than a bug in any one file.
+
+`PersonaName` reads `persona/name`, subject `assistant`, key `name`, and
+falls back to `Morrow` when the row is absent. That read works. So does its
+test. But `persona` is not in the closed vocabulary and never has been, and
+`CatalogerAgent` routes every fact through `ClosedVocabulary.MatchCategory`
+and `MatchTopic` before it is written, so no conversation can ever produce
+that address. The only test of the path (`IdentityAgentTests`) writes the
+row directly, which proves the read and hides the write. The gap predates
+the 512-pair shelf; the shelf neither caused it nor could fix it.
+
+Two ways out, and the second is preferred:
+
+- Add `persona` as a 33rd category. Cheap, and exactly the mistake
+  `AssistantScope` exists to prevent: it puts the persona's own drawer into
+  the ranking that decides where the user's facts go, which was measured at
+  1 of 16 and is why the scope is decided before ranking rather than in it.
+- Give the name a deterministic write path that bypasses vocabulary
+  routing, the way the scope already bypasses ranking. Being told a name is
+  not a fact about the user to be filed; it is an instruction to the
+  persona, recognised where it is said and written straight to the fixed
+  address `PersonaName.Pair`. Then Cataloger never sees it, the vocabulary
+  stays closed, and the read path already in place is the only reader.
+
+Until one of them is done, the fallback is the name.
+
 ### The recency lane — a bundled cache beside the shelf
 
 Daniel's proposal: every row written to `category/topic.parquet` is also
