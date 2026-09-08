@@ -509,6 +509,13 @@ and beside it an action of type `tool`, dispatched to the toolbox. The person
 gets an answer at conversational latency; the tool takes as long as it takes
 and returns the way a device does, as a fresh perception.
 
+**Dispatching is not waiting.** The `tool` action starts the work and the turn
+ends — nothing on the bus is holding a call open. The next action about that
+request only exists because the *result* came back in as a perception and ran
+an ordinary turn on it. So a tool that takes four minutes costs nothing for
+four minutes, and the reply about it is written by an Intent that has the
+answer in front of it rather than one waiting for it.
+
 This is why the toolbox sits on the action side of Governance rather than
 inside Intent. A tool call is a *second action on the same verdict*, so it is
 gated once, by the machinery that already gates speech, and a Red turn emits
@@ -540,11 +547,31 @@ whether the registry is a device registry or a tool registry:
   under the running system, which is a different problem from calling a tool
   and should not be conflated with one.
 
+### ToolManager — Governance for handlers
+
+One **ToolManager** in front of many **tool handlers**, each handler owning one
+device or service. The manager is to handlers what Governance is to agents: the
+single place a call is admitted, tracked and given up on, so a handler is only
+ever the thing that talks to its device.
+
+**It owns the timeout, and a timeout is a perception.** A dispatched call the
+manager never hears back about is not an error swallowed at the boundary — the
+acknowledgement already promised the person an answer, so silence is the one
+outcome that must not be silent. The manager publishes it as a perception like
+any other result, and the turn that runs on it is the persona saying the camera
+never answered. Same seam, same shape as success; only the content differs.
+`DeviceBlockCount` belongs here for the same reason admission control does.
+
+This also settles where a handler's failure stops. A handler that throws, or a
+device that refuses, reaches the manager and leaves it as a perception; nothing
+propagates back to the action that started it, because that action finished
+long ago.
+
 Open: whether the tool result arrives tagged `tool` and unified with `device`
-at the perception seam or stays distinct; how a long-running tool that never
-returns is noticed, given the acknowledgement has already promised an answer;
-and whether an unfinished tool is state the persona can be asked about
-(*"what were you checking?"*) or is invisible until it lands.
+at the perception seam or stays distinct; and whether an unfinished tool is
+state the persona can be asked about (*"what were you checking?"*) or is
+invisible until it lands — the manager holds the in-flight list either way, so
+this is a question about what reaches Intent, not about what is known.
 
 ## Memory architecture — the layers not built
 
