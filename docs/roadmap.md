@@ -500,6 +500,52 @@ design pass since the hazards are the same ones — provenance on the
 returned fact, and Archivist deciding whether a skill's answer is worth
 writing down at all.
 
+### One request, two actions
+
+A tool request is not a turn that stalls until the tool answers. It is a turn
+that produces **two** actions: the ordinary spoken reply — *"I've started
+working on that and I'll get back to you as soon as the tool is finished"* —
+and beside it an action of type `tool`, dispatched to the toolbox. The person
+gets an answer at conversational latency; the tool takes as long as it takes
+and returns the way a device does, as a fresh perception.
+
+This is why the toolbox sits on the action side of Governance rather than
+inside Intent. A tool call is a *second action on the same verdict*, so it is
+gated once, by the machinery that already gates speech, and a Red turn emits
+neither. Intent keeps one output vocabulary; what varies is how many actions
+the verdict releases.
+
+The acknowledgement is Intent's own sentence, not a canned string. It knows
+what was asked and can say so — *"I'll check the camera and come back"* — and
+a fixed template would be the one line in the conversation the persona did not
+write.
+
+**The class is wider than IoT**, and worth naming early because it decides
+whether the registry is a device registry or a tool registry:
+
+- *"check this in your manual"*, *"tell me about your debug settings"*, *"do
+  you want to change anything in your settings?"* — the system reading and
+  eventually writing itself. The last one is not a lookup; it is a proposal the
+  person approves.
+- *"check my \[IoT] and give me status"*, *"check my camera feed from last
+  night"* — devices, the original sketch.
+- *"how is cowork progressing?"*, *"check my stream on the other monitor"* —
+  another machine's state, or another agent's.
+- *"look something up online"* — the open web, which is the one that needs its
+  own answer on provenance and on Security.
+- *"tell me about your thoughts"* — the passage corpus, already local, already
+  written. The cheapest first tool, and the one that proves the seam without
+  any integration at all.
+- *"has the community added tools to the workshop?"* — a registry that changes
+  under the running system, which is a different problem from calling a tool
+  and should not be conflated with one.
+
+Open: whether the tool result arrives tagged `tool` and unified with `device`
+at the perception seam or stays distinct; how a long-running tool that never
+returns is noticed, given the acknowledgement has already promised an answer;
+and whether an unfinished tool is state the persona can be asked about
+(*"what were you checking?"*) or is invisible until it lands.
+
 ## Memory architecture — the layers not built
 
 The passage corpus shipped (see the design records). These interlock with
