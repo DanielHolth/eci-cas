@@ -232,4 +232,34 @@ public class RecallVectorTests
         var facts = advisory!.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey)!;
         Assert.Equal("few", Assert.Single(facts).Key);
     }
+
+    /// <summary>
+    /// The recency lane is a set of candidates like any other. It used to
+    /// reach Intent on its timestamp order alone — the newest rows, whatever
+    /// the turn was about — so a burst of unrelated writes arrived as facts.
+    /// Recency is how the lane is built, not how it is ranked.
+    /// </summary>
+    [Fact]
+    public async Task TheRecencyLane_IsRankedByCosine_NotByClock()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+        var embeddings = Counting();
+        var store = new InMemoryArchiveStore();
+
+        // Write order is the fake's clock: "far" is the newest thing in the
+        // archive and the worst answer to the question.
+        await store.WriteAsync([Embedded("near", "xxxxxxxx", embeddings)], null, CancellationToken.None);
+        await store.WriteAsync([Embedded("far", "a", embeddings)], null, CancellationToken.None);
+
+        var agent = Agent(bus, activity, store, new NeverCalledSubstrate(), embeddings,
+            new RecallOptions { RecentRows = 5, PickAfterVector = false }, depth: 1);
+
+        await agent.HandleAsync(Selection(new ArchivePair("person", "family"), "xxxxxxxx"), CancellationToken.None);
+
+        Assert.True(advisories.TryRead(out var advisory));
+        var facts = advisory!.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey)!;
+        Assert.Equal("near", Assert.Single(facts).Key);
+    }
 }

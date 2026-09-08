@@ -89,7 +89,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // still knows what was said lately.
         if (!entry.UseSubstrate)
         {
-            Publish(envelope, [.. recent.Take(_knobs.RecallDepth)], degraded: null);
+            Publish(envelope, Distinct(recent.Take(_knobs.RecallDepth)), degraded: null);
             return;
         }
 
@@ -98,11 +98,25 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         var read = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
 
         // The cosine cut, before anything is chunked. This is where the row
-        // vectors earn their disk: a pair every row of which carries a
-        // current vector is narrowed to the handful nearest the question, and
-        // what reaches the workers below is already the right end of the
-        // file rather than the first RowsPerWorker of it in importance order.
-        var (loaded, narrowedAll) = await NarrowAsync(envelope, read, text, cancellationToken).ConfigureAwait(false);
+        // vectors earn their disk: a set every row of which carries a current
+        // vector is narrowed to the handful nearest the question, and what
+        // reaches the workers below is already the right end of the file
+        // rather than the first RowsPerWorker of it in importance order.
+        //
+        // One embed for the turn, and the same cut over both kinds of
+        // candidate. The lane used to reach Intent on timestamp alone -- the
+        // newest RecallDepth rows, whatever the turn was about -- which is
+        // how a question about a daughter arrived carrying four rows of the
+        // persona's own identity, written twenty minutes earlier. Recency is
+        // how the lane is built, not a reason to hand Intent its head: once a
+        // row is a candidate it is ranked like every other candidate, and the
+        // lane keeps only what it is for, which is reaching rows no selector
+        // can name.
+        var query = await QueryVectorAsync(envelope, text, cancellationToken).ConfigureAwait(false);
+        var (loaded, narrowedPairs) = Narrow(query, read);
+        var (lane, narrowedLane) = Narrow(query, [recent], "recent");
+        recent = lane[0];
+        var narrowedAll = narrowedPairs && narrowedLane;
 
         // When every loaded row would fit in a single worker's pick budget,
         // the picking call can only return a subset of what passing them all
@@ -133,16 +147,16 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // return made the picking call pure subtraction, and the bench
         // measured it subtracting the right answer.
         //
-        // The cut is three times the depth now, so those two stages no
-        // longer overlap -- cosine says which thirty rows are worth reading
-        // and the picking call says which ten of them answer the question.
-        // PickAfterVector: false restores the old shape and hands all thirty
-        // to Intent, which is a real choice for a tier with no picking model
-        // worth the call.
+        // So the cut is the depth itself and the two stages no longer
+        // overlap: a set holding no more rows than a worker may return has
+        // nothing left to pick from, and PickAfterVector is false everywhere
+        // because of it. Raising the cut above the depth is what turns the
+        // picking call back on -- cosine saying which rows are worth reading,
+        // the model saying which of them answer the question.
         if (narrowedAll && !_options.PickAfterVector && loaded.Length > 0)
         {
-            _logger.LogInformation("{Agent} vector-narrowed every pair; skipping the picking calls", Name);
-            Publish(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent.Take(_knobs.RecallDepth))), degraded: null);
+            _logger.LogInformation("{Agent} vector-narrowed every pair and the lane; skipping the picking calls", Name);
+            Publish(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent)), degraded: null);
             return;
         }
 
@@ -180,8 +194,11 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     }
 
     /// <summary>
-    /// Narrows each loaded pair to the rows nearest this turn, and says
-    /// whether every pair could be narrowed that way.
+    /// Narrows each loaded set of rows to the ones nearest this turn, and
+    /// says whether every set could be narrowed that way. A set is a pair
+    /// Librarian selected or the recency lane -- the lane is not a pair, but
+    /// by the time it is a list of candidate rows there is nothing left to
+    /// distinguish them, and one cut is easier to reason about than two.
     ///
     /// The rule is all-or-nothing per pair, and deliberately: a file where
     /// half the rows carry a vector would be swept half-blind, and the half
@@ -195,16 +212,10 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     /// while it was down, simply slower rather than wrong. Backfilling is
     /// what turns those pairs on.
     /// </summary>
-    private async Task<(IReadOnlyList<ArchiveRecord>[] Loaded, bool NarrowedAll)> NarrowAsync(
-        Envelope envelope, IReadOnlyList<ArchiveRecord>[] loaded, string text, CancellationToken cancellationToken)
+    private (IReadOnlyList<ArchiveRecord>[] Loaded, bool NarrowedAll) Narrow(
+        float[]? query, IReadOnlyList<ArchiveRecord>[] loaded, string? label = null)
     {
-        if (loaded.Length == 0 || _knobs.VectorCandidates <= 0 || !_embeddings.Available)
-        {
-            return (loaded, false);
-        }
-
-        var query = await QueryVectorAsync(envelope, text, cancellationToken).ConfigureAwait(false);
-        if (query is null)
+        if (query is null || loaded.Length == 0 || _knobs.VectorCandidates <= 0 || !_embeddings.Available)
         {
             return (loaded, false);
         }
@@ -234,8 +245,8 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
             if (_logger.IsEnabled(LogLevel.Debug))
             {
-                _logger.LogDebug("{Agent} narrowed {Category}/{Topic} from {Before} to {After} row(s) by cosine",
-                    Name, rows[0].Category, rows[0].Topic, rows.Count, narrowed[i].Count);
+                _logger.LogDebug("{Agent} narrowed {Set} from {Before} to {After} row(s) by cosine",
+                    Name, label ?? $"{rows[0].Category}/{rows[0].Topic}", rows.Count, narrowed[i].Count);
             }
         }
 
