@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace EciCas.Agents.Utterances;
 
@@ -48,6 +48,8 @@ public static partial class KeywordExtractor
         s t now
         one two get got go going went make made take took come came say said
         thing things something anything nothing lot lots bit
+        haha hah hahaha lol lmao hmm hm huh uh um umm err ah aha oh oops
+        ok okay yeah yep yup nope nah wow hey hi hello bye thanks
         """.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries),
         StringComparer.Ordinal);
 

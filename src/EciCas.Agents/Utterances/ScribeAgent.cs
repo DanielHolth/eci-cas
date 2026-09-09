@@ -1,4 +1,4 @@
-using EciCas.Agents.Perception;
+﻿using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -32,14 +32,16 @@ public sealed class ScribeAgent : AgentBase
 {
     private readonly IUtteranceLog _log;
     private readonly ThreadWeaver _weaver;
+    private readonly UtteranceOptions _options;
     private readonly ILogger _logger;
 
     public ScribeAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ScribeAgent> logger,
-        IUtteranceLog log, ThreadWeaver weaver)
+        IUtteranceLog log, ThreadWeaver weaver, IOptions<UtteranceOptions> options)
         : base(bus, activity, logger)
     {
         _log = log;
         _weaver = weaver;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -62,13 +64,23 @@ public sealed class ScribeAgent : AgentBase
             return;
         }
 
+        var keywords = KeywordExtractor.Content(text);
+
+        // Nothing to recall from a sentence with no content word in it, and
+        // it would compete for one of five slots forever. See UtteranceFilter
+        // for why the cut is content words rather than characters.
+        if (!UtteranceFilter.Keep(keywords, _options))
+        {
+            return;
+        }
+
         var utterance = new Utterance(
             Id: Guid.NewGuid().ToString("n"),
             Text: text,
             Timestamp: envelope.Timestamp,
             Speaker: envelope.Meta.Get<string>(PerceptionAgent.ProfileKey) ?? "user",
             ProfileId: envelope.Meta.Get<string>(PerceptionAgent.ProfileKey),
-            Keywords: KeywordExtractor.Content(text));
+            Keywords: keywords);
 
         try
         {

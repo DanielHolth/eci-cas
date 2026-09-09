@@ -2284,6 +2284,17 @@ duplicate junk crowds top-k. Length and novelty-against-existing-vectors
 may be enough. If they are, the Archivist's last job goes and a turn costs
 one LLM call.
 
+*Partly answered, and shipped.* The length half is in `UtteranceFilter`,
+cut on content words rather than characters (`MinContentWords`, default
+one): a sentence with no content word in it makes no claim, so there is
+nothing to recall from it, and the stopword list the lexical lane already
+needed now carries the conversational filler too. The novelty half was
+deliberately not built -- threading already collapses restatements into one
+thread that reads back as its newest phrasing, so dropping the row as well
+would buy nothing at read time and would lose the fact that it was said
+again, and when. What is still unmeasured is whether the filter changes
+retrieval at all; it is one integer, and zero restores the old behaviour.
+
 **Should the shelf be clustered rather than authored?** If nothing routes
 through it, folder names can be labels on discovered structure: cluster the
 vectors, name the clusters offline and occasionally, and ship the 170

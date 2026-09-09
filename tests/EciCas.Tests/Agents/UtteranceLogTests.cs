@@ -1,4 +1,4 @@
-using EciCas.Agents.Utterances;
+﻿using EciCas.Agents.Utterances;
 using EciCas.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -184,6 +184,23 @@ public class UtteranceLogTests : IDisposable
         var backfill = new UtteranceBackfill(log, Embeddings(), Options.Create(new UtteranceOptions()));
 
         Assert.Equal((0, 0), await backfill.RunAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public void FillerEarnsNoRowAndAShortFactStillDoes()
+    {
+        var options = new UtteranceOptions();
+
+        Assert.False(UtteranceFilter.Keep(KeywordExtractor.Content("haha ok"), options));
+        Assert.False(UtteranceFilter.Keep(KeywordExtractor.Content("hmm, ok -- yeah, haha"), options));
+
+        // The cut has to be content words: both of these are shorter than the
+        // filler above and both carry a claim.
+        Assert.True(UtteranceFilter.Keep(KeywordExtractor.Content("Rex is 4"), options));
+        Assert.True(UtteranceFilter.Keep(KeywordExtractor.Content("Vega"), options));
+
+        // Zero is the behaviour before the filter existed.
+        Assert.True(UtteranceFilter.Keep(KeywordExtractor.Content("haha ok"), new UtteranceOptions { MinContentWords = 0 }));
     }
 
     [Fact]

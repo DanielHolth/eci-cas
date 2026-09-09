@@ -1,4 +1,4 @@
-namespace EciCas.Agents.Utterances;
+﻿namespace EciCas.Agents.Utterances;
 
 /// <summary>
 /// The inverted archive's knobs, all of them measured rather than chosen.
@@ -53,6 +53,19 @@ public sealed class UtteranceOptions
     /// untouched log -- the judgment is disposable on purpose.
     /// </summary>
     public bool ConsolidatorEnabled { get; set; }
+
+    /// <summary>
+    /// How many content words an utterance needs before it earns a row.
+    ///
+    /// One: a sentence with no content word in it -- "haha ok", "yeah",
+    /// "hmm" -- makes no claim, so there is nothing a later read could want
+    /// from it, and it is a vector competing for five slots. Anything above
+    /// one starts discarding real short facts ("Rex is 4" is two), so this
+    /// is a knob with one safe setting and a measurement to do before it
+    /// moves. Zero keeps everything, which is the behaviour before this
+    /// existed.
+    /// </summary>
+    public int MinContentWords { get; set; } = 1;
 
     /// <summary>How many rows reach Intent. Five slots, as benched.</summary>
     public int TopK { get; set; } = 5;
