@@ -23,6 +23,7 @@ const string Usage = """
     list | show <[profile:]category> [topic] [subtopic] | showall <[profile:]category> [topic] [subtopic]
     recent [[profile:]recent] | passages [count] | passage <id>
     utterances [count] | threads [count]
+    thread merge <thread> <thread> | thread split <utterance>
     del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic]
     del [profile:]recent <index[,index...]> | del passage <id>
     embed <model.onnx> <vocab.txt> | reset | help | exit
@@ -80,6 +81,14 @@ while (true)
 
             case "utterances":
                 await ShowUtterancesAsync(directory, parts.ElementAtOrDefault(1));
+                break;
+
+            case "thread" when parts.Length == 4 && parts[1].Equals("merge", StringComparison.OrdinalIgnoreCase):
+                await MergeThreadsAsync(directory, parts[2], parts[3]);
+                break;
+
+            case "thread" when parts.Length == 3 && parts[1].Equals("split", StringComparison.OrdinalIgnoreCase):
+                await SplitThreadAsync(directory, parts[2]);
                 break;
 
             case "threads":
@@ -622,4 +631,67 @@ static async Task ShowThreadsAsync(string directory, string? count)
         var newest = thread.OrderByDescending(r => r.Timestamp).First();
         Console.WriteLine($"  {thread.Key[..8]}  {thread.Count(),3} row(s)  {Oneline(newest.Text, 72)}");
     }
+}
+
+/// <summary>
+/// Move every row of one thread onto another. A thread is a derived column,
+/// so this is a correction and not a rewrite: no text changes, nothing is
+/// deleted, and the next backfill would reach the same place if it could
+/// judge. The surviving id is the first argument, because a merge has a
+/// direction and the operator should be the one choosing it.
+/// </summary>
+static async Task MergeThreadsAsync(string directory, string keep, string absorb)
+{
+    var log = new ParquetUtteranceLog(directory);
+    var rows = await log.AllAsync(CancellationToken.None);
+
+    var into = Resolve(rows, keep);
+    var from = Resolve(rows, absorb);
+    if (into is null || from is null || into == from)
+    {
+        Console.WriteLine(into == from && into is not null ? "Those are the same thread." : "Say more of the thread id -- 'threads' lists them.");
+        return;
+    }
+
+    var moving = rows.Where(r => r.ThreadId == from).ToList();
+    await log.UpdateDerivedAsync([.. moving.Select(r => new UtteranceDerived(r.Id, ThreadId: into))], CancellationToken.None);
+    Console.WriteLine($"Moved {moving.Count} row(s) from {from[..8]} into {into[..8]}.");
+}
+
+/// <summary>
+/// Give one row a thread of its own. The recoverable half of a threading
+/// mistake: a false merge hides a fact behind another one at read time, and
+/// this is how it is undone without touching what was said.
+/// </summary>
+static async Task SplitThreadAsync(string directory, string utterance)
+{
+    var log = new ParquetUtteranceLog(directory);
+    var rows = await log.AllAsync(CancellationToken.None);
+    var matches = rows.Where(r => r.Id.StartsWith(utterance, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    if (matches.Count != 1)
+    {
+        Console.WriteLine(matches.Count == 0 ? $"No utterance {utterance}." : $"{utterance} names {matches.Count} utterances. Say more of it.");
+        return;
+    }
+
+    var row = matches[0];
+    // And it is no longer retired: the row that superseded it belonged to
+    // the thread this row just left, so the link would leave a fact true and
+    // unreadable. The empty string is how a supersession is unset.
+    await log.UpdateDerivedAsync([new UtteranceDerived(row.Id, ThreadId: row.Id, SupersededBy: "")], CancellationToken.None);
+    Console.WriteLine($"{Oneline(row.Text, 60)} is now its own thread.");
+}
+
+/// <summary>A thread id by prefix, or null when the prefix names none or many.</summary>
+static string? Resolve(IReadOnlyList<Utterance> rows, string prefix)
+{
+    var ids = rows.Where(r => r.ThreadId is not null)
+        .Select(r => r.ThreadId!)
+        .Distinct(StringComparer.Ordinal)
+        .Where(t => t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        .Take(2)
+        .ToList();
+
+    return ids.Count == 1 ? ids[0] : null;
 }
