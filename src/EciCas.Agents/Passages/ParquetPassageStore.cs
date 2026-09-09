@@ -188,28 +188,17 @@ public sealed class ParquetPassageStore : IPassageStore
     private static Passage FromRow(PassageRow r) => new(
         r.Id,
         r.Text,
-        ParsePairs(r.Pairs),
+        JsonSerializer.Deserialize<List<ArchivePair>>(r.Pairs) ?? [],
         // Invariant on both sides, matching ParquetArchiveStore. The fallback
         // is silent, so a culture mismatch would not surface as an error but
         // as every note being two millennia old — wrong ages in Hindsight and
         // LatestAsync picking whichever row parsed.
         DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var ts) ? ts : DateTimeOffset.MinValue,
         DecodeFloats(Convert.FromBase64String(r.Embedding)),
-        ParseIds(r.ParentIds),
+        r.ParentIds is null ? [] : JsonSerializer.Deserialize<List<string>>(r.ParentIds) ?? [],
         r.EchoDepth ?? 0,
         r.Generation ?? 0,
         r.ModelId ?? "");
-
-    // A column can be absent (written before it existed) or present and
-    // empty (Parquet's default for a missing string is "", not null), and
-    // neither is JSON. Deserializing "" throws, which turned one unreadable
-    // row into a host that will not start -- so both spellings of "nobody
-    // wrote this" read back as the empty list they mean.
-    private static List<ArchivePair> ParsePairs(string? json) =>
-        string.IsNullOrWhiteSpace(json) ? [] : JsonSerializer.Deserialize<List<ArchivePair>>(json) ?? [];
-
-    private static List<string> ParseIds(string? json) =>
-        string.IsNullOrWhiteSpace(json) ? [] : JsonSerializer.Deserialize<List<string>>(json) ?? [];
 
     private static byte[] EncodeFloats(float[] v)
     {
