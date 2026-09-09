@@ -850,3 +850,48 @@ next arm.
 **`split_err` flatlining at .156 is filler-dominated.** Hundreds of one-shot
 filler threads swamp the ten core threads that are actually fragmenting.
 `now_correct` is the real split signal; read it, not `split`.
+
+## Batch 24 — five slots, and what they get spent on
+
+`read_dedup.py`, v5, 8 000 rows, 3 seeds, 15 subject anchors per seed. The
+read-side half of "repetition costs one slot", which batch 23 could not see.
+`distinct` = true threads covered by the five rows, `current` = the value that
+is current now is among them, `stale` = a superseded value is among them and
+the current one is not.
+
+    arm               distinct   current     stale
+    flat                  1.47     0.867     0.133
+    collapse@0.86         3.87     0.867     0.133
+    +now@0.86             4.13     0.911     0.067
+    collapse@0.90         3.38     0.933     0.067
+    +now@0.90             3.49     0.933     0.067
+    collapse@0.92         3.11     0.933     0.067
+    oracle                4.80     0.667     0.333
+    oracle+now            4.80     1.000     0.000
+
+**A flat top-5 over an append-only archive returns 1.47 distinct facts.**
+Three and a half slots of five are restatements of the loudest one. This is
+the cost of keeping every utterance, and it lands entirely on the read side
+where batch 23 was not looking.
+
+**Identity dedup alone makes the answer worse.** `oracle` covers 4.80 facts
+and yet carries the current value only 67% of the time -- below flat --
+because one slot per thread means the slot goes to the *nearest* member, and
+a superseded phrasing routinely sits closer to the anchor than its successor
+does ("I drive a Subaru" against `my car`). Collapsing by identity and
+filling by rank answers confidently and wrongly a third of the time.
+
+**The rule is one row per thread, and that row is the newest.** Cosine
+chooses which threads answer; the thread's own ordering chooses which row.
+`oracle+now` is 4.80 distinct, 1.000 current, 0.000 stale -- the read rule has
+no residual error of its own, and the whole gap down to `+now@0.86` (4.13,
+0.911) is threading quality. Dedup stays a read-time projection over the
+ranked list; nothing is deleted from the log.
+
+**Third independent argument for a lower threshold.** 0.86 → 4.13 distinct,
+0.92 → 3.13: over-splitting makes a subject's eras compete for slots. This
+agrees with `now_correct` (batch 23) and with the consolidator gate.
+
+Caveat: 45 query observations total, anchored on subject phrases rather than
+authored questions. `distinct` is well sampled; `current` and `stale` are
+directionally right and not precise to a percentage point.
