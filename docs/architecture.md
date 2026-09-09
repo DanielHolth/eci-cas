@@ -26,6 +26,20 @@ on a subscriber.** A slow or failing agent cannot stall another's turn.
 | ConsoleSubscriber | `Topics.All` | — | display |
 | TurnLog | `Topics.All` | — | display |
 
+With `Utterances:Enabled` (default false) the roster inverts: Librarian,
+Archivist and Cataloger are removed, and two deterministic agents take
+`events.perception` in their place.
+
+| Agent | Subscribes | Publishes | Tier |
+|---|---|---|---|
+| Scribe | `events.perception` | — | deterministic (regex + cosine) |
+| Recall (Consult) | `events.perception` | `events.advisories` | deterministic (cosine) |
+
+Both manifests are inverted in code (`AgentRegistration.InvertManifest`),
+not by a second appsettings topology, so the roster follows one boolean and
+there is nothing to drift. The utterance log is a **library** on the same
+footing as `IArchiveStore`.
+
 `IArchiveStore` and `IPassageStore` are **libraries**, not bus citizens.
 Topics are named by purpose, never by recipient, so no agent names another.
 
