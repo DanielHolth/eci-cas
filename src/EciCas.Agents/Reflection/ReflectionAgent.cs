@@ -428,7 +428,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// silently, and a mood no one mapped is indistinguishable from no mood
     /// at all. Impulse ignores anything not in its own table regardless.
     /// </summary>
-    private static readonly string[] Moods = ["warm", "tense", "dull", "curious", "neutral"];
+    private static readonly string[] Moods = ["warm", "tense", "dull", "curious", "attached", "protective", "neutral"];
 
     private static string MoodLabels => string.Join(", ", Moods);
 

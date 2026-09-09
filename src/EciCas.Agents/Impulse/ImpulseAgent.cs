@@ -125,6 +125,16 @@ public sealed class ImpulseAgent : AgentBase
         ["dull"] = new(Curiosity: -0.02, Fatigue: 0.02, Urgency: -0.01, SocialDrive: -0.01, Temperature: -0.01),
         ["curious"] = new(Curiosity: 0.03, Fatigue: -0.01, Urgency: 0, SocialDrive: 0.01, Temperature: 0.01),
 
+        // The two the original five could not say. SocialDrive is an axis
+        // nothing much moves slowly — "warm" lifts it 0.02 and that was the
+        // ceiling — so a batch where the persona is genuinely invested in
+        // the person reads identically to a batch where it merely enjoyed
+        // the topic. These separate them: "attached" is the bond itself,
+        // "protective" is the bond under threat, which is why it is the one
+        // slow label carrying urgency.
+        ["attached"] = new(Curiosity: 0.01, Fatigue: -0.01, Urgency: 0, SocialDrive: 0.03, Temperature: 0.03),
+        ["protective"] = new(Curiosity: 0, Fatigue: 0.01, Urgency: 0.03, SocialDrive: 0.02, Temperature: 0.01),
+
         // Present, and zero, on purpose: "nothing stood out" is a real
         // answer Reflection can give, and an explicit no-op entry keeps it
         // distinguishable from a label nobody mapped.
