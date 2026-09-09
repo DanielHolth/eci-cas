@@ -219,3 +219,47 @@ volume, that is v5.
 The pre-cosine Minimal baseline pins the corpus. A statement added after it
 invalidates every number measured against it. So the shape above is settled
 here, before generation, and v5 is the way to change it.
+
+## v5 — the longitudinal corpus, and the threading sweep
+
+v4 cannot ask a Characterise question and cannot ask a threading one: its
+statements are one-shot, undated, unrepeated and single-speaker. `build_v5.py`
+generates the instrument that can.
+
+**Structure first, text second.** Every fact is a record — thread, subject,
+value, speaker, timestamp — before a sentence is written, so both keys are
+properties of the generator rather than annotations over prose: which
+utterances belong to one thread, and which terms a Characterise answer must
+contain. Paraphrase pools are wide so a restatement is never a string match,
+and the adversarial pairs (my car / my wife's car, where I live / where my
+parents live, my allergy / Ingrid's allergy) are authored by hand because
+they are the cases the consolidator exists for.
+
+**What it must not be used for.** Templates have an idiom no real archive
+has. v5 answers questions about *structure* — threading errors,
+representative growth, aggregate ranking. Extraction quality stays with v4
+and its hand-written statements, for exactly the reason v4's header gives.
+
+`thread_sweep.py` is the long run: thresholds 0.70–0.99 against three
+representative strategies (`first`, `centroid`, `newest`), over 20 000
+utterances, replicated by **regenerating and re-embedding the corpus** rather
+than by re-running — the sweep is deterministic, so a repeat measures nothing
+and only the paraphrase draw and the dates can honestly vary.
+
+    python thread_sweep.py --rows 20000 --seeds 40 --budget 4200
+    python thread_report.py          # reads a partial file on purpose
+
+Three numbers, kept apart because they are not the same question:
+
+- **merge** — subjects glued together. The asymmetric error: read time cannot
+  undo it. The named adversarial pairs are reported separately from the
+  average, because an average over a corpus with hundreds of easy threads
+  hides the one failure the bench exists to find.
+- **split** — one subject scattered. Recoverable; it restores duplicates.
+- **growth** — representatives against utterances at checkpoints. The roadmap
+  claims the scanned set grows with distinct subjects rather than with
+  utterances, and the entire cost case for threading on write depends on it.
+
+Also reported: `now_correct`, whether the newest row of a thread carries the
+value that is actually current — the one thing the pair store was good at and
+the property the inversion has to recover without a schema.

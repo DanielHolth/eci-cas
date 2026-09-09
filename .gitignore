@@ -22,3 +22,7 @@ tools/retrieval-bench/.archive_v3_lean.json
 tools/retrieval-bench/.archive_v3_sent.json
 tools/retrieval-bench/.archive_v3_terse.json
 tools/retrieval-bench/.archive_v4_*.json
+tools/retrieval-bench/.v5_corpus.json
+tools/retrieval-bench/.v5_vectors.npy
+tools/retrieval-bench/.v5_threads.jsonl
+tools/retrieval-bench/.v5_threads.log
