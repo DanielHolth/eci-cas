@@ -4,6 +4,14 @@ The C# backend and its Next.js companion (`morrow-eci/`) are built and wired
 end to end — [`architecture.md`](architecture.md) says what exists. This
 document owns everything else: what's next, what's parked, what's out of
 scope, and compact design records for what shipped.
+[`product.md`](product.md) owns the other half — what is being sold, to
+whom, and what is deliberately not promised.
+
+**The archive is being inverted.** *The archive inverted — perception is
+the record* below supersedes the pair-addressed store that *Reading the
+archive back* and *Memory architecture* are written against. Those sections
+are kept for their reasoning; where they conflict with the inversion, the
+inversion wins.
 
 **Next up.** Nothing is outstanding against the Python prototype's business
 logic. The live work comes from the September 2026 external review, below.
@@ -580,6 +588,156 @@ askable. That is the same trade the `skills.txt` index makes and the reason
 camera"*: introspection is a tool, and the manager is one of the things it can
 be pointed at.
 
+## The archive inverted — perception is the record
+
+Everything below in *Memory architecture* assumes the pair-addressed store:
+a fact is extracted into `subtopic/subject/key = value`, filed under a
+category and topic, and read back by selecting a pair. Batches 12-16 took
+that apart piece by piece (see *Open design questions*), and what is left
+standing is smaller and differently shaped than the thing it replaced.
+
+**The inversion.** There is no data model the write side has to satisfy.
+There is a log of what was perceived, and an Intent that makes sense of it
+on the way past. The archive stops asserting truth and starts holding
+evidence.
+
+### Ground truth, and everything else
+
+One line separates what is permanent from what is not, and it is the line
+the hundred-year claim rests on.
+
+**Ground truth** is the original utterance, a timestamp, who said it, and
+keywords. Appended, never rewritten. Readable in 2126 by anyone with a
+parquet reader and no model, no vocabulary, and no code of ours.
+
+**Everything else is derived and disposable**: vectors, score columns, any
+partition, any index, any shelf. All of it rebuildable from ground truth by
+a background job. `ArchiveBackfill` already grants vectors that status
+because the embedder can change; the rest inherits it.
+
+That line is what makes a dynamic shelf safe. An open vocabulary was
+rejected before because the shelf *was* the index -- folders invented by a
+4B become a schema a stronger model must live with, with no migration path.
+Once retrieval no longer routes through it, nothing depends on it being
+right, and a bad shelf in 2030 is a recomputation rather than a legacy.
+
+**Store the message, not the parse.** Batch 15 measured the retrieval
+ceiling by what is kept: 91% for the address line, 97% adding the sentence,
+100% adding the message. `pet/dog/name = rex` is a lossy compression of
+something already in hand. It is also destructive for the second consult
+mode below -- word frequencies cannot be counted over a corpus of parsed
+key-values.
+
+### Keywords are the lexical half, not a lightweight drawer
+
+Embeddings are weak exactly where a query is a token: names, dates,
+numbers, rare words. "What is Rex's vet called" is a lexical question
+wearing a semantic costume. Keywords cover that blind spot, fused with
+cosine rather than replacing it.
+
+Extraction is deterministic -- tokenise, drop stopwords, keep capitalised
+tokens, numbers, and terms rare in the corpus. No model. That matters: it
+is what stops keywords reintroducing a write-side call through the back
+door.
+
+### Two ways to consult a memory
+
+**Find.** Hybrid vector plus lexical, top-k. "What is Rex's vet called."
+This is the path batches 12-16 measured, and flat cosine over the whole
+archive was the best arm in the log at 78%.
+
+**Characterise.** An aggregate over a filtered subset. "What was my uncle
+interested in", "what do I always eat", "what changed after the divorce".
+Top-k cannot answer these -- five rows is not what *interested in* means.
+It is a scan with counts over keywords, speakers and timestamps: SQL, not
+cosine, and no model on the read side either.
+
+The second mode is most of what makes a twenty-year archive feel like it
+knows someone rather than merely containing them, and it exists only
+because the original text was kept.
+
+### Time shards, not importance tiers
+
+A single parquet grows to a gigabyte and every append rewrites it. Shard by
+**time** -- one file per year or month. Bounded size, appends touch only the
+newest shard, old shards immutable, which also makes incremental encrypted
+backup a matter of uploading each year once.
+
+**Nothing routes on a shard.** With the Librarian gone there is no file
+selection anywhere in the read path; a query sweeps every shard's vectors
+and takes the best rows wherever they live. Shards are a container, not a
+decision. For a human descendant, time is the most navigable index there
+is.
+
+Tiering by *importance* -- hot, cold, archive -- was considered and
+rejected. A row untouched for 180 days is as likely to be a grandmother's
+last recipe as a restaurant visited once, and a product promising decades
+must never make a memory harder to reach for having been quiet. Recency and
+frequency survive as **score columns**, where the effect is recoverable,
+rather than as locations, where it is a wall.
+
+The frequency metric is a rate, not a count: hits divided by
+opportunities -- surfaced ten times across a thousand turns -- so it stays
+comparable across a row's age, where a raw count only rewards rows for
+having existed longer.
+
+Only the numerator is per-row. The row carries `hit_count` and the turn
+ordinal it was first seen at; the denominator is a single global turn
+counter kept outside the shards, and the rate is
+`hit_count / (turns_now - turns_at_first_seen)`, computed at read time. So
+a turn writes one integer in one place, not a column across every row it
+did not touch -- which is the difference between an append-only store and
+one that rewrites a gigabyte to record that nothing happened.
+
+User-set pins ("I care about skiing") sit beside the rate as an explicit
+boost and outrank any metric, being the person saying what matters.
+
+### What this deletes
+
+The 170-pair shelf as a schema (it survives as a *seed* for clustering and
+as a browsing view), the closed vocabulary as a routing mechanism, the
+Cataloger's two calls per fact, Recall's chunk-and-pick, and the Librarian
+entirely. All of it was properly benched, and all of it was beaten by the
+flat baseline sitting in the same results file.
+
+The Archivist shrinks rather than vanishing. Extraction and splitting go;
+what is not obviously droppable is the judgment -- *is this worth keeping*,
+and *does it supersede something* -- because an append-only log of
+utterances never overwrites, and cosine will hand Intent a dead dog five
+years on. Timestamps recover most of it: Intent reading "dog named Buddy
+(2019)" beside "new dog, Rex, after Buddy died (2024)" resolves the
+contradiction the way a person does. That only works if retrieval hands it
+*both* rows, which is the open arm below.
+
+Nothing in the current model is deployed to anyone, so there is no
+migration to design. The parquet schema is free.
+
+## Skill hints and deferred turns
+
+**A skill agent on perception, where the Librarian sat.** It publishes a
+hint -- `toolkit: metric-analysis` -- and nothing more. Intent decides
+whether the tool actually runs and Governance executes it: exactly the
+split the Librarian had, where the side agent suggests, Intent owns the
+framing and Governance owns the action. Killing the Librarian vacates that
+slot rather than removing the pattern.
+
+It is a second call on the critical path, which makes it a clean paid-tier
+boundary: the free tier reads its memory, the paid tier reasons about it.
+
+**A turn may answer later.** "I have started the tool that answers what
+your uncle was interested in, and will come back when I know" is a turn
+producing a deferred result, delivered as a notification rather than
+blocking the conversation. Reflection wants the same schedule-and-notify
+mechanism, so the two features cost one piece of machinery -- and an entity
+that goes away and thinks reads as more alive than one that stalls
+mid-sentence.
+
+**Maintenance is a consented tool, never a silent process.** "That is old
+news" leads to *"shall I tidy up? I may have the right tool for it"*, and
+the person chooses what gets demoted. Tools of this kind adjust scores and
+pins. They never delete ground truth; deletion is its own action, loudly
+confirmed, and has to exist for GDPR regardless.
+
 ## Memory architecture — the layers not built
 
 The passage corpus shipped (see the design records). These interlock with
@@ -1017,11 +1175,120 @@ to drive vectors (`tense`, `curious`, ...) — "ecstatic" is in both and
 recognised by neither side of the other, so a detected mood can never reach
 the dial that names it.
 
+## Delivery — Morrow as an Android product
+
+Supersedes the one-line Android stretch goal this section used to carry.
+The destination is a Play Store app, and enough of the architecture
+question now has an answer to write down.
+
+### The client hosts everything
+
+`ChannelBus` is in-process `System.Threading.Channels` -- no broker, no
+network -- and the agents are C# classes subscribed to it. .NET 10 targets
+`net10.0-android`, so Core, Bus, Agents and Substrates compile and run
+on-device essentially unchanged. What does not come along is
+`EciCas.Host`: its DI wiring is replaced by an Android host project, and
+the SSE endpoints by a UI reading the bus directly.
+
+This is not the remote-client mode the old goal described, where only
+Perception and Action cross a process boundary. It is the whole runtime on
+the phone -- the more invasive of the two, chosen for legal posture and
+cost rather than latency.
+
+### The relay is metered, not a router
+
+An API key cannot ship in an APK; it is extractable in minutes. Masking
+*which* providers are used is not the point and can be dropped -- naming
+them is arguably a trust asset. What cannot be dropped is that entitlement
+and spend must be checked somewhere the client does not control. A token
+ceiling the client enforces is a ceiling the client can be patched to
+ignore, and the free tier has the most motivated attackers and the least
+to lose.
+
+So: a thin gateway that holds the key, validates the subscription, counts
+tokens and forwards. Play Billing hands the client a purchase token; the
+relay validates it and issues a short-lived token carrying tier and
+remaining budget.
+
+Its only state is an account row -- tier, running token count. No archive,
+no passages, no conversation. Bad to lose, not catastrophic to leak,
+nothing a regulator calls sensitive. The privacy property survives; it is
+simply not achieved by having no server at all.
+
+Two things move to the relay with it. `MaxConcurrent` and the circuit
+breaker are per-device once the runtime is on the phone, which defends one
+user's fan-out and nothing else -- shared vendor quota needs a gate that
+sees aggregate load. And the hard monthly ceiling is the whole risk
+control on free: mean usage is irrelevant to the bill, the top 1% will do
+50x the median, and the ceiling has to exist on day one rather than after
+the first surprising invoice.
+
+### Tiers become plans
+
+`TierCatalog` already swaps whole config overlays live, which is the
+mechanism. What changes is that a tier is now a *purchase*, so entitlement
+is verified server-side and the overlay is the consequence.
+
+- **Free** -- sponsored, cheapest viable provider, hard token ceiling, no
+  toolkit.
+- **Standard** -- best value per token, reflection daily.
+- **Pro** -- fastest and strongest models, toolkit, premium support, first
+  access to new features.
+
+The economics only work because the read and write paths go deterministic.
+At Intent plus a reduced Archivist a turn is roughly $0.0005 on a cheap
+model; a hundred turns a month is about five cents a user, and nine
+thousand free users a few hundred dollars. The free tier is not the
+threat. The threats are the tail, and pricing Pro at a number implying
+support a solo developer cannot staff.
+
+Note that free is no longer merely a worse tier: a deterministic read path
+measured *better* than the LLM one. Tiers stop being one axis from worse to
+better, which is what `TierCatalog` and its tests currently assume.
+
+**Reflection is the paid hook, and daily beats a trial.** A one-hour trial
+teaches someone the feature exists and then takes it away; a small
+permanent taste converts better. Free getting reflection *rarely* -- once a
+day, on charge, on wifi -- is likely worth more than free getting none,
+because reflection is most of what separates a companion from a chatbot
+with a database. Open.
+
+**The continuous-thought promise is dropped.** Android kills background
+work; "it thinks while you are away" is a foreground service with a
+persistent notification, WorkManager batches, or it does not happen.
+Notification-on-reflection is the honest shape and the better one -- a
+reflection that *arrives* beats one that interrupts.
+
+### What the legacy claim commits us to
+
+Passing an archive to a child means it outlives the app, the phone, the
+vendors and possibly the author.
+
+- **The format is the product.** Parquet and JSONL are readable in thirty
+  years without our code. Say so publicly; it is a real difference from
+  every companion app that is a proprietary blob.
+- **Re-embedding is a designed experience.** Change the embedder and every
+  stored vector is scrap. On a phone, re-embedding a large archive is an
+  overnight plugged-in job, not a silent one.
+- **Device loss must not be fatal.** Encrypted backup where we hold only
+  ciphertext and the key derives from a user passphrase: durability
+  without becoming the controller. Play savegame sync is the wrong tool --
+  account-tied, size-capped, opaque. An export the person owns is better
+  and more on-message.
+- **Inheritance is a feature.** Someone must be able to open a dead
+  relative's archive. That is an export format and a passphrase-recovery
+  story, and it is the strongest thing in the pitch if it is built.
+
+### Personas are content, not engines
+
+Student, coach, secretary, confidant are one engine with different
+instruction files and different seeded vocabularies. That is a real
+authoring cost per persona and belongs here as work rather than as an
+assumption. See [`product.md`](product.md) for which one launches.
+
 ## Long-term goals
 
-**Android native client.** On-device minimal-tier agent running the full
-roster, or a remote-client mode where only Perception and Action cross
-process boundaries. Stretch: iOS via shared business logic.
+**iOS**, via the same shared business logic the Android client runs on.
 
 ---
 
@@ -1616,3 +1883,44 @@ looser second pass side by side, and let the reader see both. Attractive
 because the `writable` ceiling (29/35 on v3) is a write-side loss nothing
 downstream can recover, and two methods fail differently. Unmeasured, and it
 wants the v4 corpus before it is worth designing.
+
+## Open against the inverted archive
+
+Five arms gate the design in *The archive inverted*. The first two decide
+whether it works at all; the rest decide how much of the old machinery
+goes.
+
+**Does retrieval show Intent the contradiction?** Supersession is resolved
+by reading rather than by writing -- Intent sees "dog named Buddy (2019)"
+beside "new dog, Rex (2024)" and works it out. That only holds if top-k
+returns *both*. Naive cosine on "what is my dog called" may return three
+near-identical Rex rows and never surface Buddy, and then Intent resolves
+nothing, confidently. Wants temporal spread, dedup-by-similarity, or
+neighbourhood expansion. This is the single arm the whole design leans on
+and it is unmeasured.
+
+**Does flat retrieval hold at scale?** Flat cosine beat every shelf arm at
+1559 rows on a synthetic corpus, and no batch in the log tests degradation
+under density. The compute is not the question -- 100k rows at 384 dims is
+about 150MB and sub-second with SIMD on a phone. Whether quality survives
+is.
+
+**Is the write side filterable without a model?** Storing every utterance
+stores "haha ok". Cheap in bytes, not free in retrieval, since near-
+duplicate junk crowds top-k. Length and novelty-against-existing-vectors
+may be enough. If they are, the Archivist's last job goes and a turn costs
+one LLM call.
+
+**Should the shelf be clustered rather than authored?** If nothing routes
+through it, folder names can be labels on discovered structure: cluster the
+vectors, name the clusters offline and occasionally, and ship the 170
+written glosses as a seed, since a cold archive has nothing to cluster.
+Costs: names become unstable, so a pair needs a stable id with a
+free-moving display name; reclustering is a background job that must never
+block a turn; and early on a person sees folders they did not choose, which
+argues for a merge/rename/pin surface -- itself a good feature.
+
+**On-device decode speed.** Every claim about a free tier that is not
+merely sponsored assumes a phone can run a small model at a tolerable rate,
+and nobody has measured it. It gates the whole delivery plan and it is the
+cheapest thing on this list to answer.
