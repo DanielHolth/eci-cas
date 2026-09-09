@@ -48,14 +48,14 @@ builder.Services.AddSingleton<IMessageBus, ChannelBus>();
 
 builder.Services.AddSubstrates(builder.Configuration);
 
-var stores = await builder.AddStoresAsync();
+await builder.AddStoresAsync();
 
 builder.AddKnobs(tier);
 builder.Services.AddAgents();
 
 var app = builder.Build();
 
-await BootChecks.RunAsync(app, stores);
+await BootChecks.RunAsync(app);
 
 app.UseCors(surface.CorsPolicy);
 

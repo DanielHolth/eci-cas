@@ -8,11 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EciCas.Host.Startup;
 
-/// <summary>What the caller still needs a direct handle on after boot: the
-/// archive's own files, which the maintenance pass rewrites underneath the
-/// registered decorator.</summary>
-internal sealed record HostStores(ParquetArchiveStore Archive, string ArchiveDirectory);
-
 /// <summary>
 /// Everything the persona remembers with, and the two seeds that only ever
 /// run into an empty one. Async because seeding writes: a store that is
@@ -21,7 +16,7 @@ internal sealed record HostStores(ParquetArchiveStore Archive, string ArchiveDir
 /// </summary>
 internal static class StoreRegistration
 {
-    public static async Task<HostStores> AddStoresAsync(this WebApplicationBuilder builder)
+    public static async Task AddStoresAsync(this WebApplicationBuilder builder)
     {
         var services = builder.Services;
 
@@ -123,6 +118,10 @@ internal static class StoreRegistration
         // under archive/profiles/. A surface concern, not a bus citizen.
         services.AddSingleton(new ProfileStore(archiveDirectory));
 
-        return new HostStores(archiveStore, archiveDirectory);
+        // Upkeep as a service rather than a handle handed back out of band: the
+        // pass needs the concrete store and the directory, and this is the last
+        // place that has both. Everyone else asks for the interface.
+        services.AddSingleton<IArchiveMaintenance>(sp =>
+            new ParquetArchiveMaintenance(archiveStore, archiveDirectory, sp.GetRequiredService<IEmbeddingProvider>()));
     }
 }
