@@ -17,6 +17,7 @@ using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Host.Telemetry;
 using EciCas.Host.TurnLog;
+using EciCas.Substrates;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -95,7 +96,8 @@ internal static class AgentRegistration
     /// would be two things to keep in step, and the one that drifted would
     /// only be found by flipping it.
     /// </summary>
-    private static void InvertManifest(IServiceCollection services) =>
+    private static void InvertManifest(IServiceCollection services)
+    {
         services.PostConfigure<RoutingManifest>(manifest =>
         {
             manifest.Agents.Remove("Librarian");
@@ -104,6 +106,21 @@ internal static class AgentRegistration
             manifest.Agents["Recall"] = new ManifestAgentEntry { Subscribes = [Topics.Perception] };
             manifest.Agents["Scribe"] = new ManifestAgentEntry { Subscribes = [Topics.Perception] };
         });
+
+        // The substrate manifest is validated the same way and has to move
+        // with the roster. The four that go are exactly the four calls the
+        // inversion deleted: neither of the agents that replace them thinks,
+        // so neither has a tier entry. The entries stay in appsettings for
+        // the flag's other position and are dropped here, in the one place
+        // that already knows which position we are in.
+        services.PostConfigure<SubstrateOptions>(substrates =>
+        {
+            substrates.Agents.Remove("Librarian");
+            substrates.Agents.Remove("Recall");
+            substrates.Agents.Remove("Archivist");
+            substrates.Agents.Remove("Cataloger");
+        });
+    }
 
     private static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : AgentBase, IAgent
     {

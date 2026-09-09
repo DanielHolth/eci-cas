@@ -1,5 +1,6 @@
 ﻿using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
+using EciCas.Agents.Utterances;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -28,7 +29,7 @@ internal static class BootChecks
 
         // Cheap re-read of the same cached singletons resolved above, not a re-construction.
         var substrateOptions = app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value;
-        SubstrateManifestValidator.Validate(substrateOptions, app.Services.GetServices<IAgent>());
+        SubstrateManifestValidator.Validate(substrateOptions, app.Services.GetServices<IAgent>(), [SubstrateConsolidator.AgentName]);
 
         // Every tier, bound but not applied — see TierCatalog for why a live switch
         // is a few reference writes rather than a rebuild. Registered against the
