@@ -791,3 +791,62 @@ not a knob to set now.
 
 The honest reading: the gate is passed, one sentence of the roadmap is
 wrong, and the interesting half of the question is still open.
+
+## Batch 23 — the threading sweep, 40 corpora, and no threshold that works alone
+
+`thread_sweep.py`, v5, 20 000 utterances, 40 seeds (a seed is a regenerated
+and re-embedded corpus, not a re-run — the sweep is deterministic), 30
+thresholds × 3 representative strategies, multilingual-e5-small. 3 600
+records. `merge` = 1−pairwise precision, `split` = 1−recall, `adv` = the
+*worst* named adversarial pair per seed averaged over seeds, `now` =
+fraction of authored core threads whose newest row carries the current value.
+
+    strategy     thr    merge    split      adv      now   threads
+    first       0.85    0.889    0.157    0.305    0.777        26
+    first       0.87    0.871    0.154    0.071    0.812        34
+    first       0.89    0.818    0.155    0.077    0.685        45
+    first       0.90    0.689    0.155    0.060    0.705        55
+    first       0.92    0.190    0.155    0.000    0.642        88
+    first       0.93    0.125    0.156    0.000    0.575       111
+    first       0.95    0.026    0.157    0.000    0.657       163
+    first       0.97    0.000    0.157    0.000    0.667       191
+
+Findings.
+
+**`first` beats `centroid` everywhere, and `newest` is the chaining the
+roadmap predicted.** A frozen opening representative dominates a running mean
+at every threshold; the mean drifts toward whatever joined last and drags the
+thread with it. `newest` is worse still — split 0.85 at threshold 0.80, where
+`first` is at 0.08 — so the warning in prose is now a measurement.
+
+**The adversarial pairs go clean at 0.92 and not before.** my car / my wife's
+car, where I live / where my parents live, my allergy / my child's allergy.
+At 0.85 a fifth to a third of the smaller thread is absorbed. This is the
+unrecoverable error, and it is the only reason to want a high threshold.
+
+**No single threshold delivers both separation and *now*.** `now_correct`
+peaks at 0.81 around 0.87 and falls to 0.58–0.66 above 0.92, because
+over-splitting fragments one subject into eras and the newest row of the
+dominant fragment is then the newest row of an *old* era. The band 0.85–0.92
+is not a place where a threshold is well chosen; it is a place where a
+threshold is being asked to do two jobs and does neither. That promotes the
+consolidator from paid-tier nicety to load-bearing.
+
+**Growth is sublinear, as claimed, but the corpus cannot prove the claim.**
+At (first, 0.97): 500 → 112 representatives, 1 000 → 138, 5 000 → 161,
+20 000 → 191. The curve is the right shape. It is also bounded by
+construction: the generator has 192 distinct templates, so the asymptote is
+the generator's, not language's. This confirms the *cost model is not
+quadratic*; it does not confirm the number.
+
+**The high end is contaminated and must not be quoted.** Paraphrase pools are
+3–4 per value, so many restatements are string-identical and cosine 1.0. At
+0.97+ threads collapse to exactly 192 = the template count: that is
+deduplication, not threading. The honest window is 0.90–0.95, and even there
+the corpus is under-sampled on "same fact, different words" — the distance
+that actually matters. Widening the pools is the next corpus change, not the
+next arm.
+
+**`split_err` flatlining at .156 is filler-dominated.** Hundreds of one-shot
+filler threads swamp the ten core threads that are actually fragmenting.
+`now_correct` is the real split signal; read it, not `split`.
