@@ -399,6 +399,9 @@ PassageCorpus.EnsureModelAgreement(
     await app.Services.GetRequiredService<IPassageStore>().StampedModelsAsync(CancellationToken.None),
     embedder.ModelId);
 
+// One budget, read once, spent both at boot and on every live tier swap.
+var warmupBudgetMs = int.TryParse(builder.Configuration["Substrates:WarmupMs"], out var w) ? w : 60_000;
+
 app.UseCors(CorsPolicy);
 
 var jsonOptions = app.Services.GetRequiredService<JsonSerializerOptions>();
@@ -410,13 +413,30 @@ app.MapGet("/api/profiles", (ProfileStore profiles) => Results.Json(profiles.Lis
 app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults) =>
     Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions));
 
-app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults) =>
+app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults,
+    ISubstrateProvider substrates, IOptions<SubstrateOptions> substrateConfig) =>
 {
     // First, because it re-seeds RecallDepth: a request that sets both
     // should end with the explicit depth, not with the tier's answer to it.
-    if (request.Tier is { } tierName && !tiers.Switch(tierName))
+    if (request.Tier is { } tierName)
     {
-        return Results.BadRequest($"No such tier '{tierName}'.");
+        if (!tiers.Switch(tierName))
+        {
+            return Results.BadRequest($"No such tier '{tierName}'.");
+        }
+
+        // A swap points the agents at models this process may never have
+        // called. Boot warms the tier it started on; without this, going
+        // Mock -> Default made the next turn pay the cold handshake, or on
+        // local the whole weight load, exactly as a cold boot would -- and
+        // that first slow call is the one that used to time out.
+        //
+        // Not awaited: the switch has already taken effect, so the surface
+        // has its answer, and a POST that blocked for a 4B loading off disk
+        // would look like a hung slider. Errors are SubstrateWarmup's own
+        // business; it cannot throw.
+        _ = SubstrateWarmup.RunAsync(
+            substrates, substrateConfig.Value, TimeSpan.FromMilliseconds(warmupBudgetMs), Console.WriteLine, CancellationToken.None);
     }
 
     if (request.MaxSentences is { } n)
@@ -689,13 +709,12 @@ await app.StartAsync();
 // person types does not pay for the model load. Configurable because a
 // mock-only or vendor-only tier wants far less of a budget than a local 4B
 // reading weights off disk; 0 turns it off.
-var warmupMs = int.TryParse(builder.Configuration["Substrates:WarmupMs"], out var w) ? w : 60_000;
-if (warmupMs > 0)
+if (warmupBudgetMs > 0)
 {
     await SubstrateWarmup.RunAsync(
         app.Services.GetRequiredService<ISubstrateProvider>(),
         substrateOptions,
-        TimeSpan.FromMilliseconds(warmupMs),
+        TimeSpan.FromMilliseconds(warmupBudgetMs),
         Console.WriteLine,
         CancellationToken.None);
 }
