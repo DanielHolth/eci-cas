@@ -420,8 +420,17 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // simply not asked for then.
         var revisit = previous is null
             ? string.Empty
+            // Shown at the length a note is allowed to be, not at PromptCap's
+            // default. This asymmetry is what made the notes grow: a stored
+            // note had no ceiling, the copy read back had one, so every
+            // batch met its own thought truncated mid-sentence and ending in
+            // an ellipsis, and completing it is the obvious thing to do with
+            // a sentence that stops. The longer result was stored whole,
+            // clipped again next batch, and expanded again — a ratchet that
+            // reached a thousand characters in the 2026-09-09 run. A note
+            // that passed ParseNotes now always arrives whole.
             : Environment.NewLine + InstructionFile.Fill(_instructions.For(Name, "revisit"),
-                ("previous", PromptCap.Apply(previous.Text)),
+                ("previous", PromptCap.Apply(previous.Text, MaxValueChars)),
                 ("topics", string.Join(", ", previous.Pairs.Select(p => $"{p.Category}/{p.Topic}"))));
 
         return InstructionFile.Fill(_instructions.For(Name),
