@@ -17,17 +17,27 @@ public sealed class PassageOptions
     public int TopK { get; set; } = 3;
 
     /// <summary>
-    /// Cosine floor, deliberately low. A high floor only returns notes that
-    /// restate the prompt — the persona rediscovering what it already knew it
-    /// was looking for, which is the one thing a note cannot usefully add. The
-    /// hits worth having are the middling ones, where a thought touches the
-    /// turn sideways. Recall depth is the budget, not this: the floor
-    /// rejects noise, the cap decides how much gets through. Was 0.45 when a passage was a
-    /// miss note whose pairs bought Recall workers; MaxPairsFromPassages
-    /// bounds that cost on its own.
+    /// Cosine floor. Raised from 0.25 to 0.625 -- the midpoint between the
+    /// old floor and a perfect match.
+    ///
+    /// The low floor was argued from the ring: the hits worth having are the
+    /// middling ones, where a thought touches the turn sideways, and a high
+    /// floor only returns notes that restate the prompt. That argument is
+    /// still the right one about *what a note is for*; what it did not
+    /// account for is how much of the bundle a loose hit spends. A note is
+    /// prose, it is not cheap in the prompt, and a sideways hit that does not
+    /// land is indistinguishable in the bundle from one that does.
+    ///
+    /// So the trade is deliberate and it is a trade: fewer wakes, and the
+    /// ones that come are more nearly about the turn. If the ring goes quiet
+    /// -- Reflection writing notes that never wake -- this is the first knob
+    /// to walk back, and 0.45 is the obvious next stop rather than 0.25.
+    ///
+    /// Read by Hindsight and by Librarian's passage lane both, so this moves
+    /// prose recall everywhere at once. Reflection's revisit floor is its
+    /// own knob (ReflectionOptions.RevisitMinScore) and is untouched.
     /// </summary>
-    public double MinScore { get; set; } = 0.25;
-
+    public double MinScore { get; set; } = 0.625;
     /// <summary>
     /// Wake notes on a turn addressed to the persona ("do you have any
     /// thoughts about that?"), not only on Reflection's own reposted ideas.

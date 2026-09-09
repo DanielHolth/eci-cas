@@ -27,10 +27,11 @@ namespace EciCas.Agents.Hindsight;
 /// no tier entry, so no CognitiveAgent&lt;T&gt; base. That is also why it
 /// can join the roster for free — it adds a bundle slot, not a turn cost.
 ///
-/// A hit is a lead, not an answer. The floor is deliberately low (see
-/// PassageOptions.MinScore): notes that restate the prompt tell the persona
-/// what it already knew, and unrelated material is what keeps a thought
-/// from resonating with itself. See roadmap.md, "Hindsight — what it is
+/// A hit is a lead, not an answer -- but a lead costs prose in the bundle,
+/// so the floor is no longer the loose one it started as (0.625, see
+/// PassageOptions.MinScore). Fewer wakes, more nearly about the turn. If
+/// the ring goes quiet -- notes written and never woken -- that knob is
+/// where to look first. See roadmap.md, "Hindsight — what it is
 /// for", for the ring this sits inside and why the pairs field matters.
 /// </summary>
 public sealed class HindsightAgent : AgentBase
