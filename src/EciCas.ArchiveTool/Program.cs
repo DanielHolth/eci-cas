@@ -1,5 +1,6 @@
-using EciCas.Agents.Passages;
+﻿using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
+using EciCas.Agents.Utterances;
 using EciCas.Core;
 using EciCas.Substrates;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,6 +22,7 @@ if (!Directory.Exists(directory))
 const string Usage = """
     list | show <[profile:]category> [topic] [subtopic] | showall <[profile:]category> [topic] [subtopic]
     recent [[profile:]recent] | passages [count] | passage <id>
+    utterances [count] | threads [count]
     del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic]
     del [profile:]recent <index[,index...]> | del passage <id>
     embed <model.onnx> <vocab.txt> | reset | help | exit
@@ -74,6 +76,14 @@ while (true)
 
             case "passages":
                 await ShowPassagesAsync(directory, parts.ElementAtOrDefault(1));
+                break;
+
+            case "utterances":
+                await ShowUtterancesAsync(directory, parts.ElementAtOrDefault(1));
+                break;
+
+            case "threads":
+                await ShowThreadsAsync(directory, parts.ElementAtOrDefault(1));
                 break;
 
             case "passage" when parts.Length >= 2:
@@ -538,4 +548,68 @@ readonly record struct Scope(string Name, string Directory)
 {
     /// <summary>What `list` prints and what a command may type back: "daniel:" for a profile, nothing for the shared root.</summary>
     public string Prefix => Name.Length == 0 ? string.Empty : $"{Name}:";
+}
+
+/// <summary>
+/// The inverted archive, read raw. Nothing here interprets: an operator
+/// turning the flag on for the first time needs to see that rows landed, that
+/// they carry a vector, and which of them the reader will treat as retired --
+/// which are exactly the three columns a wrong answer would be explained by.
+/// </summary>
+static async Task ShowUtterancesAsync(string directory, string? count)
+{
+    var log = new ParquetUtteranceLog(directory);
+    var rows = await log.AllAsync(CancellationToken.None);
+    if (rows.Count == 0)
+    {
+        Console.WriteLine("No utterances. The log is written only with Utterances:Enabled=true.");
+        return;
+    }
+
+    var take = int.TryParse(count, out var n) && n > 0 ? n : 20;
+    Console.WriteLine($"{rows.Count} utterance(s) over {log.TurnsRecorded} turn(s); newest {Math.Min(take, rows.Count)}:");
+
+    foreach (var r in rows.OrderByDescending(r => r.Timestamp).Take(take))
+    {
+        var marks = string.Concat(
+            r.Embedding is { Length: > 0 } ? "v" : "-",
+            r.ThreadId is null ? "-" : "t",
+            r.SupersededBy is null ? "-" : "x");
+        Console.WriteLine($"  {r.Timestamp:yyyy-MM-dd HH:mm} [{marks}] {r.HitCount,3} hits  {Oneline(r.Text, 78)}");
+    }
+
+    Console.WriteLine("  flags: v=vector t=threaded x=superseded");
+}
+
+/// <summary>
+/// Threads, largest first. This is the one view that says whether threading
+/// is working: a corpus that is all singletons is one that never merged, and
+/// a thread holding a dozen unrelated sentences is the failure a consolidator
+/// exists to prevent.
+/// </summary>
+static async Task ShowThreadsAsync(string directory, string? count)
+{
+    var rows = await new ParquetUtteranceLog(directory).AllAsync(CancellationToken.None);
+    var threads = rows
+        .Where(r => r.ThreadId is not null)
+        .GroupBy(r => r.ThreadId!)
+        .OrderByDescending(g => g.Count())
+        .ThenByDescending(g => g.Max(r => r.Timestamp))
+        .ToList();
+
+    if (threads.Count == 0)
+    {
+        Console.WriteLine("No threads. Rows are threaded at write time, or by the backfill at boot.");
+        return;
+    }
+
+    var singletons = threads.Count(t => t.Count() == 1);
+    Console.WriteLine($"{threads.Count} thread(s) over {rows.Count} row(s); {singletons} hold one row.");
+
+    var take = int.TryParse(count, out var n) && n > 0 ? n : 15;
+    foreach (var thread in threads.Take(take))
+    {
+        var newest = thread.OrderByDescending(r => r.Timestamp).First();
+        Console.WriteLine($"  {thread.Key[..8]}  {thread.Count(),3} row(s)  {Oneline(newest.Text, 72)}");
+    }
 }
