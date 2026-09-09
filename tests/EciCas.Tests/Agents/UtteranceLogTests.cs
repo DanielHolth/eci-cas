@@ -147,6 +147,46 @@ public class UtteranceLogTests : IDisposable
     }
 
     [Fact]
+    public async Task TheBackfillGivesABareRowAVectorAndAThread()
+    {
+        var log = new ParquetUtteranceLog(_dir);
+        var when = DateTimeOffset.UtcNow;
+
+        // What a turn taken while the embedder was down leaves behind: good
+        // ground truth, invisible to a sweep.
+        await log.AppendAsync([
+            Said("the boat is called Vega", when.AddDays(-1)),
+            Said("the boat is called Vega", when),
+        ], CancellationToken.None);
+
+        var backfill = new UtteranceBackfill(log, Embeddings(), Options.Create(new UtteranceOptions()));
+        var (embedded, threaded) = await backfill.RunAsync(CancellationToken.None);
+
+        Assert.Equal(2, embedded);
+        Assert.Equal(2, threaded);
+
+        var rows = await log.AllAsync(CancellationToken.None);
+        Assert.All(rows, r => Assert.True(r.HasVector("stub-bow")));
+
+        // Restatements of one fact, so one thread -- the free half of the
+        // write-time rule, applied without a call.
+        Assert.Single(rows.Select(r => r.ThreadId).Distinct());
+    }
+
+    [Fact]
+    public async Task TheBackfillIsFreeOnAWarmLog()
+    {
+        var log = new ParquetUtteranceLog(_dir);
+        var weaver = Weaver(log);
+        var woven = await weaver.WeaveAsync([Said("the boat is called Vega", DateTimeOffset.UtcNow)], CancellationToken.None);
+        await log.AppendAsync(woven.Rows, CancellationToken.None);
+
+        var backfill = new UtteranceBackfill(log, Embeddings(), Options.Create(new UtteranceOptions()));
+
+        Assert.Equal((0, 0), await backfill.RunAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task AReadOnAnEmptyLogIsNotAnError()
     {
         var log = new ParquetUtteranceLog(_dir);

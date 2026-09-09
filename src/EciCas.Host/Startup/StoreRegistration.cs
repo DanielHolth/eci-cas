@@ -123,6 +123,7 @@ internal static class StoreRegistration
         services.AddSingleton<IUtteranceLog>(new ParquetUtteranceLog(archiveDirectory));
         services.AddSingleton<UtteranceConsult>();
         services.AddSingleton<ThreadWeaver>();
+        services.AddSingleton<UtteranceBackfill>();
 
         // The one model call the write path may make, and it is gated. With
         // Utterances:ConsolidatorEnabled false the null implementation stands
