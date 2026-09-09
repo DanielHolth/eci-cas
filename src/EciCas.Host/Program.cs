@@ -10,8 +10,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
-const string CorsPolicy = "morrow-eci";
-
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
@@ -36,18 +34,12 @@ if (!string.IsNullOrEmpty(verbose))
     builder.Configuration["Console:Verbose"] = verbose;
 }
 
-builder.WebHost.UseUrls(builder.Configuration["Surface:Url"] ?? "http://localhost:5179");
-
 // One line per agent per Information-level log call, colored per agent —
 // warnings/errors keep the stock two-line shape. See AgentConsoleFormatter.
 builder.Logging.AddConsole(options => options.FormatterName = AgentConsoleFormatter.FormatterName)
     .AddConsoleFormatter<AgentConsoleFormatter, ConsoleFormatterOptions>();
 
-builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
-    policy.WithOrigins(builder.Configuration.GetSection("Surface:AllowedOrigins").Get<string[]>()
-            ?? ["http://localhost:3000"])
-        .AllowAnyHeader()
-        .AllowAnyMethod()));
+var surface = builder.AddSurface();
 
 builder.Services.AddConfiguredOptions(builder.Configuration);
 
@@ -56,25 +48,22 @@ builder.Services.AddSingleton<IMessageBus, ChannelBus>();
 
 builder.Services.AddSubstrates(builder.Configuration);
 
-var stores = await builder.AddStoresAsync(tier);
+var stores = await builder.AddStoresAsync();
 
+builder.AddKnobs(tier);
 builder.Services.AddAgents();
 
 var app = builder.Build();
 
 await BootChecks.RunAsync(app, stores);
 
-// One budget, read once, spent both at boot and on every live tier swap.
-var warmupBudgetMs = int.TryParse(builder.Configuration["Substrates:WarmupMs"], out var w) ? w : 60_000;
-
-app.UseCors(CorsPolicy);
+app.UseCors(surface.CorsPolicy);
 
 var jsonOptions = app.Services.GetRequiredService<JsonSerializerOptions>();
-var excludedMetaKeys = (builder.Configuration.GetSection("Sse:ExcludedMetaKeys").Get<string[]>() ?? []).ToHashSet(StringComparer.Ordinal);
 
 app.MapPersona(jsonOptions);
-app.MapKnobs(jsonOptions, warmupBudgetMs);
-app.MapStreams(jsonOptions, excludedMetaKeys);
+app.MapKnobs(jsonOptions, surface.WarmupBudgetMs);
+app.MapStreams(jsonOptions, surface.ExcludedMetaKeys);
 
 await app.StartAsync();
 
@@ -82,12 +71,12 @@ await app.StartAsync();
 // person types does not pay for the model load. Configurable because a
 // mock-only or vendor-only tier wants far less of a budget than a local 4B
 // reading weights off disk; 0 turns it off.
-if (warmupBudgetMs > 0)
+if (surface.WarmupBudgetMs > 0)
 {
     await SubstrateWarmup.RunAsync(
         app.Services.GetRequiredService<ISubstrateProvider>(),
         app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value,
-        TimeSpan.FromMilliseconds(warmupBudgetMs),
+        TimeSpan.FromMilliseconds(surface.WarmupBudgetMs),
         Console.WriteLine,
         CancellationToken.None);
 }

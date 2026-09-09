@@ -1,15 +1,10 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using EciCas.Agents.Identity;
-using EciCas.Agents.Librarian;
+﻿using EciCas.Agents.Identity;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Security;
 using EciCas.Core;
-using EciCas.Host.TurnLog;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace EciCas.Host.Startup;
 
@@ -26,10 +21,9 @@ internal sealed record HostStores(ParquetArchiveStore Archive, string ArchiveDir
 /// </summary>
 internal static class StoreRegistration
 {
-    public static async Task<HostStores> AddStoresAsync(this WebApplicationBuilder builder, string tier)
+    public static async Task<HostStores> AddStoresAsync(this WebApplicationBuilder builder)
     {
         var services = builder.Services;
-        var configuration = builder.Configuration;
 
         var securityRulesPath = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Security:RulesPath"] ?? "config/security-rules.json");
         services.AddSingleton(SecurityRuleSet.Load(securityRulesPath));
@@ -128,58 +122,6 @@ internal static class StoreRegistration
         // Profiles live beside the archive they scope — one directory per person
         // under archive/profiles/. A surface concern, not a bus citizen.
         services.AddSingleton(new ProfileStore(archiveDirectory));
-
-        // One JSON shape for every surface: the HTTP endpoints below and the disk
-        // sink, which is the same record a client reads.
-        services.AddSingleton(new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-        });
-
-        // Off unless asked for. TurnLog:Path is resolved against the build output
-        // the same way the archive is, so the log sits beside the persona it
-        // describes rather than wherever the process happened to start.
-        var turnLogPath = builder.Configuration["TurnLog:Path"];
-        if (!string.IsNullOrWhiteSpace(turnLogPath))
-        {
-            builder.Configuration["TurnLog:Path"] = Path.Combine(AppContext.BaseDirectory, turnLogPath);
-            services.AddSingleton<ITurnLogSink, JsonlTurnLogSink>();
-        }
-
-        // Resolved against the binary the same way, and on by default: the session
-        // total is arithmetic, but the lifetime total is only worth showing if it
-        // outlives the process that spent it.
-        var costPath = builder.Configuration["TurnLog:CostPath"] ?? "cost.json";
-        services.AddSingleton(new CostLedger(
-            string.IsNullOrWhiteSpace(costPath) ? null : Path.Combine(AppContext.BaseDirectory, costPath)));
-
-        services.Configure<PersonaNameOptions>(builder.Configuration.GetSection("Identity"));
-        services.AddSingleton<PersonaName>();
-        // RecallDepth is a live knob, but its starting value is configuration, not a
-        // constant: RecallOptions.MaxPickedPerWorker is the tier's answer to "how many
-        // rows may one picking call hand back". Seeding it here is what makes that
-        // option mean anything -- until this, every tier ran at the knob's hardcoded 5
-        // whatever it configured, and the field was read by nothing at all.
-        services.AddSingleton(sp => new TierCatalog(
-            TierCatalogLoader.Load(AppContext.BaseDirectory),
-            sp.GetRequiredService<IOptions<SubstrateOptions>>().Value,
-            sp.GetRequiredService<IOptions<RecallOptions>>().Value,
-            sp.GetRequiredService<IOptions<LibrarianOptions>>().Value,
-            sp.GetRequiredService<RuntimeKnobs>(),
-            sp.GetRequiredService<IOptions<KnobDefaults>>().Value,
-            tier));
-
-        services.AddSingleton(sp => new RuntimeKnobs
-        {
-            RecallDepth = sp.GetRequiredService<IOptions<RecallOptions>>().Value.MaxPickedPerWorker,
-            RecallThreads = sp.GetRequiredService<IOptions<RecallOptions>>().Value.Threads,
-            MaxSentences = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.MaxSentences,
-            ReflectionEvery = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ReflectionEvery,
-            PerceptionChars = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.PerceptionChars,
-            ContextTurns = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ContextTurns,
-            Mood = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Mood,
-        });
 
         return new HostStores(archiveStore, archiveDirectory);
     }

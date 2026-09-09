@@ -1,4 +1,4 @@
-using EciCas.Agents.Action;
+﻿using EciCas.Agents.Action;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Cataloger;
 using EciCas.Agents.Governance;
@@ -55,7 +55,7 @@ internal static class AgentRegistration
         return services;
     }
 
-    static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : AgentBase, IAgent
+    private static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : AgentBase, IAgent
     {
         services.AddSingleton<TAgent>();
         services.AddSingleton<IAgent>(sp => sp.GetRequiredService<TAgent>());

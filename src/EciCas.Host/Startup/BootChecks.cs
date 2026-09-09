@@ -1,4 +1,4 @@
-using EciCas.Agents.Passages;
+﻿using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
 using EciCas.Bus;
 using EciCas.Core;
@@ -26,7 +26,7 @@ internal static class BootChecks
         var archiveStore = stores.Archive;
         var archiveDirectory = stores.ArchiveDirectory;
 
-        var manifest = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<RoutingManifest>>().Value;
+        var manifest = app.Services.GetRequiredService<IOptions<RoutingManifest>>().Value;
         RoutingManifest.Validate(manifest, app.Services.GetServices<IAgent>());
 
         // Cheap re-read of the same cached singletons resolved above, not a re-construction.
