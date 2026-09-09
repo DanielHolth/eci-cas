@@ -471,7 +471,14 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             var idea = parts[2].Trim();
             if (idea.Length > 0 && subtopic.Length > 0 && double.TryParse(scoreText, NumberStyles.Float, CultureInfo.InvariantCulture, out var score))
             {
-                candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), subtopic, idea));
+                // Capped where it is parsed, not where it is pushed. The
+                // pushed idea has always gone through PromptCap; the copies
+                // that land in the archive and in the passage corpus did
+                // not, and in the 2026-09-09 run a note asked for in 25
+                // words came back at a thousand characters and was stored
+                // whole. A cap the writer cannot talk its way past is the
+                // only one that holds.
+                candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), subtopic, PromptCap.Apply(idea)));
             }
         }
 
@@ -585,7 +592,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 continue;
             }
 
-            notes.Add(new Note(kind == "revisit", text, ParsePairs(parts[1])));
+            notes.Add(new Note(kind == "revisit", PromptCap.Apply(text), ParsePairs(parts[1])));
         }
 
         return notes;
