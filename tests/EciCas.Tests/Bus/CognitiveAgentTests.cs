@@ -9,14 +9,14 @@ public class CognitiveAgentTests
 {
     private sealed class StubSubstrate(Func<string, string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) =>
-            respond(substrateClass, prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) =>
+            respond(agent, prompt);
     }
 
-    private static IOptions<AgentSubstrateManifest> ManifestWith(string substrateClass, bool useSubstrate = true) =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Test"] = new AgentSubstrateEntry { Class = substrateClass, UseSubstrate = useSubstrate } } });
+    private static IOptions<SubstrateOptions> ManifestWith(bool useSubstrate = true) =>
+        Options.Create(new SubstrateOptions { Agents = { ["Test"] = new SubstrateAgentEntry { UseSubstrate = useSubstrate } } });
 
-    private sealed class TestCognitiveAgent(IMessageBus bus, BusActivityTracker activity, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates)
+    private sealed class TestCognitiveAgent(IMessageBus bus, BusActivityTracker activity, ISubstrateProvider substrate, IOptions<SubstrateOptions> agentSubstrates)
         : CognitiveAgent<string>(bus, activity, NullLogger.Instance, substrate, agentSubstrates)
     {
         public FallbackPosture FallbackPostureValue { get; set; } = FallbackPosture.Open;
@@ -42,7 +42,7 @@ public class CognitiveAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var substrate = new StubSubstrate((_, _) => Task.FromResult(new SubstrateResult("real answer", TimeSpan.Zero, 10, 0m)));
-        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low"));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith());
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
@@ -55,7 +55,7 @@ public class CognitiveAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var substrate = new StubSubstrate((_, _) => throw new InvalidOperationException("down"));
-        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low")) { FallbackPostureValue = FallbackPosture.Open };
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith()) { FallbackPostureValue = FallbackPosture.Open };
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
@@ -69,7 +69,7 @@ public class CognitiveAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var substrate = new StubSubstrate((_, _) => throw new InvalidOperationException("down"));
-        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low")) { FallbackPostureValue = FallbackPosture.Closed };
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith()) { FallbackPostureValue = FallbackPosture.Closed };
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
@@ -83,7 +83,7 @@ public class CognitiveAgentTests
         var bus = new ChannelBus(activity);
         var called = false;
         var substrate = new StubSubstrate((_, _) => { called = true; return Task.FromResult(new SubstrateResult("real answer", TimeSpan.Zero, 10, 0m)); });
-        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low", useSubstrate: false));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith(useSubstrate: false));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
@@ -97,7 +97,7 @@ public class CognitiveAgentTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var substrate = new StubSubstrate((_, _) => Task.FromResult(new SubstrateResult("real answer", TimeSpan.Zero, 10, 0m)));
-        var agent = new TestCognitiveAgent(bus, activity, substrate, Options.Create(new AgentSubstrateManifest()));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, Options.Create(new SubstrateOptions()));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None));
@@ -110,13 +110,12 @@ public class CognitiveAgentTests
         var bus = new ChannelBus(activity);
         var telemetry = bus.Subscribe(Topics.Telemetry);
         var substrate = new StubSubstrate((_, _) => Task.FromResult(new SubstrateResult("real answer", TimeSpan.FromMilliseconds(42), 10, 0.002m)));
-        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low"));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith());
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
         Assert.True(telemetry.TryRead(out var trace));
         Assert.Equal("Test", trace.Meta.Get<string>(SubstrateTrace.AgentKey));
-        Assert.Equal("fast-low", trace.Meta.Get<string>(SubstrateTrace.ClassKey));
         Assert.Equal(42d, trace.Meta.Get<double>(SubstrateTrace.LatencyKey));
         Assert.Equal(0.002m, trace.Meta.Get<decimal>(SubstrateTrace.CostKey));
     }
@@ -128,7 +127,7 @@ public class CognitiveAgentTests
         var bus = new ChannelBus(activity);
         var telemetry = bus.Subscribe(Topics.Telemetry);
         var substrate = new StubSubstrate((_, _) => throw new HttpRequestException("down"));
-        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low"));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith());
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 
@@ -144,7 +143,7 @@ public class CognitiveAgentTests
         var bus = new ChannelBus(activity);
         var telemetry = bus.Subscribe(Topics.Telemetry);
         var substrate = new StubSubstrate((_, _) => Task.FromResult(new SubstrateResult("real answer", TimeSpan.Zero, 10, 0m)));
-        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith("fast-low", useSubstrate: false));
+        var agent = new TestCognitiveAgent(bus, activity, substrate, ManifestWith(useSubstrate: false));
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Test", Severity.Neutral), CancellationToken.None);
 

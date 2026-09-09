@@ -21,11 +21,11 @@ public class PassageMemoryTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) => respond(prompt);
     }
 
-    private static IOptions<AgentSubstrateManifest> Manifest(string agent, string substrateClass) =>
-        Options.Create(new AgentSubstrateManifest { Agents = { [agent] = new AgentSubstrateEntry { Class = substrateClass } } });
+    private static IOptions<SubstrateOptions> Manifest(string agent) =>
+        Options.Create(new SubstrateOptions { Agents = { [agent] = new SubstrateAgentEntry() } });
 
     /// <summary>Orthogonal unit vectors, so a test can make two texts match exactly or not at all.</summary>
     private static float[] Unit(int i)
@@ -110,7 +110,7 @@ public class PassageMemoryTests
         // contributes person/family, which it did not pick.
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("1", TimeSpan.Zero, 5, 0m)));
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
-            Manifest("Librarian", "fast-medium"), Options.Create(new LibrarianOptions()),
+            Manifest("Librarian"), Options.Create(new LibrarianOptions()),
             new RuntimeKnobs { RecallThreads = 3 },
             new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
@@ -146,7 +146,7 @@ public class PassageMemoryTests
 
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store,
             new StubSubstrate(_ => throw new InvalidOperationException("index fits under the cap, so this is never called")),
-            Manifest("Librarian", "fast-medium"), Options.Create(new LibrarianOptions()),
+            Manifest("Librarian"), Options.Create(new LibrarianOptions()),
             new RuntimeKnobs { RecallThreads = 3 },
             new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
@@ -186,7 +186,7 @@ public class PassageMemoryTests
         // sits; the newest note is orthogonal to it and scores zero.
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
-            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            Manifest("Reflection"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
             passages, new StubEmbeddings(_ => Unit(0)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
@@ -219,7 +219,7 @@ public class PassageMemoryTests
 
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
-            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            Manifest("Reflection"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
             passages, new StubEmbeddings(_ => Unit(2)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
@@ -371,7 +371,7 @@ public class PassageMemoryTests
 
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
-            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            Manifest("Reflection"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
             passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);
@@ -404,7 +404,7 @@ public class PassageMemoryTests
 
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()), substrate,
-            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            Manifest("Reflection"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
             passages, new StubEmbeddings(_ => Unit(1)), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         var conclusion = Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral,
@@ -437,7 +437,7 @@ public class PassageMemoryTests
         var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, new InMemoryArchiveStore(),
             new JsonlAgentStateStore(Path.GetTempFileName()),
             new StubSubstrate(_ => Task.FromResult(new SubstrateResult("mood|dull\nthought|person/family|note", TimeSpan.Zero, 5, 0m))),
-            Manifest("Reflection", "slow-medium"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
+            Manifest("Reflection"), Options.Create(new ReflectionOptions { BatchSize = 1 }),
             passages, new StubEmbeddings(), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
 
         await agent.HandleAsync(Envelope.Create(Topics.Conclusion, "Governance", Severity.Neutral, MetaBag.Empty), CancellationToken.None);

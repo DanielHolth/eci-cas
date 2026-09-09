@@ -1,19 +1,22 @@
-namespace EciCas.Substrates;
+namespace EciCas.Core;
 
 /// <summary>
-/// Substrate classes -> vendor mapping, one place. Mirrors the Python
-/// prototype's ecosystem-manifest.yaml `substrates:` table: `Providers` holds
-/// shared endpoint config per vendor (never a literal key — only the env var
-/// that holds it), `Classes` says which provider and model backs each
-/// logical substrate class. Multiple providers can be live at once — e.g.
-/// fast-* on Mistral, slow-* on OpenAI — because each class picks its own
-/// provider independently.
+/// Agent -> vendor mapping, one place. `Providers` holds shared endpoint
+/// config per vendor (never a literal key — only the env var that holds
+/// it), `Agents` says which provider and model backs each cognitive agent,
+/// by that agent's own name. Multiple providers can be live at once — e.g.
+/// Librarian on Mistral, Archivist on OpenAI — because each agent picks its
+/// own provider independently.
+///
+/// There is no class layer in between. Buckets named fast-low/slow-high were
+/// a vocabulary the roles had to be translated into and back out of; a tier
+/// now says what backs Librarian by saying "Librarian".
 /// </summary>
 public sealed class SubstrateOptions
 {
     public Dictionary<string, ProviderEndpoint> Providers { get; set; } = [];
 
-    public Dictionary<string, SubstrateClassEntry> Classes { get; set; } = [];
+    public Dictionary<string, SubstrateAgentEntry> Agents { get; set; } = [];
 }
 
 public sealed class ProviderEndpoint
@@ -50,18 +53,18 @@ public sealed class ProviderEndpoint
     public int MaxConcurrent { get; set; }
 }
 
-public sealed class SubstrateClassEntry
+public sealed class SubstrateAgentEntry
 {
     /// <summary>A key into <see cref="SubstrateOptions.Providers"/>, or "mock" for the zero-cost default.</summary>
     public string Provider { get; set; } = "mock";
 
-    /// <summary>Vendor model id. Falls back to the substrate class name itself when unset.</summary>
+    /// <summary>Vendor model id. Falls back to the agent's own name when unset.</summary>
     public string? Model { get; set; }
 
     /// <summary>
     /// OpenAI reasoning_effort ("low"/"medium"/"high"), sent only when set —
-    /// omitted entirely for providers/models that don't take it (e.g.
-    /// Mistral's fast-* classes leave this unset in appsettings).
+    /// omitted entirely for providers/models that don't take it (e.g. the
+    /// Mistral-backed agents leave this unset in appsettings).
     /// https://developers.openai.com/api/docs/guides/reasoning
     /// </summary>
     public string? Effort { get; set; }
@@ -77,11 +80,19 @@ public sealed class SubstrateClassEntry
     /// <summary>
     /// Qwen-style chat_template_kwargs.enable_thinking, sent only when set so
     /// nothing changes for providers that don't take it. Qwen3 reasons aloud
-    /// by default, which the picking classes must not do; the slow classes
+    /// by default, which the picking agents must not do; the writing agents
     /// want it, and land behind the reply anyway. Requires llama-server
     /// --jinja for the flag to reach the template.
     /// </summary>
     public bool? Thinking { get; set; }
+
+    /// <summary>
+    /// False means this agent never calls a substrate at all — it publishes
+    /// its fallback directly. The provider/model fields stay meaningful
+    /// (they say what it would use if switched back on), so turning an agent
+    /// off is one word rather than a deleted entry.
+    /// </summary>
+    public bool UseSubstrate { get; set; } = true;
 
     /// <summary>Raw $/million-token pricing, pasted straight off the provider's pricing page — no manual per-token conversion needed.</summary>
     public PricePerMillionTokens? PricePerMtok { get; set; }

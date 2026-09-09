@@ -54,7 +54,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
-    private readonly AgentSubstrateManifest _agentSubstrates;
+    private readonly SubstrateOptions _substrates;
     private readonly LibrarianOptions _options;
     private readonly RuntimeKnobs _knobs;
 
@@ -72,11 +72,11 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     private readonly ILogger _logger;
 
     public LibrarianAgent(IMessageBus bus, BusActivityTracker activity, ILogger<LibrarianAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<LibrarianOptions> options,
+        ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates, IOptions<LibrarianOptions> options,
         RuntimeKnobs knobs,
         IEmbeddingProvider embeddings, IPassageStore passages, IOptions<PassageOptions> passageOptions,
         IInstructionStore instructions)
-        : base(bus, activity, logger, substrate, agentSubstrates)
+        : base(bus, activity, logger, substrate, substrates)
     {
         _bus = bus;
         _store = store;
@@ -93,7 +93,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             }
         });
         _substrate = substrate;
-        _agentSubstrates = agentSubstrates.Value;
+        _substrates = substrates.Value;
         _options = options.Value;
         _knobs = knobs;
         _embeddings = embeddings;
@@ -169,9 +169,9 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
+        if (!_substrates.Agents.TryGetValue(Name, out var entry))
         {
-            throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+            throw new InvalidOperationException($"No substrate entry for agent '{Name}' — add one to appsettings.json's Substrates:Agents section.");
         }
 
         var index = _store.IndexFor(envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
@@ -247,11 +247,11 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         var started = Stopwatch.GetTimestamp();
         try
         {
-            var result = await _substrate.CompleteAsync(entry.Class, prompt, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            var result = await _substrate.CompleteAsync(Name, prompt, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             _logger.LogDebug("{Agent} selection response <<<\n{Response}", Name, result.Text);
-            SubstrateTrace.Publish(_bus, envelope, Name, entry.Class, result);
+            SubstrateTrace.Publish(_bus, envelope, Name, result);
             Publish(envelope, Merge(WithOverflow(ParsePairs(result.Text, shown), index), remembered), degraded: null, queryVector);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -260,7 +260,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _logger.LogWarning("{Agent} substrate call {Cause} after {LatencyMs}ms, fallback posture {Posture}",
                 Name, cause, elapsed, Fallback);
-            SubstrateTrace.PublishFailure(_bus, envelope, Name, entry.Class, elapsed, cause);
+            SubstrateTrace.PublishFailure(_bus, envelope, Name, elapsed, cause);
 
             // Open posture, and the passages are exactly what makes it worth
             // something: a selection call that failed still leaves the turn

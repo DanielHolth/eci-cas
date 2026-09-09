@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace EciCas.Host.TurnLog;
 
 /// <summary>One substrate call, as the log shows it. Cost and tokens are null when the provider does not report them — the mock tier reports neither, and a rendered $0.0000 would read as free rather than unmeasured.</summary>
-public sealed record SubstrateCall(string Agent, string Class, string? Label, double LatencyMs, int? Tokens, decimal? Cost, string? Degraded);
+public sealed record SubstrateCall(string Agent, string? Label, double LatencyMs, int? Tokens, decimal? Cost, string? Degraded);
 
 /// <summary>
 /// What happened in one event, in the order a person reads it rather than

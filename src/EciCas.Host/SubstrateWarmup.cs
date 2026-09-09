@@ -12,9 +12,9 @@ namespace EciCas.Host;
 /// disk. Left alone, all of that lands on the first turn a person types,
 /// which is exactly the turn they are judging the persona on.
 ///
-/// Deduplicated by provider+model rather than by substrate class: the
-/// minimal tier points all eight classes at one local 4B, and warming that
-/// model eight times would move the wait rather than remove it. The mock
+/// Deduplicated by provider+model rather than by agent: the minimal tier
+/// points every agent at one local 4B, and warming that model eight times
+/// would move the wait rather than remove it. The mock
 /// provider is skipped — it has nothing to warm.
 ///
 /// Nothing here can fail a boot. A provider that is down at startup is
@@ -37,13 +37,13 @@ public static class SubstrateWarmup
         Action<string> report,
         CancellationToken cancellationToken)
     {
-        var firstClassPerModel = options.Classes
+        var firstAgentPerModel = options.Agents
             .Where(c => !string.Equals(c.Value.Provider, "mock", StringComparison.OrdinalIgnoreCase))
             .GroupBy(c => (c.Value.Provider, c.Value.Model ?? c.Key))
             .Select(g => g.First())
             .ToList();
 
-        if (firstClassPerModel.Count == 0)
+        if (firstAgentPerModel.Count == 0)
         {
             return;
         }
@@ -54,7 +54,7 @@ public static class SubstrateWarmup
         // Sequential on purpose. Distinct models are usually distinct
         // vendors, but when they are not — two models on one local server —
         // loading them at once is how a warm-up becomes an out-of-memory.
-        foreach (var entry in firstClassPerModel)
+        foreach (var entry in firstAgentPerModel)
         {
             var name = $"{entry.Value.Provider}/{entry.Value.Model ?? entry.Key}";
             var started = DateTimeOffset.UtcNow;

@@ -34,8 +34,8 @@ public sealed class IntentAgent : CognitiveAgent<string>
     private readonly IInstructionStore _instructions;
     private readonly RuntimeKnobs _knobs;
 
-    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IInstructionStore instructions, RuntimeKnobs knobs)
-        : base(bus, activity, logger, substrate, agentSubstrates)
+    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates, IInstructionStore instructions, RuntimeKnobs knobs)
+        : base(bus, activity, logger, substrate, substrates)
     {
         _bus = bus;
         _instructions = instructions;

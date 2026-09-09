@@ -255,16 +255,16 @@ public class SmokeTests
                 BundleRoster = ["Impulse", "Recall", "Identity", "Hindsight"],
                 BundleTimeoutMs = 4000,
             }));
-            services.AddSingleton(Options.Create(new AgentSubstrateManifest
+            services.AddSingleton(Options.Create(new SubstrateOptions
             {
                 Agents =
                 {
-                    ["Intent"] = new AgentSubstrateEntry { Class = "fast-medium" },
-                    ["Librarian"] = new AgentSubstrateEntry { Class = "fast-low" },
-                    ["Recall"] = new AgentSubstrateEntry { Class = "fast-low" },
-                    ["Reflection"] = new AgentSubstrateEntry { Class = "fast-medium" },
-                    ["Archivist"] = new AgentSubstrateEntry { Class = "fast-low" },
-                    ["Cataloger"] = new AgentSubstrateEntry { Class = "fast-low" },
+                    ["Intent"] = new SubstrateAgentEntry(),
+                    ["Librarian"] = new SubstrateAgentEntry(),
+                    ["Recall"] = new SubstrateAgentEntry(),
+                    ["Reflection"] = new SubstrateAgentEntry(),
+                    ["Archivist"] = new SubstrateAgentEntry(),
+                    ["Cataloger"] = new SubstrateAgentEntry(),
                 },
             }));
             services.AddSingleton(Options.Create(new RecallOptions()));

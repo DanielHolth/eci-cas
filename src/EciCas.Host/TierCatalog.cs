@@ -18,13 +18,13 @@ namespace EciCas.Host;
 /// compares.
 ///
 /// What makes this safe rather than clever is that nothing caches its
-/// configuration. <see cref="SubstrateRegistry"/> resolves class -> provider
+/// configuration. <see cref="SubstrateRegistry"/> resolves agent -> provider
 /// on every call, <see cref="OpenAiCompatibleSubstrateProvider"/> re-reads
-/// the class entry for model and thinking flags on every call, and the
+/// that agent's entry for model and thinking flags on every call, and the
 /// agents hold the options *object* and read its properties per turn. So a
 /// switch is a handful of writes to objects everything already consults,
-/// and the two that carry a whole table -- Classes and Agents -- are
-/// replaced by reference rather than edited in place, so a call that is
+/// and the one that carries a whole table -- Agents -- is replaced by
+/// reference rather than edited in place, so a call that is
 /// already mid-fan-out reads one coherent table or the other and never a
 /// half-swapped one.
 ///
@@ -38,7 +38,6 @@ public sealed class TierCatalog
     private readonly Dictionary<string, TierPreset> _presets;
     private readonly IReadOnlyList<TierPreset> _ordered;
     private readonly SubstrateOptions _substrates;
-    private readonly AgentSubstrateManifest _agentSubstrates;
     private readonly RecallOptions _recall;
     private readonly LibrarianOptions _librarian;
     private readonly RuntimeKnobs _knobs;
@@ -46,13 +45,12 @@ public sealed class TierCatalog
     private readonly object _switchLock = new();
 
     public TierCatalog(IEnumerable<TierPreset> presets, SubstrateOptions substrates,
-        AgentSubstrateManifest agentSubstrates, RecallOptions recall, LibrarianOptions librarian,
+        RecallOptions recall, LibrarianOptions librarian,
         RuntimeKnobs knobs, KnobDefaults knobDefaults, string active)
     {
         _ordered = presets.ToList();
         _presets = _ordered.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         _substrates = substrates;
-        _agentSubstrates = agentSubstrates;
         _recall = recall;
         _librarian = librarian;
         _knobs = knobs;
@@ -96,8 +94,7 @@ public sealed class TierCatalog
         // calls are already in flight.
         lock (_switchLock)
         {
-            _substrates.Classes = preset.Classes;
-            _agentSubstrates.Agents = preset.Agents;
+            _substrates.Agents = preset.Agents;
             _recall.RowsPerWorker = preset.Recall.RowsPerWorker;
             _recall.MaxConcurrentRecalls = preset.Recall.MaxConcurrentRecalls;
             _recall.MaxPickedPerWorker = preset.Recall.MaxPickedPerWorker;
@@ -144,8 +141,7 @@ public sealed class TierCatalog
 public sealed class TierPreset
 {
     public required string Name { get; init; }
-    public required Dictionary<string, SubstrateClassEntry> Classes { get; init; }
-    public required Dictionary<string, AgentSubstrateEntry> Agents { get; init; }
+    public required Dictionary<string, SubstrateAgentEntry> Agents { get; init; }
     public required RecallOptions Recall { get; init; }
     public required LibrarianOptions Librarian { get; init; }
     public required KnobDefaults Knobs { get; init; }
@@ -160,7 +156,7 @@ public sealed class TierPreset
     public required int Rank { get; init; }
 
     /// <summary>
-    /// Environment variables this tier's live classes need and that are not
+    /// Environment variables this tier's live agents need and that are not
     /// set right now. Empty does not promise the tier works -- Minimal needs
     /// llama-server up and declares no key at all -- it only rules out the
     /// failure that is knowable without making a call.

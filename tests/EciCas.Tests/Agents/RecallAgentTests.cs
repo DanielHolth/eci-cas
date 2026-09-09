@@ -12,11 +12,11 @@ public class RecallAgentTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) => respond(prompt);
     }
 
-    private static IOptions<AgentSubstrateManifest> Manifest() =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Recall"] = new AgentSubstrateEntry { Class = "fast-low" } } });
+    private static IOptions<SubstrateOptions> Manifest() =>
+        Options.Create(new SubstrateOptions { Agents = { ["Recall"] = new SubstrateAgentEntry() } });
 
     private static Envelope Selection(params ArchivePair[] pairs) =>
         Envelope.Create(Topics.SelectedPairs, "Librarian", Severity.Neutral,

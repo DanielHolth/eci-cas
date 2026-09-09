@@ -16,11 +16,11 @@ public class ReflectionAgentTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) => respond(prompt);
     }
 
-    private static IOptions<AgentSubstrateManifest> Manifest() =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Reflection"] = new AgentSubstrateEntry { Class = "slow-low" } } });
+    private static IOptions<SubstrateOptions> Manifest() =>
+        Options.Create(new SubstrateOptions { Agents = { ["Reflection"] = new SubstrateAgentEntry() } });
 
     private static async Task SeedDriveVectorsAsync(IAgentStateStore stateStore, DriveVectors vectors) =>
         await stateStore.WriteAsync([new AgentStateRecord(ImpulseAgent.DrivePath, JsonSerializer.Serialize(vectors), DateTimeOffset.UtcNow, ArchiveDomain.Internal)], CancellationToken.None);

@@ -27,12 +27,12 @@ public sealed class SubstrateRegistry : ISubstrateProvider
         _services = services;
     }
 
-    public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
+    public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken)
     {
-        var providerName = _options.Classes.GetValueOrDefault(substrateClass)?.Provider ?? "mock";
+        var providerName = _options.Agents.GetValueOrDefault(agent)?.Provider ?? "mock";
         ISubstrateProvider provider = providerName == "mock"
             ? _mock
             : _services.GetRequiredKeyedService<ISubstrateProvider>(providerName);
-        return provider.CompleteAsync(substrateClass, prompt, cancellationToken);
+        return provider.CompleteAsync(agent, prompt, cancellationToken);
     }
 }

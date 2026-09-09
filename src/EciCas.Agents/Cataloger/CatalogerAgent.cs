@@ -41,7 +41,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
     private readonly IArchiveStore _store;
     private readonly IInstructionStore _instructions;
     private readonly ISubstrateProvider _substrate;
-    private readonly AgentSubstrateManifest _agentSubstrates;
+    private readonly SubstrateOptions _substrates;
     private readonly CatalogerOptions _options;
     private readonly ILogger _logger;
     private readonly Lazy<ClosedVocabulary> _vocabulary;
@@ -53,7 +53,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
     private int _turnsSinceFlush;
 
     public CatalogerAgent(IMessageBus bus, BusActivityTracker activity, ILogger<CatalogerAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<CatalogerOptions> options,
+        ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates, IOptions<CatalogerOptions> options,
         IInstructionStore instructions)
         : base(bus, activity, logger)
     {
@@ -61,7 +61,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
         _store = store;
         _instructions = instructions;
         _substrate = substrate;
-        _agentSubstrates = agentSubstrates.Value;
+        _substrates = substrates.Value;
         _options = options.Value;
         _logger = logger;
         _vocabulary = new Lazy<ClosedVocabulary>(() => ClosedVocabulary.Parse(_instructions.For(Name, VocabularySection)));
@@ -72,9 +72,9 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
+        if (!_substrates.Agents.TryGetValue(Name, out var entry))
         {
-            throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+            throw new InvalidOperationException($"No substrate entry for agent '{Name}' — add one to appsettings.json's Substrates:Agents section.");
         }
 
         var facts = envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ArchivistAgent.FactsKey) ?? [];
@@ -103,7 +103,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
         // There is no keyword fallback and there should not be one: guessing
         // an address is exactly the behaviour this agent exists to remove.
         IReadOnlyList<ArchiveRecord> filed = entry.UseSubstrate
-            ? [.. reserved, .. await FileAsync(envelope, open, text, entry.Class, cancellationToken).ConfigureAwait(false)]
+            ? [.. reserved, .. await FileAsync(envelope, open, text, cancellationToken).ConfigureAwait(false)]
             : reserved;
 
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
@@ -148,7 +148,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
         $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}";
 
     private async Task<IReadOnlyList<ArchiveRecord>> FileAsync(Envelope envelope, IReadOnlyList<ArchiveRecord> facts,
-        string text, string substrateClass, CancellationToken cancellationToken)
+        string text, CancellationToken cancellationToken)
     {
         var addressed = new List<ArchiveRecord>();
 
@@ -180,7 +180,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
             }
             else
             {
-                var answer = await AskAsync(envelope, substrateClass,
+                var answer = await AskAsync(envelope,
                     InstructionFile.Fill(_instructions.For(Name, CategorySection), ("text", text), ("fact", line)),
                     cancellationToken).ConfigureAwait(false);
 
@@ -214,7 +214,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
                 ? [.. AssistantScope.Topics, ClosedVocabulary.OtherTopic]
                 : _vocabulary.Value.TopicsIn(category);
 
-            var reply = await AskAsync(envelope, substrateClass,
+            var reply = await AskAsync(envelope,
                 InstructionFile.Fill(_instructions.For(Name, TopicSection),
                     ("cat", category), ("topics", string.Join("  ", topics)), ("text", text), ("fact", line)),
                 cancellationToken).ConfigureAwait(false);
@@ -235,15 +235,15 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
     /// posture as FallbackPosture.Closed — because this whole path runs behind
     /// the reply and a filing failure must never surface as a turn failure.
     /// </summary>
-    private async Task<string?> AskAsync(Envelope envelope, string substrateClass, string prompt, CancellationToken cancellationToken)
+    private async Task<string?> AskAsync(Envelope envelope, string prompt, CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
         try
         {
             _logger.LogDebug("{Agent} prompt >>>\n{Prompt}", Name, prompt);
-            var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            var result = await _substrate.CompleteAsync(Name, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, result.Text);
-            SubstrateTrace.Publish(_bus, envelope, Name, substrateClass, result);
+            SubstrateTrace.Publish(_bus, envelope, Name, result);
 
             // The mock tier echoes its prompt back, and a reply containing its
             // own entire input names no drawer.
@@ -253,7 +253,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
         {
             var cause = SubstrateHealth.Classify(ex);
             _logger.LogWarning("{Agent} filing call {Cause}, skipping", Name, cause);
-            SubstrateTrace.PublishFailure(_bus, envelope, Name, substrateClass, Stopwatch.GetElapsedTime(started).TotalMilliseconds, cause);
+            SubstrateTrace.PublishFailure(_bus, envelope, Name, Stopwatch.GetElapsedTime(started).TotalMilliseconds, cause);
             return null;
         }
     }

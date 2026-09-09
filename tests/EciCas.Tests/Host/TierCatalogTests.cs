@@ -17,18 +17,17 @@ public class TierCatalogTests
 {
     private static string TierDirectory => AppContext.BaseDirectory;
 
-    private static (TierCatalog Catalog, SubstrateOptions Substrates, AgentSubstrateManifest Agents,
+    private static (TierCatalog Catalog, SubstrateOptions Substrates,
         RecallOptions Recall, LibrarianOptions Librarian, RuntimeKnobs Knobs) Build()
     {
         var substrates = new SubstrateOptions();
-        var agents = new AgentSubstrateManifest();
         var recall = new RecallOptions();
         var librarian = new LibrarianOptions();
         var knobs = new RuntimeKnobs();
         var knobDefaults = new KnobDefaults();
-        var catalog = new TierCatalog(TierCatalogLoader.Load(TierDirectory), substrates, agents, recall, librarian,
+        var catalog = new TierCatalog(TierCatalogLoader.Load(TierDirectory), substrates, recall, librarian,
             knobs, knobDefaults, "Mock");
-        return (catalog, substrates, agents, recall, librarian, knobs);
+        return (catalog, substrates, recall, librarian, knobs);
     }
 
     [Fact]
@@ -64,13 +63,13 @@ public class TierCatalogTests
     [Fact]
     public void TheFreeTierIsSomewhereYouCanReturnTo()
     {
-        var (catalog, substrates, _, recall, _, _) = Build();
+        var (catalog, substrates, recall, _, _) = Build();
 
         Assert.True(catalog.Switch("Minimal"));
         Assert.True(catalog.Switch("Mock"));
 
         Assert.Equal("Mock", catalog.Active);
-        Assert.All(substrates.Classes.Values, c => Assert.Equal("mock", c.Provider));
+        Assert.All(substrates.Agents.Values, c => Assert.Equal("mock", c.Provider));
         Assert.Equal(10, recall.RowsPerWorker);
     }
 
@@ -83,14 +82,14 @@ public class TierCatalogTests
     [Fact]
     public void SwitchingCarriesTheWholeTier_NotJustItsModels()
     {
-        var (catalog, substrates, agents, recall, librarian, knobs) = Build();
+        var (catalog, substrates, recall, librarian, knobs) = Build();
 
         Assert.True(catalog.Switch("Minimal"));
 
         Assert.Equal("Minimal", catalog.Active);
-        Assert.All(substrates.Classes.Values, c => Assert.Equal("local", c.Provider));
-        Assert.False(agents.Agents["Reflection"].UseSubstrate);
-        Assert.True(agents.Agents["Intent"].UseSubstrate);
+        Assert.All(substrates.Agents.Values, c => Assert.Equal("local", c.Provider));
+        Assert.False(substrates.Agents["Reflection"].UseSubstrate);
+        Assert.True(substrates.Agents["Intent"].UseSubstrate);
         Assert.Equal(10, recall.RowsPerWorker);
 
         // Threads and depth are asserted against the preset rather than
@@ -115,26 +114,26 @@ public class TierCatalogTests
     [Fact]
     public void SwitchingReplacesTheClassTable_RatherThanEditingIt()
     {
-        var (catalog, substrates, _, _, _, _) = Build();
+        var (catalog, substrates, _, _, _) = Build();
         catalog.Switch("Mock");
-        var before = substrates.Classes;
+        var before = substrates.Agents;
 
         catalog.Switch("Minimal");
 
-        Assert.NotSame(before, substrates.Classes);
+        Assert.NotSame(before, substrates.Agents);
         Assert.All(before.Values, c => Assert.Equal("mock", c.Provider));
     }
 
     [Fact]
     public void AnUnknownTierIsRefused_AndChangesNothing()
     {
-        var (catalog, substrates, _, _, _, _) = Build();
+        var (catalog, substrates, _, _, _) = Build();
         catalog.Switch("Minimal");
 
         Assert.False(catalog.Switch("Minmal"));
 
         Assert.Equal("Minimal", catalog.Active);
-        Assert.All(substrates.Classes.Values, c => Assert.Equal("local", c.Provider));
+        Assert.All(substrates.Agents.Values, c => Assert.Equal("local", c.Provider));
     }
 
     /// <summary>

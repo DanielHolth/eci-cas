@@ -1,13 +1,14 @@
 ﻿namespace EciCas.Core;
 
 /// <summary>
-/// Logical substrate class (fast-low/fast-medium/fast-high, slow-low/slow-medium/slow-high)
-/// resolved to a concrete completion. The tier is a manifest/DI choice — a mock
-/// is a substrate, not a separate agent class.
+/// An agent name resolved to a concrete completion: the caller says who is
+/// asking and the registry looks up what backs that agent in the running
+/// tier. The tier is a manifest/DI choice — a mock is a substrate, not a
+/// separate agent class.
 /// </summary>
 public interface ISubstrateProvider
 {
-    Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken);
+    Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken);
 }
 
 public sealed record SubstrateResult(string Text, TimeSpan Latency, int? TokenCount, decimal? Cost);

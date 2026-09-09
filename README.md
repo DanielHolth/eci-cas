@@ -56,8 +56,8 @@ By hand it is two terminals. The host serves the bus and the SSE feed on `:5179`
 surface talks to it from `:3000`.
 
 ```powershell
-$env:MISTRAL_API_KEY = "..."      # fast-* classes
-$env:OPENAI_API_KEY  = "..."      # slow-* classes
+$env:MISTRAL_API_KEY = "..."      # Librarian, Recall, Reflection
+$env:OPENAI_API_KEY  = "..."      # Intent, Archivist, Cataloger
 dotnet run --project src/EciCas.Host -- --Tier=Default
 ```
 
@@ -78,7 +78,7 @@ stream, and a host started later is picked up without a reload. If the host
 isn't on `:5179`, point the surface at it with `NEXT_PUBLIC_ECI_API_BASE`.
 
 **No API keys?** Two free routes. `--Tier=Mock` needs nothing at all: each
-substrate call echoes its prompt back, so `[mock:fast-high] Reply to: what is
+substrate call echoes its prompt back, so `[mock:Intent] Reply to: what is
 a tide` is the echo, not a failure to answer — the right way to see the
 machinery, not a way to hear the persona. `--Tier=Minimal` is the one that
 actually thinks, running a local Qwen3.5 4B behind every faculty for $0; it
@@ -103,9 +103,9 @@ traps that have already cost an afternoon.
 
 `Tier` (env var or `--Tier=X`) layers `appsettings.<Tier>.json` over the
 defaults: **Mock** (no substrate at all, $0, no dependencies), **Minimal**
-(one local Qwen3.5 4B behind every class — free, but needs a server up),
-**Budget** (cheap live models), **Default** (Mistral for `fast-*`, OpenAI for
-`slow-*`), **Super**. Operator only — nothing edits this config or restarts
+(one local Qwen3.5 4B behind every agent — free, but needs a server up),
+**Budget** (cheap live models), **Default** (Mistral for the read side, OpenAI
+for the write side), **Super**. Operator only — nothing edits this config or restarts
 the process on your behalf.
 
 The Debug panel's **Tier** dropdown switches between the same presets on a
@@ -142,14 +142,15 @@ Any key can be overridden on the command line, which is the cheap way to
 exercise one agent live against an otherwise mocked swarm:
 
 ```bash
-dotnet run --project src/EciCas.Host -- --Substrates:Classes:fast-low:Provider=mistral --Recall:RowsPerWorker=5
+dotnet run --project src/EciCas.Host -- --Substrates:Agents:Librarian:Provider=mistral --Recall:RowsPerWorker=5
 ```
 
-Every class under `Substrates:Classes` defaults to `"mock"`. To go live, add
-a provider (base URL plus the *name* of the env var holding its key — never a
-literal key) and point classes at it; classes pick independently, so several
-providers can be live at once. `AgentSubstrates:Agents` maps each cognitive
-agent to a class, so an operator can retarget a role without touching C#:
+`Substrates:Agents` has one entry per cognitive agent, named after the agent,
+and every entry defaults to `"mock"`. To go live, add a provider (base URL
+plus the *name* of the env var holding its key — never a literal key) and
+point an agent at it; agents pick independently, so several providers can be
+live at once. There is no class layer in between: a tier says what backs
+Librarian by saying `Librarian`.
 
 ```jsonc
 "Substrates": {
@@ -157,16 +158,17 @@ agent to a class, so an operator can retarget a role without touching C#:
     "openai":  { "BaseUrl": "https://api.openai.com/v1/",  "ApiKeyEnvironmentVariable": "OPENAI_API_KEY" },
     "mistral": { "BaseUrl": "https://api.mistral.ai/v1/",  "ApiKeyEnvironmentVariable": "MISTRAL_API_KEY" }
   },
-  "Classes": { "fast-low": { "Provider": "mistral", "Model": "ministral-3b-2512" } }
-},
-"AgentSubstrates": {
-  "Agents": { "Intent": { "Class": "fast-medium" }, "Archivist": { "Class": "slow-low" } }
+  "Agents": {
+    "Librarian": { "Provider": "mistral", "Model": "ministral-3b-2512" },
+    "Archivist": { "Provider": "openai", "Model": "gpt-5.6-luna", "Effort": "low" }
+  }
 }
 ```
 
-Both blocks are validated at startup — including that `Class` names a real
-class even when `UseSubstrate` is `false` — so a typo fails loud rather than
-falling back to mock. `UseSubstrate: false` publishes the agent's fallback
+The table is validated at startup — every cognitive agent has an entry and
+every entry names a registered agent and a declared provider, even when
+`UseSubstrate` is `false` — so a typo fails loud rather than falling back to
+mock. `UseSubstrate: false` publishes the agent's fallback
 instead of calling out, on any of the five substrate-calling agents; that is
 the persona working as configured, not a degradation, so it is never marked
 degraded.

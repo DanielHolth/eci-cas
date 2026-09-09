@@ -127,7 +127,6 @@ public static class TurnProjection
         var meta = envelope.Meta;
         var call = new SubstrateCall(
             meta.Get<string>(SubstrateTrace.AgentKey) ?? envelope.PublishedBy,
-            meta.Get<string>(SubstrateTrace.ClassKey) ?? string.Empty,
             meta.Get<string>(SubstrateTrace.LabelKey),
             meta.Get<double>(SubstrateTrace.LatencyKey),
             meta.ContainsKey(SubstrateTrace.TokensKey) ? meta.Get<int>(SubstrateTrace.TokensKey) : null,

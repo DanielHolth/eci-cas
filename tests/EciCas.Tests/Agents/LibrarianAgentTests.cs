@@ -13,11 +13,11 @@ public class LibrarianAgentTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) => respond(prompt);
     }
 
-    private static IOptions<AgentSubstrateManifest> Manifest() =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Librarian"] = new AgentSubstrateEntry { Class = "fast-medium" } } });
+    private static IOptions<SubstrateOptions> Manifest() =>
+        Options.Create(new SubstrateOptions { Agents = { ["Librarian"] = new SubstrateAgentEntry() } });
 
     [Fact]
     public async Task PublishesSelectedPairs_FromSubstrateChoice()

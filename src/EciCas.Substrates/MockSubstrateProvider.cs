@@ -40,9 +40,9 @@ public sealed partial class MockSubstrateProvider : ISubstrateProvider
     [GeneratedRegex(@"\s\[[A-Z][^\[\]:]*:\s")]
     private static partial Regex FirstAside { get; }
 
-    public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
+    public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken)
     {
-        var text = EnumeratedCandidates.IsMatch(prompt) ? "0" : $"[mock:{substrateClass}] {Turn(prompt)}";
+        var text = EnumeratedCandidates.IsMatch(prompt) ? "0" : $"[mock:{agent}] {Turn(prompt)}";
         return Task.FromResult(new SubstrateResult(text, TimeSpan.FromMilliseconds(5), prompt.Length / 4, 0m));
     }
 

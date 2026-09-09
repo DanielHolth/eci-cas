@@ -893,7 +893,7 @@ letting Reflection see a year in a prompt smaller than today's batch. Large
 flat inputs are the worst option on cost, latency and accuracy, since models
 degrade at spotting a pattern in a long undifferentiated list.
 
-**Reflection deliberately stays on `slow-medium`.** A weaker model fails
+**Reflection deliberately stays on a mid-strength model.** A weaker model fails
 loudly on bad instructions where a strong one quietly compensates and the
 flaw ships. Upgrade after the prompts are good, not before.
 

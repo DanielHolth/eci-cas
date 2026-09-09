@@ -26,7 +26,7 @@ public class PersonaRenameTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) => respond(prompt);
     }
 
     /// <summary>
@@ -42,10 +42,10 @@ public class PersonaRenameTests
     private static ISubstrateProvider NeverCalled() =>
         new StubSubstrate(_ => throw new InvalidOperationException("A reserved address was ranked against the vocabulary."));
 
-    private static IOptions<AgentSubstrateManifest> Manifest(bool useSubstrate = true) =>
-        Options.Create(new AgentSubstrateManifest
+    private static IOptions<SubstrateOptions> Manifest(bool useSubstrate = true) =>
+        Options.Create(new SubstrateOptions
         {
-            Agents = { ["Cataloger"] = new AgentSubstrateEntry { Class = "slow-low", UseSubstrate = useSubstrate } },
+            Agents = { ["Cataloger"] = new SubstrateAgentEntry { UseSubstrate = useSubstrate } },
         });
 
     private static CatalogerAgent Agent(IMessageBus bus, BusActivityTracker activity, IArchiveStore store,

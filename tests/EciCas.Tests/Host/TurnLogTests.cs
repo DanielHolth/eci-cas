@@ -40,7 +40,6 @@ public class TurnLogTests
     private static Envelope Telemetry(Envelope from, string agent, decimal cost) =>
         from.Derive(Topics.Telemetry, agent, Severity.Neutral,
             MetaBag.Empty.With(SubstrateTrace.AgentKey, agent)
-                .With(SubstrateTrace.ClassKey, "fast-low")
                 .With(SubstrateTrace.LatencyKey, 5d)
                 .With(SubstrateTrace.CostKey, cost));
 
@@ -175,8 +174,8 @@ public class TurnLogTests
     {
         var perception = Perception("who is vera?");
         var bus = new RecordingBus();
-        SubstrateTrace.Publish(bus, perception, "Librarian", "fast-medium", new SubstrateResult("", TimeSpan.FromMilliseconds(120), 300, 0.0004m));
-        SubstrateTrace.Publish(bus, perception, "Recall", "fast-low", new SubstrateResult("", TimeSpan.FromMilliseconds(80), 100, 0.0001m), "person/family");
+        SubstrateTrace.Publish(bus, perception, "Librarian", new SubstrateResult("", TimeSpan.FromMilliseconds(120), 300, 0.0004m));
+        SubstrateTrace.Publish(bus, perception, "Recall", new SubstrateResult("", TimeSpan.FromMilliseconds(80), 100, 0.0001m), "person/family");
 
         var record = Project([perception, .. bus.Published]);
 
@@ -190,7 +189,7 @@ public class TurnLogTests
     {
         var perception = Perception("who is vera?");
         var bus = new RecordingBus();
-        SubstrateTrace.PublishFailure(bus, perception, "Intent", "fast-high", 15000, SubstrateHealth.TimedOut);
+        SubstrateTrace.PublishFailure(bus, perception, "Intent", 15000, SubstrateHealth.TimedOut);
 
         var record = Project([perception, .. bus.Published]);
 

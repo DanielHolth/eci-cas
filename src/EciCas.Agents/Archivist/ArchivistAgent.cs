@@ -48,7 +48,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     private readonly IMessageBus _bus;
     private readonly IInstructionStore _instructions;
     private readonly ISubstrateProvider _substrate;
-    private readonly AgentSubstrateManifest _agentSubstrates;
+    private readonly SubstrateOptions _substrates;
     private readonly ILogger _logger;
 
     // The worked examples are well-formed "category=..." lines sitting in
@@ -61,14 +61,14 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     private readonly Lazy<HashSet<string>> _exampleRows;
 
     public ArchivistAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ArchivistAgent> logger,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates,
+        ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates,
         IInstructionStore instructions)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _instructions = instructions;
         _substrate = substrate;
-        _agentSubstrates = agentSubstrates.Value;
+        _substrates = substrates.Value;
         _logger = logger;
         _exampleRows = new Lazy<HashSet<string>>(() =>
             [.. ParseFacts(_instructions.For(Name), DateTimeOffset.MinValue).Select(Signature)]);
@@ -89,9 +89,9 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
-        if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
+        if (!_substrates.Agents.TryGetValue(Name, out var entry))
         {
-            throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+            throw new InvalidOperationException($"No substrate entry for agent '{Name}' — add one to appsettings.json's Substrates:Agents section.");
         }
 
         // A deterministic-by-configuration Archivist extracts nothing, but
@@ -104,7 +104,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             return;
         }
 
-        var (newRecords, diagnostics) = await ExtractFactsAsync(envelope, text, entry.Class, cancellationToken).ConfigureAwait(false);
+        var (newRecords, diagnostics) = await ExtractFactsAsync(envelope, text, cancellationToken).ConfigureAwait(false);
 
         // One line every turn, same shape as RecallAgent's aggregate line —
         // without this the only visible signal was a bare substrate-call
@@ -116,7 +116,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         {
             var facts = newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(Describe));
             _logger.LogInformation("{Agent} {Facts} [{Class}] ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
-                Name, facts, entry.Class, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
+                Name, facts, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
         }
 
         Publish(envelope, newRecords, text);
@@ -165,7 +165,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     /// entirely — errors are logged and swallowed, same posture as
     /// FallbackPosture.Closed on CognitiveAgent&lt;T&gt;.
     /// </summary>
-    private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics)> ExtractFactsAsync(Envelope envelope, string text, string substrateClass, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics)> ExtractFactsAsync(Envelope envelope, string text, CancellationToken cancellationToken)
     {
         text = PromptCap.Apply(text);
         var prompt = InstructionFile.Fill(_instructions.For(Name), ("text", text));
@@ -174,9 +174,9 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         try
         {
             _logger.LogDebug("{Agent} extraction prompt >>>\n{Prompt}", Name, prompt);
-            var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            var result = await _substrate.CompleteAsync(Name, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} extraction response <<<\n{Response}", Name, result.Text);
-            SubstrateTrace.Publish(_bus, envelope, Name, substrateClass, result);
+            SubstrateTrace.Publish(_bus, envelope, Name, result);
 
             // The mock tier echoes the prompt back verbatim, and a reply
             // that contains its own entire input is never an extraction.
@@ -206,7 +206,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
             // there is no raw material a retry could work from.
             var cause = SubstrateHealth.Classify(ex);
             _logger.LogWarning("{Agent} fact extraction {Cause}, skipping", Name, cause);
-            SubstrateTrace.PublishFailure(_bus, envelope, Name, substrateClass, Stopwatch.GetElapsedTime(started).TotalMilliseconds, cause);
+            SubstrateTrace.PublishFailure(_bus, envelope, Name, Stopwatch.GetElapsedTime(started).TotalMilliseconds, cause);
             return ([], null);
         }
     }

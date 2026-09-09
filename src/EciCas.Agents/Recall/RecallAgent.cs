@@ -39,14 +39,14 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     private readonly IInstructionStore _instructions;
     private readonly IArchiveStore _store;
     private readonly ISubstrateProvider _substrate;
-    private readonly AgentSubstrateManifest _agentSubstrates;
+    private readonly SubstrateOptions _substrates;
     private readonly RecallOptions _options;
     private readonly RuntimeKnobs _knobs;
     private readonly IEmbeddingProvider _embeddings;
     private readonly ILogger _logger;
 
     public RecallAgent(IMessageBus bus, BusActivityTracker activity, ILogger<RecallAgent> logger, IArchiveStore store,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<RecallOptions> options,
+        ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates, IOptions<RecallOptions> options,
         IInstructionStore instructions, RuntimeKnobs knobs, IEmbeddingProvider embeddings)
         : base(bus, activity, logger)
     {
@@ -54,7 +54,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         _store = store;
         _instructions = instructions;
         _substrate = substrate;
-        _agentSubstrates = agentSubstrates.Value;
+        _substrates = substrates.Value;
         _options = options.Value;
         _knobs = knobs;
         _embeddings = embeddings;
@@ -68,9 +68,9 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     {
         var pairs = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey) ?? [];
 
-        if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
+        if (!_substrates.Agents.TryGetValue(Name, out var entry))
         {
-            throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+            throw new InvalidOperationException($"No substrate entry for agent '{Name}' — add one to appsettings.json's Substrates:Agents section.");
         }
 
         var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
@@ -178,7 +178,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             chunks.Add(recent);
         }
 
-        var results = await Task.WhenAll(chunks.Select(c => PickAsync(envelope, c, text, entry.Class, cancellationToken))).ConfigureAwait(false);
+        var results = await Task.WhenAll(chunks.Select(c => PickAsync(envelope, c, text, cancellationToken))).ConfigureAwait(false);
         var picked = Distinct(results.SelectMany(r => r.Facts));
 
         // Any worker failing means some of the archive went unread, so the
@@ -364,7 +364,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     /// is a turn-level decision only HandleAsync can make.
     /// </summary>
     private async Task<(IReadOnlyList<ArchiveRecord> Facts, SubstrateResult? Diagnostics, string? Degraded)> PickAsync(
-        Envelope envelope, IReadOnlyList<ArchiveRecord> candidates, string text, string substrateClass, CancellationToken cancellationToken)
+        Envelope envelope, IReadOnlyList<ArchiveRecord> candidates, string text, CancellationToken cancellationToken)
     {
         if (candidates.Count == 0)
         {
@@ -376,7 +376,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         {
             var prompt = BuildPrompt(text, candidates);
             _logger.LogDebug("{Agent} picking prompt >>>\n{Prompt}", Name, prompt);
-            var result = await _substrate.CompleteAsync(substrateClass, prompt, cancellationToken).ConfigureAwait(false);
+            var result = await _substrate.CompleteAsync(Name, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("{Agent} picking response <<<\n{Response}", Name, result.Text);
 
             // Named by the pair rather than an ordinal: "worker 2 of 3" is
@@ -384,10 +384,10 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             // already names the pair — so an ordinal made the success line
             // say less about the same chunk than the warning does.
             var read = candidates[0];
-            _logger.LogInformation("{Agent} picked from {Category}/{Topic} ({Rows} row(s)) [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, read.Category, read.Topic, candidates.Count, substrateClass,
+            _logger.LogInformation("{Agent} picked from {Category}/{Topic} ({Rows} row(s)): {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, read.Category, read.Topic, candidates.Count,
                 result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
-            SubstrateTrace.Publish(_bus, envelope, Name, substrateClass, result, $"{read.Category}/{read.Topic}");
+            SubstrateTrace.Publish(_bus, envelope, Name, result, $"{read.Category}/{read.Topic}");
 
             return (ParsePicked(result.Text, candidates), result, null);
         }
@@ -396,7 +396,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             var first = candidates[0];
             var cause = SubstrateHealth.Classify(ex);
             _logger.LogWarning("{Agent} lookup for {Category}/{Topic} {Cause}, skipping", Name, first.Category, first.Topic, cause);
-            SubstrateTrace.PublishFailure(_bus, envelope, Name, substrateClass,
+            SubstrateTrace.PublishFailure(_bus, envelope, Name,
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds, cause, $"{first.Category}/{first.Topic}");
             return ([], null, cause);
         }

@@ -41,7 +41,7 @@ public class SubstrateRegistryTests
     [Fact]
     public async Task WhenClassIsUnlistedOrMock_RoutesToMockProvider()
     {
-        var options = new SubstrateOptions { Classes = { ["fast-low"] = new SubstrateClassEntry { Provider = "mock" } } };
+        var options = new SubstrateOptions { Agents = { ["fast-low"] = new SubstrateAgentEntry { Provider = "mock" } } };
         var live = CreateLiveProvider("""{"choices":[],"usage":null}""", options);
         var registry = new SubstrateRegistry(Options.Create(options), new MockSubstrateProvider(), new SingleKeyedServiceProvider("openai", live));
 
@@ -54,7 +54,7 @@ public class SubstrateRegistryTests
     public async Task WhenClassNamesALiveProvider_RoutesToThatProvider()
     {
         const string json = """{"choices":[{"message":{"role":"assistant","content":"live answer"}}],"usage":{"total_tokens":42}}""";
-        var options = new SubstrateOptions { Classes = { ["fast-high"] = new SubstrateClassEntry { Provider = "openai" } } };
+        var options = new SubstrateOptions { Agents = { ["fast-high"] = new SubstrateAgentEntry { Provider = "openai" } } };
         var live = CreateLiveProvider(json, options);
         var registry = new SubstrateRegistry(Options.Create(options), new MockSubstrateProvider(), new SingleKeyedServiceProvider("openai", live));
 
@@ -70,10 +70,10 @@ public class SubstrateRegistryTests
         const string mistralJson = """{"choices":[{"message":{"role":"assistant","content":"mistral answer"}}],"usage":{"total_tokens":10}}""";
         var options = new SubstrateOptions
         {
-            Classes =
+            Agents =
             {
-                ["fast-low"] = new SubstrateClassEntry { Provider = "mistral" },
-                ["slow-medium"] = new SubstrateClassEntry { Provider = "openai" },
+                ["fast-low"] = new SubstrateAgentEntry { Provider = "mistral" },
+                ["slow-medium"] = new SubstrateAgentEntry { Provider = "openai" },
             },
         };
         var mistral = CreateLiveProvider(mistralJson, options);

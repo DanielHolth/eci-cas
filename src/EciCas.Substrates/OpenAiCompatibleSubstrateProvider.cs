@@ -36,17 +36,17 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         _slots = maxConcurrent > 0 ? new SemaphoreSlim(maxConcurrent, maxConcurrent) : null;
     }
 
-    public async Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
+    public async Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken)
     {
         var options = _options.Value;
-        var classEntry = options.Classes.GetValueOrDefault(substrateClass);
-        var model = classEntry?.Model ?? substrateClass;
+        var entry = options.Agents.GetValueOrDefault(agent);
+        var model = entry?.Model ?? agent;
         var request = new ChatCompletionRequest(
             model,
             [new ChatMessage("user", prompt)],
-            classEntry?.Effort,
-            classEntry?.MaxTokens,
-            classEntry?.Thinking is bool thinking ? new ChatTemplateKwargs(thinking) : null);
+            entry?.Effort,
+            entry?.MaxTokens,
+            entry?.Thinking is bool thinking ? new ChatTemplateKwargs(thinking) : null);
 
         // Fail fast while the circuit is open. One dead endpoint would
         // otherwise cost every agent in the fan-out a full timeout each,
@@ -85,7 +85,7 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            throw new HttpRequestException($"Substrate call to '{substrateClass}' failed: {(int)response.StatusCode} {response.StatusCode} — {body}");
+            throw new HttpRequestException($"Substrate call for '{agent}' failed: {(int)response.StatusCode} {response.StatusCode} — {body}");
         }
 
         var payload = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(JsonOptions, cancellationToken).ConfigureAwait(false)
@@ -97,7 +97,7 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
 
         var text = StripThinking(payload.Choices.Count > 0 ? payload.Choices[0].Message.Content : string.Empty);
         var tokens = payload.Usage?.TotalTokens;
-        var cost = tokens is int t ? t * (classEntry?.CostPerTokenUsd ?? 0m) : (decimal?)null;
+        var cost = tokens is int t ? t * (entry?.CostPerTokenUsd ?? 0m) : (decimal?)null;
 
         return new SubstrateResult(text, elapsed, tokens, cost);
     }

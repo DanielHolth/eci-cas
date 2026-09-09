@@ -19,11 +19,11 @@ public class ArchivistAgentTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) => respond(prompt);
     }
 
-    private static IOptions<AgentSubstrateManifest> Manifest() =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Archivist"] = new AgentSubstrateEntry { Class = "fast-low" } } });
+    private static IOptions<SubstrateOptions> Manifest() =>
+        Options.Create(new SubstrateOptions { Agents = { ["Archivist"] = new SubstrateAgentEntry() } });
 
     private const string FactLine = "subtopic=son subject=marcus holth key=birthdate value=2020-08-28";
 

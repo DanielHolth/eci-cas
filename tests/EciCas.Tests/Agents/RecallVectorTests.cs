@@ -17,7 +17,7 @@ public class RecallVectorTests
 {
     private sealed class NeverCalledSubstrate : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) =>
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The picking model was called on a turn that should have been answered by cosine alone.");
     }
 
@@ -25,7 +25,7 @@ public class RecallVectorTests
     {
         public List<string> Prompts { get; } = [];
 
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken)
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken)
         {
             lock (Prompts)
             {
@@ -36,8 +36,8 @@ public class RecallVectorTests
         }
     }
 
-    private static IOptions<AgentSubstrateManifest> Manifest() =>
-        Options.Create(new AgentSubstrateManifest { Agents = { ["Recall"] = new AgentSubstrateEntry { Class = "fast-low" } } });
+    private static IOptions<SubstrateOptions> Manifest() =>
+        Options.Create(new SubstrateOptions { Agents = { ["Recall"] = new SubstrateAgentEntry() } });
 
     /// <summary>
     /// An embedder a test can predict: the vector is the count of "x"

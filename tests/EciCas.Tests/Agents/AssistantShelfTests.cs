@@ -24,7 +24,7 @@ public class AssistantShelfTests
 {
     private sealed class StubSubstrate(Func<string, Task<SubstrateResult>> respond) : ISubstrateProvider
     {
-        public Task<SubstrateResult> CompleteAsync(string substrateClass, string prompt, CancellationToken cancellationToken) => respond(prompt);
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) => respond(prompt);
     }
 
     private const string TopicMarker = "folders inside";
@@ -49,7 +49,7 @@ public class AssistantShelfTests
 
     private static CatalogerAgent Agent(IMessageBus bus, BusActivityTracker activity, IArchiveStore store, ISubstrateProvider substrate) =>
         new(bus, activity, NullLogger<CatalogerAgent>.Instance, store, substrate,
-            Options.Create(new AgentSubstrateManifest { Agents = { ["Cataloger"] = new AgentSubstrateEntry { Class = "slow-low" } } }),
+            Options.Create(new SubstrateOptions { Agents = { ["Cataloger"] = new SubstrateAgentEntry() } }),
             Options.Create(new CatalogerOptions { BatchSize = 1 }), ShippedInstructions.Store);
 
     private static ArchiveRecord Fact(string subject, string key, string value) =>

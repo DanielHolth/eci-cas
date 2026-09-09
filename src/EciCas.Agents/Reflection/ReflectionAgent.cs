@@ -75,7 +75,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private readonly IEmbeddingProvider _embeddings;
     private readonly IAgentStateStore _stateStore;
     private readonly ISubstrateProvider _substrate;
-    private readonly AgentSubstrateManifest _agentSubstrates;
+    private readonly SubstrateOptions _substrates;
     private readonly ILogger _logger;
     private readonly ReflectionOptions _options;
     private readonly RuntimeKnobs _knobs;
@@ -83,7 +83,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private readonly object _pendingLock = new();
 
     public ReflectionAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ReflectionAgent> logger, IArchiveStore store, IAgentStateStore stateStore,
-        ISubstrateProvider substrate, IOptions<AgentSubstrateManifest> agentSubstrates, IOptions<ReflectionOptions> options,
+        ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates, IOptions<ReflectionOptions> options,
         IPassageStore passages, IEmbeddingProvider embeddings, IInstructionStore instructions, RuntimeKnobs knobs)
         : base(bus, activity, logger)
     {
@@ -94,7 +94,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         _embeddings = embeddings;
         _stateStore = stateStore;
         _substrate = substrate;
-        _agentSubstrates = agentSubstrates.Value;
+        _substrates = substrates.Value;
         _logger = logger;
         _options = options.Value;
         _knobs = knobs;
@@ -142,9 +142,9 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     private async Task FlushAsync(List<BufferedConclusion> batch, CancellationToken cancellationToken)
     {
-        if (!_agentSubstrates.Agents.TryGetValue(Name, out var entry))
+        if (!_substrates.Agents.TryGetValue(Name, out var entry))
         {
-            throw new InvalidOperationException($"No AgentSubstrates entry for agent '{Name}' — add one to appsettings.json's AgentSubstrates:Agents section.");
+            throw new InvalidOperationException($"No substrate entry for agent '{Name}' — add one to appsettings.json's Substrates:Agents section.");
         }
 
         // A deterministic-by-configuration Reflection has no idea to
@@ -176,11 +176,11 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         {
             var batchPrompt = BuildBatchPrompt(batch, previous, driveTrend);
             _logger.LogDebug("{Agent} prompt >>>\n{Prompt}", Name, batchPrompt);
-            var result = await _substrate.CompleteAsync(entry.Class, batchPrompt, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("{Agent} substrate call [{Class}]: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
-                Name, entry.Class, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
+            var result = await _substrate.CompleteAsync(Name, batchPrompt, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("{Agent} substrate call: {LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost",
+                Name, result.Latency.TotalMilliseconds, result.TokenCount, result.Cost);
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, result.Text);
-            SubstrateTrace.Publish(_bus, flush, Name, entry.Class, result);
+            SubstrateTrace.Publish(_bus, flush, Name, result);
 
             // Same guard as ArchivistAgent.ExtractFactsAsync: the mock
             // tier echoes the prompt back verbatim, and its own worked
@@ -210,7 +210,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _logger.LogWarning("{Agent} batch scoring {Cause} after {LatencyMs}ms, retaining {Count} turns for the next flush",
                 Name, cause, elapsed, batch.Count);
-            SubstrateTrace.PublishFailure(_bus, flush, Name, entry.Class, elapsed, cause);
+            SubstrateTrace.PublishFailure(_bus, flush, Name, elapsed, cause);
 
             lock (_pendingLock)
             {

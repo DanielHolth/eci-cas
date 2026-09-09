@@ -34,7 +34,6 @@ public sealed class TelemetryLogAgent : AgentBase
         public string Timestamp { get; set; } = "";
         public Guid CorrelationId { get; set; }
         public string Agent { get; set; } = "";
-        public string Class { get; set; } = "";
         public string? Label { get; set; }
         public double LatencyMs { get; set; }
         public int? Tokens { get; set; }
@@ -81,7 +80,6 @@ public sealed class TelemetryLogAgent : AgentBase
             Timestamp = envelope.Timestamp.ToString("O", CultureInfo.InvariantCulture),
             CorrelationId = envelope.CorrelationId,
             Agent = envelope.Meta.Get<string>(SubstrateTrace.AgentKey) ?? envelope.PublishedBy,
-            Class = envelope.Meta.Get<string>(SubstrateTrace.ClassKey) ?? "",
             Label = envelope.Meta.Get<string>(SubstrateTrace.LabelKey),
             LatencyMs = envelope.Meta.Get<double>(SubstrateTrace.LatencyKey),
             Tokens = envelope.Meta.ContainsKey(SubstrateTrace.TokensKey) ? envelope.Meta.Get<int>(SubstrateTrace.TokensKey) : null,

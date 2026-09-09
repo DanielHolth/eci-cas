@@ -72,7 +72,6 @@ builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
 builder.Services.Configure<GovernanceOptions>(builder.Configuration.GetSection("Governance"));
 builder.Services.Configure<RoutingManifest>(builder.Configuration.GetSection("RoutingManifest"));
 builder.Services.Configure<SubstrateOptions>(builder.Configuration.GetSection("Substrates"));
-builder.Services.Configure<AgentSubstrateManifest>(builder.Configuration.GetSection("AgentSubstrates"));
 builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Recall"));
 builder.Services.Configure<LibrarianOptions>(builder.Configuration.GetSection("Librarian"));
 builder.Services.Configure<CatalogerOptions>(builder.Configuration.GetSection("Cataloger"));
@@ -316,7 +315,6 @@ builder.Services.AddSingleton<PersonaName>();
 builder.Services.AddSingleton(sp => new TierCatalog(
     TierCatalogLoader.Load(AppContext.BaseDirectory),
     sp.GetRequiredService<IOptions<SubstrateOptions>>().Value,
-    sp.GetRequiredService<IOptions<AgentSubstrateManifest>>().Value,
     sp.GetRequiredService<IOptions<RecallOptions>>().Value,
     sp.GetRequiredService<IOptions<LibrarianOptions>>().Value,
     sp.GetRequiredService<RuntimeKnobs>(),
@@ -357,9 +355,8 @@ var manifest = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOpt
 RoutingManifest.Validate(manifest, app.Services.GetServices<IAgent>());
 
 // Cheap re-read of the same cached singletons resolved above, not a re-construction.
-var agentSubstrates = app.Services.GetRequiredService<IOptions<AgentSubstrateManifest>>().Value;
 var substrateOptions = app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value;
-AgentSubstrateManifestValidator.Validate(agentSubstrates, substrateOptions, app.Services.GetServices<IAgent>());
+SubstrateManifestValidator.Validate(substrateOptions, app.Services.GetServices<IAgent>());
 
 // Every tier, bound but not applied — see TierCatalog for why a live switch
 // is a few reference writes rather than a rebuild. Registered against the
