@@ -754,6 +754,16 @@ What it buys:
 - Disagreement inside a thread is one operation. Newest plus
   oldest-that-differs, handed over with dates, which is the open arm above.
 
+**Superseded rows do not compete, but they are one hop away.** The read-side
+rule is the two consult modes, not a global filter: *Find* means *now*, so it
+drops anything carrying a `superseded_by`; *Characterise* is history by
+definition -- "what cars have I owned", "what changed after the divorce" --
+so it does not. This is what keeps the working set lean without a deletion:
+forty dead rows are invisible to the sweep, and the fat index never forms.
+Dereferencing from the live row is what keeps "you said Oslo before"
+reachable, and it is also the answer to a query that asks *for* the dead row
+by name, which a hard filter gets wrong.
+
 **Compare against the thread's representative, not any member.** Chaining --
 A matches B, B matches C, A does not match C -- walks a thread across
 subjects over twenty years, and bounded drift matters more here than
@@ -775,9 +785,28 @@ part cosine throws away. That is a reading problem, and it wants a model.
 **Gated by the sweep, not run per fact.** Most new rows have no candidate
 above the threshold at all, and for those there is nothing to disambiguate
 and no call to make. When the sweep does return candidates, the top five go
-to one call that names which row this continues or supersedes -- one call per
-turn rather than per fact, and the inversion's deletion of the write-side
-call budget mostly survives.
+to one call carrying only the facts that had a hit -- one call per turn
+rather than per fact, and the inversion's deletion of the write-side call
+budget mostly survives.
+
+**Cardinality is the wrong gate; disagreement is the right one.** Skipping
+the call when the sweep returned a single candidate optimises away exactly
+the case the consolidator exists for -- "my wife's new car is a Volvo"
+against "my new car is a Tesla" is plausibly a lone hit above threshold, and
+auto-linking it is a false merge, the error read time cannot undo.
+
+What predicts danger is not how many candidates there are but whether the
+*values* disagree, and the keyword extraction above already detects that
+without a model. Cosine clears the threshold and the keyword sets match: a
+near-verbatim restatement, threaded deterministically, no call -- and this is
+where the volume sits in a chatty archive, so this is where the saving
+actually comes from. Cosine clears it and the keywords differ on a rare token
+-- Tesla against Subaru, Oslo against Bergen -- and that is what supersession
+looks like, so the call is made whether there was one candidate or five.
+
+The principle underneath: a false merge costs in proportion to how much the
+two values disagree. Gluing together two rows that say the same thing is
+nearly free even when it is wrong. Spend the call where the disagreement is.
 
 **It links, it never replaces.** The verdict writes a thread id and a
 `superseded_by`; the utterance is not touched, not rewritten, not deleted.
