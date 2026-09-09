@@ -104,7 +104,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
         className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-900"
       >
         <span className="font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
-          Event {String(record.seq).padStart(3, "0")} · {date} · {time}
+          Turn {String(record.seq).padStart(3, "0")} · {date} · {time}
           {record.selfTriggered && " · self"}
           {stillArriving(record) && " · …"}
         </span>

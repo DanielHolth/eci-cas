@@ -19,10 +19,11 @@ using EciCas.Core;
 /// file that is optional by design, and throwing per call would turn one
 /// missing download into a warning per turn.
 ///
-/// The session is not thread-safe for concurrent Run on all execution
-/// providers, and a turn embeds one short string, so calls are serialized on
-/// a semaphore rather than raced — the pass is single-digit milliseconds at
-/// this model size.
+/// InferenceSession.Run is thread-safe, so the semaphore is not correctness
+/// — it is a choice. This runs on the same CPU as a local LLM, and letting
+/// several embeds spin up the session's own thread pool at once takes cores
+/// away from the thing the person is waiting on. A pass is single-digit
+/// milliseconds at this model size, so queueing costs nothing worth having.
 /// </summary>
 public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
 {

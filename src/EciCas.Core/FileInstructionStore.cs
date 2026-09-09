@@ -96,6 +96,10 @@ public sealed class FileInstructionStore : IInstructionStore
                 ("stranger", []),
                 ("name", [])),
             ["Intent"] = Sections(("fallback", [])),
+            ["Impulse"] = Sections(
+                (InstructionFile.MainSection, []),
+                ("alarm", []),
+                ("contrast", [])),
         };
 
     private static IReadOnlyDictionary<string, string[]> Sections(params (string Section, string[] Names)[] entries) =>

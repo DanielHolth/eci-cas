@@ -9,7 +9,9 @@ using EciCas.Agents.Reflection;
 using EciCas.Agents.Archivist;
 using EciCas.Bus;
 using EciCas.Core;
+using EciCas.Substrates;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Tests.Agents;
 
@@ -22,7 +24,8 @@ public class ImpulseAgentTests
         var advisories = bus.Subscribe(Topics.Advisories);
         var proposals = bus.Subscribe(Topics.Proposal);
         var store = new JsonlAgentStateStore(Path.GetTempFileName());
-        var agent = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store, ShippedInstructions.Store);
+        var agent = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store, ShippedInstructions.Store,
+            new NullEmbeddingProvider(), Options.Create(new ImpulseOptions()));
         return (agent, advisories, proposals, store);
     }
 
@@ -31,7 +34,7 @@ public class ImpulseAgentTests
     {
         var (agent, advisories, proposals, _) = Create();
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            MetaBag.Empty.With(PerceptionAgent.TextKey, "emergency, need help now"));
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "call an ambulance"));
 
         await agent.HandleAsync(perception, CancellationToken.None);
 
@@ -108,7 +111,7 @@ public class ImpulseAgentTests
         var (agent, _, _, store) = Create();
         var baseline = new DriveVectors();
 
-        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
         var alarmed = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
         Assert.True(alarmed.Urgency > baseline.Urgency);
 
@@ -149,7 +152,7 @@ public class ImpulseAgentTests
     public async Task QuietTurns_ArriveAtBaselineRatherThanApproachingItForever()
     {
         var (agent, _, _, store) = Create();
-        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
 
         for (var i = 0; i < 100; i++)
         {
@@ -190,7 +193,7 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            MetaBag.Empty.With(PerceptionAgent.TextKey, "emergency, need help now"));
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "call an ambulance"));
 
         await agent.HandleAsync(perception, CancellationToken.None);
 
@@ -333,7 +336,7 @@ public class ImpulseAgentTests
         Assert.True(advisories.TryRead(out var calm));
         Assert.Equal("neutral", calm!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
 
-        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
         Assert.True(advisories.TryRead(out var urgent));
         Assert.Equal("alert", urgent!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
     }
@@ -352,7 +355,7 @@ public class ImpulseAgentTests
         await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
         while (advisories.TryRead(out _)) { }
 
-        await agent.HandleAsync(Perceive("emergency, need help now", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
         Assert.True(advisories.TryRead(out var advisory));
         Assert.Equal("alert", advisory!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
     }

@@ -5,6 +5,7 @@ using EciCas.Agents.Recall;
 using EciCas.Agents.Security;
 using EciCas.Bus;
 using EciCas.Core;
+using EciCas.Substrates;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -152,7 +153,8 @@ public class GovernanceAgentTests
         var store = new JsonlAgentStateStore(Path.GetTempFileName());
         var agent = new GovernanceAgent(bus, activity, NullLogger<GovernanceAgent>.Instance,
             Options.Create(new GovernanceOptions { BundleRoster = [] }), store, ShippedInstructions.Store);
-        var impulse = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store, ShippedInstructions.Store);
+        var impulse = new ImpulseAgent(bus, activity, NullLogger<ImpulseAgent>.Instance, store, ShippedInstructions.Store,
+            new NullEmbeddingProvider(), Options.Create(new ImpulseOptions()));
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
         await agent.HandleAsync(perception, CancellationToken.None);

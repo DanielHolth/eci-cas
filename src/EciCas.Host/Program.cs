@@ -76,6 +76,7 @@ builder.Services.Configure<SubstrateOptions>(builder.Configuration.GetSection("S
 builder.Services.Configure<RecallOptions>(builder.Configuration.GetSection("Recall"));
 builder.Services.Configure<LibrarianOptions>(builder.Configuration.GetSection("Librarian"));
 builder.Services.Configure<CatalogerOptions>(builder.Configuration.GetSection("Cataloger"));
+builder.Services.Configure<ImpulseOptions>(builder.Configuration.GetSection("Impulse"));
 builder.Services.Configure<ReflectionOptions>(builder.Configuration.GetSection("Reflection"));
 builder.Services.Configure<PassageOptions>(builder.Configuration.GetSection("Passages"));
 builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("Embedding"));

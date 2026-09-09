@@ -108,7 +108,7 @@ export function ThoughtsPanel({
                     onClick={() => onOpen(t.correlationId)}
                     className="text-xs text-neutral-400 underline decoration-dotted hover:text-neutral-700 dark:hover:text-neutral-200"
                   >
-                    open event
+                    open turn
                   </button>
                 </div>
               )}

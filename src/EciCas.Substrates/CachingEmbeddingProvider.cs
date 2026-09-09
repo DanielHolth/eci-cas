@@ -14,10 +14,10 @@ namespace EciCas.Substrates;
 /// no ordering assumption. Nothing about the agents changes.
 ///
 /// The cost is worse than a duplicated cheap call, which is why this is
-/// worth a type. OnnxEmbeddingProvider holds a lock across inference because
-/// an ONNX session is not safe to call concurrently, so the two embeds do
-/// not overlap: the second waits for the first to finish and then recomputes
-/// a bit-identical answer. Two serial model passes on the critical path
+/// worth a type. OnnxEmbeddingProvider serializes inference on purpose, to
+/// leave CPU for the local model, so the two embeds do not even overlap: the
+/// second waits for the first to finish and then recomputes a bit-identical
+/// answer. Two serial model passes on the critical path
 /// where one would do. On the API provider it is two HTTP round trips.
 ///
 /// Capacity is small on purpose. This is a within-turn deduplicator, not a

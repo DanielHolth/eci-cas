@@ -7,6 +7,7 @@ using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Agents.Impulse;
 
@@ -61,7 +62,6 @@ public sealed class ImpulseAgent : AgentBase
     public static string DrivePathFor(string? profileId) =>
         string.IsNullOrEmpty(profileId) ? DrivePath : $"{DrivePath}/{profileId}";
 
-    private static readonly string[] CriticalTriggers = ["help", "emergency", "urgent"];
 
     /// <summary>
     /// §5.4's Somatic shortcut, scoped down: Python ties this to a physical
@@ -139,16 +139,18 @@ public sealed class ImpulseAgent : AgentBase
     private readonly IMessageBus _bus;
     private readonly IAgentStateStore _store;
     private readonly IInstructionStore _instructions;
+    private readonly EmergencyReflex _reflex;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private readonly Dictionary<string, DriveVectors> _cached = [];
 
     public ImpulseAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ImpulseAgent> logger, IAgentStateStore store,
-        IInstructionStore instructions)
+        IInstructionStore instructions, IEmbeddingProvider embeddings, IOptions<ImpulseOptions> options)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _store = store;
         _instructions = instructions;
+        _reflex = new EmergencyReflex(embeddings, instructions, options.Value, logger);
     }
 
     public override string Name => "Impulse";
@@ -180,7 +182,7 @@ public sealed class ImpulseAgent : AgentBase
 
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
-        var isCritical = CriticalTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase));
+        var isCritical = await _reflex.IsEmergencyAsync(text, cancellationToken).ConfigureAwait(false);
 
         // Reflex severity is capped at Elevated — only Perception/Librarian may tag Critical.
         var severity = isCritical ? Severity.Elevated : envelope.Severity;

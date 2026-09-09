@@ -4,3 +4,49 @@
 # else. Lines starting "# " are stripped; everything else is spoken verbatim.
 
 I can see this is urgent. I'm on it.
+
+## alarm
+# Scenarios where someone may die in the next minutes. The reflex fires when a
+# turn lands close to one of these AND clearly closer to them than to anything
+# in the contrast section below. Write situations, not keywords: the comparison
+# is against meaning, so a line reads like something a frightened person would
+# actually type. One per line.
+
+someone is bleeding heavily and it will not stop
+he is not breathing
+she has stopped breathing and has no pulse
+my child is choking and cannot breathe
+someone collapsed and is unconscious and will not wake up
+I think I am having a heart attack, my chest hurts and my arm is numb
+the kitchen is on fire and the fire is spreading
+the house is on fire and we cannot get out
+call an ambulance right now, this is an emergency
+he has taken too many pills and is losing consciousness
+she fell down the stairs and is not moving
+someone is drowning
+I cannot breathe, my throat is closing up
+he is having a seizure and it will not stop
+there has been a bad car crash and people are hurt
+I am going to kill myself tonight
+
+## contrast
+# The everyday near-misses. These share the alarm section's words and mean
+# nothing of the kind, and they are what stops the reflex firing on ordinary
+# speech. Every line here should be something a person might really say.
+
+help me write this email
+this is urgent, I need the report by five
+we have an emergency meeting tomorrow morning
+that presentation was a disaster
+my phone is dying, do you have a charger
+I am dying to see that film
+the kitchen is a mess after cooking
+that chilli is on fire, so spicy
+I was up all night and I am dead tired
+he is drowning in paperwork this week
+my laptop just crashed and I lost the document
+I am having a heart attack over these prices
+the fire alarm test is scheduled for noon
+she is bleeding money on that project
+I cannot breathe with this deadline
+tell me what to do if someone is choking
