@@ -31,6 +31,8 @@ export interface Knobs {
   tiers: Tier[];
   maxSentences: number;
   reflectionEvery: number;
+  /** Characters of one person's input that reach the bus; the rest is not typed. */
+  perceptionChars: number;
   recallDepth: number;
   recallThreads: number;
   // What the active tier's file on disk says, so the Save button can tell a
@@ -39,6 +41,7 @@ export interface Knobs {
   savedRecallThreads: number;
   savedMaxSentences: number;
   savedReflectionEvery: number;
+  savedPerceptionChars: number;
   savedMood: string;
   mood: string;
   moods: string[];
@@ -52,7 +55,7 @@ export async function fetchKnobs(): Promise<Knobs> {
   return response.json();
 }
 
-async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "recallDepth" | "recallThreads" | "mood" | "tier", number | string>>): Promise<Knobs> {
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "recallDepth" | "recallThreads" | "mood" | "tier", number | string>>): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -67,6 +70,7 @@ async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery"
 
 export const setMaxSentences = (maxSentences: number) => postKnobs({ maxSentences });
 export const setReflectionEvery = (reflectionEvery: number) => postKnobs({ reflectionEvery });
+export const setPerceptionChars = (perceptionChars: number) => postKnobs({ perceptionChars });
 export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth });
 export const setRecallThreads = (recallThreads: number) => postKnobs({ recallThreads });
 export const setMood = (mood: string) => postKnobs({ mood });

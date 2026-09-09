@@ -6,6 +6,7 @@ import {
   fetchKnobs,
   saveKnobs,
   setMaxSentences,
+  setPerceptionChars,
   setRecallDepth,
   setRecallThreads,
   setReflectionEvery,
@@ -72,6 +73,7 @@ export function KnobsPanel() {
       knobs.recallThreads !== knobs.savedRecallThreads ||
       knobs.maxSentences !== knobs.savedMaxSentences ||
       knobs.reflectionEvery !== knobs.savedReflectionEvery ||
+      knobs.perceptionChars !== knobs.savedPerceptionChars ||
       knobs.mood !== knobs.savedMood);
 
   async function save() {
@@ -162,6 +164,25 @@ export function KnobsPanel() {
           value={knobs?.maxSentences ?? 2}
           disabled={knobs === null}
           onChange={(e) => apply("maxSentences", Number(e.target.value), setMaxSentences)}
+          className="accent-neutral-700 dark:accent-neutral-300"
+        />
+      </label>
+
+      <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
+        <span className="flex items-center justify-between">
+          <span title="Characters of one person's input that reach the bus. The input field counts against this rather than swallowing the overflow silently." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Input length</span>
+          <span className="font-mono text-neutral-800 dark:text-neutral-100">
+            {knobs === null ? "…" : `${knobs.perceptionChars} chars`}
+          </span>
+        </span>
+        <input
+          type="range"
+          min={64}
+          max={2048}
+          step={64}
+          value={knobs?.perceptionChars ?? 512}
+          disabled={knobs === null}
+          onChange={(e) => apply("perceptionChars", Number(e.target.value), setPerceptionChars)}
           className="accent-neutral-700 dark:accent-neutral-300"
         />
       </label>

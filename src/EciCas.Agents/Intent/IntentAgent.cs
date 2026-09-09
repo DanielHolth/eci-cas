@@ -61,7 +61,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// </summary>
     private static string BuildContext(Envelope envelope, int maxSentences, Mood mood)
     {
-        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
         var prompt = new StringBuilder("Reply to: ").Append(text);
 

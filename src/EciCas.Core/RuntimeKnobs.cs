@@ -16,6 +16,7 @@ public sealed class RuntimeKnobs
     private int _reflectionEvery = 5;
     private int _recallDepth = 5;
     private int _recallThreads = 3;
+    private int _perceptionChars = 512;
     private Mood _mood = Mood.Neutral;
 
     /// <summary>Upper bound Intent is told to keep replies within, clamped
@@ -107,6 +108,28 @@ public sealed class RuntimeKnobs
     /// </summary>
     public int PassageCandidates => 1 + _recallDepth / 2;
 
+    /// <summary>
+    /// How much of one person's typed input reaches the bus, in characters.
+    ///
+    /// Not <see cref="PromptCap"/>: that is a loop guard sized for text a
+    /// substrate wrote, which every hop re-embeds into the next hop's
+    /// prompt, so it compounds. First-hand human input is read once and is
+    /// the thing the turn is actually about -- 240 characters is a sentence
+    /// and a half, and pasting a log into it lost the log without saying so.
+    ///
+    /// It is a knob rather than no limit because the ceiling is the
+    /// smallest tier's attention, not money: a 4B stops obeying the length
+    /// bracket and the mood vocabulary long before the prompt stops fitting.
+    /// And it is announced on the input field rather than applied quietly --
+    /// a counter that stops climbing is a limit a person can work with, a
+    /// truncated paste is not.
+    /// </summary>
+    public int PerceptionChars
+    {
+        get => _perceptionChars;
+        set => _perceptionChars = Math.Clamp(value, 64, 2048);
+    }
+
     /// <summary>How the persona feels this turn, on top of whatever
     /// Identity's own advisory already says about who it is.
     ///
@@ -148,6 +171,7 @@ public sealed class KnobDefaults
 {
     public int MaxSentences { get; set; } = 2;
     public int ReflectionEvery { get; set; } = 5;
+    public int PerceptionChars { get; set; } = 512;
     public Mood Mood { get; set; } = Mood.Neutral;
 }
 

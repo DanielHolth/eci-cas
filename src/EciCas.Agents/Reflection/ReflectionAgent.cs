@@ -261,7 +261,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         {
             _logger.LogInformation("{Agent} pushed idea: {Idea}", Name, best.Idea);
             var idea = Envelope.Create(Topics.Perception, Name, Severity.Restful,
-                MetaBag.Empty.With(PerceptionAgent.TextKey, best.Idea).With(TriggeredByKey, "self"),
+                MetaBag.Empty.With(PerceptionAgent.TextKey, PromptCap.Apply(best.Idea)).With(TriggeredByKey, "self"),
                 generation: maxGeneration + 1);
             _bus.Publish(Topics.Perception, idea);
         }

@@ -175,7 +175,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         }
 
         var index = _store.IndexFor(envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
-        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
         // The count at Information, the pairs at Debug. An index of one pair
         // is a seeded-empty archive, i.e. the host was started from the wrong

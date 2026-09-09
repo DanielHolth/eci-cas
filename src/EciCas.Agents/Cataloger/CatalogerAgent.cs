@@ -78,7 +78,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
         }
 
         var facts = envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ArchivistAgent.FactsKey) ?? [];
-        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty);
+        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
         // Reserved addresses first, and outside the substrate switch on
         // purpose. These are decided by who the fact is about rather than by

@@ -327,6 +327,7 @@ builder.Services.AddSingleton(sp => new RuntimeKnobs
     RecallThreads = sp.GetRequiredService<IOptions<RecallOptions>>().Value.Threads,
     MaxSentences = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.MaxSentences,
     ReflectionEvery = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ReflectionEvery,
+    PerceptionChars = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.PerceptionChars,
     Mood = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Mood,
 });
 
@@ -424,6 +425,11 @@ app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog
         knobs.ReflectionEvery = r;
     }
 
+    if (request.PerceptionChars is { } p)
+    {
+        knobs.PerceptionChars = p;
+    }
+
     if (request.RecallDepth is { } d)
     {
         knobs.RecallDepth = d;
@@ -474,9 +480,10 @@ app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<
             || !TryWriteNumber(ref text, "Threads", knobs.RecallThreads)
             || !TryWriteNumber(ref text, "MaxSentences", knobs.MaxSentences)
             || !TryWriteNumber(ref text, "ReflectionEvery", knobs.ReflectionEvery)
+            || !TryWriteNumber(ref text, "PerceptionChars", knobs.PerceptionChars)
             || !TryWriteString(ref text, "Mood", knobs.Mood.ToString()))
         {
-            return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Recall:Threads, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:Mood.");
+            return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Recall:Threads, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:Mood.");
         }
 
         // Parsed to prove the edit, not to produce it. Round-tripping through
@@ -503,6 +510,7 @@ app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<
     recall.Value.Threads = knobs.RecallThreads;
     knobDefaults.Value.MaxSentences = knobs.MaxSentences;
     knobDefaults.Value.ReflectionEvery = knobs.ReflectionEvery;
+    knobDefaults.Value.PerceptionChars = knobs.PerceptionChars;
     knobDefaults.Value.Mood = knobs.Mood;
 
     return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions);
@@ -514,6 +522,7 @@ static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOption
     tiers = tiers.Presets.Select(p => new { name = p.Name, missingKeys = p.MissingKeys }),
     maxSentences = knobs.MaxSentences,
     reflectionEvery = knobs.ReflectionEvery,
+    perceptionChars = knobs.PerceptionChars,
     recallDepth = knobs.RecallDepth,
     recallThreads = knobs.RecallThreads,
     // What the tier file on disk says, so the surface can grey its Save
@@ -522,6 +531,7 @@ static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOption
     savedRecallThreads = recall.Threads,
     savedMaxSentences = knobDefaults.MaxSentences,
     savedReflectionEvery = knobDefaults.ReflectionEvery,
+    savedPerceptionChars = knobDefaults.PerceptionChars,
     savedMood = knobDefaults.Mood.ToString(),
     mood = knobs.Mood.ToString(),
     moods = Enum.GetNames<Mood>(),
@@ -774,6 +784,6 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
 
 internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? RecallDepth = null, int? RecallThreads = null, string? Mood = null, string? Tier = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? RecallDepth = null, int? RecallThreads = null, string? Mood = null, string? Tier = null);
 
 internal sealed record CreateProfileRequest(string DisplayName, string Avatar);

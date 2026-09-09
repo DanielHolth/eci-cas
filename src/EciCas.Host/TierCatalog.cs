@@ -119,9 +119,11 @@ public sealed class TierCatalog
             // tier's session experiment.
             _knobs.MaxSentences = preset.Knobs.MaxSentences;
             _knobs.ReflectionEvery = preset.Knobs.ReflectionEvery;
+            _knobs.PerceptionChars = preset.Knobs.PerceptionChars;
             _knobs.Mood = preset.Knobs.Mood;
             _knobDefaults.MaxSentences = preset.Knobs.MaxSentences;
             _knobDefaults.ReflectionEvery = preset.Knobs.ReflectionEvery;
+            _knobDefaults.PerceptionChars = preset.Knobs.PerceptionChars;
             _knobDefaults.Mood = preset.Knobs.Mood;
 
             Active = preset.Name;

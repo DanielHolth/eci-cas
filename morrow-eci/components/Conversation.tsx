@@ -12,6 +12,7 @@ import { useEciStream } from "@/lib/useEciStream";
 import { usePersona } from "@/lib/usePersona";
 import { useSpeaking } from "@/lib/useSpeaking";
 import { useTurnLog } from "@/lib/useTurnLog";
+import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { sendPerceive } from "@/lib/api";
 import type { Profile } from "@/lib/profiles";
 
@@ -29,6 +30,11 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   // once a turn has settled is the cheapest correct trigger: settling is
   // exactly the point at which Archivist has finished writing.
   const persona = usePersona(profile.id, log.length);
+
+  // What the host will actually accept. Null until the first fetch answers,
+  // which leaves the field unbounded for that instant rather than guessing a
+  // number and contradicting the host.
+  const limit = usePerceptionLimit(log.length);
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -161,10 +167,12 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
 
           <Transcript turns={turns} />
 
-          <form onSubmit={handleSubmit} className="flex w-full shrink-0 gap-2">
+          <form onSubmit={handleSubmit} className="w-full shrink-0">
+            <div className="flex w-full gap-2">
             <input
               type="text"
               value={text}
+              maxLength={limit ?? undefined}
               onChange={(e) => setText(e.target.value)}
               placeholder={`Say something to ${persona.name || "ECI-CAS"}, ${profile.displayName}…`}
               className="flex-1 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-neutral-500"
@@ -176,6 +184,18 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
             >
               Send
             </button>
+            </div>
+            {/* The counter only appears in the last quarter of the budget.
+                A number that sits under the field from the first keystroke
+                reads as a demand for brevity; one that shows up as the room
+                runs out reads as the fact it is. */}
+            {limit !== null && text.length > limit * 0.75 && (
+              <p className="mt-1 px-4 text-right text-xs text-neutral-500 dark:text-neutral-400">
+                {text.length === limit
+                  ? `${limit} characters — that is all this tier reads`
+                  : `${text.length} / ${limit}`}
+              </p>
+            )}
           </form>
         </div>
       </main>

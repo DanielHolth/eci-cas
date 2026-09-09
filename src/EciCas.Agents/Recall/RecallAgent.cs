@@ -73,7 +73,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             throw new InvalidOperationException($"No substrate entry for agent '{Name}' — add one to appsettings.json's Substrates:Agents section.");
         }
 
-        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
 
         // The recency lane, read whatever Librarian selected and even when it

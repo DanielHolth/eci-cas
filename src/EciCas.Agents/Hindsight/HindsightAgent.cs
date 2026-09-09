@@ -98,7 +98,7 @@ public sealed class HindsightAgent : AgentBase
         // ArchivistAgent's matching skip). That repost is the one moment the
         // ring (Hindsight -> Intent -> reply -> note -> Hindsight) is
         // actually being closed.
-        var text = PromptCap.Apply(envelope.Meta.Get<string>(PerceptionAgent.TextKey));
+        var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var selfTriggered = envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self";
 
         // The second trigger, and the reason it is affordable: a turn that
