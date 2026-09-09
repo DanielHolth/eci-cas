@@ -712,6 +712,95 @@ contradiction the way a person does. That only works if retrieval hands it
 Nothing in the current model is deployed to anyone, so there is no
 migration to design. The parquet schema is free.
 
+### Threads — accumulation is the inversion's own failure mode
+
+The pair store deduplicated for free: a restatement landed on the same
+address and replaced what was there. A log has no addresses, so "my car is a
+Tesla, so much better than my old Subaru" accumulates beside the 2016 row
+that named the Subaru, and forty repetitions of a fact become forty rows
+competing for the same five slots in front of Intent.
+
+Two problems wearing one costume. **Redundancy** is the same value restated,
+and it is only a top-k problem -- the disk does not care, and the repetition
+is itself signal worth keeping. **Supersession** is a different value at the
+same subject, and there the log is right to hold both: "my old Subaru" is
+true history someone will want in 2040. What fails is retrieval handing
+Intent one row and calling it the present.
+
+**A thread id, minted on write.** Embed the row -- already happening on the
+way to disk -- sweep, and if the nearest thread representative clears the
+threshold, inherit its id; otherwise mint a new one. Deterministic, no model,
+and off the critical path, where nobody is waiting.
+
+The check does not disappear, it relocates. Doing this at read time is
+O(k squared) cosine every turn, forever, and structurally blind: a collapse
+pass over the top-k cannot know about a 2016 Subaru that cosine did not
+already return. Doing it on write is one sweep against **one representative
+per thread**, over the whole archive, and the set it scans grows with
+distinct subjects rather than with utterances -- a person acquires new topics
+slowly and repeats endlessly, so the thing being scanned stays small while
+the log does not.
+
+What it buys:
+
+- Repetition costs one slot, not forty. Retrieval groups by thread before
+  ranking, so "said 40 times, Mar 2025-now" reaches Intent as one row
+  carrying its own frequency -- more than the pair store ever gave it.
+- "What car do I drive" is the newest row in a thread. This recovers the one
+  thing the pair store was genuinely good at, addressing current state,
+  without reintroducing a schema to do it. The fast-changing subjects -- car,
+  job, city, the series someone is watching -- are exactly the queries that
+  silently mean *now*.
+- Disagreement inside a thread is one operation. Newest plus
+  oldest-that-differs, handed over with dates, which is the open arm above.
+
+**Compare against the thread's representative, not any member.** Chaining --
+A matches B, B matches C, A does not match C -- walks a thread across
+subjects over twenty years, and bounded drift matters more here than
+anywhere given what the archive is being promised for.
+
+**Bias the threshold high and bench it.** The errors are not symmetric. A
+false split restores today's behaviour, which is duplicates and recoverable;
+a false merge glues two subjects together and makes *now* wrong, which is
+not recoverable at read time. Start near 0.9 rather than 0.85 and let the
+corpus argue it down.
+
+### The consolidator — judgment where cosine has none
+
+Cosine says two rows are about the same thing. It cannot say which of
+"my new car is a Tesla" and "my *wife's* new car is a Volvo" supersedes the
+other, because the sentences are near-identical and the difference is the
+part cosine throws away. That is a reading problem, and it wants a model.
+
+**Gated by the sweep, not run per fact.** Most new rows have no candidate
+above the threshold at all, and for those there is nothing to disambiguate
+and no call to make. When the sweep does return candidates, the top five go
+to one call that names which row this continues or supersedes -- one call per
+turn rather than per fact, and the inversion's deletion of the write-side
+call budget mostly survives.
+
+**It links, it never replaces.** The verdict writes a thread id and a
+`superseded_by`; the utterance is not touched, not rewritten, not deleted.
+At read time the effect is what replacement would have given -- the Subaru
+stops surfacing as current -- and ground truth keeps its guarantee. A
+consolidator with permission to overwrite the log would be the one feature
+able to falsify the hundred-year claim.
+
+**Which makes the tiering fall out rather than be designed.** Threading is
+deterministic and costs nothing, so it runs on every tier. The consolidator
+is a substrate call, so it is what a paid tier buys. And because both write
+only derived columns, an upgrade is a **backfill, not a migration**: the same
+status `ArchiveBackfill` already grants vectors, the same background job
+shape. A free-tier archive of six years upgraded in 2032 is consolidated by
+re-running over an untouched log -- and so is an archive consolidated by a
+weaker model in 2027, once a better one exists. The judgment is disposable
+on purpose.
+
+Open: whether the model should be allowed to say *neither* -- two rows that
+cosine threaded and a reader would keep apart -- and whether that unthreads
+them or only marks them. Splitting a thread is the write no other path here
+performs.
+
 ## Skill hints and deferred turns
 
 **A skill agent on perception, where the Librarian sat.** It publishes a
