@@ -601,6 +601,22 @@ There is a log of what was perceived, and an Intent that makes sense of it
 on the way past. The archive stops asserting truth and starts holding
 evidence.
 
+**Status: shipped, behind `Utterances:Enabled` (default false).** What is
+described below is built and tested, not planned. `ParquetUtteranceLog`
+holds the log as one parquet per month; `ThreadWeaver` threads at write
+time against one frozen earliest representative per thread;
+`UtteranceConsult` reads it with the two-pass split; `UtteranceBackfill`
+rebuilds vectors and threads at boot. With the flag on, `InvertManifest`
+drops Librarian, Archivist and Cataloger from both manifests and puts
+Recall and Scribe on Perception -- the flag is one boolean and the roster
+follows it in code, so there is no second topology in appsettings to
+drift. With it off nothing changes and nothing is written. The settings
+below are the measured ones (benches 22-25): threshold 0.86, top-5
+consolidator candidates, MMR lambda 0.7, lexical weight 0.15, ReadMinScore
+0.55. The consolidator is off by default and degrades as described under
+*The consolidator* -- a non-verbatim candidate mints a new thread rather
+than joining.
+
 ### Ground truth, and everything else
 
 One line separates what is permanent from what is not, and it is the line
