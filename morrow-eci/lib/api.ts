@@ -49,12 +49,43 @@ export interface Knobs {
   moods: string[];
 }
 
+/**
+ * The last knob payload anyone received, and who wants to hear about the
+ * next one. Every call below funnels through `publish`, so a control that
+ * moves a knob does not also have to know which parts of the surface care:
+ * the Debug panel drags a slider, the input field's counter changes.
+ *
+ * Deliberately a module-level fan-out rather than a bus message or a
+ * context provider — the knobs are already a single shared value fetched
+ * from one place, and this is that place.
+ */
+let latest: Knobs | null = null;
+const listeners = new Set<(knobs: Knobs) => void>();
+
+function publish(knobs: Knobs): Knobs {
+  latest = knobs;
+  for (const listener of listeners) {
+    listener(knobs);
+  }
+  return knobs;
+}
+
+/** What the host last said, for a subscriber mounting after the fetch. */
+export const latestKnobs = (): Knobs | null => latest;
+
+export function subscribeKnobs(listener: (knobs: Knobs) => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export async function fetchKnobs(): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`);
   if (!response.ok) {
     throw new Error(`knobs fetch failed: ${response.status}`);
   }
-  return response.json();
+  return publish(await response.json());
 }
 
 async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "contextTurns" | "recallDepth" | "recallThreads" | "mood" | "tier", number | string>>): Promise<Knobs> {
@@ -67,7 +98,7 @@ async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery"
   if (!response.ok) {
     throw new Error(`knobs update failed: ${response.status}`);
   }
-  return response.json();
+  return publish(await response.json());
 }
 
 export const setMaxSentences = (maxSentences: number) => postKnobs({ maxSentences });
@@ -88,5 +119,5 @@ export async function saveKnobs(): Promise<Knobs> {
   if (!response.ok) {
     throw new Error(`knobs save failed: ${response.status}`);
   }
-  return response.json();
+  return publish(await response.json());
 }

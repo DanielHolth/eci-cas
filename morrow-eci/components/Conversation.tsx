@@ -185,15 +185,24 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
               Send
             </button>
             </div>
-            {/* The counter only appears in the last quarter of the budget.
-                A number that sits under the field from the first keystroke
-                reads as a demand for brevity; one that shows up as the room
-                runs out reads as the fact it is. */}
-            {limit !== null && text.length > limit * 0.75 && (
-              <p className="mt-1 px-4 text-right text-xs text-neutral-500 dark:text-neutral-400">
-                {text.length === limit
-                  ? `${limit} characters — that is all this tier reads`
-                  : `${text.length} / ${limit}`}
+            {/* Standing, not conditional: the ceiling is a tier setting a
+                person can move while typing, so the count has to be there
+                before it matters — a number that only appears near the cap
+                reads as a complaint, and one that appears only after the
+                next turn is simply wrong. It turns amber in the last
+                quarter and red at the cap, which is where the old sentence
+                said what it said. */}
+            {limit !== null && (
+              <p
+                className={`mt-1 px-4 text-right text-xs tabular-nums ${
+                  text.length >= limit
+                    ? "text-red-600 dark:text-red-400"
+                    : text.length > limit * 0.75
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-neutral-400 dark:text-neutral-500"
+                }`}
+              >
+                {text.length} / {limit}
               </p>
             )}
           </form>
