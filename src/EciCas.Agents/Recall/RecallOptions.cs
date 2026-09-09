@@ -73,4 +73,32 @@ public sealed class RecallOptions
     /// hands all thirty to Intent instead.
     /// </summary>
     public bool PickAfterVector { get; set; } = true;
+
+    /// <summary>
+    /// How long a fact keeps half its importance for ranking purposes, in
+    /// days. Zero switches decay off, and off is exactly today's behaviour.
+    ///
+    /// Nothing on disk changes -- this is a comparison key, not a write. The
+    /// capsule keeps what was worth keeping; the persona surfaces what is
+    /// still live. Sixty days is a season: a preference stated in spring is
+    /// still worth a quarter of its importance in autumn, which is enough to
+    /// beat filler and not enough to beat something said last week.
+    ///
+    /// Age is measured from the last time the row was touched, written or
+    /// read, so a fact that keeps being recalled never decays. That is the
+    /// line between forgetting something and merely having known it a while.
+    /// </summary>
+    public double SalienceHalfLifeDays { get; set; } = 60;
+
+    /// <summary>
+    /// What a row's hit rate is worth on top of its decayed importance.
+    ///
+    /// Added rather than multiplied, so a row nobody has asked for is not
+    /// zeroed -- it simply gets no lift, and ranks on importance alone. The
+    /// rate is hits over turns recorded and is capped at one, so this is the
+    /// most any amount of use can be worth: a third of the way up the
+    /// importance scale, enough to raise a low-scored fact the person keeps
+    /// coming back to above a high-scored one nobody has ever wanted.
+    /// </summary>
+    public double SalienceHitWeight { get; set; } = 0.3;
 }

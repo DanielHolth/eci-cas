@@ -1,4 +1,4 @@
-﻿namespace EciCas.Core;
+namespace EciCas.Core;
 
 /// <summary>
 /// Knowledge-swarm archive: the semantic two-stage store (Librarian selects
@@ -49,6 +49,25 @@ public interface IArchiveStore
 
     /// <summary>Writes to this profile's own tier, except for categories the store treats as shared.</summary>
     Task WriteAsync(IReadOnlyList<ArchiveRecord> records, string? profileId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// How many turns have been recorded against this archive — the
+    /// denominator a row's hit count is a rate against. Read, never set:
+    /// RecordRecallAsync is what advances it.
+    /// </summary>
+    long TurnsRecorded { get; }
+
+    /// <summary>
+    /// One turn happened, and these are the rows it actually put in front of
+    /// Intent. Advances the turn counter and credits each row a hit.
+    ///
+    /// Called after the reply has been published, never before: it is a
+    /// disk write that changes nothing about this turn, and the only thing
+    /// it can do on the critical path is make the person wait for a
+    /// statistic. An empty list still counts the turn — a turn that recalled
+    /// nothing is exactly the kind of turn a hit *rate* has to know about.
+    /// </summary>
+    Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, string? profileId, CancellationToken cancellationToken);
 }
 
 public sealed record ArchivePair(string Category, string Topic);
@@ -66,7 +85,9 @@ public sealed record ArchiveRecord(
     string Sentence = "",
     float[]? Embedding = null,
     string EmbeddingModelId = "",
-    string EmbeddingHash = "")
+    string EmbeddingHash = "",
+    long Hits = 0,
+    DateTimeOffset? LastHitAt = null)
 {
     public ArchivePair Pair => new(Category, Topic);
 
@@ -130,6 +151,27 @@ public sealed record ArchiveRecord(
     /// and a tool import by the same rule.
     /// </summary>
     public string EmbeddingHash { get; init; } = EmbeddingHash;
+
+    /// <summary>
+    /// How many turns have put this row in front of Intent. Not a quality
+    /// score and not written by any model: it is the only evidence the
+    /// archive holds about which of its facts the person's questions keep
+    /// reaching for.
+    ///
+    /// It survives a restatement. "Lives in Oslo" becoming "lives in Bergen"
+    /// replaces the row at its address, and starting the count over there
+    /// would punish a fact for being kept current — the address is what has
+    /// been asked about, not the particular value it held.
+    /// </summary>
+    public long Hits { get; init; } = Hits;
+
+    /// <summary>
+    /// When the last of those hits was, or null for a row nothing has
+    /// recalled yet. Salience decays from whichever is later, this or
+    /// Timestamp: a fact written a year ago and read last week is not stale,
+    /// and being *used* is the clearest signal of that there is.
+    /// </summary>
+    public DateTimeOffset? LastHitAt { get; init; } = LastHitAt;
 
     /// <summary>
     /// What the embedder is given for this row: the address line and the

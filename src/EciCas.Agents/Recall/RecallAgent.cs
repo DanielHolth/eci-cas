@@ -89,13 +89,21 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // still knows what was said lately.
         if (!entry.UseSubstrate)
         {
-            Publish(envelope, Distinct(recent.Take(_knobs.RecallDepth)), degraded: null);
+            await PublishAsync(envelope, Distinct(recent.Take(_knobs.RecallDepth)), degraded: null, profileId, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         // Phase one: read every selected pair at once. Distinct pairs are
         // distinct files, so these don't contend with each other.
         var read = await Task.WhenAll(pairs.Select(p => _store.LookupAsync(p, profileId, cancellationToken))).ConfigureAwait(false);
+
+        // Re-ranked on the way out of the store, because the store's order is
+        // Importance and the order that matters here is salience: what was
+        // worth writing, faded by how long ago it was last touched, lifted by
+        // how often the turns have actually wanted it. Everything downstream
+        // reads "first" as "most valuable" -- the chunk trim, the whole-pass
+        // shortcut, the picking prompt -- so it has to be true here.
+        read = [.. read.Select(rows => Ranked(rows))];
 
         // The cosine cut, before anything is chunked. This is where the row
         // vectors earn their disk: a set every row of which carries a current
@@ -156,14 +164,14 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         if (narrowedAll && !_options.PickAfterVector && loaded.Length > 0)
         {
             _logger.LogInformation("{Agent} vector-narrowed every pair and the lane; skipping the picking calls", Name);
-            Publish(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent)), degraded: null);
+            await PublishAsync(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent)), degraded: null, profileId, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         var total = loaded.Sum(rows => rows.Count) + recent.Count;
         if (total <= _knobs.RecallDepth)
         {
-            Publish(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent)), degraded: null);
+            await PublishAsync(envelope, Distinct(loaded.SelectMany(rows => rows).Concat(recent)), degraded: null, profileId, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -190,7 +198,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
         // worker that made it. Folding N calls into a total needed a
         // wall-clock caveat to not be misread as a sum, and the per-call
         // lines carry the same numbers without needing one.
-        Publish(envelope, picked, degraded);
+        await PublishAsync(envelope, picked, degraded, profileId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -330,14 +338,28 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
     /// once. The pair is part of the key: the lane spans every drawer, so
     /// subtopic/subject/key alone is not an identity across it.
     /// </summary>
-    private static IReadOnlyList<ArchiveRecord> Distinct(IEnumerable<ArchiveRecord> facts) =>
-        [.. facts
+    private IReadOnlyList<ArchiveRecord> Distinct(IEnumerable<ArchiveRecord> facts) =>
+        Ranked([.. facts
             .GroupBy(r => (r.Category.ToLowerInvariant(), r.Topic.ToLowerInvariant(),
                 r.Subtopic.ToLowerInvariant(), r.Subject.ToLowerInvariant(), r.Key.ToLowerInvariant()))
-            .Select(g => g.First())
-            .OrderByDescending(r => r.Importance)];
+            .Select(g => g.First())]);
 
-    private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string? degraded)
+    /// <summary>
+    /// Salience order. With the half-life off this is Importance order and
+    /// nothing about a turn changes, which is what makes the decay a knob
+    /// rather than a rewrite -- an archive that has never counted a hit and
+    /// a tier that has never set a half-life both rank exactly as before.
+    /// </summary>
+    private IReadOnlyList<ArchiveRecord> Ranked(IEnumerable<ArchiveRecord> rows)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var turns = _store.TurnsRecorded;
+        return [.. rows.OrderByDescending(r => ArchiveSalience.Effective(
+            r, now, turns, _options.SalienceHalfLifeDays, _options.SalienceHitWeight))];
+    }
+
+    private async Task PublishAsync(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string? degraded,
+        string? profileId, CancellationToken cancellationToken)
     {
         // Logged here rather than beside the picking calls, because the two
         // paths that skip those calls — nothing selected, and an archive
@@ -351,6 +373,20 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
         var advisory = envelope.Derive(Topics.Advisories, Name, envelope.Severity, SubstrateHealth.Mark(meta, degraded));
         _bus.Publish(Topics.Advisories, advisory);
+
+        // After the advisory, never before: crediting is a disk write that
+        // changes nothing about this turn, and the turn should not wait on it
+        // to reach Intent. An empty recall still counts the turn -- the rate
+        // these hits are measured against needs the turns that wanted nothing
+        // just as much as the ones that wanted something.
+        try
+        {
+            await _store.RecordRecallAsync(facts, profileId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "{Agent} could not record which rows this turn used", Name);
+        }
     }
 
     private static string Describe(ArchiveRecord r) =>

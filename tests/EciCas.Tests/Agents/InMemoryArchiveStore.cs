@@ -21,6 +21,32 @@ public sealed class InMemoryArchiveStore : IArchiveStore
     /// <summary>Each write paired with the profile it was scoped to.</summary>
     public IReadOnlyList<(string? ProfileId, ArchiveRecord Record)> Scoped => _records;
 
+    public long TurnsRecorded { get; private set; }
+
+    /// <summary>
+    /// Credits by address, the way the real store does, so a test can watch
+    /// a row's rate climb without a directory.
+    /// </summary>
+    public Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, string? profileId, CancellationToken cancellationToken)
+    {
+        TurnsRecorded++;
+        var now = DateTimeOffset.UtcNow;
+        var hit = recalled.Select(Address).ToHashSet();
+        for (var i = 0; i < _records.Count; i++)
+        {
+            if (hit.Contains(Address(_records[i].Record)))
+            {
+                var record = _records[i].Record;
+                _records[i] = (_records[i].ProfileId, record with { Hits = record.Hits + 1, LastHitAt = now });
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static (string, string, string) Address(ArchiveRecord record) =>
+        (record.Subtopic.ToLowerInvariant(), record.Subject.ToLowerInvariant(), record.Key.ToLowerInvariant());
+
     public Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, string? profileId, CancellationToken cancellationToken)
     {
         IReadOnlyList<ArchiveRecord> results = _records

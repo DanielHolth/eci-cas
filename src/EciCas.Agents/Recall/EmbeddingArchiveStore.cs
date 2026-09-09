@@ -26,6 +26,11 @@ public sealed class EmbeddingArchiveStore(IArchiveStore inner, IEmbeddingProvide
     public Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, string? profileId, CancellationToken cancellationToken) =>
         inner.LookupAsync(pair, profileId, cancellationToken);
 
+    public long TurnsRecorded => inner.TurnsRecorded;
+
+    public Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, string? profileId, CancellationToken cancellationToken) =>
+        inner.RecordRecallAsync(recalled, profileId, cancellationToken);
+
     public Task<IReadOnlyList<ArchiveRecord>> RecentAsync(string? profileId, int limit, CancellationToken cancellationToken) =>
         inner.RecentAsync(profileId, limit, cancellationToken);
 

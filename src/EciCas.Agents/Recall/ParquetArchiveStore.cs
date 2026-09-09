@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using Parquet.Serialization;
@@ -57,6 +57,9 @@ public sealed class ParquetArchiveStore : IArchiveStore
     /// property that makes the file listing safe to use as the index.
     /// </summary>
     public const string RecentFileName = "recent.parquet";
+
+    /// <summary>Where the recalled-turn denominator lives, beside the shelf it counts for.</summary>
+    public const string TurnCountFileName = "turns.txt";
 
     /// <summary>
     /// How far back the lane reaches. Time, not rows: "lately" is a span,
@@ -118,6 +121,14 @@ public sealed class ParquetArchiveStore : IArchiveStore
         public string? EmbeddingModel { get; set; }
 
         public string? EmbeddingHash { get; set; }
+
+        // How often this row has been recalled, and when it last was. Both
+        // nullable for the reason every column added since the first release
+        // is: a pair file written before they existed reads back with them
+        // null, which is "nobody has counted", not "counted zero".
+        public long? Hits { get; set; }
+
+        public string? LastHit { get; set; }
     }
 
     /// <summary>Pairs are addresses, and addresses are case-insensitive — as are the file names that carry them.</summary>
@@ -140,6 +151,7 @@ public sealed class ParquetArchiveStore : IArchiveStore
     private readonly HashSet<string> _sharedCategories;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _indexLock = new();
+    private long _turnsRecorded;
     private readonly Dictionary<string, HashSet<ArchivePair>> _indexes = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -157,6 +169,7 @@ public sealed class ParquetArchiveStore : IArchiveStore
         _directory = directory;
         _sharedCategories = new HashSet<string>(sharedCategories ?? DefaultSharedCategories, StringComparer.OrdinalIgnoreCase);
         Directory.CreateDirectory(_directory);
+        _turnsRecorded = LoadTurnCount(_directory);
     }
 
     public IReadOnlyList<ArchivePair> IndexFor(string? profileId)
@@ -337,6 +350,112 @@ public sealed class ParquetArchiveStore : IArchiveStore
         }
     }
 
+    public long TurnsRecorded => Interlocked.Read(ref _turnsRecorded);
+
+    /// <summary>
+    /// Credits the rows a turn actually used, and counts the turn.
+    ///
+    /// The counter is the denominator, so it advances on every turn whether
+    /// or not anything was recalled — a persona asked a hundred questions
+    /// that needed no fact has learned something real about the two rows
+    /// that did get used.
+    ///
+    /// Rows are credited wherever they live. A recalled row may have come
+    /// from the shared tier, from the profile's own, or from the recency
+    /// lane's copy of either, and the caller does not know which — it was
+    /// handed a union. So each candidate file is opened once and every row
+    /// in it whose address was recalled is credited, which also keeps the
+    /// lane's copy and the pair's copy from drifting apart.
+    /// </summary>
+    public async Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, string? profileId, CancellationToken cancellationToken)
+    {
+        var turns = Interlocked.Increment(ref _turnsRecorded);
+        await SaveTurnCountAsync(turns, cancellationToken).ConfigureAwait(false);
+
+        if (recalled.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var directories = profileId is null
+            ? new[] { _directory }
+            : [_directory, ProfileDirectoryFor(_directory, profileId)];
+
+        var paths = directories
+            .SelectMany(d => recalled
+                .Select(r => PairPathFor(d, r.Pair))
+                .Append(Path.Combine(d, RecentFileName)))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        var hit = recalled.Select(RowKey).ToHashSet();
+        await Task.WhenAll(paths.Select(path => CreditAsync(path, hit, now, cancellationToken))).ConfigureAwait(false);
+    }
+
+    private async Task CreditAsync(string path, HashSet<(string, string, string)> hit, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var gate = LockFor(path);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var rows = await CachedAsync(path, cancellationToken).ConfigureAwait(false);
+            var credited = rows
+                .Select(r => hit.Contains(RowKey(r)) ? r with { Hits = r.Hits + 1, LastHitAt = now } : r)
+                .ToList();
+
+            if (!credited.Where((r, i) => !ReferenceEquals(r, rows[i])).Any())
+            {
+                return;
+            }
+
+            await WriteRecordsAsync(path, credited, cancellationToken).ConfigureAwait(false);
+            _pairs[path] = credited;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The turn count is one number and it is written every turn, so it gets
+    /// a plain text file rather than a row in anything: parquet for a single
+    /// integer would cost a schema and a rewrite to say what nine bytes say.
+    /// A missing or unreadable file means zero — the archive predates
+    /// counting, which is the same starting state as a new one.
+    /// </summary>
+    private static long LoadTurnCount(string directory)
+    {
+        var path = Path.Combine(directory, TurnCountFileName);
+        return File.Exists(path) && long.TryParse(File.ReadAllText(path).Trim(), out var turns) ? turns : 0;
+    }
+
+    private async Task SaveTurnCountAsync(long turns, CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(_directory, TurnCountFileName);
+        var gate = LockFor(path);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await File.WriteAllTextAsync(path, turns.ToString(CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+            // A lost turn count is a slightly wrong denominator on one row's
+            // rate, and nothing else. Not worth failing a turn that has
+            // already answered the person.
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     private async Task AppendAsync(string directory, ArchivePair pair, List<ArchiveRecord> newRecords, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(directory);
@@ -391,7 +510,17 @@ public sealed class ParquetArchiveStore : IArchiveStore
             var key = address(record);
             if (positions.TryGetValue(key, out var at))
             {
-                merged[at] = record;
+                // The new statement wins on every field except the two
+                // nobody stated: a restated fact keeps the history of having
+                // been asked for. Written as a max rather than an assignment
+                // because an incoming row may legitimately carry counts —
+                // RecordRecallAsync writes through this same path.
+                var previous = merged[at];
+                merged[at] = record with
+                {
+                    Hits = Math.Max(previous.Hits, record.Hits),
+                    LastHitAt = Later(previous.LastHitAt, record.LastHitAt),
+                };
             }
             else
             {
@@ -402,6 +531,9 @@ public sealed class ParquetArchiveStore : IArchiveStore
 
         return merged;
     }
+
+    private static DateTimeOffset? Later(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is null ? b : b is null ? a : a > b ? a : b;
 
     private async Task<IReadOnlyList<ArchiveRecord>> ReadPairAsync(string directory, ArchivePair pair, CancellationToken cancellationToken)
     {
@@ -604,7 +736,8 @@ public sealed class ParquetArchiveStore : IArchiveStore
             r.Category, r.Topic, r.Subtopic, r.Subject, r.Key, r.Value,
             DateTimeOffset.Parse(r.Timestamp, CultureInfo.InvariantCulture), r.Domain, r.Importance, r.Sentence ?? "",
             string.IsNullOrEmpty(r.Embedding) ? null : VectorMath.Decode(r.Embedding),
-            r.EmbeddingModel ?? "", r.EmbeddingHash ?? ""))];
+            r.EmbeddingModel ?? "", r.EmbeddingHash ?? "", r.Hits ?? 0,
+            string.IsNullOrEmpty(r.LastHit) ? null : DateTimeOffset.Parse(r.LastHit, CultureInfo.InvariantCulture)))];
     }
 
     public static async Task WriteRecordsAsync(string path, List<ArchiveRecord> records, CancellationToken cancellationToken)
@@ -624,6 +757,8 @@ public sealed class ParquetArchiveStore : IArchiveStore
             Embedding = r.Embedding is { Length: > 0 } v ? VectorMath.Encode(v) : null,
             EmbeddingModel = r.EmbeddingModelId.Length == 0 ? null : r.EmbeddingModelId,
             EmbeddingHash = r.EmbeddingHash.Length == 0 ? null : r.EmbeddingHash,
+            Hits = r.Hits == 0 ? null : r.Hits,
+            LastHit = r.LastHitAt?.ToString("O", CultureInfo.InvariantCulture),
         });
         // Through a temp file, for the reason JsonlAgentStateStore already
         // gives about the persona's state: a crash, a full disk or a killed
