@@ -66,16 +66,6 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private const string FixedTopic = AssistantScope.Reflection;
     private const string FixedSubject = "self";
     private const string FixedKey = "insight";
-    /// <summary>
-    /// Longest a candidate idea or a note may be before it is refused. Not a
-    /// cap — nothing is shortened to fit it; see ParseCandidates. Generous
-    /// against what is asked for (20 and 25 words), because its job is to
-    /// catch a batch that abandoned the format, not to police a line that
-    /// ran a little long: in the 2026-09-09 run a note asked for in 25 words
-    /// came back at roughly a thousand characters and was stored whole.
-    /// </summary>
-    private const int MaxValueChars = 400;
-
     private const double QuietImportance = 0.1;
     private const double PushedImportance = 0.2;
 
@@ -420,17 +410,18 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // simply not asked for then.
         var revisit = previous is null
             ? string.Empty
-            // Shown at the length a note is allowed to be, not at PromptCap's
-            // default. This asymmetry is what made the notes grow: a stored
-            // note had no ceiling, the copy read back had one, so every
-            // batch met its own thought truncated mid-sentence and ending in
-            // an ellipsis, and completing it is the obvious thing to do with
-            // a sentence that stops. The longer result was stored whole,
-            // clipped again next batch, and expanded again — a ratchet that
-            // reached a thousand characters in the 2026-09-09 run. A note
-            // that passed ParseNotes now always arrives whole.
+            // Shown whole, deliberately. It used to go through PromptCap's
+            // default 240, and that asymmetry — no ceiling on the stored
+            // note, a ceiling on the copy read back — is what made the notes
+            // grow. Every batch met its own thought cut off mid-sentence
+            // and ending in an ellipsis, and completing a sentence that
+            // stops is the obvious thing to do; the longer result was stored
+            // whole, clipped again next batch, expanded again. A ratchet
+            // that reached a thousand characters in the 2026-09-09 run. The
+            // note's length is the instructions' job, and a writer that
+            // cannot see what it wrote cannot be asked to keep it short.
             : Environment.NewLine + InstructionFile.Fill(_instructions.For(Name, "revisit"),
-                ("previous", PromptCap.Apply(previous.Text, MaxValueChars)),
+                ("previous", previous.Text),
                 ("topics", string.Join(", ", previous.Pairs.Select(p => $"{p.Category}/{p.Topic}"))));
 
         return InstructionFile.Fill(_instructions.For(Name),
@@ -488,14 +479,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             var scoreText = parts[0].Trim();
             var subtopic = parts[1].Trim();
             var idea = parts[2].Trim();
-            // Over-long lines are dropped, not shortened. ArchiveWriteStyle
-            // asks for the density and says why the asking is where it
-            // stops: truncating on the way in never prevented a long fact,
-            // it stored a mangled one. So the limit is a validator — a row
-            // may be refused, never edited. A batch that ignores the word
-            // count loses that line and keeps the rest.
-            if (idea.Length > 0 && idea.Length <= MaxValueChars && subtopic.Length > 0
-                && double.TryParse(scoreText, NumberStyles.Float, CultureInfo.InvariantCulture, out var score))
+            if (idea.Length > 0 && subtopic.Length > 0 && double.TryParse(scoreText, NumberStyles.Float, CultureInfo.InvariantCulture, out var score))
             {
                 candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), subtopic, idea));
             }
@@ -607,11 +591,6 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
             var text = parts[2].Trim();
             if (text.Length == 0)
-            {
-                continue;
-            }
-
-            if (text.Length > MaxValueChars)
             {
                 continue;
             }

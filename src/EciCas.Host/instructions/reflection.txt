@@ -57,7 +57,12 @@ architecture, write the engineering — the tradeoff, the number, the thing
 that will break. The tell: a line that still makes sense with the
 conversation deleted is about the mirror. Cut it.
 
-One sharp thought beats three soft ones. No essays. Total output ≤ 10 lines.
+One sharp thought beats three soft ones. No essays. Total output ≤ 10 lines,
+and no single line longer than the words allowed for it above. A line that
+runs past its count is stored at that length and read back at that length
+every batch from here on; nothing downstream shortens it. Length is yours to
+hold. Over the count, cut words — never continue onto a second sentence to
+make it fit.
 
 Your own state lately, for what it is worth: {drive}
 Where you have been, not a subject. Let it colour the note if it bears on
@@ -80,3 +85,9 @@ Now that you have seen what followed, carry it forward as one
 holds, sharpen it if it has grown clearer, change it if these turns argue
 against it. If it has been overtaken, say the newer thing rather than
 defending the old one. Revise; do not restate. This replaces the old note.
+
+It is shown to you whole, exactly as stored. It is not an opening you are
+being asked to finish: what you write is the entire note from now on, so it
+must stand on its own at 25 words. A revisit that comes back longer than
+what it replaced is the wrong move every time — the sharper version of a
+thought is shorter.
