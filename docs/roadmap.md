@@ -635,10 +635,19 @@ numbers, rare words. "What is Rex's vet called" is a lexical question
 wearing a semantic costume. Keywords cover that blind spot, fused with
 cosine rather than replacing it.
 
-Extraction is deterministic -- tokenise, drop stopwords, keep capitalised
-tokens, numbers, and terms rare in the corpus. No model. That matters: it
-is what stops keywords reintroducing a write-side call through the back
-door.
+Extraction is deterministic -- tokenise, drop stopwords, and keep what is
+rare in the corpus, with capitalisation and digits as a complement rather
+than as equals. No model. That matters: it is what stops keywords
+reintroducing a write-side call through the back door.
+
+The ordering is measured, not stylistic (batch 22). Casing and digits alone
+keep a third of what v4's answers need -- *penicillin*, *seasick*, *choir*
+are neither capitalised nor numeric, and they are most of what an archive is
+about. Rarity carries the extractor; casing recovers the names and compounds
+stated often enough to stop being rare. Together they lose nothing against
+keeping every non-stopword. What that run cannot settle is the threshold: at
+78 statements almost everything is rare, so the value of *rare* as a filter
+is a v5 question.
 
 ### Two ways to consult a memory
 
@@ -655,6 +664,112 @@ cosine, and no model on the read side either.
 The second mode is most of what makes a twenty-year archive feel like it
 knows someone rather than merely containing them, and it exists only
 because the original text was kept.
+
+### Characterise, specified
+
+The paragraph above is the whole of what was ever written down about the
+mode that justifies keeping raw text, and "SQL, not cosine" is a slogan, not
+a plan. What follows is the plan, and it costs the section one of its
+claims.
+
+**Three query shapes, not one.** They differ in what the filter is and what
+the aggregate counts, so treating them as one mode is what let the design
+stay a paragraph.
+
+- *Trait.* "What was my uncle interested in." Filter by participant or
+  subject, count terms, rank by distinctiveness.
+- *Habit.* "What do I always eat", "how often do I call my mother." Filter,
+  then count **threads and their members**, ranked by recurrence rather than
+  by score. Threading already computes this; habit is the query that spends
+  it.
+- *Change.* "What changed after the divorce", "what did I stop caring
+  about." A split on the time axis, two aggregates, and the diff of the two
+  term distributions. Superseded rows are in scope here by the rule above,
+  and this is the mode that makes keeping them pay.
+
+**The filter is the hard part, and it is not free of a model.** "After the
+divorce" is not a column; it is a date the archive holds as an utterance.
+So Characterise is *Find* then aggregate -- one retrieval to resolve the
+anchor to a timestamp, a participant or a keyword set, then the scan. That
+demotes "no model on the read side either" to false as written: the scan
+needs none, but deciding that a question is a Characterise at all, and what
+its filter is, is a call. It is the same call Intent already makes, so the
+cost is a decision added to an existing prompt rather than a new hop -- but
+it should be written down as a call, because a mode whose routing is
+mis-specced fails by silently answering as *Find*.
+
+**Contrast, not frequency.** Counting terms in the subset returns the
+corpus's own background -- *think*, *really*, *today*. What is wanted is
+what is distinctive about the subset against the archive as a whole: a
+log-odds or tf-idf contrast, computed at read time over two counts. This is
+the technical core of the mode and it is twenty lines and no model. Ranking
+by raw count is the obvious implementation and it is the one that fails, so
+it is an arm in the bench below rather than a footnote.
+
+**What reaches Intent is an aggregate, never the subset.** Ranked terms with
+counts, thread representatives with their date ranges and recurrence, and a
+bounded number of exemplar utterances -- typically the newest, the oldest,
+and the most recurrent. The prompt is therefore constant in archive size,
+which is the property that makes the mode shippable at all: a subset of ten
+thousand rows and one of forty produce the same shape of answer.
+
+**Where it degrades.** A subset under some floor is not an aggregate, it is
+a list -- fall back to handing the rows over as *Find* does, because counts
+over nine rows are noise wearing a number. A subset that is most of the
+archive ("what am I like") is the opposite failure and has no honest answer;
+it should be answered as such rather than by summarising a decade into six
+adjectives. An unresolvable anchor is a question back to the person, not a
+guess at a date.
+
+### Characterise -- pre-registered, before anything is built
+
+Every arm below is measurable and none has been measured. Written before the
+corpus exists, same rule as v3 and v4.
+
+**v4 cannot be the instrument.** Its statements are one-shot, undated and
+unrepeated -- there is no recurrence to count, no time axis to split on, and
+no speaker but one. Every question this mode exists for is unaskable of it.
+The instrument is **v5, a longitudinal corpus**, and its shape is settled
+before generation:
+
+- Utterances carry a timestamp and a speaker, spread over years, and the
+  *distribution is authored first*: a true habit stated twelve times across
+  the span, a decoy stated three, a former habit stated eight times all
+  before a dated hinge and never after. The rendered sentences come second,
+  so the key is structural rather than a judgement about text.
+- Near-miss terms that co-occur with the true answer without being it, or
+  the contrast arm wins by having nothing to discriminate.
+- Deliberately thin subsets, to exercise the floor.
+- One "what am I like" question with no honest answer, scored on refusal.
+
+**The key is a set of terms that must appear and a set that must not**, per
+question -- gross correctness, the same shape as `filing_key.py`, not a
+judgement of phrasing.
+
+**Arms**, over one frozen archive, differing only in what is handed to
+Intent:
+
+    find-only        top-k, the mode the doc asserts cannot answer these
+    count            aggregate, raw term frequency
+    contrast         aggregate, log-odds against the whole archive
+    contrast+thread  the above, plus recurrence and date ranges
+    +exemplars       the above, plus bounded exemplar utterances
+
+`find-only` is the baseline that matters. The claim "top-k cannot answer
+these -- five rows is not what *interested in* means" is the premise the
+entire mode rests on and it is an assertion in a document, not a number. If
+top-30 flat cosine handed over whole answers these adequately, most of this
+section is unnecessary and should be deleted rather than defended.
+
+**The first gate, which needs no corpus and no server.** Every arm here and
+the consolidator's disagreement test both stand on deterministic keyword
+extraction -- tokenise, drop stopwords, keep capitalised tokens, numbers and
+rare terms. That extractor can be run over v4's statements and nulls today,
+scored on whether the tokens an answer actually needs survive it and whether
+the background survives with them. If keywords are noise, the lexical half
+of *Find*, all of *Characterise*, and the consolidator's gate are noise
+together, and no longitudinal corpus is worth writing yet. That is the
+cheapest disconfirmation available and it runs first.
 
 ### Time shards, not importance tiers
 

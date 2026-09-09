@@ -750,3 +750,44 @@ not spend on.
 
 The prediction was mine and it was wrong. v512 ships with the first-person
 glosses as written.
+
+## Batch 22 — the keyword gate, and the roadmap's rule as written fails
+
+`keyword_gate.py`. The first Characterise gate, pre-registered in
+`docs/roadmap.md`. No server, no model, no sampling: the arms differ by
+construction, so there is nothing to interleave and no noise floor.
+
+    arm                keep   yield  oblique  nullyield
+    all              100.0%    4.01   100.0%       1.50
+    cap+num           33.3%    0.72    40.0%       0.00
+    cap+num+rare2    100.0%    3.79   100.0%       1.46
+    cap+num+rare1     95.4%    3.22   100.0%       1.14
+    rare2             92.0%    3.67    90.0%       1.46
+
+**The rule as the roadmap writes it does not work.** "Keep capitalised
+tokens, numbers, and terms rare in the corpus" reads as three parallel
+clauses of similar weight. Casing and digits alone keep 33% -- *penicillin*,
+*seasick*, *choir*, *smoke*, *basement* are none of them capitalised and none
+of them a number, and they are most of what a person's archive is about.
+Rarity is not the third clause, it is the extractor; casing and digits are a
+small complement that recovers the seven questions rarity alone drops
+(*Marit*, *Bodo*, *heat pump* -- names and compounds stated more than twice).
+The roadmap sentence has been corrected to match.
+
+**Keep is at ceiling, which means the gate passes and measures nothing
+else.** cap+num+rare2 loses zero questions against keeping every
+non-stopword. The lexical half of *Find* survives deterministic extraction
+intact on this corpus, so the consolidator's disagreement test and the
+Characterise term counts are not built on sand. That was the question asked
+and it is answered.
+
+**The cost axis is not measurable here and must not be read off this
+table.** v4 is 78 statements, so df <= 2 admits nearly everything: yield 3.79
+against the ceiling's 4.01 is a filter that removed 5% of tokens, not a
+discriminator. Every rarity number above is a property of a corpus of 78, and
+the threshold that matters is the one over thousands of utterances where
+*train*, *cabin* and *engineer* stop being rare. Calibrating it is v5's job,
+not a knob to set now.
+
+The honest reading: the gate is passed, one sentence of the roadmap is
+wrong, and the interesting half of the question is still open.
