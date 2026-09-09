@@ -66,6 +66,16 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     private const string FixedTopic = AssistantScope.Reflection;
     private const string FixedSubject = "self";
     private const string FixedKey = "insight";
+    /// <summary>
+    /// Longest a candidate idea or a note may be before it is refused. Not a
+    /// cap — nothing is shortened to fit it; see ParseCandidates. Generous
+    /// against what is asked for (20 and 25 words), because its job is to
+    /// catch a batch that abandoned the format, not to police a line that
+    /// ran a little long: in the 2026-09-09 run a note asked for in 25 words
+    /// came back at roughly a thousand characters and was stored whole.
+    /// </summary>
+    private const int MaxValueChars = 400;
+
     private const double QuietImportance = 0.1;
     private const double PushedImportance = 0.2;
 
@@ -469,16 +479,16 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             var scoreText = parts[0].Trim();
             var subtopic = parts[1].Trim();
             var idea = parts[2].Trim();
-            if (idea.Length > 0 && subtopic.Length > 0 && double.TryParse(scoreText, NumberStyles.Float, CultureInfo.InvariantCulture, out var score))
+            // Over-long lines are dropped, not shortened. ArchiveWriteStyle
+            // asks for the density and says why the asking is where it
+            // stops: truncating on the way in never prevented a long fact,
+            // it stored a mangled one. So the limit is a validator — a row
+            // may be refused, never edited. A batch that ignores the word
+            // count loses that line and keeps the rest.
+            if (idea.Length > 0 && idea.Length <= MaxValueChars && subtopic.Length > 0
+                && double.TryParse(scoreText, NumberStyles.Float, CultureInfo.InvariantCulture, out var score))
             {
-                // Capped where it is parsed, not where it is pushed. The
-                // pushed idea has always gone through PromptCap; the copies
-                // that land in the archive and in the passage corpus did
-                // not, and in the 2026-09-09 run a note asked for in 25
-                // words came back at a thousand characters and was stored
-                // whole. A cap the writer cannot talk its way past is the
-                // only one that holds.
-                candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), subtopic, PromptCap.Apply(idea)));
+                candidates.Add(new Candidate(Math.Clamp(score, 0.0, 1.0), subtopic, idea));
             }
         }
 
@@ -592,7 +602,12 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 continue;
             }
 
-            notes.Add(new Note(kind == "revisit", PromptCap.Apply(text), ParsePairs(parts[1])));
+            if (text.Length > MaxValueChars)
+            {
+                continue;
+            }
+
+            notes.Add(new Note(kind == "revisit", text, ParsePairs(parts[1])));
         }
 
         return notes;
