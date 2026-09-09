@@ -895,3 +895,69 @@ agrees with `now_correct` (batch 23) and with the consolidator gate.
 Caveat: 45 query observations total, anchored on subject phrases rather than
 authored questions. `distinct` is well sampled; `current` and `stale` are
 directionally right and not precise to a percentage point.
+
+## Batch 25 — the threshold as a gate, and two reads instead of one
+
+### The gate (`consolidator_gate.py`, 20 000 rows, 6 seeds)
+
+Batch 23 scored the threshold as a verdict: argmax joins and every mistake is
+permanent. The design has a consolidator reading the top five candidates, so
+the threshold's job is candidate *recall* and precision is the model's. `auto`
+is the argmax arm, `oracle` a perfect adjudicator over the five that mints a
+new thread when none belongs -- an upper bound, not a prediction.
+
+    mode       thr  recall@5     call    saved    merge    split      now
+    oracle    0.85     0.999    0.311    0.689    0.000    0.043    0.933
+    oracle    0.88     0.997    0.204    0.795    0.000    0.118    0.800
+    oracle    0.92     0.994    0.044    0.956    0.000    0.151    0.617
+    auto      0.92     0.729    0.300    0.699    0.188    0.154    0.617
+
+**Adjudication absorbs the whole merge axis**, including the adversarial pairs,
+at every threshold down to 0.84. The reason 0.93 looked right in batch 23 is
+that merge error was the only defence available.
+
+**Recall@5 is ~0.999 flat across the band**, so tightening buys nothing on the
+axis the threshold actually controls. What it costs is `now` (0.933 → 0.617)
+and `split` (0.043 → 0.151) -- errors adjudication *cannot* fix, because a
+thread absent from the candidate set cannot be recovered by any model reading
+it. The only argument for a high threshold is the bill: post-keyword-shortcut
+call rate 0.31 at 0.85 against 0.04 at 0.92.
+
+Verdict: **0.85--0.86 with a top-5 consolidator**, not 0.92 and not 0.93. The
+consolidator is not a cleanup pass around a well-chosen threshold; it is what
+makes a loose threshold correct.
+
+### Two reads (`dual_read.py`, 8 000 rows, 3 seeds, collapse at 0.86)
+
+    arm           distinct   eras   current   stale
+    B flat            1.47   1.84     0.867   0.133
+    B collapse        3.87   4.29     0.867   0.133
+    A flat            1.60   1.60     0.933   0.000
+    A collapse        3.93   3.93     0.933   0.000
+    A +mmr            4.07   4.07     0.933   0.000
+    A +noise          3.82   3.82     0.933   0.000
+
+A is `superseded_by IS NULL` (what is true), B unrestricted (what changed).
+
+**The filter takes stale to 0.000** and lifts `current` to 0.933. Batch 24
+reached the same place by heuristic (newest row of the thread); the filter
+reaches it by construction and degrades honestly when the consolidator has not
+run -- the link is absent, so the row stays eligible.
+
+**Filtering and collapsing are independent and both are needed.** `A flat` is
+still 1.60 distinct facts: the filter removes wrong-era duplicates, collapse
+removes same-era restatements, and neither does the other's job.
+
+**B is not a worse A, it is a different read.** `eras` 4.29 against `distinct`
+3.87 means B returns one subject at two values on purpose. That is the
+`change` shape, and it is why B must not be filtered.
+
+**MMR is a small real gain; score jitter is a small real loss.** 3.93 → 4.07
+at lambda 0.7, 3.93 → 3.82 with noise, neither touching `current`/`stale`.
+Diversity is worth buying on the redundancy axis and not by degrading rank.
+`hit_rate` as a primary sort is the flat-top-5 failure by another road -- the
+loudest fact gets louder; keep it as a within-thread tiebreaker.
+
+Caveat: `superseded_by` is modelled perfectly (a row is current iff it carries
+its thread's latest value), so read A is the ceiling the consolidator must
+reach.
