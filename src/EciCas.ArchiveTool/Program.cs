@@ -366,6 +366,16 @@ static async Task ResetAsync(string directory)
         File.Delete(file);
     }
 
+    // The utterance log's turn counter is not a parquet file, and it is the
+    // denominator of every hit rate in it. Left behind, a reset archive
+    // reports a thousand turns and no rows, which is a rate of zero over a
+    // corpus that never existed.
+    var turns = Path.Combine(directory, ParquetUtteranceLog.DirectoryName, ParquetUtteranceLog.TurnCountFileName);
+    if (File.Exists(turns))
+    {
+        File.Delete(turns);
+    }
+
     var record = new ArchiveRecord(
         AssistantScope.Name, AssistantScope.System, "eci", "this", "version", "0.1",
         DateTimeOffset.UtcNow, ArchiveDomain.Internal, 1.0);
