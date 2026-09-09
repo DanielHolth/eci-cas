@@ -1286,6 +1286,75 @@ instruction files and different seeded vocabularies. That is a real
 authoring cost per persona and belongs here as work rather than as an
 assumption. See [`product.md`](product.md) for which one launches.
 
+## The emergency reflex can detect, but cannot act (not started)
+
+Impulse now recognises a life-threatening turn — heavy bleeding, someone not
+breathing, a kitchen on fire, "call an ambulance" — as a distance in the
+embedding space rather than a keyword, and it interrupts the turn to say the
+persona is paying attention. That promise is currently all it has. Nothing
+in the prototype can call an ambulance, raise an alarm, or reach a named
+next-of-kin.
+
+That capability belongs on the **toolbox agent** above, as its most
+consequential handler: an emergency call is an action, so it passes the same
+Governance gate every device call does, and it is the one action where a Red
+verdict has to be argued for rather than assumed. Until it exists the reflex
+is calibration work — the floor and margin in `Impulse:ReflexFloor` /
+`ReflexMargin` are estimates, and every turn logs both scores so real
+traffic can set them before anything is wired to a phone.
+
+## Toolkit for assisting the disabled (not started)
+
+The companion's reason to exist, stated as work rather than as a motive.
+Three impairments, three different toolkits, one persona:
+
+- **Speech.** Compose and speak for someone who cannot; hear someone whose
+  speech a general recogniser fails on. The 512-character perception bracket
+  and the reply-length knob are the wrong shape here and will need their own
+  profile.
+- **Vision.** Describe what is in front of the camera on request, read text
+  aloud, find a named object. Depends on the screen/camera perception below.
+- **Cognition.** Reminders that survive being forgotten, step-by-step
+  prompting through a task, recognising that the same question has been
+  asked four times without saying so. The last one is a Reflection
+  behaviour, not a tool.
+
+Each is a set of handlers on the toolbox agent plus, probably, a per-need
+instruction profile — this is where "one instance per person" stops being a
+privacy argument and starts being a functional one.
+
+## Reading the screen as perception (not started)
+
+Perception is text someone typed or said. It should also be **what is on a
+screen** — either the device's own screen read directly, or another screen
+seen through the camera. A phone held up to a parking meter, a laptop the
+person cannot read, an error dialog nobody can parse.
+
+Two paths with different costs: direct capture is exact but platform-bound
+and permission-heavy; the camera works on any screen in the room and needs a
+vision model plus OCR. Both arrive on `events.perception` as an ordinary
+turn with a different `triggered_by`, the same seam device responses use, so
+nothing downstream learns a new contract.
+
+The open question is *when* it looks. Continuous capture is a surveillance
+device; on request only is a tool. Start at on-request.
+
+## Perception embeds once — needs evaluation
+
+The same utterance is embedded more than once per turn: Librarian embeds it
+as `EmbeddingKind.Query`, Hindsight embeds it with the default `Passage`
+(`HindsightAgent.cs:176`), and the reflex asks as `Query` again. The caching
+provider keys on `(text, kind)`, so the two `Query` calls collapse and the
+`Passage` one does not.
+
+Whether that is worth fixing is genuinely unclear, which is why this is
+flagged for evaluation rather than scheduled. The asymmetry is not
+accidental — on a multilingual-e5 model query and passage are two encoders,
+and forcing one kind to serve both is a retrieval-quality change, not a
+caching change. Measure what a second pass actually costs on the local model
+first; if it is noise, this stays as it is.
+
+
 ## Long-term goals
 
 **iOS**, via the same shared business logic the Android client runs on.
