@@ -120,10 +120,12 @@ public sealed class TierCatalog
             _knobs.MaxSentences = preset.Knobs.MaxSentences;
             _knobs.ReflectionEvery = preset.Knobs.ReflectionEvery;
             _knobs.PerceptionChars = preset.Knobs.PerceptionChars;
+            _knobs.ContextTurns = preset.Knobs.ContextTurns;
             _knobs.Mood = preset.Knobs.Mood;
             _knobDefaults.MaxSentences = preset.Knobs.MaxSentences;
             _knobDefaults.ReflectionEvery = preset.Knobs.ReflectionEvery;
             _knobDefaults.PerceptionChars = preset.Knobs.PerceptionChars;
+            _knobDefaults.ContextTurns = preset.Knobs.ContextTurns;
             _knobDefaults.Mood = preset.Knobs.Mood;
 
             Active = preset.Name;

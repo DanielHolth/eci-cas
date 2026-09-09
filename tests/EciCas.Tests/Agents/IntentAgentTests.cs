@@ -1,6 +1,7 @@
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
+using EciCas.Agents.TurnWindow;
 using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
@@ -19,7 +20,8 @@ public class IntentAgentTests
         var bus = new ChannelBus(activity);
         var proposals = bus.Subscribe(Topics.Proposal);
         var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
-            Options.Create(new SubstrateOptions { Agents = { ["Intent"] = new SubstrateAgentEntry() } }), ShippedInstructions.Store, new RuntimeKnobs());
+            Options.Create(new SubstrateOptions { Agents = { ["Intent"] = new SubstrateAgentEntry() } }), ShippedInstructions.Store, new RuntimeKnobs(),
+            new TurnWindowAgent(bus, activity, NullLogger<TurnWindowAgent>.Instance));
 
         var facts = new[] { new ArchiveRecord("person", "family", "son", "marcus holth", "birthdate", "2020-08-28", DateTimeOffset.UtcNow) };
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
@@ -48,7 +50,8 @@ public class IntentAgentTests
         var bus = new ChannelBus(activity);
         var proposals = bus.Subscribe(Topics.Proposal);
         var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
-            Options.Create(new SubstrateOptions { Agents = { ["Intent"] = new SubstrateAgentEntry() } }), ShippedInstructions.Store, new RuntimeKnobs());
+            Options.Create(new SubstrateOptions { Agents = { ["Intent"] = new SubstrateAgentEntry() } }), ShippedInstructions.Store, new RuntimeKnobs(),
+            new TurnWindowAgent(bus, activity, NullLogger<TurnWindowAgent>.Instance));
 
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
             .With(PerceptionAgent.TextKey, "when is the wedding")
@@ -86,7 +89,8 @@ public class IntentAgentTests
             var bus = new ChannelBus(activity);
             var proposals = bus.Subscribe(Topics.Proposal);
             var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
-                Options.Create(new SubstrateOptions { Agents = { ["Intent"] = new SubstrateAgentEntry() } }), ShippedInstructions.Store, new RuntimeKnobs());
+                Options.Create(new SubstrateOptions { Agents = { ["Intent"] = new SubstrateAgentEntry() } }), ShippedInstructions.Store, new RuntimeKnobs(),
+            new TurnWindowAgent(bus, activity, NullLogger<TurnWindowAgent>.Instance));
 
             await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, meta), CancellationToken.None);
             Assert.True(proposals.TryRead(out var proposal));

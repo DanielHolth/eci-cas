@@ -5,7 +5,6 @@ import { useState } from "react";
 import type { TurnRecord } from "@/types/events";
 
 const KIND_STYLE = {
-  recalled: { dot: "bg-orange-500", label: "Recalled" },
   learned: { dot: "bg-emerald-500", label: "Learned" },
   reflection: { dot: "bg-indigo-500", label: "Reflection" },
 } as const;
@@ -19,16 +18,19 @@ interface Thought {
   correlationId: string;
 }
 
-/** Newest first: what Recall read, Archivist wrote ("Learned"), and
- * Reflection noticed, across the whole session — the same terse pill the
- * center column used to show for one turn's bundle, now a running list so a
- * fact recalled three turns ago is still readable. */
+/** Newest first: what Archivist wrote ("Learned") and what Reflection
+ * noticed, across the whole session.
+ *
+ * What Recall read is deliberately absent. Recall fires on every turn and
+ * returns its depth whether or not the turn needed anything, so the reads
+ * were most of the panel and most of them were beside the point -- the
+ * thoughts a person wants to see are the ones the system arrived at, not
+ * the rows it happened to touch getting there. The reads are still whole in
+ * the event drawer, which is where you go when you want to know why a turn
+ * answered the way it did. */
 function thoughtsOf(records: TurnRecord[]): Thought[] {
   const out: Thought[] = [];
   for (const r of [...records].reverse()) {
-    r.reads.forEach((t, i) =>
-      out.push({ id: `${r.correlationId}-recalled-${i}`, kind: "recalled", text: t, correlationId: r.correlationId }),
-    );
     r.writes.forEach((t, i) =>
       out.push({ id: `${r.correlationId}-learned-${i}`, kind: "learned", text: t, correlationId: r.correlationId }),
     );
@@ -80,7 +82,7 @@ export function ThoughtsPanel({
       <ul className="flex flex-col gap-1.5 p-2">
         {thoughts.length === 0 && (
           <li className="px-2 py-4 text-xs text-neutral-400 dark:text-neutral-500">
-            Nothing recalled, learned, or reflected on yet.
+            Nothing learned or reflected on yet.
           </li>
         )}
         {thoughts.map((t) => {

@@ -4,6 +4,7 @@ using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
+using EciCas.Agents.TurnWindow;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Identity;
 using EciCas.Bus;
@@ -33,13 +34,15 @@ public sealed class IntentAgent : CognitiveAgent<string>
     private readonly IMessageBus _bus;
     private readonly IInstructionStore _instructions;
     private readonly RuntimeKnobs _knobs;
+    private readonly TurnWindowAgent _window;
 
-    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates, IInstructionStore instructions, RuntimeKnobs knobs)
+    public IntentAgent(IMessageBus bus, BusActivityTracker activity, ILogger<IntentAgent> logger, ISubstrateProvider substrate, IOptions<SubstrateOptions> substrates, IInstructionStore instructions, RuntimeKnobs knobs, TurnWindowAgent window)
         : base(bus, activity, logger, substrate, substrates)
     {
         _bus = bus;
         _instructions = instructions;
         _knobs = knobs;
+        _window = window;
     }
 
     public override string Name => "Intent";
@@ -47,8 +50,29 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
     protected override FallbackPosture Fallback => FallbackPosture.Open;
 
-    protected override string BuildPrompt(Envelope envelope) =>
-        _instructions.For(Name) + Environment.NewLine + Environment.NewLine + BuildContext(envelope, _knobs.MaxSentences, _knobs.Mood);
+    /// <summary>
+    /// Rules, then what was said before, then this turn.
+    ///
+    /// The window goes here and not into <see cref="BuildContext"/> on
+    /// purpose. Context is what Reflection reads back at a PromptCap's
+    /// width, and a transcript pushed through that hole would push the
+    /// actual "Reply to:" out the far end -- Reflection would score a turn
+    /// by its history and never see its subject. Reflection gets the same
+    /// benefit by rendering its own batch through the same renderer.
+    /// </summary>
+    protected override string BuildPrompt(Envelope envelope)
+    {
+        var recent = _window.Recent(_knobs.ContextTurns, envelope.CorrelationId,
+            envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
+
+        var window = recent.Count == 0
+            ? string.Empty
+            : "Earlier in this conversation:" + Environment.NewLine + TurnWindowAgent.Render(recent)
+                + Environment.NewLine + Environment.NewLine;
+
+        return _instructions.For(Name) + Environment.NewLine + Environment.NewLine
+            + window + BuildContext(envelope, _knobs.MaxSentences, _knobs.Mood);
+    }
 
     /// <summary>
     /// Everything this turn actually contributed: the person's text plus

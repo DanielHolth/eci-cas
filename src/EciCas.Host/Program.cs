@@ -12,6 +12,7 @@ using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
+using EciCas.Agents.TurnWindow;
 using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
@@ -328,10 +329,12 @@ builder.Services.AddSingleton(sp => new RuntimeKnobs
     MaxSentences = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.MaxSentences,
     ReflectionEvery = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ReflectionEvery,
     PerceptionChars = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.PerceptionChars,
+    ContextTurns = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ContextTurns,
     Mood = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Mood,
 });
 
 RegisterAgent<PerceptionAgent>(builder.Services);
+RegisterAgent<TurnWindowAgent>(builder.Services);
 RegisterAgent<ImpulseAgent>(builder.Services);
 RegisterAgent<LibrarianAgent>(builder.Services);
 RegisterAgent<RecallAgent>(builder.Services);
@@ -430,6 +433,11 @@ app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog
         knobs.PerceptionChars = p;
     }
 
+    if (request.ContextTurns is { } c)
+    {
+        knobs.ContextTurns = c;
+    }
+
     if (request.RecallDepth is { } d)
     {
         knobs.RecallDepth = d;
@@ -481,9 +489,10 @@ app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<
             || !TryWriteNumber(ref text, "MaxSentences", knobs.MaxSentences)
             || !TryWriteNumber(ref text, "ReflectionEvery", knobs.ReflectionEvery)
             || !TryWriteNumber(ref text, "PerceptionChars", knobs.PerceptionChars)
+            || !TryWriteNumber(ref text, "ContextTurns", knobs.ContextTurns)
             || !TryWriteString(ref text, "Mood", knobs.Mood.ToString()))
         {
-            return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Recall:Threads, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:Mood.");
+            return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Recall:Threads, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.");
         }
 
         // Parsed to prove the edit, not to produce it. Round-tripping through
@@ -511,6 +520,7 @@ app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<
     knobDefaults.Value.MaxSentences = knobs.MaxSentences;
     knobDefaults.Value.ReflectionEvery = knobs.ReflectionEvery;
     knobDefaults.Value.PerceptionChars = knobs.PerceptionChars;
+    knobDefaults.Value.ContextTurns = knobs.ContextTurns;
     knobDefaults.Value.Mood = knobs.Mood;
 
     return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions);
@@ -523,6 +533,7 @@ static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOption
     maxSentences = knobs.MaxSentences,
     reflectionEvery = knobs.ReflectionEvery,
     perceptionChars = knobs.PerceptionChars,
+    contextTurns = knobs.ContextTurns,
     recallDepth = knobs.RecallDepth,
     recallThreads = knobs.RecallThreads,
     // What the tier file on disk says, so the surface can grey its Save
@@ -532,6 +543,7 @@ static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOption
     savedMaxSentences = knobDefaults.MaxSentences,
     savedReflectionEvery = knobDefaults.ReflectionEvery,
     savedPerceptionChars = knobDefaults.PerceptionChars,
+    savedContextTurns = knobDefaults.ContextTurns,
     savedMood = knobDefaults.Mood.ToString(),
     mood = knobs.Mood.ToString(),
     moods = Enum.GetNames<Mood>(),
@@ -784,6 +796,6 @@ static void RegisterAgent<TAgent>(IServiceCollection services) where TAgent : Ag
 
 internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? RecallDepth = null, int? RecallThreads = null, string? Mood = null, string? Tier = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? ContextTurns = null, int? RecallDepth = null, int? RecallThreads = null, string? Mood = null, string? Tier = null);
 
 internal sealed record CreateProfileRequest(string DisplayName, string Avatar);

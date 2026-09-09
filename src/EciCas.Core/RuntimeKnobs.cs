@@ -17,6 +17,7 @@ public sealed class RuntimeKnobs
     private int _recallDepth = 5;
     private int _recallThreads = 3;
     private int _perceptionChars = 512;
+    private int _contextTurns = 5;
     private Mood _mood = Mood.Neutral;
 
     /// <summary>Upper bound Intent is told to keep replies within, clamped
@@ -130,6 +131,22 @@ public sealed class RuntimeKnobs
         set => _perceptionChars = Math.Clamp(value, 64, 2048);
     }
 
+    /// <summary>
+    /// How many concluded turns Intent is shown before the one it is
+    /// answering -- the running transcript, verbatim, oldest first.
+    ///
+    /// Zero is a setting, not an off switch. The bound is the smallest
+    /// tier's attention rather than its price: a 4B's instruction-following
+    /// decays with prompt length, and Minimal would trade the length bracket
+    /// and the mood vocabulary it can obey for a transcript it cannot hold.
+    /// It is a free tier, and this is one of the things that makes it free.
+    /// </summary>
+    public int ContextTurns
+    {
+        get => _contextTurns;
+        set => _contextTurns = Math.Clamp(value, 0, 8);
+    }
+
     /// <summary>How the persona feels this turn, on top of whatever
     /// Identity's own advisory already says about who it is.
     ///
@@ -172,6 +189,7 @@ public sealed class KnobDefaults
     public int MaxSentences { get; set; } = 2;
     public int ReflectionEvery { get; set; } = 5;
     public int PerceptionChars { get; set; } = 512;
+    public int ContextTurns { get; set; } = 5;
     public Mood Mood { get; set; } = Mood.Neutral;
 }
 

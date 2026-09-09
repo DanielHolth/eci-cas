@@ -7,6 +7,7 @@ import {
   saveKnobs,
   setMaxSentences,
   setPerceptionChars,
+  setContextTurns,
   setRecallDepth,
   setRecallThreads,
   setReflectionEvery,
@@ -74,6 +75,7 @@ export function KnobsPanel() {
       knobs.maxSentences !== knobs.savedMaxSentences ||
       knobs.reflectionEvery !== knobs.savedReflectionEvery ||
       knobs.perceptionChars !== knobs.savedPerceptionChars ||
+      knobs.contextTurns !== knobs.savedContextTurns ||
       knobs.mood !== knobs.savedMood);
 
   async function save() {
@@ -183,6 +185,25 @@ export function KnobsPanel() {
           value={knobs?.perceptionChars ?? 512}
           disabled={knobs === null}
           onChange={(e) => apply("perceptionChars", Number(e.target.value), setPerceptionChars)}
+          className="accent-neutral-700 dark:accent-neutral-300"
+        />
+      </label>
+
+      <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
+        <span className="flex items-center justify-between">
+          <span title="Concluded turns shown to Intent before the one it is answering. Zero is a setting, not an off switch: the smallest tier trades the transcript for instructions it can still obey." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Context window</span>
+          <span className="font-mono text-neutral-800 dark:text-neutral-100">
+            {knobs === null ? "…" : knobs.contextTurns === 0 ? "none" : `${knobs.contextTurns} turns`}
+          </span>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={8}
+          step={1}
+          value={knobs?.contextTurns ?? 5}
+          disabled={knobs === null}
+          onChange={(e) => apply("contextTurns", Number(e.target.value), setContextTurns)}
           className="accent-neutral-700 dark:accent-neutral-300"
         />
       </label>

@@ -7,6 +7,7 @@ using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
+using EciCas.Agents.TurnWindow;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -398,8 +399,10 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
     private string BuildBatchPrompt(List<BufferedConclusion> batch, Passage? previous, string driveTrend)
     {
-        var turns = string.Join("\n\n", batch.Select((b, i) =>
-            $"{i + 1}. Given: {PromptCap.Apply(b.Context)}\n   Replied: {PromptCap.Apply(b.ReplyText)}"));
+        // Same renderer as the window Intent reads, so the transcript a
+        // batch is judged from and the transcript a reply was written from
+        // are one shape rather than two that drift.
+        var turns = TurnWindowAgent.Render(batch.Select(b => (b.Context, b.ReplyText)));
 
         // The previous batch's note goes back in so its rewrite is a second
         // reading of the same event-series with hindsight, not a fresh guess
