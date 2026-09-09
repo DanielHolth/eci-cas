@@ -13,6 +13,7 @@ using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Security;
+using EciCas.Agents.Utterances;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -265,6 +266,7 @@ public class SmokeTests
                     ["Reflection"] = new SubstrateAgentEntry(),
                     ["Archivist"] = new SubstrateAgentEntry(),
                     ["Cataloger"] = new SubstrateAgentEntry(),
+                    ["consolidator"] = new SubstrateAgentEntry(),
                 },
             }));
             services.AddSingleton(Options.Create(new RecallOptions()));
@@ -272,6 +274,17 @@ public class SmokeTests
             services.AddSingleton(Options.Create(new CatalogerOptions()));
             services.AddSingleton(Options.Create(new ReflectionOptions()));
             services.AddSingleton(Options.Create(new PassageOptions()));
+
+            // The inverted archive is off in shipped config, but its agents
+            // are in the assembly, and this test resolves every agent the
+            // assembly declares. So the log and its two collaborators are
+            // registered here unconditionally -- what is flag-gated is which
+            // agents Program.cs starts, not whether they can be built.
+            services.AddSingleton(Options.Create(new UtteranceOptions()));
+            services.AddSingleton<IUtteranceLog>(new ParquetUtteranceLog(Path.Combine(_dir, "utterances")));
+            services.AddSingleton<IUtteranceConsolidator>(new NullUtteranceConsolidator());
+            services.AddSingleton<UtteranceConsult>();
+            services.AddSingleton<ThreadWeaver>();
 
             foreach (var type in typeof(GovernanceAgent).Assembly.GetTypes()
                 .Where(t => t is { IsAbstract: false, IsClass: true } && t.IsSubclassOf(typeof(AgentBase))))

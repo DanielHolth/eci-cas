@@ -51,7 +51,7 @@ builder.Services.AddSubstrates(builder.Configuration);
 await builder.AddStoresAsync();
 
 builder.AddKnobs(tier);
-builder.Services.AddAgents();
+builder.Services.AddAgents(builder.Configuration);
 
 var app = builder.Build();
 

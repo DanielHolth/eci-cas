@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Globalization;
+using System.Text;
 using System.Text.Json.Nodes;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
@@ -219,6 +220,20 @@ public sealed class IntentAgent : CognitiveAgent<string>
         var array = new JsonArray();
         foreach (var f in facts)
         {
+            // An addressless fact is an utterance from the inverted archive,
+            // where the sentence is the record and the five-part address is
+            // the thing that was deleted. Rendering it the pair way would put
+            // "////" in the prompt and drop the only content there is.
+            if (f.Category.Length == 0 && f.Key.Length == 0)
+            {
+                array.Add(new JsonObject
+                {
+                    ["Said"] = f.Sentence,
+                    ["When"] = f.Timestamp.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                });
+                continue;
+            }
+
             array.Add(new JsonObject
             {
                 [$"{f.Category}/{f.Topic}/{f.Subtopic}/{f.Subject}/{f.Key}"] = f.Value,

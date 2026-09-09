@@ -5,6 +5,7 @@ using EciCas.Agents.Librarian;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
+using EciCas.Agents.Utterances;
 using EciCas.Core;
 using EciCas.Host.Telemetry;
 using EciCas.Host.TurnLog;
@@ -32,6 +33,7 @@ internal static class OptionsRegistration
         services.Configure<ImpulseOptions>(configuration.GetSection("Impulse"));
         services.Configure<ReflectionOptions>(configuration.GetSection("Reflection"));
         services.Configure<PassageOptions>(configuration.GetSection("Passages"));
+        services.Configure<UtteranceOptions>(configuration.GetSection("Utterances"));
         services.Configure<EmbeddingOptions>(configuration.GetSection("Embedding"));
         services.Configure<ConsoleOptions>(configuration.GetSection("Console"));
         services.Configure<TurnLogOptions>(configuration.GetSection("TurnLog"));

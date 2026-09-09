@@ -4,6 +4,8 @@ using EciCas.Agents.Recall;
 using EciCas.Agents.Security;
 using EciCas.Core;
 using Microsoft.Extensions.Configuration;
+using EciCas.Agents.Utterances;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EciCas.Host.Startup;
@@ -112,6 +114,24 @@ internal static class StoreRegistration
         // a self-critique belongs to the persona the way the "assistant" category
         // already does.
         services.AddSingleton<IPassageStore>(new ParquetPassageStore(archiveDirectory));
+
+        // The inverted archive: an append-only log of what was said, beside
+        // the pair files rather than instead of them. Registered
+        // unconditionally and cheap when unused -- it reads nothing until
+        // something asks -- so the flag that swaps the agents does not also
+        // have to swap the storage.
+        services.AddSingleton<IUtteranceLog>(new ParquetUtteranceLog(archiveDirectory));
+        services.AddSingleton<UtteranceConsult>();
+        services.AddSingleton<ThreadWeaver>();
+
+        // The one model call the write path may make, and it is gated. With
+        // Utterances:ConsolidatorEnabled false the null implementation stands
+        // in and every candidate set resolves to a new thread -- a deliberate
+        // split, because a wrong merge is the error read time cannot undo.
+        services.AddSingleton<IUtteranceConsolidator>(sp =>
+            sp.GetRequiredService<IOptions<UtteranceOptions>>().Value.ConsolidatorEnabled
+                ? ActivatorUtilities.CreateInstance<SubstrateConsolidator>(sp)
+                : new NullUtteranceConsolidator());
 
 
         // Profiles live beside the archive they scope — one directory per person
