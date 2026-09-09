@@ -1286,6 +1286,61 @@ instruction files and different seeded vocabularies. That is a real
 authoring cost per persona and belongs here as work rather than as an
 assumption. See [`product.md`](product.md) for which one launches.
 
+## Boot recovery — a diagnostic that repairs before the host refuses (not started)
+
+A single bad file on disk currently stops the whole host. On 2026-09-09 an
+empty column in `archive/passages.parquet` threw
+`"The input does not contain any JSON tokens"` out of
+`ParquetPassageStore.FromRow` during startup, and the only way past it was
+to know which file to delete. Nothing in the product tells a person that,
+and on a phone there is no shell to delete it from.
+
+The fix is not per-call tolerance — that was tried in c8a736d and reverted
+in 820dd42, on the standing rule that a stale store is truncated rather
+than read through a legacy-schema shim. The fix is a **recovery agent that
+runs before the agents start**, checks the things that can rot, and repairs
+or quarantines what it finds.
+
+What it should check, all of it drawn from failures already seen:
+
+- **Parquet stores** — every archive pair, the passage store, the profile
+  store: open, read one row, and confirm the columns parse. A file that
+  fails is moved to `archive/quarantine/<name>.<timestamp>` rather than
+  deleted, so a bug that quarantines a good file is recoverable and a
+  person is never silently down a corpus.
+- **Schema drift** — a store written by an older shape of the code. Same
+  treatment: quarantine, report, continue with an empty store, because a
+  cold archive is a working product and a refused boot is not.
+- **The vector sidecar** — rows whose embedding is missing or the wrong
+  dimension, which `ArchiveBackfill` already fixes but only for the files
+  it can open.
+- **Instruction files** — each one parses, and every `{placeholder}` an
+  agent fills is actually present. A renamed placeholder currently surfaces
+  as a model behaving oddly, not as an error.
+- **The routing manifest** — already enforced at boot, and the one check of
+  this kind that exists. It is the model for the rest: state the drift by
+  name, in one line, at the moment it is detectable.
+- **Substrate reachability** — one probe per configured provider. Not
+  fatal; `SubstrateWarmup` already does the call, and reporting what came
+  back is nearly free.
+
+Two things fall out of it:
+
+**A report, not just a repair.** Boot should print what it checked, what it
+fixed, and what it quarantined — and that same report is what a person taps
+"something is wrong" to see. It is the first piece of the diagnostic agent
+the config direction assumes: an agent that reads its own health, changes a
+setting, and reboots needs somewhere to read health *from*.
+
+**A toolkit the persona can reach.** Once the checks exist as functions
+rather than as startup code, they are handlers on the toolbox agent, and
+Morrow can run its own diagnostic mid-session when a turn goes wrong —
+which is the version of this that matters on a device with no operator.
+
+Sequenced after the toolbox agent for the handler half, but the boot half
+is independent and small, and every week it does not exist is a week where
+one corrupt file is indistinguishable from a dead product.
+
 ## The emergency reflex can detect, but cannot act (not started)
 
 Impulse now recognises a life-threatening turn — heavy bleeding, someone not
