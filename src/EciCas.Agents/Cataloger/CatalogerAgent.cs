@@ -249,7 +249,7 @@ public sealed class CatalogerAgent : AgentBase, ICognitiveAgent
             // own entire input names no drawer.
             return result.Text.Contains(prompt, StringComparison.Ordinal) ? null : result.Text;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             var cause = SubstrateHealth.Classify(ex);
             _logger.LogWarning("{Agent} filing call {Cause}, skipping", Name, cause);

@@ -37,6 +37,29 @@ public static class SubstrateHealth
     public const string TimedOut = "timed out";
     public const string Refused = "refused";
 
+    /// <summary>
+    /// True only when this cancellation is the host going away — the caller's
+    /// own token is the one that fired.
+    ///
+    /// Every substrate caller used to swallow the whole OperationCanceledException
+    /// family with <c>when (ex is not OperationCanceledException)</c>, on the
+    /// reading that a cancelled call is a shutdown and shutdown is not a
+    /// failure worth naming. But HttpClient.Timeout throws
+    /// TaskCanceledException, which is one of that family, so a call that
+    /// simply took longer than Providers:TimeoutMs left the catch untaken:
+    /// no degraded mark, no telemetry, no fallback published, nothing in the
+    /// turn log. Classify has said "timed out" since it was written and could
+    /// not be reached from any of them.
+    ///
+    /// Measured on 2026-09-09: Archivist made no substrate call on any of
+    /// twelve turns and published no facts envelope, so Cataloger — which
+    /// counts turns, not facts — never flushed either, and nothing about the
+    /// person reached the archive for the whole session while the persona's
+    /// own reflection passages wrote normally.
+    /// </summary>
+    public static bool IsShutdown(Exception ex, CancellationToken cancellationToken) =>
+        ex is OperationCanceledException && cancellationToken.IsCancellationRequested;
+
     /// <summary>No-ops when the call succeeded, so callers need no branch of their own.</summary>
     public static MetaBag Mark(MetaBag meta, string? cause) =>
         cause is null ? meta : meta.With(DegradedKey, cause);

@@ -254,7 +254,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             SubstrateTrace.Publish(_bus, envelope, Name, result);
             Publish(envelope, Merge(WithOverflow(ParsePairs(result.Text, shown), index), remembered), degraded: null, queryVector);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             var cause = SubstrateHealth.Classify(ex);
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
@@ -352,7 +352,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             var vectors = await _embeddings.EmbedAsync([text], EmbeddingKind.Query, cancellationToken).ConfigureAwait(false);
             return vectors.Count == 0 ? null : vectors[0];
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             _logger.LogDebug(ex, "{Agent} could not embed the turn; continuing without vector leads", Name);
             return null;

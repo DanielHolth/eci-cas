@@ -197,7 +197,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             mood = ParseMood(result.Text);
             notes = ParseNotes(result.Text);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             // Closed fallback posture: a broken substrate call publishes no
             // idea, rather than guessing at one. But the raw material goes

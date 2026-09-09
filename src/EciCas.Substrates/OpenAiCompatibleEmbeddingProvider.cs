@@ -63,7 +63,7 @@ public sealed class OpenAiCompatibleEmbeddingProvider : IEmbeddingProvider
                 .OrderBy(d => d.Index)
                 .Select(d => VectorMath.Normalize(d.Embedding))];
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             _logger.LogWarning("Embedding call {Cause}, passage retrieval skipped this turn", SubstrateHealth.Classify(ex));
             return [];

@@ -100,7 +100,7 @@ public abstract class CognitiveAgent<TResult> : AgentBase, ICognitiveAgent
 
             Publish(envelope, prompt, ParseResult(diagnostics), diagnostics, degraded: null);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             var cause = SubstrateHealth.Classify(ex);
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;

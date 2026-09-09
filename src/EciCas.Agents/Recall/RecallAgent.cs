@@ -284,7 +284,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
             var vectors = await _embeddings.EmbedAsync([text], EmbeddingKind.Query, cancellationToken).ConfigureAwait(false);
             return vectors.Count == 0 ? null : vectors[0];
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             _logger.LogDebug(ex, "{Agent} could not embed the turn; reading without vector ranking", Name);
             return null;
@@ -427,7 +427,7 @@ public sealed class RecallAgent : AgentBase, ICognitiveAgent
 
             return (ParsePicked(result.Text, candidates), result, null);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             var first = candidates[0];
             var cause = SubstrateHealth.Classify(ex);

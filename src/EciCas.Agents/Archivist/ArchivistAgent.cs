@@ -115,7 +115,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
         if (diagnostics is not null)
         {
             var facts = newRecords.Count == 0 ? "nothing" : string.Join(", ", newRecords.Select(Describe));
-            _logger.LogInformation("{Agent} {Facts} [{Class}] ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
+            _logger.LogInformation("{Agent} {Facts} ({LatencyMs}ms, {Tokens} tokens, ${Cost} est. cost)",
                 Name, facts, diagnostics.Latency.TotalMilliseconds, diagnostics.TokenCount, diagnostics.Cost);
         }
 
@@ -199,7 +199,7 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 
             return (facts, result);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
             // Nothing to retain: unlike Reflection's buffered turns, the
             // facts this call would have produced were never extracted, so
