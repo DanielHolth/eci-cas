@@ -65,7 +65,16 @@ public abstract class AgentBase : BackgroundService, IAgent
             {
                 await HandleAsync(envelope, stoppingToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // The token here is the host's lifetime, so a cancellation that
+            // is not a shutdown did not come from this loop -- it came from
+            // HttpClient.Timeout, which reports as TaskCanceledException.
+            // Excluding the whole OperationCanceledException family let that
+            // one escape the await foreach and end the loop: the agent stops
+            // consuming its queue for the rest of the process, and every
+            // later turn looks like an agent that was never wired up. One
+            // slow call was enough to take Archivist out for a whole session
+            // on 2026-09-09.
+            catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, stoppingToken))
             {
                 _logger.LogError(ex, "{Agent} failed handling {Topic} event {EventId}", Name, envelope.Topic, envelope.EventId);
             }

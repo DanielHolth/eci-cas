@@ -176,7 +176,7 @@ public sealed class TurnLogSubscriber : AgentBase
             {
                 await sink.WriteAsync(record, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
             {
                 _logger.LogWarning(ex, "{Agent} sink {Sink} failed for event {Seq}", Name, sink.GetType().Name, record.Seq);
             }
