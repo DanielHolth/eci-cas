@@ -2272,11 +2272,30 @@ nothing, confidently. Wants temporal spread, dedup-by-similarity, or
 neighbourhood expansion. This is the single arm the whole design leans on
 and it is unmeasured.
 
+*Answered, and shipped.* Batches 24 and 25 measured exactly this. A flat
+top-5 returns **1.47 distinct facts** out of five -- the failure the arm
+predicted, and worse than the guess. Collapsing by thread and taking each
+thread's *newest* row rather than its nearest reaches 4.13 distinct at
+0.911 current; the two-read split (A `superseded_by IS NULL`, B
+unrestricted) takes stale to 0.000 and MMR at lambda 0.7 adds 0.14
+distinct on top. Identity dedup *alone* makes the answer worse than flat
+(oracle: 4.80 distinct but 0.667 current), which is the one result here
+nobody would have guessed. All of it is in `UtteranceConsult`. What
+remains unmeasured is the same thing every arm here ends on: this was a
+synthetic corpus with `superseded_by` modelled perfectly, so read A is a
+ceiling, not a forecast.
+
 **Does flat retrieval hold at scale?** Flat cosine beat every shelf arm at
 1559 rows on a synthetic corpus, and no batch in the log tests degradation
 under density. The compute is not the question -- 100k rows at 384 dims is
 about 150MB and sub-second with SIMD on a phone. Whether quality survives
 is.
+
+*Partly answered.* Batches 24-25 ran at 8 000 rows and the consolidator
+gate at 20 000, an order of magnitude past the 1559 that raised the
+question, and the read rule held its numbers. That is still synthetic and
+still one corpus shape; what it rules out is a collapse between 1.5k and
+20k, not a slow drift beyond it.
 
 **Is the write side filterable without a model?** Storing every utterance
 stores "haha ok". Cheap in bytes, not free in retrieval, since near-
@@ -2303,6 +2322,12 @@ Costs: names become unstable, so a pair needs a stable id with a
 free-moving display name; reclustering is a background job that must never
 block a turn; and early on a person sees folders they did not choose, which
 argues for a merge/rename/pin surface -- itself a good feature.
+
+*Moot as asked.* The inversion deleted the shelf rather than reauthoring
+it -- there is no folder for a cluster to name, and nothing routes. The
+live question this leaves behind is threads, which are discovered
+structure with no names at all; whether a person ever wants to see or
+rename one is the same feature argument, moved.
 
 **On-device decode speed.** Every claim about a free tier that is not
 merely sponsored assumes a phone can run a small model at a tolerable rate,
