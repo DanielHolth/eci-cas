@@ -100,10 +100,12 @@ public sealed class FactBackfill
             return 0;
         }
 
+        var replies = await _utterances.RepliesAsync(cancellationToken).ConfigureAwait(false);
         var rows = new List<Fact>();
         foreach (var utterance in utterances)
         {
-            foreach (var sentence in await _extractor.ExtractAsync(utterance, cancellationToken).ConfigureAwait(false))
+            var previous = UtteranceContext.PreviousReply(replies, utterance);
+            foreach (var sentence in await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false))
             {
                 var keywords = KeywordExtractor.Content(sentence);
                 if (!UtteranceFilter.Keep(keywords, _options))
@@ -120,11 +122,9 @@ public sealed class FactBackfill
                     ProfileId: utterance.ProfileId,
                     Keywords: keywords,
 
-                    // Zero, not the current turn: a fact recovered from 2019
-                    // has been available to be recalled since 2019, and
-                    // stamping it with today's turn would rate it as though
-                    // it had been ignored for one turn rather than a decade.
-                    FirstSeenTurn: 0));
+                    // The utterance's own turn, not today's: a recovered fact
+                    // has been recallable since it was said.
+                    FirstSeenTurn: utterance.Turn));
             }
         }
 

@@ -82,7 +82,7 @@ public class FactLogTests : IDisposable
     /// </summary>
     private sealed class SentenceExtractor : IFactExtractor
     {
-        public Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, CancellationToken cancellationToken) =>
+        public Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<string>>(
                 [.. utterance.Text.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]);
     }
@@ -105,6 +105,24 @@ public class FactLogTests : IDisposable
         Assert.Single(rows);
         Assert.Equal("the boat is called Vega", rows[0].Text);
         Assert.Equal(1, reopened.TurnsRecorded);
+    }
+
+    [Fact]
+    public async Task RepliesKeepTheirTurnAndPairWithTheNextInput()
+    {
+        var log = new ParquetUtteranceLog(_dir);
+        await log.AppendReplyAsync(new Utterance("r1", "The first knob is Tier.", DateTimeOffset.UtcNow, "assistant", null, 1), CancellationToken.None);
+        Assert.Equal(1, await log.RecordTurnAsync(CancellationToken.None));
+
+        var reopened = new ParquetUtteranceLog(_dir);
+        var replies = await reopened.RepliesAsync(CancellationToken.None);
+        Assert.Equal(1, Assert.Single(replies).Turn);
+
+        var next = new Utterance("u2", "I totally agree.", DateTimeOffset.UtcNow, "user", null, reopened.TurnsRecorded + 1);
+        Assert.Equal("The first knob is Tier.", UtteranceContext.PreviousReply(replies, next));
+        Assert.Null(UtteranceContext.PreviousReply(replies, next with { Turn = 1 }));
+        Assert.Null(UtteranceContext.PreviousReply(
+            [new Utterance("r", "theirs", DateTimeOffset.UtcNow, "assistant", "other", 1)], next with { ProfileId = "me" }));
     }
 
     /// <summary>

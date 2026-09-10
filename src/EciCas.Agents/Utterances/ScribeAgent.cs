@@ -1,4 +1,5 @@
 using EciCas.Agents.Archivist;
+using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reflection;
 using EciCas.Bus;
@@ -31,7 +32,9 @@ namespace EciCas.Agents.Utterances;
 /// back onto Perception, and those ideas came *out of* the archive. Storing
 /// them back would recirculate the persona's own thought as a remembered fact
 /// about the person, and give it a hit count for the trouble. Self already has
-/// a home in the passage store.
+/// a home in the passage store. Its *replies* are kept, in their own log
+/// under the input's turn number, and never become facts: they are there so
+/// the extractor can see what "I totally agree" was agreeing with.
 ///
 /// **It holds no slot.** Nothing in the turn depends on the write landing, so
 /// this is absent from the bundle and no part of the reply waits on a disk
@@ -65,18 +68,31 @@ public sealed class ScribeAgent : AgentBase
     }
 
     public override string Name => "Scribe";
-    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception];
+    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.Conclusion];
+
+    /// <summary>The speaker every reply row is stamped with.</summary>
+    public const string ReplySpeaker = "assistant";
+
+    /// <summary>Open turns: the number and profile each input took, until its conclusion.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (long Turn, string? ProfileId)> _open = new();
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        if (envelope.Topic == Topics.Conclusion)
+        {
+            await ConcludeAsync(envelope, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var text = (envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty).Trim();
 
-        // The turn counter advances first and unconditionally. It is the
-        // denominator of every hit rate in the corpus, and it has to count
-        // the turns that wanted nothing as honestly as the ones that wanted
-        // something -- a rate measured only over turns that recalled
-        // something is not a rate, it is a tautology.
-        await _utterances.RecordTurnAsync(cancellationToken).ConfigureAwait(false);
+        // The turn in progress is one past the concluded count, and the
+        // count moves only when the turn concludes (ConcludeAsync). Self
+        // turns take a number too: the denominator of every hit rate has to
+        // count the turns that wanted nothing as honestly as the rest.
+        var turn = _utterances.TurnsRecorded + 1;
+        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
+        _open[envelope.CorrelationId] = (turn, profileId);
 
         if (text.Length == 0 || Self(envelope))
         {
@@ -87,8 +103,9 @@ public sealed class ScribeAgent : AgentBase
             Id: Guid.NewGuid().ToString("n"),
             Text: text,
             Timestamp: envelope.Timestamp,
-            Speaker: envelope.Meta.Get<string>(PerceptionAgent.ProfileKey) ?? "user",
-            ProfileId: envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
+            Speaker: profileId ?? "user",
+            ProfileId: profileId,
+            Turn: turn);
 
         try
         {
@@ -121,8 +138,10 @@ public sealed class ScribeAgent : AgentBase
     /// </summary>
     private async Task IndexAsync(Utterance utterance, Envelope envelope, CancellationToken cancellationToken)
     {
-        var sentences = await _extractor.ExtractAsync(utterance, cancellationToken).ConfigureAwait(false);
-        var turnsNow = _utterances.TurnsRecorded;
+        var previous = UtteranceContext.PreviousReply(
+            await _utterances.RepliesAsync(cancellationToken).ConfigureAwait(false), utterance);
+        var sentences = await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false);
+        var turnsNow = utterance.Turn;
 
         var facts = new List<Fact>(sentences.Count);
         foreach (var sentence in sentences)
@@ -174,6 +193,36 @@ public sealed class ScribeAgent : AgentBase
                 MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)
                     .With(ArchivistAgent.WrittenRecordsKey, kept)));
         }
+    }
+
+    /// <summary>
+    /// The reply is kept under its input's turn number, then the global
+    /// count advances and is saved. The reply write can fail without the
+    /// count stalling: a skipped number would pair the next input with the
+    /// wrong reply.
+    /// </summary>
+    private async Task ConcludeAsync(Envelope envelope, CancellationToken cancellationToken)
+    {
+        var reply = (envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty).Trim();
+        if (_open.TryRemove(envelope.CorrelationId, out var open) && reply.Length > 0)
+        {
+            try
+            {
+                await _utterances.AppendReplyAsync(new Utterance(
+                    Id: Guid.NewGuid().ToString("n"),
+                    Text: reply,
+                    Timestamp: envelope.Timestamp,
+                    Speaker: ReplySpeaker,
+                    ProfileId: open.ProfileId,
+                    Turn: open.Turn), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(ex, "{Agent} could not keep the reply.", Name);
+            }
+        }
+
+        await _utterances.RecordTurnAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

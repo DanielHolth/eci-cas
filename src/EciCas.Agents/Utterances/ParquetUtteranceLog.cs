@@ -6,8 +6,11 @@ namespace EciCas.Agents.Utterances;
 using EciCas.Core;
 
 /// <summary>
-/// Ground truth, on disk: one parquet per month under <c>utterances/</c>,
-/// named <c>yyyy-MM.parquet</c>, plus the turn counter beside them.
+/// Ground truth, on disk: what the person said under <c>utterances/</c> and
+/// what the persona said back under <c>replies/</c>, one parquet per month in
+/// each, named <c>yyyy-MM.parquet</c>, plus the turn counter beside them.
+/// Every row carries its timestamp and turn number; a reply shares its
+/// input's turn.
 ///
 /// **Append-only, and there is no other verb.** No derived-column write, no
 /// hit counter, no supersession. Those all moved to <see cref="ParquetFactLog"/>
@@ -28,95 +31,39 @@ using EciCas.Core;
 public sealed class ParquetUtteranceLog : IUtteranceLog
 {
     public const string DirectoryName = "utterances";
+    public const string RepliesDirectoryName = "replies";
     public const string TurnCountFileName = "turns.txt";
 
-    /// <summary>
-    /// Flat by design, and every column a plain scalar. This is the row a
-    /// descendant reads in a century with a parquet reader and none of our
-    /// code, so nothing on it is encoded, packed, or indirected.
-    /// </summary>
-    private sealed class Row
-    {
-        public string Id { get; set; } = "";
-        public string Text { get; set; } = "";
-        public string Timestamp { get; set; } = "";
-        public string Speaker { get; set; } = "";
-        public string? ProfileId { get; set; }
-    }
-
     private readonly string _directory;
-    private readonly SemaphoreSlim _lock = new(1, 1);
-    private List<Utterance>? _cache;
+    private readonly Shelf _said;
+    private readonly Shelf _replies;
     private long _turnsRecorded;
 
     public ParquetUtteranceLog(string archiveDirectory)
     {
         _directory = Path.Combine(archiveDirectory, DirectoryName);
-        Directory.CreateDirectory(_directory);
+        _said = new Shelf(_directory);
+        _replies = new Shelf(Path.Combine(archiveDirectory, RepliesDirectoryName));
         var path = Path.Combine(_directory, TurnCountFileName);
         _turnsRecorded = File.Exists(path) && long.TryParse(File.ReadAllText(path).Trim(), out var t) ? t : 0;
     }
 
     public long TurnsRecorded => Interlocked.Read(ref _turnsRecorded);
 
-    public async Task<IReadOnlyList<Utterance>> AllAsync(CancellationToken cancellationToken)
-    {
-        var warm = _cache;
-        if (warm is not null)
-        {
-            return warm;
-        }
+    public Task<IReadOnlyList<Utterance>> AllAsync(CancellationToken cancellationToken) => _said.AllAsync(cancellationToken);
 
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await LoadUnlockedAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
+    public Task AppendAsync(IReadOnlyList<Utterance> utterances, CancellationToken cancellationToken) =>
+        _said.AppendAsync(utterances, cancellationToken);
+
+    public Task<IReadOnlyList<Utterance>> RepliesAsync(CancellationToken cancellationToken) => _replies.AllAsync(cancellationToken);
+
+    public Task AppendReplyAsync(Utterance reply, CancellationToken cancellationToken) =>
+        _replies.AppendAsync([reply], cancellationToken);
 
     /// <summary>
-    /// Load, add, rewrite only the shards the new rows landed in, swap the
-    /// cache. Since nothing is ever modified in place, the dirty set is just
-    /// the months the arrivals belong to -- no content diff needed.
-    /// </summary>
-    public async Task AppendAsync(IReadOnlyList<Utterance> utterances, CancellationToken cancellationToken)
-    {
-        if (utterances.Count == 0)
-        {
-            return;
-        }
-
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var before = await LoadUnlockedAsync(cancellationToken).ConfigureAwait(false);
-
-            // The copy is not defensive habit: AllAsync hands the warm list
-            // back directly, and a reader walking it while this appends in
-            // place would see the corpus change underneath it.
-            var rows = new List<Utterance>(before);
-            rows.AddRange(utterances);
-            rows.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
-
-            foreach (var shard in utterances.Select(Shard).ToHashSet(StringComparer.Ordinal))
-            {
-                await WriteShardAsync(shard, [.. rows.Where(r => Shard(r) == shard)], cancellationToken).ConfigureAwait(false);
-            }
-
-            _cache = rows;
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// The denominator advances on every turn whether or not anything was
+    /// Advances when a turn concludes, not when it starts: the input and its
+    /// reply are stamped with the value before the increment. The
+    /// denominator advances on every turn whether or not anything was
     /// recalled: a persona asked a hundred questions that needed no memory
     /// has learned something real about the two rows that did get used.
     ///
@@ -124,7 +71,7 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
     /// swallowed rather than allowed to fail a turn that has already been
     /// answered.
     /// </summary>
-    public async Task RecordTurnAsync(CancellationToken cancellationToken)
+    public async Task<long> RecordTurnAsync(CancellationToken cancellationToken)
     {
         var turns = Interlocked.Increment(ref _turnsRecorded);
         try
@@ -135,62 +82,158 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         catch (IOException)
         {
         }
+
+        return turns;
     }
 
-    private async Task<IReadOnlyList<Utterance>> LoadUnlockedAsync(CancellationToken cancellationToken)
+    /// <summary>One append-only, month-sharded directory.</summary>
+    private sealed class Shelf
     {
-        if (_cache is not null)
+        /// <summary>
+        /// Flat by design, and every column a plain scalar. This is the row a
+        /// descendant reads in a century with a parquet reader and none of our
+        /// code, so nothing on it is encoded, packed, or indirected.
+        /// </summary>
+        private sealed class Row
         {
-            return _cache;
+            public string Id { get; set; } = "";
+            public long Turn { get; set; }
+            public string Timestamp { get; set; } = "";
+            public string Speaker { get; set; } = "";
+            public string? ProfileId { get; set; }
+            public string Text { get; set; } = "";
         }
 
-        var rows = new List<Utterance>();
-        foreach (var path in Directory.EnumerateFiles(_directory, "*.parquet").OrderBy(p => p, StringComparer.Ordinal))
+        private readonly string _directory;
+        private readonly SemaphoreSlim _lock = new(1, 1);
+        private List<Utterance>? _cache;
+
+        public Shelf(string directory)
         {
-            var shard = await ParquetSerializer.DeserializeAsync<Row>(path, cancellationToken: cancellationToken).ConfigureAwait(false);
-            rows.AddRange(shard.Data.Select(FromRow));
+            _directory = directory;
+            Directory.CreateDirectory(_directory);
         }
 
-        rows.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
-        _cache = rows;
-        return rows;
+        public async Task<IReadOnlyList<Utterance>> AllAsync(CancellationToken cancellationToken)
+        {
+            var warm = _cache;
+            if (warm is not null)
+            {
+                return warm;
+            }
+
+            await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await LoadUnlockedAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Load, add, rewrite only the shards the new rows landed in, swap the
+        /// cache. Since nothing is ever modified in place, the dirty set is just
+        /// the months the arrivals belong to -- no content diff needed.
+        /// </summary>
+        public async Task AppendAsync(IReadOnlyList<Utterance> utterances, CancellationToken cancellationToken)
+        {
+            if (utterances.Count == 0)
+            {
+                return;
+            }
+
+            await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var before = await LoadUnlockedAsync(cancellationToken).ConfigureAwait(false);
+
+                // The copy is not defensive habit: AllAsync hands the warm list
+                // back directly, and a reader walking it while this appends in
+                // place would see the corpus change underneath it.
+                var rows = new List<Utterance>(before);
+                rows.AddRange(utterances);
+                rows.Sort(Order);
+
+                foreach (var shard in utterances.Select(Shard).ToHashSet(StringComparer.Ordinal))
+                {
+                    await WriteShardAsync(shard, [.. rows.Where(r => Shard(r) == shard)], cancellationToken).ConfigureAwait(false);
+                }
+
+                _cache = rows;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        private async Task<IReadOnlyList<Utterance>> LoadUnlockedAsync(CancellationToken cancellationToken)
+        {
+            if (_cache is not null)
+            {
+                return _cache;
+            }
+
+            var rows = new List<Utterance>();
+            foreach (var path in Directory.EnumerateFiles(_directory, "*.parquet").OrderBy(p => p, StringComparer.Ordinal))
+            {
+                var shard = await ParquetSerializer.DeserializeAsync<Row>(path, cancellationToken: cancellationToken).ConfigureAwait(false);
+                rows.AddRange(shard.Data.Select(FromRow));
+            }
+
+            rows.Sort(Order);
+            _cache = rows;
+            return rows;
+        }
+
+        /// <summary>
+        /// Through a temp file and a move: parquet has no append, so a shard is
+        /// rewritten whole, and a torn write here would lose a month of what was
+        /// said -- the one thing in the system that cannot be recomputed.
+        /// </summary>
+        private async Task WriteShardAsync(string shard, List<Utterance> rows, CancellationToken cancellationToken)
+        {
+            var path = Path.Combine(_directory, shard + ".parquet");
+            var temp = path + ".tmp";
+            await using (var stream = File.Create(temp))
+            {
+                await ParquetSerializer.SerializeAsync(rows.Select(ToRow).ToList(), stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(temp, path, overwrite: true);
+        }
+
+        /// <summary>Turn first, time second: two inputs in the same tick keep their order.</summary>
+        private static int Order(Utterance a, Utterance b)
+        {
+            var byTurn = a.Turn.CompareTo(b.Turn);
+            return byTurn != 0 ? byTurn : a.Timestamp.CompareTo(b.Timestamp);
+        }
+
+        /// <summary>UTC, so a shard boundary does not move with a traveller.</summary>
+        private static string Shard(Utterance u) =>
+            u.Timestamp.UtcDateTime.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+
+        private static Row ToRow(Utterance u) => new()
+        {
+            Id = u.Id,
+            Turn = u.Turn,
+            Timestamp = u.Timestamp.ToString("O", CultureInfo.InvariantCulture),
+            Speaker = u.Speaker,
+            ProfileId = u.ProfileId,
+            Text = u.Text,
+        };
+
+        private static Utterance FromRow(Row r) => new(
+            r.Id,
+            r.Text,
+            DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out var when) ? when : DateTimeOffset.MinValue,
+            r.Speaker,
+            r.ProfileId,
+            r.Turn);
     }
-
-    /// <summary>
-    /// Through a temp file and a move: parquet has no append, so a shard is
-    /// rewritten whole, and a torn write here would lose a month of what was
-    /// said -- the one thing in the system that cannot be recomputed.
-    /// </summary>
-    private async Task WriteShardAsync(string shard, List<Utterance> rows, CancellationToken cancellationToken)
-    {
-        var path = Path.Combine(_directory, shard + ".parquet");
-        var temp = path + ".tmp";
-        await using (var stream = File.Create(temp))
-        {
-            await ParquetSerializer.SerializeAsync(rows.Select(ToRow).ToList(), stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-
-        File.Move(temp, path, overwrite: true);
-    }
-
-    /// <summary>UTC, so a shard boundary does not move with a traveller.</summary>
-    private static string Shard(Utterance u) =>
-        u.Timestamp.UtcDateTime.ToString("yyyy-MM", CultureInfo.InvariantCulture);
-
-    private static Row ToRow(Utterance u) => new()
-    {
-        Id = u.Id,
-        Text = u.Text,
-        Timestamp = u.Timestamp.ToString("O", CultureInfo.InvariantCulture),
-        Speaker = u.Speaker,
-        ProfileId = u.ProfileId,
-    };
-
-    private static Utterance FromRow(Row r) => new(
-        r.Id,
-        r.Text,
-        DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture,
-            DateTimeStyles.RoundtripKind, out var when) ? when : DateTimeOffset.MinValue,
-        r.Speaker,
-        r.ProfileId);
 }

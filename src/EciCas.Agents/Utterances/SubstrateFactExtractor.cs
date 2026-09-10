@@ -58,7 +58,7 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken)
     {
         var text = utterance.Text.Trim();
         if (!_options.ExtractorEnabled)
@@ -68,7 +68,7 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 
         try
         {
-            var result = await _substrate.CompleteAsync(AgentName, BuildPrompt(text), cancellationToken).ConfigureAwait(false);
+            var result = await _substrate.CompleteAsync(AgentName, BuildPrompt(text, previousReply), cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("Extractor <<< {Response}", result.Text);
 
             // NONE is the model saying "nothing was claimed": a question, a
@@ -100,11 +100,18 @@ public sealed class SubstrateFactExtractor : IFactExtractor
     /// fact the person never stated is the archive lying to itself, and the
     /// consolidator downstream will happily thread it.
     /// </summary>
-    private static string BuildPrompt(string text)
+    internal static string BuildPrompt(string text, string? previousReply)
     {
         var prompt = new StringBuilder();
         prompt.AppendLine("Rewrite what somebody said as a list of standalone facts.");
         prompt.AppendLine();
+        if (!string.IsNullOrWhiteSpace(previousReply))
+        {
+            prompt.AppendLine("WHAT WAS SAID TO THEM JUST BEFORE (context for references only; take no facts from it):");
+            prompt.AppendLine(PromptCap.Apply(previousReply.Trim(), 1500));
+            prompt.AppendLine();
+        }
+
         prompt.AppendLine("WHAT THEY SAID:");
         prompt.AppendLine(text);
         prompt.AppendLine();
@@ -115,6 +122,8 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         prompt.AppendLine("- Keep first person as first person: \"I moved to Bodo in 2019\", not \"the speaker moved to Bodo in 2019\".");
         prompt.AppendLine("- Add nothing that was not said. If you are unsure whether something was claimed, leave it out.");
         prompt.AppendLine("- Questions, greetings, requests and small talk state nothing. Skip them. A question can still contain a fact (\"now that Rex is 4, should he be neutered?\" states that Rex is 4).");
+        prompt.AppendLine("- Reactions state nothing on their own: \"I totally agree\", \"exactly\", \"thanks\", \"cool\". Skip them. Only when they say what they agree with, or the text before makes it unmistakable, write that as the fact (\"I agree that X\").");
+        prompt.AppendLine("- Drop any line that still depends on something outside itself (\"the first knob\", \"that idea\"). If you cannot say what it refers to, it is not a fact.");
         prompt.AppendLine($"- If nothing at all is stated, reply with the single word {NothingStated}.");
         prompt.AppendLine("- If the whole thing is already one standalone fact, repeat it back unchanged as the only line.");
         prompt.AppendLine();
@@ -163,6 +172,6 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 /// </summary>
 public sealed class VerbatimFactExtractor : IFactExtractor
 {
-    public Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<string>>([utterance.Text.Trim()]);
 }

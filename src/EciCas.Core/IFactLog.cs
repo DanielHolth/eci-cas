@@ -98,7 +98,9 @@ public interface IFactLog
 /// </summary>
 public interface IFactExtractor
 {
-    Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, CancellationToken cancellationToken);
+    /// <param name="previousReply">What the persona said just before, as
+    /// context for references only; null when there is none.</param>
+    Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken);
 }
 
 /// <summary>

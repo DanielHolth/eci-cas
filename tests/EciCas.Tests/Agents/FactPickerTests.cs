@@ -68,7 +68,7 @@ public class FactPickerTests
             NullLogger<SubstrateFactExtractor>.Instance);
 
         var facts = await extractor.ExtractAsync(
-            new Utterance("u", "how many kids do i have?", DateTimeOffset.UnixEpoch, "user", null), CancellationToken.None);
+            new Utterance("u", "how many kids do i have?", DateTimeOffset.UnixEpoch, "user", null), null, CancellationToken.None);
 
         Assert.Empty(facts);
     }
@@ -81,8 +81,18 @@ public class FactPickerTests
             Options.Create(new UtteranceOptions { ExtractorEnabled = true }),
             NullLogger<SubstrateFactExtractor>.Instance);
 
-        await extractor.ExtractAsync(new Utterance("u", "maia is my girl", DateTimeOffset.UnixEpoch, "user", null), CancellationToken.None);
+        await extractor.ExtractAsync(new Utterance("u", "maia is my girl", DateTimeOffset.UnixEpoch, "user", null), null, CancellationToken.None);
 
         Assert.NotNull(substrate.Prompt);
+        Assert.DoesNotContain("JUST BEFORE", substrate.Prompt);
+    }
+
+    [Fact]
+    public void ThePreviousReplyIsContextInThePrompt()
+    {
+        var prompt = SubstrateFactExtractor.BuildPrompt("I totally agree.", "The first knob is Tier.");
+        Assert.Contains("JUST BEFORE", prompt);
+        Assert.True(prompt.IndexOf("The first knob is Tier.", StringComparison.Ordinal)
+            < prompt.IndexOf("I totally agree.", StringComparison.Ordinal));
     }
 }
