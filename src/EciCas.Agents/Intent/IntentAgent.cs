@@ -150,7 +150,9 @@ public sealed class IntentAgent : CognitiveAgent<string>
             return;
         }
 
-        prompt.Append(" [Mood: ").Append(mood).Append('.').Append(']');
+        // Sad alone reads as "be gloomy"; the gloss says what it is for.
+        var gloss = mood == Mood.Sad ? " -- quiet and subdued; meet a low mood rather than trying to lift it" : "";
+        prompt.Append(" [Mood: ").Append(mood).Append(gloss).Append('.').Append(']');
     }
 
     /// <summary>

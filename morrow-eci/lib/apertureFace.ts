@@ -58,6 +58,23 @@ vec3 hue(vec3 c, float a) {
   float ca = cos(a);
   return max(c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca), 0.0);
 }
+// Speaker-cone shockwaves: six slots, each re-rolled every cycle with its own
+// lifetime, reach (just past the telemetry ring at 0.455) and a chance to
+// skip, so they read as particles rather than a metronome. Returns intensity.
+float waves(float r, float t) {
+  float s = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i);
+    float tt = t / (0.9 + 0.8 * hash(vec2(fi, 7.0))) + fi * 0.37;
+    float cy = floor(tt);
+    float x = min(fract(tt) / (0.5 + 0.5 * hash(vec2(fi, cy))), 1.0);
+    float rad = (0.47 + 0.09 * hash(vec2(cy, fi + 1.0))) * (1.0 - (1.0 - x) * (1.0 - x));
+    float d = (r - rad) / (0.005 + 0.022 * x);
+    float on = step(hash(vec2(fi + 3.1, cy)), 0.75);
+    s += exp(-d * d) * (1.0 - x) * on;
+  }
+  return s;
+}
 `;
 
 const SCENE = `
@@ -85,6 +102,11 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M, vec4 E) {
 
   float r = length(p);
   float px = 1.5 / mn;
+
+  // Shockwaves bend what is under them (a slight lens) and tint it at the end.
+  float sw = waves(r, t) * speak;
+  p *= 1.0 - 0.035 * sw;
+  r = length(p);
 
   // While speaking, both mood colours roll through neighbouring hues, and
   // differently per ring, so shades travel outward across the iris.
@@ -162,6 +184,7 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M, vec4 E) {
   float lid = bl2 * 0.41;
   float cover = smoothstep(0.0, 0.012, abs(p.y) - (0.40 - lid));
   col = mix(col, vec3(0.030, 0.038, 0.052), cover * housing);
+  col += mix(A.rgb, vec3(1.0), 0.35) * sw * 0.22;
 
   col *= 0.93 + 0.07 * sin(fc.y * 1.7 + t * 1.6);
   col *= 1.0 - 0.40 * smoothstep(0.62, 1.26, r);
@@ -204,6 +227,20 @@ fn hue(c: vec3<f32>, a: f32) -> vec3<f32> {
   let ca = cos(a);
   return max(c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca), vec3<f32>(0.0));
 }
+fn waves(r: f32, t: f32) -> f32 {
+  var s = 0.0;
+  for (var i = 0; i < 6; i++) {
+    let fi = f32(i);
+    let tt = t / (0.9 + 0.8 * hash(vec2<f32>(fi, 7.0))) + fi * 0.37;
+    let cy = floor(tt);
+    let x = min(fract(tt) / (0.5 + 0.5 * hash(vec2<f32>(fi, cy))), 1.0);
+    let rad = (0.47 + 0.09 * hash(vec2<f32>(cy, fi + 1.0))) * (1.0 - (1.0 - x) * (1.0 - x));
+    let d = (r - rad) / (0.005 + 0.022 * x);
+    let on = step(hash(vec2<f32>(fi + 3.1, cy)), 0.75);
+    s = s + exp(-d * d) * (1.0 - x) * on;
+  }
+  return s;
+}
 
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
   var v = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
@@ -228,8 +265,10 @@ fn hue(c: vec3<f32>, a: f32) -> vec3<f32> {
   let q = p - sway - E.xy;
   p = vec2<f32>(q.x * cos(tilt) - q.y * sin(tilt), q.x * sin(tilt) + q.y * cos(tilt));
 
-  let r = length(p);
   let px = 1.5 / mn;
+  let sw = waves(length(p), t) * speak;
+  p = p * (1.0 - 0.035 * sw);
+  let r = length(p);
 
   A = vec4<f32>(hue(A.rgb, speak * (1.1 * sin(t * 0.83) + 0.7 * sin(r * 11.0 - t * 2.3))), A.w);
   B = vec4<f32>(hue(B.rgb, speak * (1.1 * sin(t * 0.83 + 1.7) + 0.5 * sin(r * 7.0 + t * 1.6))), B.w);
@@ -298,6 +337,7 @@ fn hue(c: vec3<f32>, a: f32) -> vec3<f32> {
   let lid = bl2 * 0.41;
   let cover = smoothstep(0.0, 0.012, abs(p.y) - (0.40 - lid));
   col = mix(col, vec3<f32>(0.030, 0.038, 0.052), cover * housing);
+  col = col + mix(A.rgb, vec3<f32>(1.0), 0.35) * sw * 0.22;
 
   col = col * (0.93 + 0.07 * sin(fc.y * 1.7 + t * 1.6));
   col = col * (1.0 - 0.40 * smoothstep(0.62, 1.26, r));

@@ -14,12 +14,19 @@ import { useSpeech } from "@/lib/useSpeech";
 import { greeting } from "@/lib/greeting";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
-import { fetchKnobs, latestKnobs, sendNudge, sendPerceive } from "@/lib/api";
+import { fetchKnobs, latestKnobs, sendNudge, sendPerceive, subscribeKnobs } from "@/lib/api";
 import type { Profile } from "@/lib/profiles";
 import type { Expression } from "@/types/events";
 
-const EXPRESSIONS: Expression[] = ["neutral", "warm", "alert", "sad", "scared", "angry"];
-const FACE_STORAGE_KEY = "morrow.face";
+// The Mood knob pins the face. Neutral is absent on purpose: an untouched
+// dial leaves the face to Impulse, the same way it leaves the prompt alone.
+const MOOD_FACE: Record<string, Expression> = {
+  Maleficent: "angry",
+  Sarcastic: "scared",
+  Sad: "sad",
+  Helpful: "warm",
+  Ecstatic: "alert",
+};
 
 /**
  * One person's live view of the persona. Mount this with `key={profile.id}`:
@@ -46,26 +53,13 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   const [logOpen, setLogOpen] = useState(false);
   const [thoughtsOpen, setThoughtsOpen] = useState(false);
 
-  // A pinned face overrides Impulse's; "" follows Impulse. Restored after
-  // mount, like the voice, so the server render and hydration agree.
-  const [face, setFaceState] = useState<Expression | "">("");
+  const [mood, setMood] = useState(() => latestKnobs()?.mood ?? "");
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(FACE_STORAGE_KEY);
-      if (saved && (EXPRESSIONS as string[]).includes(saved)) setFaceState(saved as Expression);
-    } catch {
-      // Storage unavailable — follow Impulse.
-    }
+    const off = subscribeKnobs((k) => setMood(k.mood));
+    if (!latestKnobs()) fetchKnobs().catch(() => {});
+    return off;
   }, []);
-  function setFace(value: Expression | "") {
-    setFaceState(value);
-    try {
-      if (value) window.localStorage.setItem(FACE_STORAGE_KEY, value);
-      else window.localStorage.removeItem(FACE_STORAGE_KEY);
-    } catch {
-      // Holds for this session.
-    }
-  }
+  const face = MOOD_FACE[mood];
 
   // Ideas seen the last time the Thoughts panel was open — the badge counts
   // only what arrived since, and opening it again clears the count back to
@@ -223,19 +217,6 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
             </div>
 
           <div className="flex items-center gap-2 justify-self-end">
-            <select
-              value={face}
-              onChange={(e) => setFace(e.target.value as Expression | "")}
-              aria-label="Face"
-              className="rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              <option value="">Face: live</option>
-              {EXPRESSIONS.map((x) => (
-                <option key={x} value={x}>
-                  Face: {x}
-                </option>
-              ))}
-            </select>
             {voices.length > 0 && (
               <select
                 value={voiceURI}

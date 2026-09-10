@@ -138,14 +138,17 @@ public sealed class RuntimeKnobs
 }
 
 /// <summary>
-/// Five-step dial from cruel to effusive. A closed enum rather than free
-/// text: the slider has five positions and the prompt bracket it produces
-/// (see IntentAgent.AppendMood) has to be one of exactly these words.
+/// Six-step dial from cruel to effusive. A closed enum rather than free
+/// text: the slider has one position per value and the prompt bracket it
+/// produces (see IntentAgent.AppendMood) has to be one of exactly these words.
+/// Sad sits just below Neutral: low, not hostile -- a confidant who meets a
+/// low mood instead of cheering it up.
 /// </summary>
 public enum Mood
 {
     Maleficent,
     Sarcastic,
+    Sad,
     Neutral,
     Helpful,
     Ecstatic,
