@@ -10,7 +10,7 @@ import { ProfileChip } from "@/components/ProfileChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEciStream } from "@/lib/useEciStream";
 import { usePersona } from "@/lib/usePersona";
-import { useSpeaking } from "@/lib/useSpeaking";
+import { useSpeech } from "@/lib/useSpeech";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { sendPerceive } from "@/lib/api";
@@ -62,10 +62,11 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
 
   const turn = turns[turns.length - 1];
 
-  // The last thing actually said, which is not the last turn: Reflection's
-  // ideas arrive as turns of their own and say nothing aloud.
-  const spoken = turns.filter((t) => t.output);
-  const speaking = useSpeaking(spoken[spoken.length - 1]?.output?.text);
+  // Every reply is said aloud, one at a time. Not just the newest: a
+  // self-triggered turn can conclude while the previous reply is still being
+  // spoken, and the mouth has to run on the utterance that is actually in
+  // flight rather than on whichever turn happens to be last in the array.
+  const speaking = useSpeech(turns);
 
   function openInLog(correlationId: string) {
     setLogOpen(true);
