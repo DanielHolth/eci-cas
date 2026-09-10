@@ -68,7 +68,7 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 
         try
         {
-            var result = await _substrate.CompleteAsync(AgentName, BuildPrompt(text, previousReply), cancellationToken).ConfigureAwait(false);
+            var result = await _substrate.CompleteAsync(AgentName, BuildPrompt(text, _options.ExtractorSeesPreviousReply ? previousReply : null), cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("Extractor <<< {Response}", result.Text);
 
             // NONE is the model saying "nothing was claimed": a question, a

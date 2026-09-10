@@ -88,6 +88,20 @@ public class FactPickerTests
     }
 
     [Fact]
+    public async Task ThePreviousReplyCanBeSwitchedOff()
+    {
+        var substrate = new StubSubstrate("NONE");
+        var extractor = new SubstrateFactExtractor(substrate,
+            Options.Create(new UtteranceOptions { ExtractorEnabled = true, ExtractorSeesPreviousReply = false }),
+            NullLogger<SubstrateFactExtractor>.Instance);
+
+        await extractor.ExtractAsync(new Utterance("u", "I totally agree.", DateTimeOffset.UnixEpoch, "user", null),
+            "The first knob is Tier.", CancellationToken.None);
+
+        Assert.DoesNotContain("The first knob", substrate.Prompt);
+    }
+
+    [Fact]
     public void ThePreviousReplyIsContextInThePrompt()
     {
         var prompt = SubstrateFactExtractor.BuildPrompt("I totally agree.", "The first knob is Tier.");

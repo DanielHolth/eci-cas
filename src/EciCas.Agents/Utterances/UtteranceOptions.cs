@@ -67,6 +67,13 @@ public sealed class UtteranceOptions
     public int ExtractorMaxFacts { get; set; } = 24;
 
     /// <summary>
+    /// Whether the extractor is shown Morrow's previous reply as context.
+    /// Replies are stored regardless. Off where a small model might copy the
+    /// reply's claims into facts about the person.
+    /// </summary>
+    public bool ExtractorSeesPreviousReply { get; set; } = true;
+
+    /// <summary>
     /// How many content words an utterance needs before it earns a row.
     ///
     /// One: a sentence with no content word in it -- "haha ok", "yeah",
