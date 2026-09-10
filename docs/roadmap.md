@@ -2285,6 +2285,33 @@ remains unmeasured is the same thing every arm here ends on: this was a
 synthetic corpus with `superseded_by` modelled perfectly, so read A is a
 ceiling, not a forecast.
 
+**Can a read reach a retired fact at all?** The two-read split as built
+cannot, and the arm above is quieter about this than it should be. Pass B
+is a *top-up*, not a lane: it runs only when pass A failed to fill five
+slots, and it further skips any thread A already spent a slot on. At a
+thousand rows A will always find five live threads above the floor, so B
+never fires; and in the one case where B would matter -- "what car did I
+used to drive" -- the car thread is precisely the thread A used its top
+slot on, so B would skip it even if it ran. The old car is unreachable
+through `Find`, twice over.
+
+The cause is not ranking. "What do I drive" and "what did I used to drive"
+produce near-identical query vectors, and no score threshold separates
+them, because the discriminator is not in the text -- it is *which member
+of the matched thread* the reader wants. That is a second read, not a
+second sort.
+
+The shape that fits: score and collapse exactly as `Find` does, then
+instead of taking each thread's newest live member, take the top thread
+and return its members oldest to newest. One thread, its whole history, in
+order -- which is also the `change` shape pass B was supposed to serve.
+The sweep has already run and the thread ids are already there, so the
+cost is a projection. Open questions: whether Intent should call it, or
+whether `Find` should spend one of its five slots on the runner-up member
+of its top thread when that member is superseded; and whether the class
+comment on `UtteranceConsult` should stop claiming pass B guards against
+an amnesiac archive, which at corpus scale it does not.
+
 **Does flat retrieval hold at scale?** Flat cosine beat every shelf arm at
 1559 rows on a synthetic corpus, and no batch in the log tests degradation
 under density. The compute is not the question -- 100k rows at 384 dims is
