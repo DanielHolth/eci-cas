@@ -209,7 +209,15 @@ public sealed class ParquetFactLog : IFactLog
     /// </summary>
     private static HashSet<string> Changed(IReadOnlyList<Fact> before, IReadOnlyList<Fact> after)
     {
-        var old = before.ToDictionary(r => r.Id, StringComparer.Ordinal);
+        // Not ToDictionary: a corpus that somehow picked up two rows sharing
+        // an Id must not turn every future write into a boot-time crash.
+        // Last-wins here, so it converges with how UpdateDerivedAsync already
+        // resolves the same collision.
+        var old = new Dictionary<string, Fact>(StringComparer.Ordinal);
+        foreach (var row in before)
+        {
+            old[row.Id] = row;
+        }
         var dirty = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var row in after)
