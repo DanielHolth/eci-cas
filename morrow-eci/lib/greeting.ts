@@ -40,11 +40,35 @@ const GREETING: Record<Band, readonly string[]> = {
   deepNight: ["Night owl.", "Still up.", "Late.", "Hei, {name}.", "Small hours."],
   dawn: ["Early.", "Morning, {name}.", "First light.", "Up already.", "Morning."],
   morning: ["Morning.", "Morning, {name}.", "Hei.", "There you are.", "God morgen."],
-  midday: ["Hei.", "Midday.", "Hello, {name}.", "Hei, {name}.", "Halfway."],
+  midday: ["Hei.", "Midday.", "Hello, {name}.", "Still going.", "Halfway."],
   afternoon: ["Afternoon.", "Hei.", "Afternoon, {name}.", "Hello.", "Still here."],
   evening: ["Evening.", "Evening, {name}.", "Hei.", "God kveld.", "Day's done."],
   night: ["Late one.", "Evening, {name}.", "Nearly tomorrow.", "Still up.", "Hei."],
 };
+
+/**
+ * One line per band that displaces the ordinary greeting about once in forty
+ * — see ODDS. Rare enough to be noticed rather than expected, which is the
+ * whole trick: a surprise on a fixed rota is a feature, and a feature this
+ * small should not be one.
+ *
+ * They are Norwegian, and short, and they ask for nothing. Morrow lives in a
+ * Norwegian house; the eggs are the one place that shows without the persona
+ * announcing it. Not every band has one — a household that produced a quip at
+ * every hour would be trying too hard.
+ */
+const EGG: Partial<Record<Band, string>> = {
+  deepNight: "Bare oss.",
+  dawn: "Fuglene først.",
+  morning: "Kaffe?",
+  midday: "Lunsj?",
+  night: "Sov litt.",
+};
+
+/** Roughly how many greetings pass between eggs. Deterministic like
+ * everything else here: a person who gets one keeps it for that band all day,
+ * rather than watching it vanish on the next refresh. */
+const ODDS = 40;
 
 /** FNV-1a with a final avalanche. Small, stable, and identical across runs
  * and machines — a `Math.random` here would defeat the whole point of the
@@ -74,7 +98,13 @@ function hash(seed: string): number {
 export function greeting(name: string, key: string, at: Date = new Date()): string {
   const band = bandFor(at.getHours());
   const day = `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
-  const pool = GREETING[band];
+  const seed = `${key}|${day}|${band}`;
 
-  return pool[hash(`${key}|${day}|${band}`) % pool.length].replace("{name}", name);
+  const egg = EGG[band];
+  if (egg && hash(`${seed}|egg`) % ODDS === 0) {
+    return egg;
+  }
+
+  const pool = GREETING[band];
+  return pool[hash(seed) % pool.length].replace("{name}", name);
 }
