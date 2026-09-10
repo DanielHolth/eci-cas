@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { mountApertureFace, type Backend } from "@/lib/apertureFace";
 import type { Expression } from "@/types/events";
 
 /**
@@ -49,25 +53,18 @@ const FACE: Record<
   neutral: { label: "Neutral", from: "#cbd5e1", to: "#64748b", brow:   0, browY:  0, open: 1,    mouth: "M47 83 Q60 87 73 83", motion: "eci-idle" },
 };
 
-export function Avatar({
-  expression,
-  speaking = false,
-  identity,
-}: {
-  expression: Expression;
-  /** Moves the mouth while Action is voicing a reply. */
-  speaking?: boolean;
-  /** The active profile's chosen emoji, worn as a badge beside the face —
-   * whose conversation this is, kept strictly separate from the colour,
-   * which is Impulse's alone. */
-  identity?: string;
-}) {
+/**
+ * The drawn face, kept as the fallback for a browser with neither WebGPU nor
+ * WebGL2. The prototype had no fallback drawing to show and said so on
+ * screen; the app already had this one written, and a face is a better
+ * answer than an apology.
+ */
+function DrawnFace({ expression, speaking }: { expression: Expression; speaking: boolean }) {
   const face = FACE[expression];
   return (
-    <div className="relative shrink-0">
-      <svg
+    <svg
         viewBox="0 0 120 120"
-        className="h-20 w-20 overflow-visible"
+        className="h-28 w-28 overflow-visible"
         role="img"
         aria-label={`Avatar expression: ${face.label}`}
         style={{ ["--eci-motion" as string]: face.motion }}
@@ -112,6 +109,77 @@ export function Avatar({
           />
         </g>
       </svg>
+  );
+}
+
+/**
+ * The face, above the transcript.
+ *
+ * A canvas, not the SVG that used to be here: the iris, the telemetry ring
+ * and the brow bars are one fragment shader (lib/apertureFace.ts), which is
+ * what buys the machine read — nine blades that actually rotate, a ring
+ * whose cells light against alertness, and a pupil that follows the pointer.
+ * None of that is reachable with six hand-drawn paths.
+ *
+ * The renderer is mounted once and then *driven*, never re-created: React
+ * owns the mood, the shader owns the frames. A remount on every expression
+ * change would rebuild a GPU pipeline several times a turn and lose the
+ * easing between moods, which is most of what makes it read as a face
+ * moving rather than a sprite swapping.
+ *
+ * If neither WebGPU nor WebGL2 is available, the drawn face takes over. It
+ * is the same six-word vocabulary and the same colour pairs, so nothing is
+ * lost but the motion.
+ */
+export function Avatar({
+  expression,
+  speaking = false,
+  identity,
+}: {
+  expression: Expression;
+  /** Drives the standing ripples across the iris while a reply is voiced. */
+  speaking?: boolean;
+  /** The active profile's chosen emoji, worn as a badge beside the face —
+   * whose conversation this is, kept strictly separate from the colour,
+   * which is Impulse's alone. */
+  identity?: string;
+}) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const handle = useRef<ReturnType<typeof mountApertureFace>>(null);
+  const [backend, setBackend] = useState<Backend | null>(null);
+
+  // Mount once. The mood props are read through refs on the first frame
+  // rather than listed as dependencies, because a dependency on them is
+  // exactly the remount this component exists to avoid.
+  const start = useRef({ expression, speaking });
+  useEffect(() => {
+    if (!canvas.current) return;
+    const face = mountApertureFace(canvas.current, start.current, setBackend);
+    handle.current = face;
+    return () => {
+      face.destroy();
+      handle.current = null;
+    };
+  }, []);
+
+  useEffect(() => { handle.current?.setMood(expression); }, [expression]);
+  useEffect(() => { handle.current?.setSpeaking(speaking); }, [speaking]);
+
+  const drawn = backend === "none";
+
+  return (
+    <div className="relative shrink-0">
+      {/* Kept mounted even when the drawn face is showing: unmounting the
+          canvas would take the context with it, and "none" is decided by
+          the canvas itself. Hidden rather than removed. */}
+      <canvas
+        ref={canvas}
+        hidden={drawn}
+        role="img"
+        aria-label={`Avatar expression: ${FACE[expression].label}`}
+        className="h-28 w-28 rounded-full bg-[#060810] shadow-inner"
+      />
+      {drawn && <DrawnFace expression={expression} speaking={speaking} />}
 
       {identity && (
         <span
