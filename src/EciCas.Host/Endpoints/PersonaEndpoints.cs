@@ -72,8 +72,43 @@ internal static class PersonaEndpoints
             perceptionAgent.Perceive(request.Text, request.ProfileId);
             return Results.Accepted();
         });
+
+        // The persona picking a thought back up on its own, without a batch
+        // having concluded to find it. The surface calls this on a rare
+        // opening -- see morrow-eci/lib/greeting.ts -- and the point is that
+        // the greeting is then followed by the persona actually saying
+        // something of its own rather than a canned line.
+        //
+        // The newest passage, not the nearest. There is no query to be near:
+        // nobody has said anything yet, which is the whole occasion. Newest
+        // is the one choice that needs no embedder, costs no search, and
+        // gives the same answer twice -- and it is already the fallback
+        // Reflection drops to for exactly that reason (IPassageStore.LatestAsync).
+        //
+        // An empty corpus is 204, not 404: a persona that has not thought
+        // anything yet is a normal early state, and the surface simply says
+        // its greeting and stops.
+        app.MapPost("/api/nudge", async (NudgeRequest request, IPassageStore passages,
+            PerceptionAgent perceptionAgent, ProfileStore profiles, CancellationToken cancellationToken) =>
+        {
+            if (!string.IsNullOrEmpty(request.ProfileId) && profiles.Find(request.ProfileId) is null)
+            {
+                return Results.NotFound();
+            }
+
+            var latest = await passages.LatestAsync(cancellationToken);
+            if (latest is null || string.IsNullOrWhiteSpace(latest.Text))
+            {
+                return Results.NoContent();
+            }
+
+            perceptionAgent.Perceive(latest.Text, request.ProfileId, self: true);
+            return Results.Accepted();
+        });
     }
 }
+
+internal sealed record NudgeRequest(string? ProfileId = null);
 
 internal sealed record PerceiveRequest(string Text, string? ProfileId = null);
 

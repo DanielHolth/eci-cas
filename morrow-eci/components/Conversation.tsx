@@ -14,7 +14,7 @@ import { useSpeech } from "@/lib/useSpeech";
 import { greeting } from "@/lib/greeting";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
-import { sendPerceive } from "@/lib/api";
+import { fetchKnobs, latestKnobs, sendNudge, sendPerceive } from "@/lib/api";
 import type { Profile } from "@/lib/profiles";
 
 /**
@@ -74,7 +74,29 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   // different sentence than the one it sent.
   const [hello, setHello] = useState("");
   useEffect(() => {
-    setHello(greeting(profile.displayName, profile.id));
+    const opener = greeting(profile.displayName, profile.id);
+    setHello(opener.text);
+
+    // A rare opening earns a real one. The greeting itself is canned, so on
+    // the one morning in forty that it is a quip, the persona follows it by
+    // picking its newest passage back up and perceiving it as its own
+    // thought -- which is also what wakes Hindsight (HindsightAgent's first
+    // trigger is a self-flagged perception).
+    //
+    // Not on the two cheap tiers. Mock has no model behind it and Minimal is
+    // the one people leave running all day; spending a turn on a flourish is
+    // a Budget-and-up indulgence. Unknown tier means the knobs have not been
+    // fetched yet, so ask -- and if that fails, say nothing and stop, since
+    // a failed fetch is not a reason to spend a turn.
+    if (opener.egg) {
+      const spend = (tier: string) => {
+        if (["mock", "minimal"].includes(tier.toLowerCase())) return;
+        sendNudge(profile.id).catch(() => {});
+      };
+      const known = latestKnobs()?.tier;
+      if (known) spend(known);
+      else fetchKnobs().then((knobs) => spend(knobs.tier)).catch(() => {});
+    }
     // Deliberately not in the dependency list: this is the opening line, and
     // it is said once per mount. Conversation is keyed by profile id, so a
     // different person is a different mount and gets their own.

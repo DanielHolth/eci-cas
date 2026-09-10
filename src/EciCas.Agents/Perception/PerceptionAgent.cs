@@ -1,3 +1,4 @@
+﻿using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -49,13 +50,25 @@ public sealed class PerceptionAgent : AgentBase
     /// instead. So the readers downstream can take this text as given, which
     /// is what stopped five of them re-truncating a person's paste to 240
     /// characters apiece.
+    ///
+    /// <paramref name="self"/> marks the text as the persona's own thought
+    /// rather than a person's words. It is the same flag Reflection stamps,
+    /// and it is here for the one caller that has a thought to hand without
+    /// having run a batch to find it: the surface nudging the persona with a
+    /// note it already wrote. Hindsight wakes on it (HindsightAgent's first
+    /// trigger) and the display layer draws it as an idea, not an utterance.
     /// </summary>
-    public void Perceive(string text, string? profileId = null)
+    public void Perceive(string text, string? profileId = null, bool self = false)
     {
         var meta = MetaBag.Empty.With(TextKey, PromptCap.Apply(text, _knobs.PerceptionChars));
         if (!string.IsNullOrEmpty(profileId))
         {
             meta = meta.With(ProfileKey, profileId);
+        }
+
+        if (self)
+        {
+            meta = meta.With(ReflectionAgent.TriggeredByKey, "self");
         }
 
         var envelope = Envelope.Create(Topics.Perception, Name, Severity.Neutral, meta);

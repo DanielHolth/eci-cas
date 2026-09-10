@@ -20,6 +20,24 @@ export async function sendPerceive(text: string, profileId?: string): Promise<vo
   }
 }
 
+/**
+ * Asks the host to pick its newest passage back up and perceive it as its own
+ * thought — the persona resuming a train of thought rather than answering
+ * anybody. 204 when it has not written one yet, which is an ordinary early
+ * state and not an error: nothing to resume, nothing to say.
+ */
+export async function sendNudge(profileId?: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/nudge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profileId ? { profileId } : {}),
+  });
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`nudge failed: ${response.status}`);
+  }
+}
+
 export interface Tier {
   name: string;
   /** Env vars this tier's live classes need and that the host cannot see. */

@@ -19,6 +19,14 @@
  * is recorded. See morrow-eci/README.md -- "what this app is allowed to do".
  */
 
+/** `egg` is reported rather than kept private: the surface follows a rare
+ * opening with a nudge, so the persona says something of its own after it.
+ * See morrow-eci/components/Conversation.tsx. */
+export interface Greeting {
+  text: string;
+  egg: boolean;
+}
+
 export type Band = "deepNight" | "dawn" | "morning" | "midday" | "afternoon" | "evening" | "night";
 
 /** Which row an hour falls in. Boundaries are the ordinary social ones rather
@@ -52,17 +60,15 @@ const GREETING: Record<Band, readonly string[]> = {
  * whole trick: a surprise on a fixed rota is a feature, and a feature this
  * small should not be one.
  *
- * They are Norwegian, and short, and they ask for nothing. Morrow lives in a
- * Norwegian house; the eggs are the one place that shows without the persona
- * announcing it. Not every band has one — a household that produced a quip at
- * every hour would be trying too hard.
+ * Short, and asking for nothing. Not every band has one — a household that
+ * produced a quip at every hour would be trying too hard.
  */
 const EGG: Partial<Record<Band, string>> = {
-  deepNight: "Bare oss.",
-  dawn: "Fuglene først.",
-  morning: "Kaffe?",
-  midday: "Lunsj?",
-  night: "Sov litt.",
+  deepNight: "Just us, then.",
+  dawn: "Birds first.",
+  morning: "Coffee?",
+  midday: "Lunch?",
+  night: "Get some sleep.",
 };
 
 /** Roughly how many greetings pass between eggs. Deterministic like
@@ -95,16 +101,16 @@ function hash(seed: string): number {
  * than taken from `Date.now()` so this stays a pure function and can be tested
  * at four in the morning without being awake at four in the morning.
  */
-export function greeting(name: string, key: string, at: Date = new Date()): string {
+export function greeting(name: string, key: string, at: Date = new Date()): Greeting {
   const band = bandFor(at.getHours());
   const day = `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
   const seed = `${key}|${day}|${band}`;
 
   const egg = EGG[band];
   if (egg && hash(`${seed}|egg`) % ODDS === 0) {
-    return egg;
+    return { text: egg, egg: true };
   }
 
   const pool = GREETING[band];
-  return pool[hash(seed) % pool.length].replace("{name}", name);
+  return { text: pool[hash(seed) % pool.length].replace("{name}", name), egg: false };
 }
