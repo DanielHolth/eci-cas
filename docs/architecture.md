@@ -29,7 +29,8 @@ telemetry) watch everything and are invisible to agents.
 
 | Store | Holds | Read at reply time |
 |---|---|---|
-| `archive/utterances/` | verbatim input, append-only | no |
+| `archive/utterances/` | verbatim input, append-only, with turn number; `turns.txt` +1 per concluded turn | no |
+| `archive/replies/` | Morrow's replies, keyed by the input's turn; extractor context only | no |
 | `archive/facts/` | one claim per row, with vector, thread and supersession | yes (Recall) |
 | `archive/passages.parquet` | Reflection's own thinking | yes (Hindsight) |
 | `memory.jsonl` | agent state (persona) | yes (Identity) |

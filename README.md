@@ -11,6 +11,10 @@ over SSE. Design: [`docs/architecture.md`](docs/architecture.md).
 
 - **`archive/utterances/`** — what the person said, verbatim. Append-only,
   never read at reply time. Ground truth.
+- **`archive/replies/`** — what Morrow said back, same shape. Every row in
+  both carries a timestamp and a turn number; a reply shares its input's
+  turn. `utterances/turns.txt` holds the count, +1 per concluded turn. The
+  extractor reads the previous reply as context, never as a source of facts.
 - **`archive/facts/`** — standalone one-claim sentences extracted from each
   utterance, with embedding, thread and supersession. The only store Recall
   reads. Disposable: boot extracts any utterance that has no facts yet.
