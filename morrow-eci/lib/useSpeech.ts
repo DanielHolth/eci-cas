@@ -89,6 +89,16 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
     };
     load();
     synth.addEventListener("voiceschanged", load);
+
+    // The engine behind speechSynthesis (SAPI on Windows) loads lazily, and
+    // its very first utterance in a session pays that cold-start cost --
+    // measured up to ten seconds, independent of the gesture-permission wait
+    // below. cancel() on an idle synth is a no-op except for one side effect:
+    // it forces the browser to spin the engine up now, so the cold start
+    // overlaps with the person reading the greeting instead of stacking
+    // after the gesture that unlocks it.
+    synth.cancel();
+
     return () => synth.removeEventListener("voiceschanged", load);
   }, []);
 
