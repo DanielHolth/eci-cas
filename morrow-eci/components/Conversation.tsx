@@ -16,6 +16,10 @@ import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { fetchKnobs, latestKnobs, sendNudge, sendPerceive } from "@/lib/api";
 import type { Profile } from "@/lib/profiles";
+import type { Expression } from "@/types/events";
+
+const EXPRESSIONS: Expression[] = ["neutral", "warm", "alert", "sad", "scared", "angry"];
+const FACE_STORAGE_KEY = "morrow.face";
 
 /**
  * One person's live view of the persona. Mount this with `key={profile.id}`:
@@ -41,6 +45,27 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   const [sending, setSending] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [thoughtsOpen, setThoughtsOpen] = useState(false);
+
+  // A pinned face overrides Impulse's; "" follows Impulse. Restored after
+  // mount, like the voice, so the server render and hydration agree.
+  const [face, setFaceState] = useState<Expression | "">("");
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(FACE_STORAGE_KEY);
+      if (saved && (EXPRESSIONS as string[]).includes(saved)) setFaceState(saved as Expression);
+    } catch {
+      // Storage unavailable — follow Impulse.
+    }
+  }, []);
+  function setFace(value: Expression | "") {
+    setFaceState(value);
+    try {
+      if (value) window.localStorage.setItem(FACE_STORAGE_KEY, value);
+      else window.localStorage.removeItem(FACE_STORAGE_KEY);
+    } catch {
+      // Holds for this session.
+    }
+  }
 
   // Ideas seen the last time the Thoughts panel was open — the badge counts
   // only what arrived since, and opening it again clears the count back to
@@ -198,6 +223,19 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
             </div>
 
           <div className="flex items-center gap-2 justify-self-end">
+            <select
+              value={face}
+              onChange={(e) => setFace(e.target.value as Expression | "")}
+              aria-label="Face"
+              className="rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              <option value="">Face: live</option>
+              {EXPRESSIONS.map((x) => (
+                <option key={x} value={x}>
+                  Face: {x}
+                </option>
+              ))}
+            </select>
             {voices.length > 0 && (
               <select
                 value={voiceURI}
@@ -240,7 +278,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
             input off the bottom of the screen instead of scrolling. */}
         <div className="flex min-h-0 w-full max-w-5xl flex-1 flex-col items-center gap-2">
           <Avatar
-            expression={turn?.impulse?.expression ?? "neutral"}
+            expression={face || (turn?.impulse?.expression ?? "neutral")}
             speaking={speaking}
             identity={profile.avatar}
           />
