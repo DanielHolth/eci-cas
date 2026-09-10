@@ -57,6 +57,10 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
   // `busy`: an utterance refused for want of a gesture still runs the whole
   // speak/onerror cycle, so only onstart is evidence of sound.
   const heard = useRef(false);
+  // The text the browser refused for want of a gesture, if any. Retrying on
+  // "not heard yet" instead doubled the greeting: a cold engine can take ten
+  // seconds to start, and a click in that window queued it a second time.
+  const refused = useRef<string | null>(null);
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceURI, setVoiceURIState] = useState("");
@@ -147,7 +151,10 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
     // Both hands go to the same place: an utterance that errors (no voice
     // installed, autoplay refused) must not wedge the queue shut.
     utterance.onend = drain;
-    utterance.onerror = drain;
+    utterance.onerror = (event) => {
+      if (event.error === "not-allowed") refused.current = next;
+      drain();
+    };
     synth.speak(utterance);
   }, []);
 
@@ -174,7 +181,8 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
       opener.volume = 0;
       synth.speak(opener);
 
-      if (retry && !heard.current) {
+      if (retry && !heard.current && refused.current === retry) {
+        refused.current = null;
         say(retry);
       }
     },

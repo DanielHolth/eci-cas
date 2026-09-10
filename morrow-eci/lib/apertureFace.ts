@@ -52,10 +52,16 @@ float seg(vec2 p, vec2 a, vec2 b) {
   return length(pa - ba * h);
 }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+// Rotates a colour's hue by a radians around the grey axis.
+vec3 hue(vec3 c, float a) {
+  vec3 k = vec3(0.57735);
+  float ca = cos(a);
+  return max(c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca), 0.0);
+}
 `;
 
 const SCENE = `
-vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M) {
+vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M, vec4 E) {
   float mn = min(R.x, R.y);
   vec2 p = (fc - 0.5 * R.xy) / mn;
   float t = R.z, speak = R.w;
@@ -71,13 +77,19 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M) {
   // the voice is slow, and a fast jitter would read as a loose mount rather
   // than as someone talking. Two incommensurate periods, so the sway never
   // settles into a visible loop for as long as the sentence lasts.
-  vec2 sway = vec2(sin(t * 1.9) * 0.011, sin(t * 1.37 + 1.1) * 0.008) * speak;
-  float tilt = sin(t * 1.13 + 0.4) * 0.050 * speak;
-  vec2 q = p - sway;
+  // E carries the idle shake (offset xy, tilt z), computed in JS.
+  vec2 sway = vec2(sin(t * 1.9) * 0.022, sin(t * 1.37 + 1.1) * 0.016) * speak;
+  float tilt = sin(t * 1.13 + 0.4) * 0.100 * speak + E.z;
+  vec2 q = p - sway - E.xy;
   p = vec2(q.x * cos(tilt) - q.y * sin(tilt), q.x * sin(tilt) + q.y * cos(tilt));
 
   float r = length(p);
   float px = 1.5 / mn;
+
+  // While speaking, both mood colours roll through neighbouring hues, and
+  // differently per ring, so shades travel outward across the iris.
+  A.rgb = hue(A.rgb, speak * (1.1 * sin(t * 0.83) + 0.7 * sin(r * 11.0 - t * 2.3)));
+  B.rgb = hue(B.rgb, speak * (1.1 * sin(t * 0.83 + 1.7) + 0.5 * sin(r * 7.0 + t * 1.6)));
 
   float breath = 0.5 + 0.5 * sin(t * (0.7 + alert * 1.4));
 
@@ -107,20 +119,34 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M) {
   col += A.rgb * 0.30 * smoothstep(0.46, 0.5, abs(sa - 0.5)) * irisMask;
   col += A.rgb * smoothstep(0.005, 0.0, abs(blades)) * 1.15 * smoothstep(px, -px, r - 0.345);
 
+  // Inner layers: faint at rest, flaring while speaking. Half the gaze
+  // parallax of the pupil, so they read as sitting deeper.
+  float lv = 0.12 + 0.88 * speak;
+  vec2 dp = p - gaze * 0.025;
+  float dr = length(dp);
+  float da = atan(dp.y, dp.x);
+  float core = (1.0 - smoothstep(-px, px, dr - ap * 1.9)) * irisMask;
+  float blades2 = ngon(dp, ap * (1.45 + 0.12 * sin(t * 1.7) * speak), 7.0, -t * (0.14 + 0.5 * speak));
+  col += B.rgb * 1.4 * (1.0 - smoothstep(0.0, 0.006, abs(blades2))) * core * lv;
+  float fil = pow(0.5 + 0.5 * sin(da * 23.0 + sin(dr * 34.0 - t * 1.6) * 2.2 + t * (0.3 + speak)), 8.0);
+  col += A.rgb * fil * irisMask * (1.0 - smoothstep(ap, 0.34, dr)) * (0.05 + 0.45 * speak);
+  float pulse = fract(t * (0.35 + 0.9 * speak));
+  col += A.rgb * (1.0 - smoothstep(0.0, 0.006, abs(dr - ap * (1.15 + 0.25 * pulse)))) * irisMask * lv * (1.0 - pulse);
+
   vec2 gp = p - gaze * 0.05;
   // The pupil is where the expression is pushed hardest: it swells and its
   // outline goes very slightly trilobed while a sentence is in flight, then
   // slides back. Both terms are multiplied by speak, so at rest this is
   // exactly the circle it always was.
   float pang = atan(gp.y, gp.x);
-  float pu = length(gp) * (1.0 + speak * 0.055 * sin(pang * 3.0 + t * 1.45))
-             - ap * 0.60 * (1.0 + speak * 0.11 * sin(t * 1.25));
+  float pu = length(gp) * (1.0 + speak * 0.11 * sin(pang * 3.0 + t * 1.45))
+             - ap * 0.60 * (1.0 + speak * 0.22 * sin(t * 1.25));
   col = mix(col, vec3(0.012, 0.016, 0.026), smoothstep(px, -px, pu));
   col += A.rgb * smoothstep(0.004, 0.0, abs(pu)) * 1.3;
   col += vec3(1.0) * 0.45 * smoothstep(0.022, 0.0, length(gp - vec2(-0.022, 0.026)));
 
   float wv = 0.5 + 0.5 * sin(r * 74.0 - t * 3.4);
-  col += A.rgb * speak * wv * 0.13 * smoothstep(0.40, 0.10, r) * housing;
+  col += A.rgb * speak * wv * 0.26 * smoothstep(0.40, 0.10, r) * housing;
 
   vec2 bl = p - vec2(-0.166, 0.492);
   bl = vec2(bl.x * cos(-brow) - bl.y * sin(-brow), bl.x * sin(-brow) + bl.y * cos(-brow));
@@ -147,10 +173,10 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M) {
 const GLSL_FRAG = `#version 300 es
 precision highp float;
 out vec4 outColor;
-uniform vec4 R; uniform vec4 A; uniform vec4 B; uniform vec4 M;
+uniform vec4 R; uniform vec4 A; uniform vec4 B; uniform vec4 M; uniform vec4 E;
 ${BODY}
 ${SCENE}
-void main() { outColor = vec4(scene(gl_FragCoord.xy, R, A, B, M), 1.0); }`;
+void main() { outColor = vec4(scene(gl_FragCoord.xy, R, A, B, M, E), 1.0); }`;
 
 const GLSL_VERT = `#version 300 es
 void main() {
@@ -159,7 +185,7 @@ void main() {
 }`;
 
 const WGSL = `
-struct U { R: vec4<f32>, A: vec4<f32>, B: vec4<f32>, M: vec4<f32> };
+struct U { R: vec4<f32>, A: vec4<f32>, B: vec4<f32>, M: vec4<f32>, E: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
 
 fn ngon(p: vec2<f32>, r: f32, n: f32, ro: f32) -> f32 {
@@ -173,6 +199,11 @@ fn seg(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
   return length(pa - ba * h);
 }
 fn hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233))) * 43758.5453); }
+fn hue(c: vec3<f32>, a: f32) -> vec3<f32> {
+  let k = vec3<f32>(0.57735);
+  let ca = cos(a);
+  return max(c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca), vec3<f32>(0.0));
+}
 
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
   var v = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
@@ -180,7 +211,7 @@ fn hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233
 }
 
 @fragment fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-  let R = u.R; let A = u.A; let B = u.B; let M = u.M;
+  let R = u.R; var A = u.A; var B = u.B; let M = u.M; let E = u.E;
   // WebGPU's framebuffer origin is top-left; GLSL's is bottom-left. Flip
   // once here so the rest of the body is the same arithmetic.
   let fc = vec2<f32>(pos.x, R.y - pos.y);
@@ -192,13 +223,16 @@ fn hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233
 
   // See the GLSL twin above for why the shrink and the sway are here.
   var p = p0 * 1.20;
-  let sway = vec2<f32>(sin(t * 1.9) * 0.011, sin(t * 1.37 + 1.1) * 0.008) * speak;
-  let tilt = sin(t * 1.13 + 0.4) * 0.050 * speak;
-  let q = p - sway;
+  let sway = vec2<f32>(sin(t * 1.9) * 0.022, sin(t * 1.37 + 1.1) * 0.016) * speak;
+  let tilt = sin(t * 1.13 + 0.4) * 0.100 * speak + E.z;
+  let q = p - sway - E.xy;
   p = vec2<f32>(q.x * cos(tilt) - q.y * sin(tilt), q.x * sin(tilt) + q.y * cos(tilt));
 
   let r = length(p);
   let px = 1.5 / mn;
+
+  A = vec4<f32>(hue(A.rgb, speak * (1.1 * sin(t * 0.83) + 0.7 * sin(r * 11.0 - t * 2.3))), A.w);
+  B = vec4<f32>(hue(B.rgb, speak * (1.1 * sin(t * 0.83 + 1.7) + 0.5 * sin(r * 7.0 + t * 1.6))), B.w);
 
   let breath = 0.5 + 0.5 * sin(t * (0.7 + alert * 1.4));
   var col = B.rgb * 0.07 * exp(-r * 2.1);
@@ -227,16 +261,28 @@ fn hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233
   col = col + A.rgb * 0.30 * smoothstep(0.46, 0.5, abs(sa - 0.5)) * irisMask;
   col = col + A.rgb * (1.0 - smoothstep(0.0, 0.005, abs(blades))) * 1.15 * smoothstep(-px, px, 0.345 - r);
 
+  let lv = 0.12 + 0.88 * speak;
+  let dp = p - gaze * 0.025;
+  let dr = length(dp);
+  let da = atan2(dp.y, dp.x);
+  let core = (1.0 - smoothstep(-px, px, dr - ap * 1.9)) * irisMask;
+  let blades2 = ngon(dp, ap * (1.45 + 0.12 * sin(t * 1.7) * speak), 7.0, -t * (0.14 + 0.5 * speak));
+  col = col + B.rgb * 1.4 * (1.0 - smoothstep(0.0, 0.006, abs(blades2))) * core * lv;
+  let fil = pow(0.5 + 0.5 * sin(da * 23.0 + sin(dr * 34.0 - t * 1.6) * 2.2 + t * (0.3 + speak)), 8.0);
+  col = col + A.rgb * fil * irisMask * (1.0 - smoothstep(ap, 0.34, dr)) * (0.05 + 0.45 * speak);
+  let pulse = fract(t * (0.35 + 0.9 * speak));
+  col = col + A.rgb * (1.0 - smoothstep(0.0, 0.006, abs(dr - ap * (1.15 + 0.25 * pulse)))) * irisMask * lv * (1.0 - pulse);
+
   let gp = p - gaze * 0.05;
   let pang = atan2(gp.y, gp.x);
-  let pu = length(gp) * (1.0 + speak * 0.055 * sin(pang * 3.0 + t * 1.45))
-           - ap * 0.60 * (1.0 + speak * 0.11 * sin(t * 1.25));
+  let pu = length(gp) * (1.0 + speak * 0.11 * sin(pang * 3.0 + t * 1.45))
+           - ap * 0.60 * (1.0 + speak * 0.22 * sin(t * 1.25));
   col = mix(col, vec3<f32>(0.012, 0.016, 0.026), smoothstep(-px, px, -pu));
   col = col + A.rgb * (1.0 - smoothstep(0.0, 0.004, abs(pu))) * 1.3;
   col = col + vec3<f32>(1.0) * 0.45 * (1.0 - smoothstep(0.0, 0.022, length(gp - vec2<f32>(-0.022, 0.026))));
 
   let wv = 0.5 + 0.5 * sin(r * 74.0 - t * 3.4);
-  col = col + A.rgb * speak * wv * 0.13 * (1.0 - smoothstep(0.10, 0.40, r)) * housing;
+  col = col + A.rgb * speak * wv * 0.26 * (1.0 - smoothstep(0.10, 0.40, r)) * housing;
 
   var bl = p - vec2<f32>(-0.166, 0.492);
   bl = vec2<f32>(bl.x * cos(-brow) - bl.y * sin(-brow), bl.x * sin(-brow) + bl.y * cos(-brow));
@@ -332,7 +378,46 @@ export function mountApertureFace(
     S.gaze[1] = lerp(S.gaze[1], T.gaze[1], Math.min(1, dt * 5));
   }
 
-  const U = new Float32Array(16);
+  const U = new Float32Array(20);
+
+  /**
+   * A small shiver after a stretch of nobody doing anything, so an idle face
+   * still reads as alive. The countdown is 60 s ± 30 %, re-rolled every time
+   * it fires or anything happens, so it never lands on a beat.
+   */
+  const IDLE_S = 60;
+  const rollIdle = () => IDLE_S * (1 + 0.3 * (2 * Math.random() - 1)) * 1000;
+  let shakeAt = performance.now() + rollIdle();
+  let shake: { start: number; dur: number; amp: number; ph: number[] } | null = null;
+  function poke() {
+    shakeAt = performance.now() + rollIdle();
+  }
+
+  function idleShake(now: number): [number, number, number] {
+    if (reduced) return [0, 0, 0];
+    if (T.speak > 0) { shake = null; shakeAt = now + rollIdle(); return [0, 0, 0]; }
+    if (!shake && now >= shakeAt) {
+      shake = {
+        start: now,
+        dur: 350 + Math.random() * 700,
+        amp: 0.012 + Math.random() * 0.020,
+        ph: [0, 1, 2, 3, 4, 5].map(() => Math.random() * Math.PI * 2),
+      };
+      shakeAt = now + rollIdle();
+    }
+    if (!shake) return [0, 0, 0];
+    const k = (now - shake.start) / shake.dur;
+    if (k >= 1) { shake = null; return [0, 0, 0]; }
+    const env = Math.sin(Math.PI * k) * shake.amp;
+    const s = (now - shake.start) / 1000;
+    const p = shake.ph;
+    const n = () => (Math.random() - 0.5) * 0.6;
+    return [
+      env * (Math.sin(s * 47 + p[0]) + 0.6 * Math.sin(s * 83 + p[1]) + n()),
+      env * (Math.sin(s * 53 + p[2]) + 0.6 * Math.sin(s * 71 + p[3]) + n()),
+      env * 2.5 * (Math.sin(s * 39 + p[4]) + 0.5 * Math.sin(s * 97 + p[5]) + n()),
+    ];
+  }
 
   /**
    * How far the expression is pushed past its resting value while a reply is
@@ -351,11 +436,11 @@ export function mountApertureFace(
     return {
       // Colour: the light half brightens and the deep half recedes, which
       // reads as the face leaning in rather than as a brightness wobble.
-      lift: s * 0.16 * (0.5 + 0.5 * Math.sin(t * 1.05)),
+      lift: s * 0.30 * (0.5 + 0.5 * Math.sin(t * 1.05)),
       // Aperture, in knob units. The shader turns this into blade radius and
       // pupil size together, so one term moves both.
-      aper: s * 0.13 * Math.sin(t * 0.78 + 1.4),
-      warm: s * 0.10 * Math.sin(t * 0.61 + 0.3),
+      aper: s * 0.22 * Math.sin(t * 0.78 + 1.4),
+      warm: s * 0.20 * Math.sin(t * 0.61 + 0.3),
     };
   }
 
@@ -367,6 +452,8 @@ export function mountApertureFace(
     U[4] = clamp01(S.a[0] * (1 + d.lift)); U[5] = clamp01(S.a[1] * (1 + d.lift)); U[6] = clamp01(S.a[2] * (1 + d.lift)); U[7] = S.brow;
     U[8] = S.b[0] * (1 - d.lift * 0.5); U[9] = S.b[1] * (1 - d.lift * 0.5); U[10] = S.b[2] * (1 - d.lift * 0.5); U[11] = clamp01(S.aper + d.aper);
     U[12] = S.alert; U[13] = clamp01(S.warm + d.warm); U[14] = S.gaze[0]; U[15] = S.gaze[1];
+    const e = idleShake(t * 1000);
+    U[16] = e[0]; U[17] = e[1]; U[18] = e[2]; U[19] = 0;
   }
 
   const dpr = Math.min(typeof devicePixelRatio === "number" ? devicePixelRatio : 1, 2);
@@ -385,6 +472,7 @@ export function mountApertureFace(
   // that only counted while it was on top of the face would almost never
   // count at all. Passive, because this never prevents a default.
   function steer(event: PointerEvent) {
+    poke();
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
     const cx = rect.left + rect.width / 2;
@@ -399,6 +487,8 @@ export function mountApertureFace(
     ];
   }
   window.addEventListener("pointermove", steer, { passive: true });
+  const ACTIVITY = ["pointerdown", "keydown", "wheel"] as const;
+  for (const e of ACTIVITY) window.addEventListener(e, poke, { passive: true });
 
   function loop(render: (t: number) => void) {
     let last = performance.now();
@@ -435,7 +525,7 @@ export function mountApertureFace(
       fragment: { module: shader, entryPoint: "fs", targets: [{ format }] },
       primitive: { topology: "triangle-list" },
     });
-    const buf = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const buf = device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const bind = device.createBindGroup({
       layout: pipeline.getBindGroupLayout(0),
       entries: [{ binding: 0, resource: { buffer: buf } }],
@@ -483,6 +573,7 @@ export function mountApertureFace(
     const uA = gl.getUniformLocation(prog, "A");
     const uB = gl.getUniformLocation(prog, "B");
     const uM = gl.getUniformLocation(prog, "M");
+    const uE = gl.getUniformLocation(prog, "E");
     gl.bindVertexArray(gl.createVertexArray());
 
     loop(() => {
@@ -491,6 +582,7 @@ export function mountApertureFace(
       gl.uniform4f(uA, U[4], U[5], U[6], U[7]);
       gl.uniform4f(uB, U[8], U[9], U[10], U[11]);
       gl.uniform4f(uM, U[12], U[13], U[14], U[15]);
+      gl.uniform4f(uE, U[16], U[17], U[18], 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     });
     return true;
@@ -522,15 +614,18 @@ export function mountApertureFace(
       T.aper = f.aper;
       T.alert = f.alert;
       T.warm = f.warm;
+      poke();
     },
     setSpeaking(speaking: boolean) {
       T.speak = speaking ? 1 : 0;
+      poke();
     },
     backend: () => backend,
     destroy() {
       disposed = true;
       cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", steer);
+      for (const e of ACTIVITY) window.removeEventListener(e, poke);
     },
   };
 }
