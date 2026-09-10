@@ -21,8 +21,8 @@ import type { Expression } from "@/types/events";
 // The Mood knob pins the face. Neutral is absent on purpose: an untouched
 // dial leaves the face to Impulse, the same way it leaves the prompt alone.
 const MOOD_FACE: Record<string, Expression> = {
-  Maleficent: "angry",
-  Sarcastic: "scared",
+  Maleficent: "scared",
+  Sarcastic: "angry",
   Sad: "sad",
   Helpful: "warm",
   Ecstatic: "alert",
