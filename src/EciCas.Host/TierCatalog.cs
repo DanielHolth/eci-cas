@@ -1,5 +1,3 @@
-using EciCas.Agents.Librarian;
-using EciCas.Agents.Recall;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -38,21 +36,16 @@ public sealed class TierCatalog
     private readonly Dictionary<string, TierPreset> _presets;
     private readonly IReadOnlyList<TierPreset> _ordered;
     private readonly SubstrateOptions _substrates;
-    private readonly RecallOptions _recall;
-    private readonly LibrarianOptions _librarian;
     private readonly RuntimeKnobs _knobs;
     private readonly KnobDefaults _knobDefaults;
     private readonly object _switchLock = new();
 
     public TierCatalog(IEnumerable<TierPreset> presets, SubstrateOptions substrates,
-        RecallOptions recall, LibrarianOptions librarian,
         RuntimeKnobs knobs, KnobDefaults knobDefaults, string active)
     {
         _ordered = presets.ToList();
         _presets = _ordered.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         _substrates = substrates;
-        _recall = recall;
-        _librarian = librarian;
         _knobs = knobs;
         _knobDefaults = knobDefaults;
 
@@ -95,30 +88,17 @@ public sealed class TierCatalog
         lock (_switchLock)
         {
             _substrates.Agents = preset.Agents;
-            _recall.RowsPerWorker = preset.Recall.RowsPerWorker;
-            _recall.MaxConcurrentRecalls = preset.Recall.MaxConcurrentRecalls;
-            _recall.MaxPickedPerWorker = preset.Recall.MaxPickedPerWorker;
-            _recall.PickAfterVector = preset.Recall.PickAfterVector;
-            _recall.RecentRows = preset.Recall.RecentRows;
-            _librarian.VectorMinScore = preset.Librarian.VectorMinScore;
 
-            // RecallDepth is a live knob seeded from the tier, so a tier
-            // switch re-seeds it. It overrides MaxPickedPerWorker, and
-            // leaving a hand-dragged 5 in place while switching to a tier
-            // that says 2 would silently keep the old tier's fan-out under
-            // the new tier's name -- the drag is cheap to redo, the
-            // confusion is not.
-            _knobs.RecallDepth = preset.Recall.MaxPickedPerWorker;
-
-            // Same re-seeding, same reason: MaxSentences, ReflectionEvery and
-            // Mood are live knobs too, and leaving a hand-dragged value in
-            // place across a switch would run the new tier under the old
-            // tier's session experiment.
+            // Every live knob is re-seeded from the tier on switch: leaving a
+            // hand-dragged value in place would run the new tier under the
+            // old tier's session experiment.
+            _knobs.RecallDepth = preset.Knobs.RecallDepth;
             _knobs.MaxSentences = preset.Knobs.MaxSentences;
             _knobs.ReflectionEvery = preset.Knobs.ReflectionEvery;
             _knobs.PerceptionChars = preset.Knobs.PerceptionChars;
             _knobs.ContextTurns = preset.Knobs.ContextTurns;
             _knobs.Mood = preset.Knobs.Mood;
+            _knobDefaults.RecallDepth = preset.Knobs.RecallDepth;
             _knobDefaults.MaxSentences = preset.Knobs.MaxSentences;
             _knobDefaults.ReflectionEvery = preset.Knobs.ReflectionEvery;
             _knobDefaults.PerceptionChars = preset.Knobs.PerceptionChars;
@@ -143,8 +123,6 @@ public sealed class TierPreset
 {
     public required string Name { get; init; }
     public required Dictionary<string, SubstrateAgentEntry> Agents { get; init; }
-    public required RecallOptions Recall { get; init; }
-    public required LibrarianOptions Librarian { get; init; }
     public required KnobDefaults Knobs { get; init; }
 
     /// <summary>

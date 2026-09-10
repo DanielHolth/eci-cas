@@ -1,9 +1,6 @@
-using EciCas.Agents.Cataloger;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
-using EciCas.Agents.Librarian;
 using EciCas.Agents.Passages;
-using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Utterances;
 using EciCas.Core;
@@ -27,9 +24,6 @@ internal static class OptionsRegistration
         services.Configure<GovernanceOptions>(configuration.GetSection("Governance"));
         services.Configure<RoutingManifest>(configuration.GetSection("RoutingManifest"));
         services.Configure<SubstrateOptions>(configuration.GetSection("Substrates"));
-        services.Configure<RecallOptions>(configuration.GetSection("Recall"));
-        services.Configure<LibrarianOptions>(configuration.GetSection("Librarian"));
-        services.Configure<CatalogerOptions>(configuration.GetSection("Cataloger"));
         services.Configure<ImpulseOptions>(configuration.GetSection("Impulse"));
         services.Configure<ReflectionOptions>(configuration.GetSection("Reflection"));
         services.Configure<PassageOptions>(configuration.GetSection("Passages"));

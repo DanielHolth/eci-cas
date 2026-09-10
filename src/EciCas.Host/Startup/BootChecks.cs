@@ -55,17 +55,12 @@ internal static class BootChecks
 
         // The inverted log's half of the same job: a vector and a thread are
         // derived columns, and derived only means derived if something
-        // rebuilds them. Gated on the flag rather than on the registration:
-        // the log is registered either way, and sweeping a log nothing is
-        // writing to is work with no reader.
-        if (app.Services.GetRequiredService<IOptions<UtteranceOptions>>().Value.Enabled)
+        // rebuilds them.
+        var utterances = app.Services.GetRequiredService<UtteranceBackfill>();
+        var (embedded, threaded) = await utterances.RunAsync(CancellationToken.None);
+        if (embedded > 0 || threaded > 0)
         {
-            var utterances = app.Services.GetRequiredService<UtteranceBackfill>();
-            var (embedded, threaded) = await utterances.RunAsync(CancellationToken.None);
-            if (embedded > 0 || threaded > 0)
-            {
-                Console.WriteLine($"Utterance log: embedded {embedded} row(s), threaded {threaded}.");
-            }
+            Console.WriteLine($"Utterance log: embedded {embedded} row(s), threaded {threaded}.");
         }
 
         PassageCorpus.EnsureModelAgreement(

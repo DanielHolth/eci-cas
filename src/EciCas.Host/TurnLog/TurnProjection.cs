@@ -2,11 +2,10 @@ using EciCas.Agents.Archivist;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
-using EciCas.Agents.Librarian;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Security;
+using EciCas.Agents.Utterances;
 using EciCas.Bus;
 using EciCas.Core;
 
@@ -44,7 +43,6 @@ public static class TurnProjection
         return envelope.Topic switch
         {
             Topics.Perception => ApplyPerception(record, envelope),
-            Topics.SelectedPairs => ApplySelectedPairs(record, envelope),
             Topics.Advisories => ApplyAdvisory(record, envelope),
             Topics.Verdict => ApplyVerdict(record, envelope),
             Topics.Action => ApplyAction(record, envelope),
@@ -66,22 +64,10 @@ public static class TurnProjection
         StartedAt = envelope.Timestamp,
     };
 
-    /// <summary>
-    /// What Librarian judged worth opening. Kept apart from Reads because
-    /// they answer different questions — a turn that selected three pairs and
-    /// recalled nothing looked, in the drawer, exactly like a turn where
-    /// Librarian never ran.
-    /// </summary>
-    private static TurnRecord ApplySelectedPairs(TurnRecord record, Envelope envelope)
-    {
-        var pairs = envelope.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey);
-        return pairs is null ? record : record with { Pairs = [.. pairs.Select(p => $"{p.Category}/{p.Topic}")] };
-    }
-
     private static TurnRecord ApplyAdvisory(TurnRecord record, Envelope envelope) => envelope.PublishedBy switch
     {
         "Impulse" => record with { Impulse = envelope.Meta.Get<string>(ImpulseAgent.AdviceKey) ?? record.Impulse },
-        "Recall" => record with { Reads = Describe(envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey)) },
+        "Recall" => record with { Reads = Describe(envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey)) },
         "Hindsight" => record with { Hindsight = envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey) ?? record.Hindsight },
         _ => record,
     };

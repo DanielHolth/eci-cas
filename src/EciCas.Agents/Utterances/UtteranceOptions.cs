@@ -8,15 +8,6 @@
 public sealed class UtteranceOptions
 {
     /// <summary>
-    /// The rollback. False leaves the pair-addressed store in charge and
-    /// nothing here runs; true swaps the read and write paths and leaves the
-    /// old store on disk untouched, so going back is one boolean and a
-    /// restart. Nothing is deployed to anyone, so this is the whole of the
-    /// migration plan.
-    /// </summary>
-    public bool Enabled { get; set; }
-
-    /// <summary>
     /// The write-time sweep's line, measured at 0.86.
     ///
     /// The roadmap said "start near 0.9 and let the corpus argue it down",
@@ -67,7 +58,12 @@ public sealed class UtteranceOptions
     /// </summary>
     public int MinContentWords { get; set; } = 1;
 
-    /// <summary>How many rows reach Intent. Five slots, as benched.</summary>
+    /// <summary>
+    /// Fallback top-k, used only if RuntimeKnobs has not been resolved. Live
+    /// reads take their count from RuntimeKnobs.RecallDepth instead -- see
+    /// UtteranceConsult -- so the knob panel's slider actually drives this
+    /// number. Five, as benched, matches the knob's own default.
+    /// </summary>
     public int TopK { get; set; } = 5;
 
     /// <summary>

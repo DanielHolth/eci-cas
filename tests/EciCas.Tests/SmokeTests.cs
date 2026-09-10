@@ -1,13 +1,11 @@
 ﻿using System.Reflection;
 using EciCas.Agents.Action;
 using EciCas.Agents.Archivist;
-using EciCas.Agents.Cataloger;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Identity;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
-using EciCas.Agents.Librarian;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
@@ -261,17 +259,12 @@ public class SmokeTests
                 Agents =
                 {
                     ["Intent"] = new SubstrateAgentEntry(),
-                    ["Librarian"] = new SubstrateAgentEntry(),
                     ["Recall"] = new SubstrateAgentEntry(),
                     ["Reflection"] = new SubstrateAgentEntry(),
                     ["Archivist"] = new SubstrateAgentEntry(),
-                    ["Cataloger"] = new SubstrateAgentEntry(),
                     ["consolidator"] = new SubstrateAgentEntry(),
                 },
             }));
-            services.AddSingleton(Options.Create(new RecallOptions()));
-            services.AddSingleton(Options.Create(new LibrarianOptions()));
-            services.AddSingleton(Options.Create(new CatalogerOptions()));
             services.AddSingleton(Options.Create(new ReflectionOptions()));
             services.AddSingleton(Options.Create(new PassageOptions()));
 

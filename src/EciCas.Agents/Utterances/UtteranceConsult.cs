@@ -40,13 +40,22 @@ public sealed class UtteranceConsult
     private readonly IUtteranceLog _log;
     private readonly IEmbeddingProvider _embeddings;
     private readonly UtteranceOptions _options;
+    private readonly RuntimeKnobs _knobs;
 
-    public UtteranceConsult(IUtteranceLog log, IEmbeddingProvider embeddings, IOptions<UtteranceOptions> options)
+    public UtteranceConsult(IUtteranceLog log, IEmbeddingProvider embeddings, IOptions<UtteranceOptions> options, RuntimeKnobs knobs)
     {
         _log = log;
         _embeddings = embeddings;
         _options = options.Value;
+        _knobs = knobs;
     }
+
+    /// <summary>
+    /// The live top-k, from the Debug panel's RecallDepth slider rather than
+    /// the frozen options default -- see RuntimeKnobs.RecallDepth and
+    /// UtteranceOptions.TopK.
+    /// </summary>
+    private int TopK => _knobs.RecallDepth;
 
     public async Task<IReadOnlyList<Consulted>> FindAsync(string query, CancellationToken cancellationToken)
     {
@@ -92,11 +101,11 @@ public sealed class UtteranceConsult
         var current = Collapse(scored.Where(s => s.Row.SupersededBy is null), corpus, turnsNow, true);
         var picked = Select(current, []);
 
-        if (picked.Count < _options.TopK)
+        if (picked.Count < TopK)
         {
             var all = Collapse(scored, corpus, turnsNow, false);
             picked.AddRange(Select(all, [.. picked.Select(p => p.Row.ThreadId ?? p.Row.Id)])
-                .Take(_options.TopK - picked.Count));
+                .Take(TopK - picked.Count));
         }
 
         await _log.RecordHitsAsync([.. picked.Select(p => p.Row.Id)], cancellationToken).ConfigureAwait(false);
@@ -173,7 +182,7 @@ public sealed class UtteranceConsult
         var chosen = new List<Consulted>();
         var pool = candidates.Where(c => !taken.Contains(c.Row.ThreadId ?? c.Row.Id)).ToList();
 
-        while (chosen.Count < _options.TopK && pool.Count > 0)
+        while (chosen.Count < TopK && pool.Count > 0)
         {
             var bestIndex = 0;
             var bestValue = double.NegativeInfinity;

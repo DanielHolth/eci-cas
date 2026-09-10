@@ -1,7 +1,7 @@
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Recall;
 using EciCas.Agents.TurnWindow;
+using EciCas.Agents.Utterances;
 using EciCas.Agents.Identity;
 using EciCas.Bus;
 using EciCas.Core;
@@ -27,7 +27,7 @@ public class IntentAgentTests
         var bundle = Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
             .With(PerceptionAgent.TextKey, "how's the weather")
             .With(IdentityAgent.AdviceKey, "I'm ECI, here to help.")
-            .With(RecallAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)facts));
+            .With(ConsultAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)facts));
 
         await agent.HandleAsync(bundle, CancellationToken.None);
 
@@ -100,7 +100,7 @@ public class IntentAgentTests
         var turn = MetaBag.Empty.With(PerceptionAgent.TextKey, "what's my name");
 
         var neverRan = await ContextFor(turn);
-        var foundNothing = await ContextFor(turn.With(RecallAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[]));
+        var foundNothing = await ContextFor(turn.With(ConsultAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[]));
 
         Assert.DoesNotContain("Recall", neverRan);
         Assert.Contains("[Recall: nothing on file]", foundNothing);

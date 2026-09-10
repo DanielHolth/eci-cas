@@ -1,7 +1,6 @@
 using EciCas.Agents.Passages;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Hindsight;
-using EciCas.Agents.Librarian;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Bus;
@@ -80,83 +79,6 @@ public class PassageMemoryTests
         await store.WriteAsync([new Passage("a", "note", [], DateTimeOffset.UtcNow, Unit(0))], null, CancellationToken.None);
 
         Assert.Empty(await store.SearchAsync(Unit(1), 5, 0.45, CancellationToken.None));
-    }
-
-    /// <summary>
-    /// The whole point of the corpus: a matched passage adds the pair it named
-    /// to the selection, on top of whatever the selection call picked, and its
-    /// text rides along to reach Intent through Recall.
-    /// </summary>
-    [Fact]
-    public async Task AMatchedPassage_AddsItsPairsToTheSelection_AndCarriesItsText()
-    {
-        var activity = new BusActivityTracker();
-        var bus = new ChannelBus(activity);
-        var selections = bus.Subscribe(Topics.SelectedPairs);
-
-        var store = new InMemoryArchiveStore();
-        await store.WriteAsync([
-            new ArchiveRecord("person", "family", "son", "marcus", "birthdate", "2020-08-28", DateTimeOffset.UtcNow),
-            .. Enumerable.Range(0, 3).Select(i =>
-                new ArchiveRecord("world", $"topic{i}", "misc", "misc", "key", "value", DateTimeOffset.UtcNow))],
-            null, CancellationToken.None);
-
-        var passages = new InMemoryPassageStore();
-        await passages.WriteAsync(
-            [new Passage("a", "should have read the family record", [new ArchivePair("person", "family")], DateTimeOffset.UtcNow, Unit(0))],
-            null, CancellationToken.None);
-
-        // The selection call picks index 1 (world/topic0); the passage
-        // contributes person/family, which it did not pick.
-        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("1", TimeSpan.Zero, 5, 0m)));
-        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
-            Manifest("Librarian"), Options.Create(new LibrarianOptions()),
-            new RuntimeKnobs(),
-            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
-
-        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            MetaBag.Empty.With(PerceptionAgent.TextKey, "how old is marcus?")), CancellationToken.None);
-
-        Assert.True(selections.TryRead(out var selection));
-        var pairs = selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!;
-        Assert.Contains(new ArchivePair("person", "family"), pairs);
-        Assert.Null(selection.Meta.Get<IReadOnlyList<string>>("librarian.passages"));
-    }
-
-    /// <summary>
-    /// A pair whose last row was deleted took its file, and therefore its
-    /// index entry, with it. Trusting a stale pointer would send Recall to
-    /// read nothing; resolving against the live index drops it silently.
-    /// </summary>
-    [Fact]
-    public async Task APassagePointingAtAPairThatNoLongerExists_ContributesNothing()
-    {
-        var activity = new BusActivityTracker();
-        var bus = new ChannelBus(activity);
-        var selections = bus.Subscribe(Topics.SelectedPairs);
-
-        var store = new InMemoryArchiveStore();
-        await store.WriteAsync([new ArchiveRecord("world", "weather", "misc", "misc", "key", "value", DateTimeOffset.UtcNow)],
-            null, CancellationToken.None);
-
-        var passages = new InMemoryPassageStore();
-        await passages.WriteAsync(
-            [new Passage("a", "stale lead", [new ArchivePair("person", "deleted")], DateTimeOffset.UtcNow, Unit(0))],
-            null, CancellationToken.None);
-
-        var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store,
-            new StubSubstrate(_ => throw new InvalidOperationException("index fits under the cap, so this is never called")),
-            Manifest("Librarian"), Options.Create(new LibrarianOptions()),
-            new RuntimeKnobs(),
-            new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
-
-        await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            MetaBag.Empty.With(PerceptionAgent.TextKey, "anything on file?")), CancellationToken.None);
-
-        Assert.True(selections.TryRead(out var selection));
-        Assert.DoesNotContain(new ArchivePair("person", "deleted"),
-            selection!.Meta.Get<IReadOnlyList<ArchivePair>>(LibrarianAgent.SelectedPairsKey)!);
-
     }
 
     /// <summary>

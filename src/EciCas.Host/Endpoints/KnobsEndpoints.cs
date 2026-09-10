@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using EciCas.Agents.Recall;
 using EciCas.Core;
 using EciCas.Substrates;
 using Microsoft.AspNetCore.Builder;
@@ -23,10 +22,10 @@ internal static class KnobsEndpoints
     {
         // The Debug panel's sliders — live, in-memory, and reset on restart. Read
         // on every Intent prompt, so a drag takes effect on the very next turn.
-        app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults) =>
-            Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions));
+        app.MapGet("/api/knobs", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<KnobDefaults> knobDefaults) =>
+            Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions));
 
-        app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults,
+        app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<KnobDefaults> knobDefaults,
             ISubstrateProvider substrates, IOptions<SubstrateOptions> substrateConfig) =>
         {
             // First, because it re-seeds RecallDepth: a request that sets both
@@ -82,7 +81,7 @@ internal static class KnobsEndpoints
                 knobs.Mood = mood;
             }
 
-            return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions);
+            return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
         });
 
         // Writes every live knob back into the active tier's file, so a setting
@@ -93,9 +92,9 @@ internal static class KnobsEndpoints
         // build output means the next `dotnet build` silently reverts it.
         //
         // Read-modify-write of the parsed JSON rather than a re-serialise of
-        // RecallOptions/KnobDefaults: a tier file carries Classes, Agents and Rank
-        // too, and nothing here has any business rewriting those.
-        app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<RecallOptions> recall, IOptions<KnobDefaults> knobDefaults) =>
+        // KnobDefaults: a tier file carries Classes, Agents and Rank too, and
+        // nothing here has any business rewriting those.
+        app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<KnobDefaults> knobDefaults) =>
         {
             var file = $"appsettings.{tiers.Active}.json";
             var targets = new[]
@@ -113,14 +112,14 @@ internal static class KnobsEndpoints
                 }
 
                 var text = File.ReadAllText(path);
-                if (!TryWriteNumber(ref text, "MaxPickedPerWorker", knobs.RecallDepth)
+                if (!TryWriteNumber(ref text, "RecallDepth", knobs.RecallDepth)
                     || !TryWriteNumber(ref text, "MaxSentences", knobs.MaxSentences)
                     || !TryWriteNumber(ref text, "ReflectionEvery", knobs.ReflectionEvery)
                     || !TryWriteNumber(ref text, "PerceptionChars", knobs.PerceptionChars)
                     || !TryWriteNumber(ref text, "ContextTurns", knobs.ContextTurns)
                     || !TryWriteString(ref text, "Mood", knobs.Mood.ToString()))
                 {
-                    return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.");
+                    return Results.Problem($"{file} is missing one of Knobs:RecallDepth, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.");
                 }
 
                 // Parsed to prove the edit, not to produce it. Round-tripping through
@@ -143,17 +142,17 @@ internal static class KnobsEndpoints
 
             // The bound options are what the payload reports as "saved", so they have
             // to move with the file or the Save button stays lit after a good save.
-            recall.Value.MaxPickedPerWorker = knobs.RecallDepth;
+            knobDefaults.Value.RecallDepth = knobs.RecallDepth;
             knobDefaults.Value.MaxSentences = knobs.MaxSentences;
             knobDefaults.Value.ReflectionEvery = knobs.ReflectionEvery;
             knobDefaults.Value.PerceptionChars = knobs.PerceptionChars;
             knobDefaults.Value.ContextTurns = knobs.ContextTurns;
             knobDefaults.Value.Mood = knobs.Mood;
 
-            return Results.Json(ToKnobsPayload(knobs, tiers, recall.Value, knobDefaults.Value), jsonOptions);
+            return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
         });
 
-        static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, RecallOptions recall, KnobDefaults knobDefaults) => new
+        static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, KnobDefaults knobDefaults) => new
         {
             tier = tiers.Active,
             tiers = tiers.Presets.Select(p => new { name = p.Name, missingKeys = p.MissingKeys }),
@@ -164,7 +163,7 @@ internal static class KnobsEndpoints
             recallDepth = knobs.RecallDepth,
             // What the tier file on disk says, so the surface can grey its Save
             // button rather than having to guess whether a drag is unsaved.
-            savedRecallDepth = recall.MaxPickedPerWorker,
+            savedRecallDepth = knobDefaults.RecallDepth,
             savedMaxSentences = knobDefaults.MaxSentences,
             savedReflectionEvery = knobDefaults.ReflectionEvery,
             savedPerceptionChars = knobDefaults.PerceptionChars,

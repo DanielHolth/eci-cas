@@ -1,7 +1,6 @@
 ﻿using EciCas.Agents.Archivist;
-using EciCas.Agents.Librarian;
+using EciCas.Agents.Utterances;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
@@ -258,8 +257,8 @@ public class ArchivistAgentTests
             "tromso", DateTimeOffset.UtcNow, ArchiveDomain.External, 0.9);
 
         await Agent(bus, activity, substrate).HandleAsync(Bundle("how old is he now", MetaBag.Empty
-                .With(LibrarianAgent.SelectedPairsKey, (IReadOnlyList<ArchivePair>)[new ArchivePair("person", "family")])
-                .With(RecallAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[recalled])),
+                .With("librarian.selected-pairs", (IReadOnlyList<ArchivePair>)[new ArchivePair("person", "family")])
+                .With(ConsultAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[recalled])),
             CancellationToken.None);
 
         Assert.DoesNotContain("person/family", prompt);

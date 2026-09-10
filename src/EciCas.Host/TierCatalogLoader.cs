@@ -1,5 +1,3 @@
-using EciCas.Agents.Librarian;
-using EciCas.Agents.Recall;
 using EciCas.Core;
 using EciCas.Substrates;
 using Microsoft.Extensions.Configuration;
@@ -55,8 +53,6 @@ public static class TierCatalogLoader
     private static TierPreset Bind(string name, IConfigurationRoot configuration)
     {
         var substrates = configuration.GetSection("Substrates").Get<SubstrateOptions>() ?? new SubstrateOptions();
-        var recall = configuration.GetSection("Recall").Get<RecallOptions>() ?? new RecallOptions();
-        var librarian = configuration.GetSection("Librarian").Get<LibrarianOptions>() ?? new LibrarianOptions();
         var knobs = configuration.GetSection("Knobs").Get<KnobDefaults>() ?? new KnobDefaults();
 
         // Validated here rather than on selection, so a broken tier file
@@ -95,8 +91,6 @@ public static class TierCatalogLoader
         {
             Name = name,
             Agents = substrates.Agents,
-            Recall = recall,
-            Librarian = librarian,
             Knobs = knobs,
             Rank = configuration.GetValue<int>("Tier:Rank"),
             MissingKeys = missing,

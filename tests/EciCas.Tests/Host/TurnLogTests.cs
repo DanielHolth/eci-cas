@@ -2,10 +2,9 @@ using EciCas.Agents.Archivist;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
-using EciCas.Agents.Librarian;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
+using EciCas.Agents.Utterances;
 using EciCas.Agents.Security;
 using EciCas.Bus;
 using EciCas.Core;
@@ -42,18 +41,6 @@ public class TurnLogTests
             MetaBag.Empty.With(SubstrateTrace.AgentKey, agent)
                 .With(SubstrateTrace.LatencyKey, 5d)
                 .With(SubstrateTrace.CostKey, cost));
-
-    [Fact]
-    public void Apply_WithSelectedPairs_ReportsWhatLibrarianOpened()
-    {
-        var perception = Perception("who is vera?");
-        var record = Project(perception,
-            perception.Derive(Topics.SelectedPairs, "Librarian", Severity.Neutral,
-                MetaBag.Empty.With(LibrarianAgent.SelectedPairsKey,
-                    (IReadOnlyList<ArchivePair>)[new ArchivePair("person", "family")])));
-
-        Assert.Equal("person/family", Assert.Single(record.Pairs));
-    }
 
     /// <summary>
     /// A turn's own cost is arithmetic over its calls, but the two running
@@ -126,7 +113,7 @@ public class TurnLogTests
             perception.Derive(Topics.Action, "Governance", Severity.Neutral,
                 MetaBag.Empty.With(IntentAgent.ReplyKey, "Your daughter.").With(SecurityAgent.VerdictKey, Verdict.Green)),
             perception.Derive(Topics.Advisories, "Recall", Severity.Neutral,
-                MetaBag.Empty.With(RecallAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[Fact])),
+                MetaBag.Empty.With(ConsultAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)[Fact])),
             perception);
 
         Assert.Equal("who is vera?", record.Perception);

@@ -119,7 +119,7 @@ public class UtteranceLogTests : IDisposable
         var now = Said("the boat is called Vega now", DateTimeOffset.UtcNow) with { ThreadId = "t1", Embedding = Vector("the boat is called Vega now"), EmbeddingModelId = "stub-bow" };
         await log.AppendAsync([old, now], CancellationToken.None);
 
-        var consult = new UtteranceConsult(log, Embeddings(), Options.Create(new UtteranceOptions()));
+        var consult = new UtteranceConsult(log, Embeddings(), Options.Create(new UtteranceOptions()), new RuntimeKnobs());
         var hits = await consult.FindAsync("the boat is called Vega", CancellationToken.None);
 
         var hit = Assert.Single(hits);
@@ -135,7 +135,7 @@ public class UtteranceLogTests : IDisposable
         await log.AppendAsync([stale, fresh], CancellationToken.None);
         await log.UpdateDerivedAsync([new UtteranceDerived(stale.Id, SupersededBy: fresh.Id)], CancellationToken.None);
 
-        var consult = new UtteranceConsult(log, Embeddings(), Options.Create(new UtteranceOptions()));
+        var consult = new UtteranceConsult(log, Embeddings(), Options.Create(new UtteranceOptions()), new RuntimeKnobs());
         var hits = await consult.FindAsync("what is the boat called", CancellationToken.None);
 
         // The retired row may still be topped up by the unrestricted pass --
@@ -207,7 +207,7 @@ public class UtteranceLogTests : IDisposable
     public async Task AReadOnAnEmptyLogIsNotAnError()
     {
         var log = new ParquetUtteranceLog(_dir);
-        var consult = new UtteranceConsult(log, Embeddings(), Options.Create(new UtteranceOptions()));
+        var consult = new UtteranceConsult(log, Embeddings(), Options.Create(new UtteranceOptions()), new RuntimeKnobs());
 
         Assert.Empty(await consult.FindAsync("anything at all", CancellationToken.None));
     }

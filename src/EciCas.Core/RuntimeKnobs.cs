@@ -37,10 +37,11 @@ public sealed class RuntimeKnobs
     }
 
     /// <summary>
-    /// How many rows one Recall picking call may hand back — overrides
-    /// RecallOptions.MaxPickedPerWorker live, and by extension decides how
-    /// wide the cosine cut ahead of it is (see <see cref="VectorCandidates"/>),
-    /// and it applies to every lane the thread count opens.
+    /// How many rows the read path's cosine sweep (UtteranceConsult) hands
+    /// back to Intent, replacing UtteranceOptions.TopK live, and by
+    /// extension how wide the cosine cut ahead of it is (see
+    /// <see cref="VectorCandidates"/>), and it applies to every lane the
+    /// thread count opens.
     ///
     /// Ten, not twenty: past ten rows out of one pair the addition is
     /// prompt weight rather than grounding.
@@ -69,8 +70,8 @@ public sealed class RuntimeKnobs
     public int VectorCandidates => _recallDepth;
 
     /// <summary>
-    /// How many passages a turn's cosine sweep may wake -- Hindsight's and
-    /// Librarian's alike. Half the depth plus one, so it moves with the
+    /// How many passages a turn's cosine sweep may wake -- Hindsight's.
+    /// Half the depth plus one, so it moves with the
     /// retrieval budget without matching it.
     ///
     /// The unit is what makes the discount right. A row is a fact, and ten
@@ -163,6 +164,7 @@ public sealed class KnobDefaults
     public int ReflectionEvery { get; set; } = 5;
     public int PerceptionChars { get; set; } = 512;
     public int ContextTurns { get; set; } = 5;
+    public int RecallDepth { get; set; } = 5;
     public Mood Mood { get; set; } = Mood.Neutral;
 }
 

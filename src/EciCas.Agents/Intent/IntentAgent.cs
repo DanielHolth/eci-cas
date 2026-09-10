@@ -4,8 +4,8 @@ using System.Text.Json.Nodes;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
-using EciCas.Agents.Recall;
 using EciCas.Agents.TurnWindow;
+using EciCas.Agents.Utterances;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Identity;
 using EciCas.Bus;
@@ -92,7 +92,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Identity", envelope.Meta.Get<string>(IdentityAgent.AdviceKey));
-        AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(RecallAgent.RecalledFactsKey));
+        AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey));
         AppendNotes(prompt, envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey));
         AppendLengthLimit(prompt, maxSentences);
         AppendMood(prompt, mood);

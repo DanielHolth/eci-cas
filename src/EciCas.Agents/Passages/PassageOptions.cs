@@ -9,10 +9,10 @@ public sealed class PassageOptions
 {
     /// <summary>
     /// How many passages a turn may match. Read by nothing any more:
-    /// Hindsight and Librarian both take the budget from
-    /// RuntimeKnobs.RecallDepth, so the one slider covers every cosine cut
-    /// a turn makes rather than only the ones over archive rows. Kept as a
-    /// documented default for the number the corpus was designed around.
+    /// Hindsight takes the budget from RuntimeKnobs.RecallDepth, so the one
+    /// slider covers every cosine cut a turn makes rather than only the ones
+    /// over archive rows. Kept as a documented default for the number the
+    /// corpus was designed around.
     /// </summary>
     public int TopK { get; set; } = 3;
 
@@ -33,9 +33,9 @@ public sealed class PassageOptions
     /// -- Reflection writing notes that never wake -- this is the first knob
     /// to walk back, and 0.45 is the obvious next stop rather than 0.25.
     ///
-    /// Read by Hindsight and by Librarian's passage lane both, so this moves
-    /// prose recall everywhere at once. Reflection's revisit floor is its
-    /// own knob (ReflectionOptions.RevisitMinScore) and is untouched.
+    /// Read by Hindsight's passage lane, so this moves prose recall
+    /// everywhere at once. Reflection's revisit floor is its own knob
+    /// (ReflectionOptions.RevisitMinScore) and is untouched.
     /// </summary>
     public double MinScore { get; set; } = 0.625;
     /// <summary>
@@ -49,16 +49,15 @@ public sealed class PassageOptions
     /// zero. Off turns it into exactly the agent it was before.
     ///
     /// A knob rather than a hardcoded branch because the cost depends on the
-    /// embedder: local ONNX finishes long inside Librarian plus Recall, a
+    /// embedder: local ONNX finishes long inside the consult sweep, a
     /// remote embedding endpoint might not, and that is a deployment fact
     /// this code cannot know.
     /// </summary>
     public bool WakeWhenAddressed { get; set; } = true;
 
     /// <summary>
-    /// Ceiling on pairs contributed by passages, on top of whatever Librarian
-    /// selected. Bounds the extra Recall workers a hit can buy — the same
-    /// reason RecallOptions.MaxConcurrentRecalls exists one stage down.
+    /// Ceiling on pairs contributed by passages, on top of the ordinary
+    /// consult sweep. Bounds the extra work a hit can buy.
     /// </summary>
     public int MaxPairsFromPassages { get; set; } = 3;
 }
