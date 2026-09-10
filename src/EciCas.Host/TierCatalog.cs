@@ -98,20 +98,17 @@ public sealed class TierCatalog
             _recall.RowsPerWorker = preset.Recall.RowsPerWorker;
             _recall.MaxConcurrentRecalls = preset.Recall.MaxConcurrentRecalls;
             _recall.MaxPickedPerWorker = preset.Recall.MaxPickedPerWorker;
-            _recall.Threads = preset.Recall.Threads;
             _recall.PickAfterVector = preset.Recall.PickAfterVector;
             _recall.RecentRows = preset.Recall.RecentRows;
             _librarian.VectorMinScore = preset.Librarian.VectorMinScore;
 
-            // RecallDepth and RecallThreads are live knobs seeded from the
-            // tier, so a tier switch re-seeds them. They override
-            // MaxPickedPerWorker and Threads, and
+            // RecallDepth is a live knob seeded from the tier, so a tier
+            // switch re-seeds it. It overrides MaxPickedPerWorker, and
             // leaving a hand-dragged 5 in place while switching to a tier
             // that says 2 would silently keep the old tier's fan-out under
             // the new tier's name -- the drag is cheap to redo, the
             // confusion is not.
             _knobs.RecallDepth = preset.Recall.MaxPickedPerWorker;
-            _knobs.RecallThreads = preset.Recall.Threads;
 
             // Same re-seeding, same reason: MaxSentences, ReflectionEvery and
             // Mood are live knobs too, and leaving a hand-dragged value in

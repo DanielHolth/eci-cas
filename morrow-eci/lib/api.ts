@@ -53,11 +53,9 @@ export interface Knobs {
   perceptionChars: number;
   contextTurns: number;
   recallDepth: number;
-  recallThreads: number;
   // What the active tier's file on disk says, so the Save button can tell a
   // dragged value from a stored one instead of always offering to write.
   savedRecallDepth: number;
-  savedRecallThreads: number;
   savedMaxSentences: number;
   savedReflectionEvery: number;
   savedPerceptionChars: number;
@@ -106,7 +104,7 @@ export async function fetchKnobs(): Promise<Knobs> {
   return publish(await response.json());
 }
 
-async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "contextTurns" | "recallDepth" | "recallThreads" | "mood" | "tier", number | string>>): Promise<Knobs> {
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "contextTurns" | "recallDepth" | "mood" | "tier", number | string>>): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -125,7 +123,6 @@ export const setPerceptionChars = (perceptionChars: number) => postKnobs({ perce
 
 export const setContextTurns = (contextTurns: number) => postKnobs({ contextTurns });
 export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth });
-export const setRecallThreads = (recallThreads: number) => postKnobs({ recallThreads });
 export const setMood = (mood: string) => postKnobs({ mood });
 export const setTier = (tier: string) => postKnobs({ tier });
 

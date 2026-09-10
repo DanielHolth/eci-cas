@@ -92,18 +92,17 @@ public class TierCatalogTests
         Assert.True(substrates.Agents["Intent"].UseSubstrate);
         Assert.Equal(10, recall.RowsPerWorker);
 
-        // Threads and depth are asserted against the preset rather than
-        // against literals, because they are the two values the Debug
-        // panel's Save button writes back to the tier file: pinning them to
-        // numbers here means every legitimate save breaks this test with a
-        // failure that says nothing about whether switching works.
+        // Depth is asserted against the preset rather than against a
+        // literal, because it is the value the Debug panel's Save button
+        // writes back to the tier file: pinning it to a number here means
+        // every legitimate save breaks this test with a failure that says
+        // nothing about whether switching works.
         var minimal = catalog.Presets.Single(p => p.Name == "Minimal");
-        Assert.Equal(minimal.Recall.Threads, recall.Threads);
+        Assert.Equal(minimal.Recall.MaxPickedPerWorker, recall.MaxPickedPerWorker);
 
-        // Both live knobs override their option, so leaving either behind
-        // would run the new tier at the old one's fan-out.
+        // The live knob overrides its option, so leaving it behind would run
+        // the new tier at the old one's fan-out.
         Assert.Equal(minimal.Recall.MaxPickedPerWorker, knobs.RecallDepth);
-        Assert.Equal(minimal.Recall.Threads, knobs.RecallThreads);
     }
 
     /// <summary>

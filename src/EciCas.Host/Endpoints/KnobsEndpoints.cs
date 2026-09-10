@@ -77,11 +77,6 @@ internal static class KnobsEndpoints
                 knobs.RecallDepth = d;
             }
 
-            if (request.RecallThreads is { } t)
-            {
-                knobs.RecallThreads = t;
-            }
-
             if (request.Mood is { } moodName && Enum.TryParse<Mood>(moodName, ignoreCase: true, out var mood))
             {
                 knobs.Mood = mood;
@@ -119,14 +114,13 @@ internal static class KnobsEndpoints
 
                 var text = File.ReadAllText(path);
                 if (!TryWriteNumber(ref text, "MaxPickedPerWorker", knobs.RecallDepth)
-                    || !TryWriteNumber(ref text, "Threads", knobs.RecallThreads)
                     || !TryWriteNumber(ref text, "MaxSentences", knobs.MaxSentences)
                     || !TryWriteNumber(ref text, "ReflectionEvery", knobs.ReflectionEvery)
                     || !TryWriteNumber(ref text, "PerceptionChars", knobs.PerceptionChars)
                     || !TryWriteNumber(ref text, "ContextTurns", knobs.ContextTurns)
                     || !TryWriteString(ref text, "Mood", knobs.Mood.ToString()))
                 {
-                    return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Recall:Threads, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.");
+                    return Results.Problem($"{file} is missing one of Recall:MaxPickedPerWorker, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.");
                 }
 
                 // Parsed to prove the edit, not to produce it. Round-tripping through
@@ -150,7 +144,6 @@ internal static class KnobsEndpoints
             // The bound options are what the payload reports as "saved", so they have
             // to move with the file or the Save button stays lit after a good save.
             recall.Value.MaxPickedPerWorker = knobs.RecallDepth;
-            recall.Value.Threads = knobs.RecallThreads;
             knobDefaults.Value.MaxSentences = knobs.MaxSentences;
             knobDefaults.Value.ReflectionEvery = knobs.ReflectionEvery;
             knobDefaults.Value.PerceptionChars = knobs.PerceptionChars;
@@ -169,11 +162,9 @@ internal static class KnobsEndpoints
             perceptionChars = knobs.PerceptionChars,
             contextTurns = knobs.ContextTurns,
             recallDepth = knobs.RecallDepth,
-            recallThreads = knobs.RecallThreads,
             // What the tier file on disk says, so the surface can grey its Save
             // button rather than having to guess whether a drag is unsaved.
             savedRecallDepth = recall.MaxPickedPerWorker,
-            savedRecallThreads = recall.Threads,
             savedMaxSentences = knobDefaults.MaxSentences,
             savedReflectionEvery = knobDefaults.ReflectionEvery,
             savedPerceptionChars = knobDefaults.PerceptionChars,
@@ -242,4 +233,4 @@ internal static class KnobsEndpoints
     }
 }
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? ContextTurns = null, int? RecallDepth = null, int? RecallThreads = null, string? Mood = null, string? Tier = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? ContextTurns = null, int? RecallDepth = null, string? Mood = null, string? Tier = null);

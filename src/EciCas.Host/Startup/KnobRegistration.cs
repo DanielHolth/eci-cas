@@ -42,7 +42,6 @@ internal static class KnobRegistration
         services.AddSingleton(sp => new RuntimeKnobs
         {
             RecallDepth = sp.GetRequiredService<IOptions<RecallOptions>>().Value.MaxPickedPerWorker,
-            RecallThreads = sp.GetRequiredService<IOptions<RecallOptions>>().Value.Threads,
             MaxSentences = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.MaxSentences,
             ReflectionEvery = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ReflectionEvery,
             PerceptionChars = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.PerceptionChars,

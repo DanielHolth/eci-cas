@@ -9,7 +9,6 @@ import {
   setPerceptionChars,
   setContextTurns,
   setRecallDepth,
-  setRecallThreads,
   setReflectionEvery,
   setMood,
   setTier,
@@ -71,7 +70,6 @@ export function KnobsPanel() {
   const dirty =
     knobs !== null &&
     (knobs.recallDepth !== knobs.savedRecallDepth ||
-      knobs.recallThreads !== knobs.savedRecallThreads ||
       knobs.maxSentences !== knobs.savedMaxSentences ||
       knobs.reflectionEvery !== knobs.savedReflectionEvery ||
       knobs.perceptionChars !== knobs.savedPerceptionChars ||
@@ -244,31 +242,10 @@ export function KnobsPanel() {
         />
       </label>
 
-      {/* Two knobs, one fan-out. Threads says how many lanes open: 1 is the
-          recency lane alone, and every pair after that alternates a vector
-          lane with a selected-pair lane, so 3 is recent + 1 vector + 1
-          selected. Depth says how many rows each of those lanes may hand
-          back -- and, tripled, how many candidates cosine offers the pick
-          call that cuts them down. */}
-      <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
-        <span className="flex items-center justify-between">
-          <span title="Lanes opened per turn. 1 is recency alone; each pair after adds a vector-found pair then a selector-named one." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Recall threads</span>
-          <span className="font-mono text-neutral-800 dark:text-neutral-100">
-            {knobs === null ? "…" : `${knobs.recallThreads} lane${knobs.recallThreads === 1 ? "" : "s"}`}
-          </span>
-        </span>
-        <input
-          type="range"
-          min={1}
-          max={12}
-          step={1}
-          value={knobs?.recallThreads ?? 3}
-          disabled={knobs === null}
-          onChange={(e) => apply("recallThreads", Number(e.target.value), setRecallThreads)}
-          className="accent-neutral-700 dark:accent-neutral-300"
-        />
-      </label>
-
+      {/* One fan-out knob now. The lane count went with the Librarian:
+          the inverted read is a single sweep over the whole log, so there is
+          nothing left to open lanes of, and depth is how many rows that one
+          sweep hands back. */}
       <label className="mt-2 flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">
           <span title="Rows one lane may return, and the cosine cut itself. Woken notes get half of it plus one." className="cursor-help decoration-dotted underline-offset-2 hover:underline">Recall depth</span>

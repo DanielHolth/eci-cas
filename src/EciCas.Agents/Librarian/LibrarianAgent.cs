@@ -320,7 +320,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
             .Select(p => known.GetValueOrDefault($"{p.Category}/{p.Topic}"))
             .OfType<ArchivePair>()
             .Distinct()
-            .Take(Math.Min(_passageOptions.MaxPairsFromPassages, _knobs.VectorLanePairs))
+            .Take(Math.Min(_passageOptions.MaxPairsFromPassages, _options.VectorLanePairs))
             .ToList();
 
         _logger.LogInformation("{Agent} matched {Count} note(s) for {Pairs} lead(s)", Name, hits.Count, pairs.Count);
@@ -368,7 +368,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
     /// of arriving at one.
     /// </summary>
     private int VectorLaneRoom(IReadOnlyList<ArchivePair> remembered) =>
-        Math.Max(0, _knobs.VectorLanePairs - remembered.Count);
+        Math.Max(0, _options.VectorLanePairs - remembered.Count);
 
     private static IReadOnlyList<ArchivePair> Merge(IReadOnlyList<ArchivePair> selected, IReadOnlyList<ArchivePair> remembered) =>
         [.. selected, .. remembered.Where(p => !selected.Contains(p))];
@@ -431,7 +431,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         }));
         return InstructionFile.Fill(_instructions.For(Name),
             ("options", options),
-            ("max", _knobs.SelectorLanePairs.ToString()),
+            ("max", _options.SelectorLanePairs.ToString()),
             ("text", text ?? string.Empty));
     }
 
@@ -453,7 +453,7 @@ public sealed class LibrarianAgent : CognitiveAgent<IReadOnlyList<ArchivePair>>
         var seen = new HashSet<int>();
         foreach (var i in InstructionFile.Indices(response))
         {
-            if (selected.Count >= _knobs.SelectorLanePairs)
+            if (selected.Count >= _options.SelectorLanePairs)
             {
                 break;
             }

@@ -47,18 +47,6 @@ public sealed class RecallOptions
     /// </summary>
     public int RecentRows { get; set; } = 30;
 
-    /// <summary>
-    /// Recalls a turn may fire, the recency lane included — the tier's
-    /// starting value for the Recall-threads knob, which is what actually
-    /// governs. One is the lane alone; every thread after it is one pair,
-    /// alternating vector lane then selector lane.
-    ///
-    /// This replaced LibrarianOptions.MaxSelectedPairs and VectorPairs,
-    /// which were two budgets for one question. A person tuning this is
-    /// asking "how many calls may a turn cost", and answering that in two
-    /// places meant neither number could be read as the answer.
-    /// </summary>
-    public int Threads { get; set; } = 3;
 
     /// <summary>
     /// Whether vector-narrowed rows still go through a picking call.

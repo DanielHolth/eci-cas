@@ -111,7 +111,7 @@ public class PassageMemoryTests
         var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("1", TimeSpan.Zero, 5, 0m)));
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store, substrate,
             Manifest("Librarian"), Options.Create(new LibrarianOptions()),
-            new RuntimeKnobs { RecallThreads = 3 },
+            new RuntimeKnobs(),
             new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
@@ -147,7 +147,7 @@ public class PassageMemoryTests
         var agent = new LibrarianAgent(bus, activity, NullLogger<LibrarianAgent>.Instance, store,
             new StubSubstrate(_ => throw new InvalidOperationException("index fits under the cap, so this is never called")),
             Manifest("Librarian"), Options.Create(new LibrarianOptions()),
-            new RuntimeKnobs { RecallThreads = 3 },
+            new RuntimeKnobs(),
             new StubEmbeddings(_ => Unit(0)), passages, Options.Create(new PassageOptions()), ShippedInstructions.Store);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
