@@ -41,7 +41,16 @@ public static class ArchiveBackfill
         var rows = 0;
         var files = 0;
 
-        foreach (var file in Directory.GetFiles(directory, "*.parquet", SearchOption.AllDirectories))
+        // Shelf tiers only: the root and each profile's own directory, top
+        // level. Not a recursive sweep -- utterances/ and facts/ sit under the
+        // same root in another schema, and reading them as shelf records keeps
+        // only Timestamp, then rewrites them blank.
+        var profiles = Path.Combine(directory, ParquetArchiveStore.ProfilesDirectoryName);
+        var tiers = Directory.Exists(profiles)
+            ? Directory.GetDirectories(profiles).Prepend(directory)
+            : [directory];
+
+        foreach (var file in tiers.SelectMany(t => Directory.GetFiles(t, "*.parquet")))
         {
             var records = await ParquetArchiveStore.ReadRecordsAsync(file, cancellationToken).ConfigureAwait(false);
             var pending = records

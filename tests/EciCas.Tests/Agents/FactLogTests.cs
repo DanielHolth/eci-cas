@@ -107,6 +107,23 @@ public class FactLogTests : IDisposable
         Assert.Equal(1, reopened.TurnsRecorded);
     }
 
+    /// <summary>
+    /// The shelf's boot backfill shares this root. It once swept it
+    /// recursively, read these shards as shelf rows, and rewrote them with
+    /// only Timestamp intact.
+    /// </summary>
+    [Fact]
+    public async Task TheShelfBackfillLeavesWhatWasSaidAlone()
+    {
+        await new ParquetUtteranceLog(_dir).AppendAsync(
+            [Said("Maria Benita was born on 10.01.2011", DateTimeOffset.UtcNow)], CancellationToken.None);
+
+        await EciCas.Agents.Recall.ArchiveBackfill.RunAsync(_dir, Embeddings(), onFile: null, CancellationToken.None);
+
+        var rows = await new ParquetUtteranceLog(_dir).AllAsync(CancellationToken.None);
+        Assert.Equal("Maria Benita was born on 10.01.2011", Assert.Single(rows).Text);
+    }
+
     [Fact]
     public async Task ALongPasteBecomesOneRowPerFact()
     {
