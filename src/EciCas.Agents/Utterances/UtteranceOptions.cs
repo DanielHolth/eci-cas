@@ -1,4 +1,4 @@
-﻿namespace EciCas.Agents.Utterances;
+namespace EciCas.Agents.Utterances;
 
 /// <summary>
 /// The inverted archive's knobs, all of them measured rather than chosen.
@@ -90,7 +90,7 @@ public sealed class UtteranceOptions
     /// <summary>
     /// Fallback top-k, used only if RuntimeKnobs has not been resolved. Live
     /// reads take their count from RuntimeKnobs.RecallDepth instead -- see
-    /// UtteranceConsult -- so the knob panel's slider actually drives this
+    /// FactConsult -- so the knob panel's slider actually drives this
     /// number. Five, as benched, matches the knob's own default.
     /// </summary>
     public int TopK { get; set; } = 5;

@@ -24,11 +24,16 @@ public sealed record Consulted(Fact Row, double Score, bool Current);
 /// exists to prevent. So a thread earns its slot on its best member's score
 /// and then spends it on its newest.
 ///
-/// **Two reads, not one.** Pass A drops superseded rows and is the answer to
-/// what is true; pass B is unrestricted and tops up the slots A could not
-/// fill. A read that only ever saw pass A would make the archive amnesiac
-/// about its own history; a read that never separated them would let a
-/// retired fact compete with the one that replaced it.
+/// **Two reads, not one -- and the second is a top-up, not a lane.** Pass A
+/// drops superseded rows and is the answer to what is true. Pass B is
+/// unrestricted, but it only runs when A left slots empty and it skips every
+/// thread A already used, so on a corpus with anything in it, it does not
+/// fire. That is deliberate for what this class is for: *Find* means *now*,
+/// and a retired fact competing with the one that replaced it is the
+/// expensive failure. It does mean this is not the read that answers "what
+/// car did I used to drive" -- the discriminator there is not in the query
+/// text at all, so no threshold separates the two questions. Reaching a
+/// thread's history is a second verb over the same sweep, and is not built.
 ///
 /// **MMR, not jitter.** Five slots holding one fact five times is five
 /// wasted slots. Diversity at lambda 0.7 bought +0.14 distinct facts per
