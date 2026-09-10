@@ -159,13 +159,21 @@ public sealed class ScribeAgent : AgentBase
         await _facts.AppendAsync(woven.Rows, cancellationToken).ConfigureAwait(false);
         await _facts.UpdateDerivedAsync(woven.Retired, cancellationToken).ConfigureAwait(false);
 
-        // Still Archivist's constants, for the same reason Cataloger used
-        // them: Identity and Impulse listen for "the archive grew", not for
-        // whichever agent is holding the pen this month.
-        var kept = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Text)];
-        _bus.Publish(Topics.SystemControl, envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
-            MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)
-                .With(ArchivistAgent.WrittenRecordsKey, kept)));
+        // The archive gets the row either way. The announcement is the UI's
+        // "Learned", and on a turn that never reached the extractor the row
+        // is just the utterance handed back -- announcing that would flood
+        // the Thoughts panel with a restatement of what the person just
+        // typed, once per turn, forever.
+        if (SubstrateFactExtractor.Splittable(utterance.Text, _options))
+        {
+            // Still Archivist's constants, for the same reason Cataloger used
+            // them: Identity and Impulse listen for "the archive grew", not
+            // for whichever agent is holding the pen this month.
+            var kept = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Text)];
+            _bus.Publish(Topics.SystemControl, envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
+                MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)
+                    .With(ArchivistAgent.WrittenRecordsKey, kept)));
+        }
     }
 
     /// <summary>
