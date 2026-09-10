@@ -1,7 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TurnEvent } from "@/types/events";
+
+export interface SpeechState {
+  /** True while an utterance is actually in flight — what drives the mouth. */
+  speaking: boolean;
+  /** Queue a line the stream did not produce, such as the opening greeting. */
+  say: (text: string) => void;
+  /**
+   * Call from inside a real click or submit handler. Browsers refuse speech
+   * until a page has been interacted with, and refuse it silently, so the
+   * first gesture spends a zero-volume utterance to open the permission and
+   * re-queues `retry` if nothing has ever actually been heard.
+   */
+  unlock: (retry?: string) => void;
+}
 
 /**
  * Says every reply aloud, in the order the replies arrived.
@@ -23,18 +37,18 @@ import type { TurnEvent } from "@/types/events";
  * **The backlog is never spoken.** Whatever is already on screen when this
  * mounts is marked as said. Switching profiles remounts Conversation, and a
  * remount that read twenty turns aloud would be a worse bug than silence.
- *
- * The returned boolean is what drives the avatar's mouth: true while an
- * utterance is actually in flight, which is real timing now rather than the
- * characters-per-second estimate this replaces.
  */
-export function useSpeech(turns: TurnEvent[], enabled = true): boolean {
+export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
   const [speaking, setSpeaking] = useState(false);
 
   const said = useRef<Set<string>>(new Set());
   const queue = useRef<string[]>([]);
   const busy = useRef(false);
   const primed = useRef(false);
+  // Whether a single syllable has ever left the speakers. Distinct from
+  // `busy`: an utterance refused for want of a gesture still runs the whole
+  // speak/onerror cycle, so only onstart is evidence of sound.
+  const heard = useRef(false);
 
   // Marking the backlog has to happen before the first drain, and it has to
   // happen once -- doing it in the queueing effect would also swallow the
@@ -48,28 +62,59 @@ export function useSpeech(turns: TurnEvent[], enabled = true): boolean {
     }
   }
 
-  useEffect(() => {
+  const drain = useCallback(() => {
     const synth = typeof window === "undefined" ? undefined : window.speechSynthesis;
-    if (!synth) return;
-
-    function drain() {
-      const next = queue.current.shift();
-      if (next === undefined) {
-        busy.current = false;
-        setSpeaking(false);
-        return;
-      }
-
-      busy.current = true;
-      const utterance = new SpeechSynthesisUtterance(next);
-      utterance.onstart = () => setSpeaking(true);
-      // Both hands go to the same place: an utterance that errors (no voice
-      // installed, autoplay refused) must not wedge the queue shut.
-      utterance.onend = drain;
-      utterance.onerror = drain;
-      synth!.speak(utterance);
+    const next = queue.current.shift();
+    if (!synth || next === undefined) {
+      busy.current = false;
+      setSpeaking(false);
+      return;
     }
 
+    busy.current = true;
+    const utterance = new SpeechSynthesisUtterance(next);
+    utterance.onstart = () => {
+      heard.current = true;
+      setSpeaking(true);
+    };
+    // Both hands go to the same place: an utterance that errors (no voice
+    // installed, autoplay refused) must not wedge the queue shut.
+    utterance.onend = drain;
+    utterance.onerror = drain;
+    synth.speak(utterance);
+  }, []);
+
+  const say = useCallback(
+    (text: string) => {
+      if (!enabled || !text) return;
+      queue.current.push(text);
+      if (!busy.current) {
+        drain();
+      }
+    },
+    [drain, enabled],
+  );
+
+  const unlock = useCallback(
+    (retry?: string) => {
+      const synth = typeof window === "undefined" ? undefined : window.speechSynthesis;
+      if (!synth || !enabled) return;
+
+      // Silent, and outside the queue: it exists to spend the gesture, not to
+      // be heard, and routing it through the queue would mark the queue busy
+      // for something that says nothing.
+      const opener = new SpeechSynthesisUtterance(" ");
+      opener.volume = 0;
+      synth.speak(opener);
+
+      if (retry && !heard.current) {
+        say(retry);
+      }
+    },
+    [enabled, say],
+  );
+
+  useEffect(() => {
     for (const turn of turns) {
       const text = turn.output?.text;
       if (!text || said.current.has(turn.turnId)) {
@@ -84,7 +129,7 @@ export function useSpeech(turns: TurnEvent[], enabled = true): boolean {
     if (enabled && !busy.current && queue.current.length > 0) {
       drain();
     }
-  }, [turns, enabled]);
+  }, [turns, enabled, drain]);
 
   // Leaving an utterance in flight would go on talking over the next profile,
   // since speechSynthesis is a window-wide singleton and outlives this mount.
@@ -94,5 +139,5 @@ export function useSpeech(turns: TurnEvent[], enabled = true): boolean {
     };
   }, []);
 
-  return speaking;
+  return { speaking, say, unlock };
 }

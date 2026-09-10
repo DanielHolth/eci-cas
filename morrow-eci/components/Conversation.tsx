@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { SecurityIcon } from "@/components/SecurityIcon";
 import { Transcript } from "@/components/Transcript";
@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEciStream } from "@/lib/useEciStream";
 import { usePersona } from "@/lib/usePersona";
 import { useSpeech } from "@/lib/useSpeech";
+import { greeting } from "@/lib/greeting";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { sendPerceive } from "@/lib/api";
@@ -66,7 +67,26 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   // self-triggered turn can conclude while the previous reply is still being
   // spoken, and the mouth has to run on the utterance that is actually in
   // flight rather than on whichever turn happens to be last in the array.
-  const speaking = useSpeech(turns);
+  const { speaking, say, unlock } = useSpeech(turns);
+
+  // Composed on the client, never during render: the greeting reads the
+  // clock, and a server render three hours off would hydrate into a
+  // different sentence than the one it sent.
+  const [hello, setHello] = useState("");
+  useEffect(() => {
+    setHello(greeting(profile.displayName, profile.id));
+    // Deliberately not in the dependency list: this is the opening line, and
+    // it is said once per mount. Conversation is keyed by profile id, so a
+    // different person is a different mount and gets their own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Most browsers refuse this until the page has been interacted with, and
+  // say nothing about it. handleSubmit retries it on the first gesture.
+  useEffect(() => {
+    if (hello) say(hello);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hello]);
 
   function openInLog(correlationId: string) {
     setLogOpen(true);
@@ -76,6 +96,8 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim() || sending) return;
+    // Inside the submit handler, where the gesture still counts.
+    unlock(hello);
     setSending(true);
     try {
       await sendPerceive(text.trim(), profile.id);
@@ -164,6 +186,12 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
 
           {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
             <SecurityIcon outcomes={turn.security} />
+          )}
+
+          {turns.length === 0 && hello && (
+            <p className="max-w-prose px-4 py-6 text-center text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
+              {hello}
+            </p>
           )}
 
           <Transcript turns={turns} />
