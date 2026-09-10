@@ -32,21 +32,6 @@ function latency(calls: SubstrateCall[], wallClockMs: number): string {
   return addends ? `${addends} → ${total}` : total;
 }
 
-/** Cost read the way latency does: what each call spent, then the turn.
- *
- * It used to be three totals and a parenthesised roster of call labels,
- * which named eleven calls without saying what any of them cost -- so the
- * one expensive call in a turn was invisible next to ten cheap ones. Same
- * order as the latency line, so the two read as columns of one table.
- *
- * No dollar sign on the addends and four decimals throughout: a column of
- * numbers is easier to scan than a column of prices, and the total carries
- * the unit. A call nothing priced is an em dash rather than a zero. */
-function costs(calls: SubstrateCall[], total: number | null): string {
-  const addends = calls.map((c) => (c.cost === null ? "—" : c.cost.toFixed(4))).join(" + ");
-  return addends ? `${addends} → ${money(total)}` : money(total);
-}
-
 function Line({ agent, children }: { agent: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-2 py-0.5">
@@ -141,11 +126,8 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
               </span>
             </Line>
           )}
-          {record.writes.map((write, i) => (
-            <Line key={`write-${i}`} agent={`Learned-${i + 1}`}>
-              {write}
-            </Line>
-          ))}
+          {/* Learned-N: noise here, identical to what Archivist/Scribe wrote —
+              see it in the Thoughts panel instead. */}
 
           {(record.passages.length > 0 || record.idea) && (
             <div className="py-0.5">
@@ -171,7 +153,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
 
           {record.calls.length > 0 && (
             <>
-              <Line agent="Cost">{costs(record.calls, record.cost)}</Line>
+              {/* Cost: noise here — Totals below already gives the number that matters. */}
               <Line agent="Totals">
                 <span className="text-neutral-800 dark:text-neutral-200">event {money(record.cost)}</span>
                 <span className="text-neutral-400 dark:text-neutral-500">

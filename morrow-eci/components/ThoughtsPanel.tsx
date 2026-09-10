@@ -68,18 +68,21 @@ export function ThoughtsPanel({
 }) {
   const thoughts = thoughtsOf(records);
 
-  // Collapsed, not expanded: the set names the exceptions, so a thought
-  // arrives open the way an event on the right does. A truncated row is a
-  // category and a first clause -- enough to know a fact was recalled and
-  // not enough to know which -- which made reading the panel a click per
-  // line.
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Overrides only — anything not yet clicked falls back to its kind's
+  // default. Learned is practically the utterance restated, one per turn,
+  // and arriving open turned the panel into a wall of near-duplicate prose;
+  // Hindsight and Reflection are rarer and worth seeing at a glance.
+  const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map());
 
-  function toggle(id: string) {
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+  function defaultOpen(kind: Kind): boolean {
+    return kind !== "learned";
+  }
+
+  function toggle(id: string, kind: Kind) {
+    setOverrides((current) => {
+      const next = new Map(current);
+      const open = next.has(id) ? next.get(id)! : defaultOpen(kind);
+      next.set(id, !open);
       return next;
     });
   }
@@ -94,12 +97,12 @@ export function ThoughtsPanel({
         )}
         {thoughts.map((t) => {
           const style = KIND_STYLE[t.kind];
-          const isOpen = !collapsed.has(t.id);
+          const isOpen = overrides.has(t.id) ? overrides.get(t.id)! : defaultOpen(t.kind);
           return (
             <li key={t.id} className="rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
               <button
                 type="button"
-                onClick={() => toggle(t.id)}
+                onClick={() => toggle(t.id, t.kind)}
                 className="flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm"
               >
                 <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} />
