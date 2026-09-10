@@ -188,7 +188,7 @@ public sealed class ParquetPassageStore : IPassageStore
     private static Passage FromRow(PassageRow r) => new(
         r.Id,
         r.Text,
-        JsonSerializer.Deserialize<List<ArchivePair>>(r.Pairs) ?? [],
+        string.IsNullOrEmpty(r.Pairs) ? [] : JsonSerializer.Deserialize<List<ArchivePair>>(r.Pairs) ?? [],
         // Invariant on both sides, matching ParquetArchiveStore. The fallback
         // is silent, so a culture mismatch would not surface as an error but
         // as every note being two millennia old — wrong ages in Hindsight and
