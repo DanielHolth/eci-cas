@@ -29,7 +29,7 @@ internal static class BootChecks
 
         // Cheap re-read of the same cached singletons resolved above, not a re-construction.
         var substrateOptions = app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value;
-        SubstrateManifestValidator.Validate(substrateOptions, app.Services.GetServices<IAgent>(), [SubstrateConsolidator.AgentName]);
+        SubstrateManifestValidator.Validate(substrateOptions, app.Services.GetServices<IAgent>(), [SubstrateConsolidator.AgentName, SubstrateFactExtractor.AgentName]);
 
         // Every tier, bound but not applied — see TierCatalog for why a live switch
         // is a few reference writes rather than a rebuild. Registered against the
