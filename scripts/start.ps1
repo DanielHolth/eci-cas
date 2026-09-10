@@ -198,13 +198,11 @@ if ($WhatIfOnly) { return }
 #
 # The host first: it is the slow one on a cold build, and a browser opened
 # before it answers shows an empty transcript that only a reload fixes.
-$hostUp = Wait-Port -Number $Port -What 'host'
+Wait-Port -Number $Port -What 'host' | Out-Null
 if (-not $NoUi) { Wait-Port -Number $UiPort -What 'surface' | Out-Null }
 
 if (-not $NoBrowser -and -not $NoUi) {
     Start-Process "http://localhost:$UiPort"
-} elseif (-not $NoBrowser -and $hostUp) {
-    Start-Process "http://localhost:$Port"
 }
 
 Write-Host ''
