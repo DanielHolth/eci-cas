@@ -8,11 +8,8 @@
  * only thing it is allowed to notice unprompted, because that much it knows
  * without being told.
  *
- * **Deterministic, not random.** The seed is the profile, the calendar day and
- * the band, so the same person opening the same app twice in one evening is
- * met with the same word -- a persona that greets you differently every time
- * you refresh is a slot machine, not somebody who knows you. It moves when the
- * hour band moves, and again tomorrow.
+ * **Random, without repeats.** A line is drawn fresh on every open from the
+ * hour band's pool, skipping whichever one this person heard last.
  *
  * Nothing here reaches the backend. This is the surface filling its own
  * silence while the stream connects; the archive is not consulted and no turn
@@ -71,46 +68,33 @@ const EGG: Partial<Record<Band, string>> = {
   night: "Get some sleep.",
 };
 
-/** Roughly how many greetings pass between eggs. Deterministic like
- * everything else here: a person who gets one keeps it for that band all day,
- * rather than watching it vanish on the next refresh. */
+/** Roughly how many greetings pass between eggs. */
 const ODDS = 40;
 
-/** FNV-1a with a final avalanche. Small, stable, and identical across runs
- * and machines — a `Math.random` here would defeat the whole point of the
- * seed. The avalanche is not decoration: the seeds differ only in their last
- * few characters, and FNV's low bits barely move for that, so the bands kept
- * landing on the same row. */
-function hash(seed: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x85ebca6b);
-  h ^= h >>> 13;
-  h = Math.imul(h, 0xc2b2ae35);
-  h ^= h >>> 16;
-  return h >>> 0;
-}
+const LAST_KEY = "morrow.lastGreeting.";
 
 /**
  * One greeting. `name` is what to call the person, `key` identifies them (the
- * profile id), and `at` is the clock the bands are read off — passed in rather
- * than taken from `Date.now()` so this stays a pure function and can be tested
- * at four in the morning without being awake at four in the morning.
+ * profile id), and `at` is the clock the bands are read off. `roll` is the
+ * randomness, injectable so a test can pin it.
+ *
+ * Random per open, but never the same line twice in a row for one person: a
+ * deterministic day-and-band seed meant the same word all evening, which read
+ * as broken rather than as familiar.
  */
-export function greeting(name: string, key: string, at: Date = new Date()): Greeting {
+export function greeting(name: string, key: string, at: Date = new Date(), roll: () => number = Math.random): Greeting {
   const band = bandFor(at.getHours());
-  const day = `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
-  const seed = `${key}|${day}|${band}`;
 
   const egg = EGG[band];
-  if (egg && hash(`${seed}|egg`) % ODDS === 0) {
+  if (egg && roll() * ODDS < 1) {
     return { text: egg, egg: true };
   }
 
-  const pool = GREETING[band];
-  return { text: pool[hash(seed) % pool.length].replace("{name}", name), egg: false };
+  let last: string | null = null;
+  try { last = window.localStorage.getItem(LAST_KEY + key); } catch { /* no storage: plain random */ }
+
+  const pool = GREETING[band].filter((g) => g !== last);
+  const pick = pool[Math.floor(roll() * pool.length)];
+  try { window.localStorage.setItem(LAST_KEY + key, pick); } catch { /* holds for this open only */ }
+  return { text: pick.replace("{name}", name), egg: false };
 }
