@@ -171,9 +171,9 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M, vec4 E) {
   col += A.rgb * speak * wv * 0.26 * smoothstep(0.40, 0.10, r) * housing;
 
   vec2 bl = p - vec2(-0.166, 0.492);
-  bl = vec2(bl.x * cos(-brow) - bl.y * sin(-brow), bl.x * sin(-brow) + bl.y * cos(-brow));
+  bl = vec2(bl.x * cos(brow) - bl.y * sin(brow), bl.x * sin(brow) + bl.y * cos(brow));
   vec2 br = p - vec2(0.166, 0.492);
-  br = vec2(br.x * cos(brow) - br.y * sin(brow), br.x * sin(brow) + br.y * cos(brow));
+  br = vec2(br.x * cos(-brow) - br.y * sin(-brow), br.x * sin(-brow) + br.y * cos(-brow));
   float bw = min(seg(bl, vec2(-0.078, 0.0), vec2(0.078, 0.0)),
                  seg(br, vec2(-0.078, 0.0), vec2(0.078, 0.0))) - 0.013;
   col = mix(col, A.rgb * 1.05, smoothstep(px, -px, bw));
@@ -324,9 +324,9 @@ fn waves(r: f32, t: f32) -> f32 {
   col = col + A.rgb * speak * wv * 0.26 * (1.0 - smoothstep(0.10, 0.40, r)) * housing;
 
   var bl = p - vec2<f32>(-0.166, 0.492);
-  bl = vec2<f32>(bl.x * cos(-brow) - bl.y * sin(-brow), bl.x * sin(-brow) + bl.y * cos(-brow));
+  bl = vec2<f32>(bl.x * cos(brow) - bl.y * sin(brow), bl.x * sin(brow) + bl.y * cos(brow));
   var br = p - vec2<f32>(0.166, 0.492);
-  br = vec2<f32>(br.x * cos(brow) - br.y * sin(brow), br.x * sin(brow) + br.y * cos(brow));
+  br = vec2<f32>(br.x * cos(-brow) - br.y * sin(-brow), br.x * sin(-brow) + br.y * cos(-brow));
   let bw = min(seg(bl, vec2<f32>(-0.078, 0.0), vec2<f32>(0.078, 0.0)),
                seg(br, vec2<f32>(-0.078, 0.0), vec2<f32>(0.078, 0.0))) - 0.013;
   col = mix(col, A.rgb * 1.05, smoothstep(-px, px, -bw));
