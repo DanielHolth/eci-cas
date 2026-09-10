@@ -178,8 +178,8 @@ if (-not $NoUi) {
     $ui = Join-Path $repo 'morrow-eci'
 
     if (Test-Port $UiPort) {
+        # Still opened below: a surface left running is the one to point at.
         Write-Host "surface already answering on :$UiPort; leaving it alone"
-        $NoUi = $true
     } elseif (-not (Test-Path (Join-Path $ui 'node_modules'))) {
         Write-Host 'morrow-eci has no node_modules. Run this once, then start again:'
         Write-Host '  cd morrow-eci; npm install'
