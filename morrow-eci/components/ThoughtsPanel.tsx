@@ -6,6 +6,10 @@ import type { TurnRecord } from "@/types/events";
 
 const KIND_STYLE = {
   learned: { dot: "bg-emerald-500", label: "Learned" },
+  // Its own row rather than a shade of Learned. Hindsight is the persona
+  // second-guessing a turn it has already had, which is a thought about the
+  // conversation -- not a fact taken out of it and kept.
+  hindsight: { dot: "bg-amber-500", label: "Hindsight" },
   reflection: { dot: "bg-indigo-500", label: "Reflection" },
 } as const;
 
@@ -19,7 +23,7 @@ interface Thought {
 }
 
 /** Newest first: what Archivist wrote ("Learned") and what Reflection
- * noticed, across the whole session.
+ * noticed and what Hindsight went back over, across the whole session.
  *
  * What Recall read is deliberately absent. Recall fires on every turn and
  * returns its depth whether or not the turn needed anything, so the reads
@@ -33,6 +37,9 @@ function thoughtsOf(records: TurnRecord[]): Thought[] {
   for (const r of [...records].reverse()) {
     r.writes.forEach((t, i) =>
       out.push({ id: `${r.correlationId}-learned-${i}`, kind: "learned", text: t, correlationId: r.correlationId }),
+    );
+    r.hindsight.forEach((t, i) =>
+      out.push({ id: `${r.correlationId}-hindsight-${i}`, kind: "hindsight", text: t, correlationId: r.correlationId }),
     );
     if (r.idea) {
       out.push({ id: `${r.correlationId}-reflection-idea`, kind: "reflection", text: r.idea, correlationId: r.correlationId });

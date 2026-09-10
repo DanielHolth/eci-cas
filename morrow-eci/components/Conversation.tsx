@@ -67,7 +67,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   // self-triggered turn can conclude while the previous reply is still being
   // spoken, and the mouth has to run on the utterance that is actually in
   // flight rather than on whichever turn happens to be last in the array.
-  const { speaking, say, unlock } = useSpeech(turns);
+  const { speaking, say, unlock, voices, voiceURI, setVoiceURI } = useSpeech(turns);
 
   // Composed on the client, never during render: the greeting reads the
   // clock, and a server render three hours off would hydrate into a
@@ -178,6 +178,27 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
             </div>
 
           <div className="flex items-center gap-2 justify-self-end">
+            {voices.length > 0 && (
+              <select
+                value={voiceURI}
+                onChange={(e) => setVoiceURI(e.target.value)}
+                aria-label="Voice"
+                className="rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                <option value="">Default voice</option>
+                {voices.map((v) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name} ({v.lang})
+                  </option>
+                ))}
+              </select>
+            )}
+            <ProfileChip profile={profile} onSwitch={onSwitch} />
+            <ThemeToggle />
+            {/* Rightmost of the cluster, deliberately: Debug opens EventLog,
+                which docks at the true right edge of the screen, so the
+                button that opens it should sit closest to that edge rather
+                than buried behind the other header controls. */}
             <button
               type="button"
               onClick={() => setLogOpen((v) => !v)}
@@ -186,8 +207,6 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
             >
               Debug
             </button>
-            <ProfileChip profile={profile} onSwitch={onSwitch} />
-            <ThemeToggle />
           </div>
         </div>
 
@@ -226,7 +245,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
               maxLength={limit ?? undefined}
               onChange={(e) => setText(e.target.value)}
               placeholder={`Say something to ${persona.name || "ECI-CAS"}, ${profile.displayName}…`}
-              className="flex-1 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-neutral-500"
+              className="morrow-hand flex-1 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-neutral-500"
             />
             <button
               type="submit"

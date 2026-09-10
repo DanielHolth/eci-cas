@@ -61,6 +61,21 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M) {
   float t = R.z, speak = R.w;
   float brow = A.w, aperK = B.w, alert = M.x, warm = M.y;
   vec2 gaze = M.zw;
+
+  // Everything is drawn 1.2x smaller than it used to be. The canvas is a
+  // circle that clips at r = 0.5, and brows that sit above the housing rather
+  // than inside the eye need room outside the telemetry ring to do it.
+  p *= 1.20;
+
+  // While a reply is being spoken the whole face drifts. Slow on purpose:
+  // the voice is slow, and a fast jitter would read as a loose mount rather
+  // than as someone talking. Two incommensurate periods, so the sway never
+  // settles into a visible loop for as long as the sentence lasts.
+  vec2 sway = vec2(sin(t * 1.9) * 0.011, sin(t * 1.37 + 1.1) * 0.008) * speak;
+  float tilt = sin(t * 1.13 + 0.4) * 0.050 * speak;
+  vec2 q = p - sway;
+  p = vec2(q.x * cos(tilt) - q.y * sin(tilt), q.x * sin(tilt) + q.y * cos(tilt));
+
   float r = length(p);
   float px = 1.5 / mn;
 
@@ -93,20 +108,26 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M) {
   col += A.rgb * smoothstep(0.005, 0.0, abs(blades)) * 1.15 * smoothstep(px, -px, r - 0.345);
 
   vec2 gp = p - gaze * 0.05;
-  float pu = length(gp) - ap * 0.60;
+  // The pupil is where the expression is pushed hardest: it swells and its
+  // outline goes very slightly trilobed while a sentence is in flight, then
+  // slides back. Both terms are multiplied by speak, so at rest this is
+  // exactly the circle it always was.
+  float pang = atan(gp.y, gp.x);
+  float pu = length(gp) * (1.0 + speak * 0.055 * sin(pang * 3.0 + t * 1.45))
+             - ap * 0.60 * (1.0 + speak * 0.11 * sin(t * 1.25));
   col = mix(col, vec3(0.012, 0.016, 0.026), smoothstep(px, -px, pu));
   col += A.rgb * smoothstep(0.004, 0.0, abs(pu)) * 1.3;
   col += vec3(1.0) * 0.45 * smoothstep(0.022, 0.0, length(gp - vec2(-0.022, 0.026)));
 
-  float wv = 0.5 + 0.5 * sin(r * 74.0 - t * 9.5);
+  float wv = 0.5 + 0.5 * sin(r * 74.0 - t * 3.4);
   col += A.rgb * speak * wv * 0.13 * smoothstep(0.40, 0.10, r) * housing;
 
-  vec2 bl = p - vec2(-0.170, 0.285);
+  vec2 bl = p - vec2(-0.166, 0.492);
   bl = vec2(bl.x * cos(-brow) - bl.y * sin(-brow), bl.x * sin(-brow) + bl.y * cos(-brow));
-  vec2 br = p - vec2(0.170, 0.285);
+  vec2 br = p - vec2(0.166, 0.492);
   br = vec2(br.x * cos(brow) - br.y * sin(brow), br.x * sin(brow) + br.y * cos(brow));
-  float bw = min(seg(bl, vec2(-0.082, 0.0), vec2(0.082, 0.0)),
-                 seg(br, vec2(-0.082, 0.0), vec2(0.082, 0.0))) - 0.013;
+  float bw = min(seg(bl, vec2(-0.078, 0.0), vec2(0.078, 0.0)),
+                 seg(br, vec2(-0.078, 0.0), vec2(0.078, 0.0))) - 0.013;
   col = mix(col, A.rgb * 1.05, smoothstep(px, -px, bw));
   col += A.rgb * 0.30 * exp(-max(bw, 0.0) * 38.0);
 
@@ -117,7 +138,7 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M) {
   col = mix(col, vec3(0.030, 0.038, 0.052), cover * housing);
 
   col *= 0.93 + 0.07 * sin(fc.y * 1.7 + t * 1.6);
-  col *= 1.0 - 0.40 * smoothstep(0.42, 1.05, r);
+  col *= 1.0 - 0.40 * smoothstep(0.62, 1.26, r);
   col += (hash(fc + fract(t)) - 0.5) * 0.028;
   return col;
 }
@@ -164,10 +185,18 @@ fn hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233
   // once here so the rest of the body is the same arithmetic.
   let fc = vec2<f32>(pos.x, R.y - pos.y);
   let mn = min(R.x, R.y);
-  let p = (fc - 0.5 * R.xy) / mn;
+  let p0 = (fc - 0.5 * R.xy) / mn;
   let t = R.z; let speak = R.w;
   let brow = A.w; let aperK = B.w; let alert = M.x; let warm = M.y;
   let gaze = M.zw;
+
+  // See the GLSL twin above for why the shrink and the sway are here.
+  var p = p0 * 1.20;
+  let sway = vec2<f32>(sin(t * 1.9) * 0.011, sin(t * 1.37 + 1.1) * 0.008) * speak;
+  let tilt = sin(t * 1.13 + 0.4) * 0.050 * speak;
+  let q = p - sway;
+  p = vec2<f32>(q.x * cos(tilt) - q.y * sin(tilt), q.x * sin(tilt) + q.y * cos(tilt));
+
   let r = length(p);
   let px = 1.5 / mn;
 
@@ -199,20 +228,22 @@ fn hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233
   col = col + A.rgb * (1.0 - smoothstep(0.0, 0.005, abs(blades))) * 1.15 * smoothstep(-px, px, 0.345 - r);
 
   let gp = p - gaze * 0.05;
-  let pu = length(gp) - ap * 0.60;
+  let pang = atan2(gp.y, gp.x);
+  let pu = length(gp) * (1.0 + speak * 0.055 * sin(pang * 3.0 + t * 1.45))
+           - ap * 0.60 * (1.0 + speak * 0.11 * sin(t * 1.25));
   col = mix(col, vec3<f32>(0.012, 0.016, 0.026), smoothstep(-px, px, -pu));
   col = col + A.rgb * (1.0 - smoothstep(0.0, 0.004, abs(pu))) * 1.3;
   col = col + vec3<f32>(1.0) * 0.45 * (1.0 - smoothstep(0.0, 0.022, length(gp - vec2<f32>(-0.022, 0.026))));
 
-  let wv = 0.5 + 0.5 * sin(r * 74.0 - t * 9.5);
+  let wv = 0.5 + 0.5 * sin(r * 74.0 - t * 3.4);
   col = col + A.rgb * speak * wv * 0.13 * (1.0 - smoothstep(0.10, 0.40, r)) * housing;
 
-  var bl = p - vec2<f32>(-0.170, 0.285);
+  var bl = p - vec2<f32>(-0.166, 0.492);
   bl = vec2<f32>(bl.x * cos(-brow) - bl.y * sin(-brow), bl.x * sin(-brow) + bl.y * cos(-brow));
-  var br = p - vec2<f32>(0.170, 0.285);
+  var br = p - vec2<f32>(0.166, 0.492);
   br = vec2<f32>(br.x * cos(brow) - br.y * sin(brow), br.x * sin(brow) + br.y * cos(brow));
-  let bw = min(seg(bl, vec2<f32>(-0.082, 0.0), vec2<f32>(0.082, 0.0)),
-               seg(br, vec2<f32>(-0.082, 0.0), vec2<f32>(0.082, 0.0))) - 0.013;
+  let bw = min(seg(bl, vec2<f32>(-0.078, 0.0), vec2<f32>(0.078, 0.0)),
+               seg(br, vec2<f32>(-0.078, 0.0), vec2<f32>(0.078, 0.0))) - 0.013;
   col = mix(col, A.rgb * 1.05, smoothstep(-px, px, -bw));
   col = col + A.rgb * 0.30 * exp(-max(bw, 0.0) * 38.0);
 
@@ -223,7 +254,7 @@ fn hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233
   col = mix(col, vec3<f32>(0.030, 0.038, 0.052), cover * housing);
 
   col = col * (0.93 + 0.07 * sin(fc.y * 1.7 + t * 1.6));
-  col = col * (1.0 - 0.40 * smoothstep(0.42, 1.05, r));
+  col = col * (1.0 - 0.40 * smoothstep(0.62, 1.26, r));
   col = col + (hash(fc + fract(t)) - 0.5) * 0.028;
   return vec4<f32>(col, 1.0);
 }`;
@@ -302,11 +333,40 @@ export function mountApertureFace(
   }
 
   const U = new Float32Array(16);
+
+  /**
+   * How far the expression is pushed past its resting value while a reply is
+   * being spoken. Applied in `pack`, not in `step`: these are a modulation of
+   * what is sent to the GPU this frame, and folding them into S would have
+   * the easing chase its own tail and never settle once the mouth stops.
+   *
+   * Slow, and slower than the shader's sway -- the voice is slow, so the
+   * colour has to still be sliding when the sentence ends rather than having
+   * pulsed four times through it. `S.speak` gates every term, so at rest the
+   * packed values are exactly the eased ones.
+   */
+  function push(t: number) {
+    if (reduced) return { lift: 0, aper: 0, warm: 0 };
+    const s = S.speak;
+    return {
+      // Colour: the light half brightens and the deep half recedes, which
+      // reads as the face leaning in rather than as a brightness wobble.
+      lift: s * 0.16 * (0.5 + 0.5 * Math.sin(t * 1.05)),
+      // Aperture, in knob units. The shader turns this into blade radius and
+      // pupil size together, so one term moves both.
+      aper: s * 0.13 * Math.sin(t * 0.78 + 1.4),
+      warm: s * 0.10 * Math.sin(t * 0.61 + 0.3),
+    };
+  }
+
+  const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
   function pack(w: number, h: number, t: number) {
+    const d = push(t);
     U[0] = w; U[1] = h; U[2] = reduced ? 0 : t; U[3] = S.speak;
-    U[4] = S.a[0]; U[5] = S.a[1]; U[6] = S.a[2]; U[7] = S.brow;
-    U[8] = S.b[0]; U[9] = S.b[1]; U[10] = S.b[2]; U[11] = S.aper;
-    U[12] = S.alert; U[13] = S.warm; U[14] = S.gaze[0]; U[15] = S.gaze[1];
+    U[4] = clamp01(S.a[0] * (1 + d.lift)); U[5] = clamp01(S.a[1] * (1 + d.lift)); U[6] = clamp01(S.a[2] * (1 + d.lift)); U[7] = S.brow;
+    U[8] = S.b[0] * (1 - d.lift * 0.5); U[9] = S.b[1] * (1 - d.lift * 0.5); U[10] = S.b[2] * (1 - d.lift * 0.5); U[11] = clamp01(S.aper + d.aper);
+    U[12] = S.alert; U[13] = clamp01(S.warm + d.warm); U[14] = S.gaze[0]; U[15] = S.gaze[1];
   }
 
   const dpr = Math.min(typeof devicePixelRatio === "number" ? devicePixelRatio : 1, 2);

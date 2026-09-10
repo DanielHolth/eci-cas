@@ -142,7 +142,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
             </Line>
           )}
           {record.writes.map((write, i) => (
-            <Line key={`write-${i}`} agent={`Archivist-${i + 1}`}>
+            <Line key={`write-${i}`} agent={`Learned-${i + 1}`}>
               {write}
             </Line>
           ))}

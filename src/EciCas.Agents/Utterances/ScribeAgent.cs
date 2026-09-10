@@ -1,4 +1,5 @@
-﻿using EciCas.Agents.Perception;
+﻿using EciCas.Agents.Archivist;
+using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -23,13 +24,17 @@ namespace EciCas.Agents.Utterances;
 /// and it is gated, off by default, and downstream of a shortcut that
 /// absorbs most of the volume.
 ///
-/// **It publishes nothing.** Nothing in the turn depends on the write
-/// landing, so this holds no slot in the bundle and no part of the reply
+/// **It holds no slot.** Nothing in the turn depends on the write landing,
+/// so this is absent from the bundle and no part of the reply
 /// waits on a disk write. A failure here loses one utterance and is logged;
-/// it does not degrade a turn that has already been answered.
+/// it does not degrade a turn that has already been answered. It does
+/// announce what it kept, on SystemControl, the way Cataloger did -- that is
+/// a notification rather than a slot, and it is the only reason the turn log
+/// can say what the persona learned this turn.
 /// </summary>
 public sealed class ScribeAgent : AgentBase
 {
+    private readonly IMessageBus _bus;
     private readonly IUtteranceLog _log;
     private readonly ThreadWeaver _weaver;
     private readonly UtteranceOptions _options;
@@ -39,6 +44,7 @@ public sealed class ScribeAgent : AgentBase
         IUtteranceLog log, ThreadWeaver weaver, IOptions<UtteranceOptions> options)
         : base(bus, activity, logger)
     {
+        _bus = bus;
         _log = log;
         _weaver = weaver;
         _options = options.Value;
@@ -87,6 +93,14 @@ public sealed class ScribeAgent : AgentBase
             var woven = await _weaver.WeaveAsync([utterance], cancellationToken).ConfigureAwait(false);
             await _log.AppendAsync(woven.Rows, cancellationToken).ConfigureAwait(false);
             await _log.UpdateDerivedAsync(woven.Retired, cancellationToken).ConfigureAwait(false);
+
+            // Still Archivist's constants, for the same reason Cataloger used
+            // them: Identity and Impulse listen for "the archive grew", not
+            // for whichever agent is holding the pen this month.
+            var kept = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Text)];
+            _bus.Publish(Topics.SystemControl, envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
+                MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)
+                    .With(ArchivistAgent.WrittenRecordsKey, kept)));
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {

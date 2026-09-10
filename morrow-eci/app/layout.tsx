@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Chakra_Petch, Geist, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -7,8 +7,31 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+/**
+ * The interface speaks in Chakra Petch and IBM Plex -- the faces the aperture
+ * face was designed against, so the type and the eye come from the same
+ * drawing. Display for headings and the persona's own labels, sans for
+ * everything the interface says, mono for numbers and identifiers.
+ *
+ * Geist stays loaded for exactly one job: the words the person types. Their
+ * side of the conversation is not the persona's voice and should not wear its
+ * face, so `.morrow-hand` (globals.css) hands it back.
+ */
+const display = Chakra_Petch({
+  variable: "--font-display",
+  weight: ["400", "600", "700"],
+  subsets: ["latin"],
+});
+
+const plexSans = IBM_Plex_Sans({
+  variable: "--font-plex-sans",
+  weight: ["400", "500", "600"],
+  subsets: ["latin"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  weight: ["400", "500"],
   subsets: ["latin"],
 });
 
@@ -40,7 +63,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${display.variable} ${plexSans.variable} ${plexMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

@@ -136,8 +136,17 @@ public static class TurnProjection
         return record with { Calls = [.. record.Calls, call] };
     }
 
+    /// <summary>
+    /// One line per recalled fact. Under the inverted archive a record is a
+    /// sentence and every path field is empty, which through the old format
+    /// string rendered as "//// = " -- four slashes and nothing, on every
+    /// row. The sentence is what was recalled, so where there is one it is
+    /// the line; the path form stays for records that still have a path.
+    /// </summary>
     private static IReadOnlyList<string> Describe(IReadOnlyList<ArchiveRecord>? facts) =>
-        facts is null ? [] : [.. facts.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}")];
+        facts is null ? [] : [.. facts.Select(r => string.IsNullOrWhiteSpace(r.Sentence)
+            ? $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}"
+            : r.Sentence)];
 
     private static DateTimeOffset Later(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 }
