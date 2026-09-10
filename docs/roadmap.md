@@ -190,6 +190,52 @@ were you checking?" dispatches a diagnostics handler rather than being
 plumbed into Intent's prompt as resident context — same trade the
 `skills.txt` index makes.
 
+### Three ways a result comes back
+
+The acknowledgement ("I'll let you know when it's fixed") promises a
+report. The handler declares, or the manager picks, how that report
+arrives:
+
+- **Folded into the next reply**, for results that aren't important. No new
+  turn; the manager holds the result until the next `events.bundle` and hands
+  it to Intent as an advisory ("fixed that spelling, by the way").
+- **As a `perception.self`** when the handler reports back. It runs an
+  ordinary turn, so the persona can speak up without being asked.
+- **As a push notification**, for long jobs on mobile, where the person has
+  left. It also lands as a perception, so the next conversation knows the
+  report went out.
+
+A timeout uses the same three channels. Which one is a property of the
+result, not of the tool: a quick fix that failed may deserve a perception
+even if its success would only have been folded in.
+
+### First handler: `correction_tool`
+
+"In your last reply you misspelled 'prototype emergent Cognitive
+Identity'. Can you fix it?" Morrow finds the tool in the `skills.txt`
+index, calls it like any other tool, and replies "I'll let you know when
+it's fixed."
+
+Seen on a live turn: Recall-2 returned "The prototype mergent Cognitive
+Identity…" and Intent repeated the typo word for word. The mistake lives in
+a *fact*, so the fix has to reach the store and not just the next reply:
+
+- Utterances are append-only ground truth and are never edited. The
+  person's correction is itself an utterance.
+- The handler finds the fact rows that hold the mistake (lexically;
+  "mergent" is a rare token), writes corrected rows on the same threads so
+  that supersession makes them *now*, and reports which rows changed.
+- If the mistake came from the extractor rather than from the person, the
+  same handler repairs it. Either way the old rows remain superseded
+  history.
+- Small and bounded, so it reports by folding into the next reply unless
+  it touched nothing ("couldn't find that spelling anywhere"), which comes
+  back as a perception.
+
+It is a good first handler because it exercises the whole path (index →
+dispatch → acknowledgement → store write → report) on a tool that is
+entirely local and cannot reach the outside world.
+
 ## Skill hints and deferred turns
 
 **A skill agent on perception, where the Librarian sat.** Publishes a hint
