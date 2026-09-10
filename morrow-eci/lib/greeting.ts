@@ -45,13 +45,13 @@ export function bandFor(hour: number): Band {
 /** `{name}` is the only token, and most rows do without it — a name in every
  * greeting reads as a mail merge. */
 const GREETING: Record<Band, readonly string[]> = {
-  deepNight: ["Night owl.", "Still up.", "Late.", "Hei, {name}.", "Small hours."],
+  deepNight: ["Night owl.", "Still up.", "Late.", "Hello, {name}.", "Small hours."],
   dawn: ["Early.", "Morning, {name}.", "First light.", "Up already.", "Morning."],
-  morning: ["Morning.", "Morning, {name}.", "Hei.", "There you are.", "God morgen."],
-  midday: ["Hei.", "Midday.", "Hello, {name}.", "Still going.", "Halfway."],
-  afternoon: ["Afternoon.", "Hei.", "Afternoon, {name}.", "Hello.", "Still here."],
-  evening: ["Evening.", "Evening, {name}.", "Hei.", "God kveld.", "Day's done."],
-  night: ["Late one.", "Evening, {name}.", "Nearly tomorrow.", "Still up.", "Hei."],
+  morning: ["Morning.", "Morning, {name}.", "Hello.", "There you are.", "Good morning."],
+  midday: ["Hello.", "Midday.", "Hello, {name}.", "Still going.", "Halfway."],
+  afternoon: ["Afternoon.", "Hello.", "Afternoon, {name}.", "Good afternoon.", "Still here."],
+  evening: ["Evening.", "Evening, {name}.", "Hello.", "Good evening.", "Day's done."],
+  night: ["Late one.", "Evening, {name}.", "Nearly tomorrow.", "Still up.", "Hello."],
 };
 
 /**
