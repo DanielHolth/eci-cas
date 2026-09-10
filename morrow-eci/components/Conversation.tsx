@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { SecurityIcon } from "@/components/SecurityIcon";
 import { Transcript } from "@/components/Transcript";
@@ -104,11 +104,31 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   }, []);
 
   // Most browsers refuse this until the page has been interacted with, and
-  // say nothing about it. handleSubmit retries it on the first gesture.
+  // say nothing about it. handleSubmit retries it on the first gesture, but
+  // waiting specifically for Send made the greeting feel mute on arrival --
+  // people read it, then only heard it once they'd already typed a reply.
+  // Any gesture anywhere on the page spends the same permission, so the
+  // first click, key, or tap -- not necessarily a submit -- is what should
+  // retry it.
   useEffect(() => {
     if (hello) say(hello);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hello]);
+
+  const helloRef = useRef(hello);
+  helloRef.current = hello;
+  useEffect(() => {
+    const prime = () => unlock(helloRef.current);
+    window.addEventListener("pointerdown", prime, { once: true });
+    window.addEventListener("keydown", prime, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", prime);
+      window.removeEventListener("keydown", prime);
+    };
+    // Bound once per mount: `once: true` already retires the listener after
+    // the first gesture, so there is nothing here that needs to re-run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openInLog(correlationId: string) {
     setLogOpen(true);

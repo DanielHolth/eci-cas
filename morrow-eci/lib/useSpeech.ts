@@ -15,7 +15,15 @@ export interface SpeechState {
    * re-queues `retry` if nothing has ever actually been heard.
    */
   unlock: (retry?: string) => void;
+  /** Every voice the browser/OS currently offers. Empty until the platform reports them. */
+  voices: SpeechSynthesisVoice[];
+  /** voiceURI of the voice in use, or "" for the platform default. */
+  voiceURI: string;
+  /** Persisted across reloads; "" restores the platform default. */
+  setVoiceURI: (uri: string) => void;
 }
+
+const VOICE_STORAGE_KEY = "morrow.voiceURI";
 
 /**
  * Says every reply aloud, in the order the replies arrived.
@@ -50,6 +58,54 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
   // speak/onerror cycle, so only onstart is evidence of sound.
   const heard = useRef(false);
 
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceURI, setVoiceURIState] = useState("");
+  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+
+  // Restore the saved choice once on mount. Not read during render: reading
+  // localStorage during render would differ between server and client and
+  // trip hydration.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VOICE_STORAGE_KEY);
+      if (saved) setVoiceURIState(saved);
+    } catch {
+      // Private browsing or storage disabled — the platform default is fine.
+    }
+  }, []);
+
+  // getVoices() returns nothing until the platform has loaded its voice
+  // list, which on some browsers only fires the onvoiceschanged event once,
+  // asynchronously, well after mount.
+  useEffect(() => {
+    const synth = typeof window === "undefined" ? undefined : window.speechSynthesis;
+    if (!synth) return;
+    // Some browsers (Chrome) list the same voiceURI more than once, which
+    // would otherwise surface as duplicate <option> keys in any dropdown
+    // built from this list.
+    const load = () => {
+      const seen = new Set<string>();
+      setVoices(synth.getVoices().filter((v) => (seen.has(v.voiceURI) ? false : (seen.add(v.voiceURI), true))));
+    };
+    load();
+    synth.addEventListener("voiceschanged", load);
+    return () => synth.removeEventListener("voiceschanged", load);
+  }, []);
+
+  useEffect(() => {
+    voiceRef.current = voices.find((v) => v.voiceURI === voiceURI) ?? null;
+  }, [voices, voiceURI]);
+
+  const setVoiceURI = useCallback((uri: string) => {
+    setVoiceURIState(uri);
+    try {
+      if (uri) window.localStorage.setItem(VOICE_STORAGE_KEY, uri);
+      else window.localStorage.removeItem(VOICE_STORAGE_KEY);
+    } catch {
+      // Nothing to persist to — the choice still holds for this session.
+    }
+  }, []);
+
   // Marking the backlog has to happen before the first drain, and it has to
   // happen once -- doing it in the queueing effect would also swallow the
   // first real reply when it arrives in the same commit.
@@ -73,6 +129,7 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
 
     busy.current = true;
     const utterance = new SpeechSynthesisUtterance(next);
+    if (voiceRef.current) utterance.voice = voiceRef.current;
     utterance.onstart = () => {
       heard.current = true;
       setSpeaking(true);
@@ -139,5 +196,5 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
     };
   }, []);
 
-  return { speaking, say, unlock };
+  return { speaking, say, unlock, voices, voiceURI, setVoiceURI };
 }
