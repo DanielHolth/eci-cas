@@ -34,10 +34,29 @@ telemetry) watch everything and are invisible to agents.
 | `archive/passages.parquet` | Reflection's own thinking | yes (Hindsight) |
 | `memory.jsonl` | agent state (persona) | yes (Identity) |
 
-The utterances are the ground truth. Facts are derived from them and are
-rebuilt at boot by `FactBackfill`. The extractor and consolidator are
-optional model calls; with them off, each utterance becomes a single fact on
-its own thread.
+The utterances are the ground truth. Facts are derived from them; at boot
+`FactBackfill` extracts every utterance whose id no fact carries as its
+source, then embeds and threads any fact missing a vector or thread.
+
+**Write.** The extractor splits every utterance into standalone facts,
+however short. `NONE` (a bare question, a greeting) stores nothing; a failed
+call keeps the utterance as one fact. With `ExtractorEnabled` off, every
+utterance is one fact. The consolidator (optional) decides joins onto an
+existing thread above `ThreadThreshold`.
+
+**Read.** Cosine over multilingual-e5-small plus a lexical lane, one row per
+thread, MMR. e5 packs related and unrelated rows into roughly 0.73-0.83, so
+no cutoff separates them (`ReadMinScore` 0.60 is a guard only). With
+`PickerEnabled` the sweep casts 40 wide and the picker model returns up to 8
+row numbers, or `NONE`; if it can't answer, cosine top-k stands. That is one
+model call on every turn's critical path.
+
+| Tier | extractor, picker | Intent | Reflection |
+|---|---|---|---|
+| Minimal | local qwen3.5-4b | local | local |
+| Budget | local qwen3.5-4b | Mistral | OpenAI |
+| Default | OpenAI | OpenAI | Mistral |
+| Super | OpenAI | Mistral | OpenAI |
 
 ## Governance
 

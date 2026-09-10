@@ -78,7 +78,7 @@ public sealed class PersonaName
     /// `persona` is deliberately not a category in cataloger.txt. Adding it
     /// would make it a drawer ranked by similarity against every other, which
     /// is the exact mistake <see cref="AssistantScope"/> exists to prevent --
-    /// measured 1 of 16 (tools/retrieval-bench/refl_v4.py). A shelf that
+    /// measured 1 of 16 (refl_v4, tools/retrieval-bench/RESULTS.md). A shelf that
     /// belongs to the persona is decided BEFORE ranking, by who the fact is
     /// about, and this is that decision for the one address on it that a
     /// person can change by saying so.

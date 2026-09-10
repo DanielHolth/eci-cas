@@ -7,22 +7,13 @@ obj/
 archive.jsonl
 src/EciCas.Host/telemetry/
 
-# Secrets — manifest references env var NAMES only, never values.
+# Secrets â€” manifest references env var NAMES only, never values.
 # Real keys live in .env, which is never committed.
 .env
 .env.*
 !.env.example
 
-# Embedding model — ~90MB, downloaded not committed.
+# Embedding model â€” ~90MB, downloaded not committed.
 models/
 __pycache__/
 *.pyc
-tools/retrieval-bench/.archive_v3.json
-tools/retrieval-bench/.archive_v3_lean.json
-tools/retrieval-bench/.archive_v3_sent.json
-tools/retrieval-bench/.archive_v3_terse.json
-tools/retrieval-bench/.archive_v4_*.json
-tools/retrieval-bench/.v5_corpus.json
-tools/retrieval-bench/.v5_vectors.npy
-tools/retrieval-bench/.v5_threads.jsonl
-tools/retrieval-bench/.v5_threads.log

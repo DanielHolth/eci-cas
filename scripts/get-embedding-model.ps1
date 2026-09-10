@@ -5,7 +5,7 @@ Downloads the sentence-transformer weights the passage corpus needs.
 .DESCRIPTION
 Facts, passages and Hindsight's wake all read through one embedder:
 multilingual-e5-small, because it is the one that finds a Norwegian fact from
-an English question (tools/retrieval-bench/lang_v4.py). ONNX export plus its
+an English question (tools/retrieval-bench/RESULTS.md). ONNX export plus its
 SentencePiece model, ~470MB, deliberately not committed: git would carry them forever and diff them badly.
 
 Without them the swarm runs exactly as it did before vectors existed. That

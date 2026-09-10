@@ -13,13 +13,18 @@ over SSE. Design: [`docs/architecture.md`](docs/architecture.md).
   never read at reply time. Ground truth.
 - **`archive/facts/`** — standalone one-claim sentences extracted from each
   utterance, with embedding, thread and supersession. The only store Recall
-  reads. Disposable: rebuilt from utterances at boot.
+  reads. Disposable: boot extracts any utterance that has no facts yet.
 
-Scribe writes both after the reply. With `Utterances:ExtractorEnabled`
-(Default, Super) a model splits long messages into facts; otherwise the
-utterance is one fact. Recall is one cosine sweep plus a lexical lane,
-collapsed to each thread's newest member, diversified by MMR. Reflection's
-own thinking lives in `passages.parquet`.
+Scribe writes both after the reply. With `Utterances:ExtractorEnabled` (every
+tier but Mock) a model splits every utterance into facts, however short; a
+bare question or greeting answers `NONE` and stores nothing. With it off, or
+if the call fails, the utterance is kept as one fact.
+
+Recall: cosine (multilingual-e5-small) plus a lexical lane, collapsed to each
+thread's newest member, diversified by MMR. With `Utterances:PickerEnabled`
+the sweep casts `FanoutWidth` (40) and a model keeps up to `PickMax` (8) by
+number, or `NONE`; if it can't answer, cosine top-k stands. Reflection's own
+thinking lives in `passages.parquet`.
 
 ## Layout
 
@@ -47,15 +52,17 @@ Starts llama-server (if the tier needs it), the host on `:5179` and the UI on
 By hand:
 
 ```powershell
-$env:OPENAI_API_KEY  = "..."   # Intent, extractor, consolidator
-$env:MISTRAL_API_KEY = "..."   # Reflection
+$env:OPENAI_API_KEY  = "..."   # Default: Intent, extractor, picker, consolidator
+$env:MISTRAL_API_KEY = "..."   # Default: Reflection
 dotnet run --project src/EciCas.Host -- --Tier=Default
 cd morrow-eci; npm install; npm run dev
 ```
 
 No keys: `--Tier=Mock` echoes prompts (machinery only); `--Tier=Minimal` runs
-a local Qwen3.5 4B for $0 via
-`scripts/get-local-model.ps1 -Start` (needs llama.cpp on `:8080`).
+everything on a local Qwen3.5 4B for $0 via
+`scripts/get-local-model.ps1 -Start` (needs llama.cpp on `:8080`). Budget is
+Minimal's local extractor and picker with Intent (Mistral) and Reflection
+(OpenAI) on the API.
 
 ```bash
 dotnet test EciCas.slnx
@@ -74,7 +81,7 @@ Super. The Debug panel switches tiers live. Any key overrides from the
 command line.
 
 `Substrates:Agents` maps each model consumer — `Intent`, `Reflection`,
-`extractor`, `consolidator` — to a provider; unset means `mock`. Providers
+`extractor`, `picker`, `consolidator` — to a provider; unset means `mock`. Providers
 name an env var for the key, never the key itself. The table is validated at
 boot; `Agent substrate manifest drift` usually means a stale build
 (`dotnet clean`).
@@ -83,8 +90,15 @@ boot; `Agent substrate manifest drift` usually means a stale build
 `.txt` per agent. `identity.txt` only seeds an empty store; delete
 `bin/.../memory.jsonl` to re-seed (`--Identity:Profile=grump|educator|playmate`).
 
-Embeddings: `scripts/get-embedding-model.ps1` (ONNX, into `models/embedding/`)
-or `--Embedding:Provider=api`. Without one, recall falls back to lexical.
+Embeddings: multilingual-e5-small, in-process ONNX, fetched by
+`scripts/get-embedding-model.ps1` into `models/embedding/multilingual-e5-small/`
+(`model.onnx` + `sentencepiece.bpe.model`), or `--Embedding:Provider=api`.
+Vectors are stamped with the model; switching models means deleting
+`passages.parquet` and `facts/` (boot rebuilds facts from utterances).
+Without an embedder, recall falls back to lexical.
+
+Measurements behind the knobs: `tools/retrieval-bench/RESULTS.md` (the
+scripts are in git history).
 
 ## Docs
 

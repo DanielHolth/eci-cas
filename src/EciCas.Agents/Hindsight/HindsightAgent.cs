@@ -105,7 +105,7 @@ public sealed class HindsightAgent : AgentBase
         // The second trigger, and the reason it is affordable: a turn that
         // says "you" is asking the persona for its own view, and there is no
         // row anywhere in the archive that answers one. Retrieval measured
-        // this directly (tools/retrieval-bench/refl_v4.py): routing such a
+        // this directly (refl_v4, tools/retrieval-bench/RESULTS.md): routing such a
         // turn by similarity puts 1 of 16 in an assistant drawer while 6 of 6
         // human controls stay correctly out, because a bi-encoder has nowhere
         // to encode WHOSE fact this is. So the fact shelf cannot serve these

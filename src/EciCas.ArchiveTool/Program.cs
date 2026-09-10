@@ -26,7 +26,7 @@ const string Usage = """
     thread merge <thread> <thread> | thread split <fact> | facts clear
     del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic]
     del [profile:]recent <index[,index...]> | del passage <id>
-    embed <model.onnx> <vocab.txt> | reset | help | exit
+    embed <model.onnx> <sentencepiece.bpe.model> | reset | help | exit
     """;
 
 Console.WriteLine($"EciCas Archive Tool — {Path.GetFullPath(directory)}");
@@ -124,7 +124,7 @@ while (true)
                 break;
 
             case "embed":
-                Console.WriteLine("embed <model.onnx> <vocab.txt> - use the same paths the host is configured with, or the vectors will not count.");
+                Console.WriteLine("embed <model.onnx> <sentencepiece.bpe.model> - use the same paths the host is configured with, or the vectors will not count.");
                 break;
 
             case "reset":
@@ -566,13 +566,6 @@ static string Oneline(string text, int width)
     return flat.Length <= width ? flat : flat[..width] + "...";
 }
 
-/// <summary>A tier of the archive: the shared root, or one person's own directory under it.</summary>
-readonly record struct Scope(string Name, string Directory)
-{
-    /// <summary>What `list` prints and what a command may type back: "daniel:" for a profile, nothing for the shared root.</summary>
-    public string Prefix => Name.Length == 0 ? string.Empty : $"{Name}:";
-}
-
 /// <summary>
 /// The inverted archive, read raw. Nothing here interprets: an operator
 /// turning the flag on for the first time needs to see that rows landed, that
@@ -715,4 +708,11 @@ static string? Resolve(IReadOnlyList<Fact> rows, string prefix)
         .ToList();
 
     return ids.Count == 1 ? ids[0] : null;
+}
+
+/// <summary>A tier of the archive: the shared root, or one person's own directory under it.</summary>
+readonly record struct Scope(string Name, string Directory)
+{
+    /// <summary>What `list` prints and what a command may type back: "daniel:" for a profile, nothing for the shared root.</summary>
+    public string Prefix => Name.Length == 0 ? string.Empty : $"{Name}:";
 }

@@ -5,7 +5,7 @@ namespace EciCas.Core;
 /// category.
 ///
 /// A bi-encoder has nowhere to encode whose fact a row is. Measured
-/// directly (tools/retrieval-bench/refl_v4.py): routing a turn that asks
+/// directly (refl_v4, tools/retrieval-bench/RESULTS.md): routing a turn that asks
 /// the persona for its own view by similarity puts 1 of 16 into an
 /// assistant drawer, while 6 of 6 human controls correctly stay out. So
 /// "assistant" cannot be a thirty-third category ranked against
