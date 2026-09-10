@@ -60,14 +60,6 @@ public sealed class UtteranceOptions
     public bool ExtractorEnabled { get; set; }
 
     /// <summary>
-    /// Characters below which a single-sentence utterance is taken to be its
-    /// own fact, with no call spent. "Rex is 4" needs no decontextualising,
-    /// and asking a model to restate it can only make it longer or wrong.
-    /// Multi-sentence input is always sent regardless of length.
-    /// </summary>
-    public int ExtractorMinLength { get; set; } = 120;
-
-    /// <summary>
     /// Ceiling on facts from one utterance. Not a quality knob -- it is the
     /// stop on a model that has started listing rather than extracting, which
     /// is the failure mode that turns one paste into a hundred rows.
@@ -96,11 +88,34 @@ public sealed class UtteranceOptions
     public int TopK { get; set; } = 5;
 
     /// <summary>
-    /// Cosine floor for a row to be a candidate at read time. Well below the
-    /// threading line: threading asks whether two utterances are the same
-    /// subject, and reading asks whether one is worth showing.
+    /// Fused-score floor for a row to be a candidate at read time. A guard,
+    /// not a verdict: multilingual-e5 packs related and unrelated rows into
+    /// 0.73-0.83 cosine ("weather on mars" scores 0.79 against a family
+    /// archive), so no line separates them. Ranking and the picker do that.
     /// </summary>
-    public double ReadMinScore { get; set; } = 0.55;
+    public double ReadMinScore { get; set; } = 0.60;
+
+    /// <summary>
+    /// Whether a model chooses the facts from a wide cosine shortlist. A
+    /// substrate call on the critical path, so it is what a paid tier buys.
+    ///
+    /// Cosine alone ranks "list my children's birthdays" below four rows
+    /// about Governance, because the question shares a register with them
+    /// and not with "Susana's birthday is 10.02.2018". A reader that can see
+    /// forty short facts at once has no such problem, and forty facts is a
+    /// few hundred tokens.
+    /// </summary>
+    public bool PickerEnabled { get; set; }
+
+    /// <summary>How many cosine candidates the picker reads.</summary>
+    public int FanoutWidth { get; set; } = 40;
+
+    /// <summary>
+    /// Most facts the picker may hand on. Above RecallDepth on purpose: a
+    /// list question needs every member of the list, and the picker, unlike
+    /// a cosine cut, can tell when the list is complete.
+    /// </summary>
+    public int PickMax { get; set; } = 8;
 
     /// <summary>
     /// MMR's balance between relevance and not-saying-it-twice. 0.7 measured

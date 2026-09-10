@@ -164,7 +164,7 @@ public sealed class ScribeAgent : AgentBase
         // is just the utterance handed back -- announcing that would flood
         // the Thoughts panel with a restatement of what the person just
         // typed, once per turn, forever.
-        if (SubstrateFactExtractor.Splittable(utterance.Text, _options))
+        if (_options.ExtractorEnabled)
         {
             // Still Archivist's constants, for the same reason Cataloger used
             // them: Identity and Impulse listen for "the archive grew", not

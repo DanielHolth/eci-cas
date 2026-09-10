@@ -2,6 +2,7 @@ using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Agents.Utterances;
 
@@ -27,6 +28,8 @@ public sealed class ConsultAgent : AgentBase
 {
     private readonly IMessageBus _bus;
     private readonly FactConsult _consult;
+    private readonly FactPicker _picker;
+    private readonly UtteranceOptions _options;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -36,11 +39,14 @@ public sealed class ConsultAgent : AgentBase
     /// </summary>
     public const string RecalledFactsKey = "recall.facts";
 
-    public ConsultAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ConsultAgent> logger, FactConsult consult)
+    public ConsultAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ConsultAgent> logger, FactConsult consult,
+        FactPicker picker, IOptions<UtteranceOptions> options)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _consult = consult;
+        _picker = picker;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -60,7 +66,9 @@ public sealed class ConsultAgent : AgentBase
         IReadOnlyList<Consulted> hits = [];
         try
         {
-            hits = await _consult.FindAsync(text, cancellationToken).ConfigureAwait(false);
+            hits = _options.PickerEnabled
+                ? await FanoutAsync(text, cancellationToken).ConfigureAwait(false)
+                : await _consult.FindAsync(text, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -76,6 +84,22 @@ public sealed class ConsultAgent : AgentBase
         var facts = (IReadOnlyList<ArchiveRecord>)[.. hits.Select(ToRecord)];
         var meta = MetaBag.Empty.With(RecalledFactsKey, facts);
         _bus.Publish(Topics.Advisories, envelope.Derive(Topics.Advisories, Name, envelope.Severity, meta));
+    }
+
+    /// <summary>
+    /// Wide shortlist, then the picker. A picker that could not be asked
+    /// leaves the cosine order standing, cut to the usual depth, so a
+    /// substrate outage costs the turn its judgment and not its memory.
+    /// </summary>
+    private async Task<IReadOnlyList<Consulted>> FanoutAsync(string text, CancellationToken cancellationToken)
+    {
+        var shortlist = await _consult.ShortlistAsync(text, _options.FanoutWidth, cancellationToken).ConfigureAwait(false);
+        var picked = await _picker.PickAsync(text, shortlist, _options.PickMax, cancellationToken).ConfigureAwait(false);
+        var used = picked ?? [.. shortlist.Take(_consult.Depth)];
+        _logger.LogInformation("{Agent} picked {Picked} of {Shortlist}{Fallback}", Name, used.Count, shortlist.Count,
+            picked is null ? " (cosine fallback)" : string.Empty);
+        await _consult.RecordAsync(used, cancellationToken).ConfigureAwait(false);
+        return used;
     }
 
     /// <summary>

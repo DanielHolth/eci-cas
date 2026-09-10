@@ -28,6 +28,10 @@ using EciCas.Core;
 /// resolve each other's pronouns. A per-fact call would have thrown away the
 /// context that made them resolvable, which is the entire job.
 ///
+/// **Every utterance is asked, however short.** A length gate once let
+/// short turns through verbatim, and short turns are mostly questions:
+/// "how many kids do i have?" became a fact and answered the next read.
+///
 /// **It never throws for content reasons.** Substrate down, deadline blown,
 /// reply unparseable -- the answer is the same, the utterance verbatim as one
 /// fact. An unsplit row retrieves badly; an absent row does not retrieve at
@@ -38,6 +42,9 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 {
     /// <summary>The name its Substrates:Agents entry goes under.</summary>
     public const string AgentName = "extractor";
+
+    /// <summary>The reply that means "said nothing to keep".</summary>
+    public const string NothingStated = "NONE";
 
     private readonly ISubstrateProvider _substrate;
     private readonly UtteranceOptions _options;
@@ -54,7 +61,7 @@ public sealed class SubstrateFactExtractor : IFactExtractor
     public async Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, CancellationToken cancellationToken)
     {
         var text = utterance.Text.Trim();
-        if (!Splittable(text, _options))
+        if (!_options.ExtractorEnabled)
         {
             return [text];
         }
@@ -63,6 +70,16 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         {
             var result = await _substrate.CompleteAsync(AgentName, BuildPrompt(text), cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("Extractor <<< {Response}", result.Text);
+
+            // NONE is the model saying "nothing was claimed": a question, a
+            // greeting. Stored as a fact, a question comes back later as the
+            // answer to itself. An empty or garbled reply is a failure, not a
+            // verdict, and keeps the utterance whole like any other failure.
+            if (result.Text.Trim().Trim('.').Equals(NothingStated, StringComparison.OrdinalIgnoreCase))
+            {
+                return [];
+            }
+
             var facts = Parse(result.Text, _options.ExtractorMaxFacts);
             return facts.Count > 0 ? facts : [text];
         }
@@ -74,36 +91,6 @@ public sealed class SubstrateFactExtractor : IFactExtractor
             _logger.LogWarning(ex, "Extractor failed; keeping the utterance whole.");
             return [text];
         }
-    }
-
-    /// <summary>
-    /// Whether it is worth asking. A short single sentence *is* its own fact
-    /// -- "Rex is 4", "my sister is called Ingrid" -- and asking a model to
-    /// restate it can only make it longer or wrong. Most turns in a chat
-    /// archive are this, which is what keeps the call affordable.
-    /// </summary>
-    public static bool Splittable(string text, UtteranceOptions options) =>
-        options.ExtractorEnabled
-        && (text.Length >= options.ExtractorMinLength || SentenceEnds(text) > 1);
-
-    /// <summary>
-    /// Terminators followed by a space or end-of-string, which is enough to
-    /// count sentences without being a sentence tokeniser. It only decides
-    /// whether to spend a call, so a decimal point mistaken for a full stop
-    /// costs a cheap call and nothing else.
-    /// </summary>
-    private static int SentenceEnds(string text)
-    {
-        var ends = 0;
-        for (var i = 0; i < text.Length; i++)
-        {
-            if (text[i] is '.' or '!' or '?' && (i == text.Length - 1 || char.IsWhiteSpace(text[i + 1])))
-            {
-                ends++;
-            }
-        }
-
-        return ends;
     }
 
     /// <summary>
@@ -127,7 +114,8 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         prompt.AppendLine("- Keep the speaker's own words and their names for things wherever you can. You are putting the missing pieces back, not rephrasing.");
         prompt.AppendLine("- Keep first person as first person: \"I moved to Bodo in 2019\", not \"the speaker moved to Bodo in 2019\".");
         prompt.AppendLine("- Add nothing that was not said. If you are unsure whether something was claimed, leave it out.");
-        prompt.AppendLine("- Questions, greetings and small talk state nothing. Skip them.");
+        prompt.AppendLine("- Questions, greetings, requests and small talk state nothing. Skip them. A question can still contain a fact (\"now that Rex is 4, should he be neutered?\" states that Rex is 4).");
+        prompt.AppendLine($"- If nothing at all is stated, reply with the single word {NothingStated}.");
         prompt.AppendLine("- If the whole thing is already one standalone fact, repeat it back unchanged as the only line.");
         prompt.AppendLine();
         prompt.AppendLine("Facts:");

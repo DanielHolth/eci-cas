@@ -15,9 +15,9 @@ public sealed class EmbeddingOptions
     /// <summary>"onnx" (local, default), "openai" (an OpenAI-compatible /embeddings endpoint), or "none".</summary>
     public string Provider { get; set; } = "onnx";
 
-    public string ModelPath { get; set; } = "models/embedding/model.onnx";
+    public string ModelPath { get; set; } = "models/embedding/multilingual-e5-small/model.onnx";
 
-    public string VocabPath { get; set; } = "models/embedding/vocab.txt";
+    public string VocabPath { get; set; } = "models/embedding/multilingual-e5-small/sentencepiece.bpe.model";
 
     /// <summary>Longer inputs are truncated. Passages are 5-15 words, so this only ever bites on a turn's own text.</summary>
     public int MaxTokens { get; set; } = 256;

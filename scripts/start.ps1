@@ -137,9 +137,9 @@ if ($needsOpenAi -and -not $env:OPENAI_API_KEY) {
 # Minimal had no embedder of its own, and it outlived that by long enough to
 # hide a real outage.
 #
-# Both files, not just the model: a vocab.txt that did not come down with the
+# Both files, not just the model: a tokenizer that did not come down with the
 # weights fails the host's own check and produces exactly the same silence.
-$weights = @('models/embedding/model.onnx', 'models/embedding/vocab.txt')
+$weights = @('models/embedding/multilingual-e5-small/model.onnx', 'models/embedding/multilingual-e5-small/sentencepiece.bpe.model')
 $missing = @($weights | Where-Object { -not (Test-Path (Join-Path $repo $_)) })
 if ($missing.Count -gt 0) {
     Write-Host "note: no local embedding weights ($($missing -join ', '))."

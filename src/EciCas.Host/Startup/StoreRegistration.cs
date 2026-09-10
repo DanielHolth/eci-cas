@@ -128,6 +128,7 @@ internal static class StoreRegistration
         // hit counts) and the one above is only ever appended to.
         services.AddSingleton<IFactLog>(new ParquetFactLog(archiveDirectory));
         services.AddSingleton<FactConsult>();
+        services.AddSingleton<FactPicker>();
         services.AddSingleton<ThreadWeaver>();
         services.AddSingleton<FactBackfill>();
 

@@ -70,7 +70,28 @@ public sealed class FactConsult
     /// </summary>
     private int TopK => _knobs.RecallDepth;
 
+    /// <summary>The depth a read without a picker stops at.</summary>
+    public int Depth => TopK;
+
+    /// <summary>The read at RecallDepth, its hits recorded.</summary>
     public async Task<IReadOnlyList<Consulted>> FindAsync(string query, CancellationToken cancellationToken)
+    {
+        var picked = await ShortlistAsync(query, TopK, cancellationToken).ConfigureAwait(false);
+        await RecordAsync(picked, cancellationToken).ConfigureAwait(false);
+        return picked;
+    }
+
+    /// <summary>
+    /// The same read at any width, recording nothing: a shortlist is not a
+    /// hit, and counting forty candidates a turn would make hit rate measure
+    /// the sweep instead of the archive.
+    /// </summary>
+    public Task RecordAsync(IReadOnlyList<Consulted> used, CancellationToken cancellationToken) =>
+        used.Count == 0
+            ? Task.CompletedTask
+            : _facts.RecordHitsAsync([.. used.Select(p => p.Row.Id)], cancellationToken);
+
+    public async Task<IReadOnlyList<Consulted>> ShortlistAsync(string query, int limit, CancellationToken cancellationToken)
     {
         var corpus = await _facts.AllAsync(cancellationToken).ConfigureAwait(false);
         if (corpus.Count == 0 || string.IsNullOrWhiteSpace(query))
@@ -112,16 +133,15 @@ public sealed class FactConsult
         }
 
         var current = Collapse(scored.Where(s => s.Row.SupersededBy is null), corpus, turnsNow, true);
-        var picked = Select(current, []);
+        var picked = Select(current, [], limit);
 
-        if (picked.Count < TopK)
+        if (picked.Count < limit)
         {
             var all = Collapse(scored, corpus, turnsNow, false);
-            picked.AddRange(Select(all, [.. picked.Select(p => p.Row.ThreadId ?? p.Row.Id)])
-                .Take(TopK - picked.Count));
+            picked.AddRange(Select(all, [.. picked.Select(p => p.Row.ThreadId ?? p.Row.Id)], limit)
+                .Take(limit - picked.Count));
         }
 
-        await _facts.RecordHitsAsync([.. picked.Select(p => p.Row.Id)], cancellationToken).ConfigureAwait(false);
         return picked;
     }
 
@@ -189,13 +209,13 @@ public sealed class FactConsult
     /// Maximal marginal relevance over the collapsed threads, penalising a
     /// candidate by how much it resembles what is already chosen.
     /// </summary>
-    private List<Consulted> Select(List<Consulted> candidates, IReadOnlyList<string> alreadyThreaded)
+    private List<Consulted> Select(List<Consulted> candidates, IReadOnlyList<string> alreadyThreaded, int limit)
     {
         var taken = new HashSet<string>(alreadyThreaded, StringComparer.Ordinal);
         var chosen = new List<Consulted>();
         var pool = candidates.Where(c => !taken.Contains(c.Row.ThreadId ?? c.Row.Id)).ToList();
 
-        while (chosen.Count < TopK && pool.Count > 0)
+        while (chosen.Count < limit && pool.Count > 0)
         {
             var bestIndex = 0;
             var bestValue = double.NegativeInfinity;

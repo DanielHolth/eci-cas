@@ -57,12 +57,23 @@ class Embedder:
         self.tok.enable_padding()
         opts = onnxruntime.SessionOptions()
         opts.log_severity_level = 3
+        onnx = "model.onnx"
+        if not os.path.exists(os.path.join(self.path, onnx)):
+            onnx = "model_quantized.onnx"
         self.sess = onnxruntime.InferenceSession(
-            os.path.join(self.path, "model.onnx"), opts,
+            os.path.join(self.path, onnx), opts,
             providers=["CPUExecutionProvider"])
         self.inputs = set(i.name for i in self.sess.get_inputs())
-        self.prefix = ({"query": "query: ", "passage": "passage: "}
-                       if "e5" in self.name else {})
+        # EmbeddingGemma ships its pooling and projection inside the graph,
+        # and wants its task prompts the way e5 wants its role prefixes.
+        self.pooled = "sentence_embedding" in (o.name for o in self.sess.get_outputs())
+        if "gemma" in self.name:
+            self.prefix = {"query": "task: search result | query: ",
+                           "passage": "title: none | text: "}
+        elif "e5" in self.name:
+            self.prefix = {"query": "query: ", "passage": "passage: "}
+        else:
+            self.prefix = {}
 
     @property
     def model_id(self):
@@ -94,6 +105,10 @@ class Embedder:
             feed = {"input_ids": ids, "attention_mask": mask}
             if "token_type_ids" in self.inputs:
                 feed["token_type_ids"] = np.zeros_like(ids)
+            if self.pooled:
+                v = self.sess.run(["sentence_embedding"], feed)[0]
+                out.append(v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-9))
+                continue
             hidden = self.sess.run(None, feed)[0]
             m = mask[..., None].astype(np.float32)
             pooled = (hidden * m).sum(1) / np.maximum(m.sum(1), 1e-9)

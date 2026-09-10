@@ -77,7 +77,8 @@ PAIRS = [
 ]
 
 MODELS = [("bge-small-en-v1.5", "bge-small-en"),
-          ("multilingual-e5-small", "multilingual-e5")]
+          ("multilingual-e5-small", "multilingual-e5"),
+          ("embeddinggemma-300m", "embeddinggemma")]
 
 
 def main():

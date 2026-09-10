@@ -279,6 +279,7 @@ public class SmokeTests
             services.AddSingleton<IFactConsolidator>(new NullFactConsolidator());
             services.AddSingleton<IFactExtractor>(new VerbatimFactExtractor());
             services.AddSingleton<FactConsult>();
+            services.AddSingleton<FactPicker>();
             services.AddSingleton<ThreadWeaver>();
 
             foreach (var type in typeof(GovernanceAgent).Assembly.GetTypes()

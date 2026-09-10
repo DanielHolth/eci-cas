@@ -3,9 +3,10 @@
 Downloads the sentence-transformer weights the passage corpus needs.
 
 .DESCRIPTION
-The passage corpus — what Reflection writes and Hindsight wakes — needs a
-BERT-family ONNX export and its vocab.txt. They are ~90MB and deliberately
-not committed: git would carry them forever and diff them badly.
+Facts, passages and Hindsight's wake all read through one embedder:
+multilingual-e5-small, because it is the one that finds a Norwegian fact from
+an English question (tools/retrieval-bench/lang_v4.py). ONNX export plus its
+SentencePiece model, ~470MB, deliberately not committed: git would carry them forever and diff them badly.
 
 Without them the swarm runs exactly as it did before vectors existed. That
 is a normal, announced state, not a failure, so nothing here is required to
@@ -21,7 +22,7 @@ Embedding:ModelPath resolves relative paths against the build output.
 #>
 [CmdletBinding()]
 param(
-    [string]$Model = 'sentence-transformers/all-MiniLM-L6-v2',
+    [string]$Model = 'intfloat/multilingual-e5-small',
     [string]$Destination
 )
 
@@ -29,7 +30,7 @@ $ErrorActionPreference = 'Stop'
 
 if (-not $Destination) {
     $repo = Split-Path -Parent $PSScriptRoot
-    $Destination = Join-Path $repo 'models/embedding'
+    $Destination = Join-Path $repo ('models/embedding/' + ($Model -split '/')[-1])
 }
 
 if (-not (Test-Path $Destination)) {
@@ -37,7 +38,7 @@ if (-not (Test-Path $Destination)) {
 }
 
 $base = "https://huggingface.co/$Model/resolve/main"
-$files = @{ 'onnx/model.onnx' = 'model.onnx'; 'vocab.txt' = 'vocab.txt' }
+$files = @{ 'onnx/model.onnx' = 'model.onnx'; 'sentencepiece.bpe.model' = 'sentencepiece.bpe.model' }
 
 foreach ($remote in $files.Keys) {
     $target = Join-Path $Destination $files[$remote]
@@ -51,7 +52,7 @@ foreach ($remote in $files.Keys) {
 }
 
 $modelPath = (Resolve-Path (Join-Path $Destination 'model.onnx')).Path
-$vocabPath = (Resolve-Path (Join-Path $Destination 'vocab.txt')).Path
+$vocabPath = (Resolve-Path (Join-Path $Destination 'sentencepiece.bpe.model')).Path
 
 Write-Host ''
 Write-Host 'Done. Point the host at them in src/EciCas.Host/appsettings.json:'

@@ -9,9 +9,9 @@ namespace EciCas.Substrates;
 using EciCas.Core;
 
 /// <summary>
-/// Local sentence-transformer (bge-small / all-MiniLM class) over ONNX
-/// Runtime: WordPiece tokenize, one forward pass, attention-masked mean pool,
-/// L2 normalize. CPU only and deliberately so — this runs on the device the
+/// Local sentence-transformer over ONNX Runtime: tokenize, one forward pass,
+/// mean pool, L2 normalize. Ships multilingual-e5-small, whose tokenizer is
+/// XLM-R SentencePiece; a vocab.txt still loads the BERT WordPiece family. CPU only and deliberately so — this runs on the device the
 /// persona lives on, next to a minimal-tier local LLM, not on a GPU host.
 ///
 /// Missing weights are announced once and then simply mean Available is
@@ -30,7 +30,7 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
     private readonly EmbeddingOptions _options;
     private readonly ILogger _logger;
     private readonly InferenceSession? _session;
-    private readonly BertTokenizer? _tokenizer;
+    private readonly Func<string, long[]>? _tokenize;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     public OnnxEmbeddingProvider(IOptions<EmbeddingOptions> options, ILogger<OnnxEmbeddingProvider> logger)
@@ -49,10 +49,37 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
         }
 
         _session = new InferenceSession(modelPath);
-        _tokenizer = BertTokenizer.Create(vocabPath);
+        _tokenize = vocabPath.EndsWith(".model", StringComparison.OrdinalIgnoreCase)
+            ? XlmRoberta(vocabPath)
+            : Bert(vocabPath);
     }
 
-    public bool Available => _session is not null && _tokenizer is not null;
+    public bool Available => _session is not null && _tokenize is not null;
+
+    private static Func<string, long[]> Bert(string vocabPath)
+    {
+        var tokenizer = BertTokenizer.Create(vocabPath);
+        return text => [.. tokenizer.EncodeToIds(text, addSpecialTokens: true).Select(i => (long)i)];
+    }
+
+    /// <summary>
+    /// XLM-R ids are SentencePiece ids shifted by one: fairseq put
+    /// &lt;s&gt;=0 &lt;pad&gt;=1 &lt;/s&gt;=2 &lt;unk&gt;=3 in front of the piece table,
+    /// so every piece moves up one and unknown lands on 3. Checked
+    /// id-for-id against the HF tokenizer.json, Norwegian included.
+    /// </summary>
+    private static Func<string, long[]> XlmRoberta(string modelPath)
+    {
+        using var stream = File.OpenRead(modelPath);
+        var tokenizer = SentencePieceTokenizer.Create(stream, addBeginningOfSentence: false, addEndOfSentence: false);
+        return text =>
+        [
+            0L,
+            .. tokenizer.EncodeToIds(text, considerPreTokenization: false, considerNormalization: true)
+                .Select(i => i == 0 ? 3L : i + 1L),
+            2L,
+        ];
+    }
 
     /// <summary>The weights file's own path: two operators pointing at
     /// different downloads are running different models, whatever either
@@ -93,7 +120,7 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
 
     private float[] Embed(string text)
     {
-        var ids = _tokenizer!.EncodeToIds(text, addSpecialTokens: true).Take(_options.MaxTokens).Select(i => (long)i).ToArray();
+        var ids = _tokenize!(text).Take(_options.MaxTokens).ToArray();
         var shape = new[] { 1, ids.Length };
         var mask = new long[ids.Length];
         Array.Fill(mask, 1L);
