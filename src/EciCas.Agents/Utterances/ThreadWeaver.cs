@@ -6,9 +6,9 @@ namespace EciCas.Agents.Utterances;
 using EciCas.Core;
 
 /// <summary>
-/// Threading: which running subject a new utterance belongs to.
+/// Threading: which running subject a new fact belongs to.
 ///
-/// The log has no addresses, so "my new car is a Tesla" accumulates beside
+/// The store has no addresses, so "my new car is a Tesla" accumulates beside
 /// the 2016 row that named the Subaru, and forty restatements of one fact
 /// become forty rows competing for the same five slots. A thread id, minted
 /// on write, is what makes repetition cost one slot instead of forty and
@@ -41,13 +41,13 @@ using EciCas.Core;
 /// </summary>
 public sealed class ThreadWeaver
 {
-    private readonly IUtteranceLog _log;
+    private readonly IFactLog _log;
     private readonly IEmbeddingProvider _embeddings;
-    private readonly IUtteranceConsolidator _consolidator;
+    private readonly IFactConsolidator _consolidator;
     private readonly UtteranceOptions _options;
     private readonly ILogger<ThreadWeaver> _logger;
 
-    public ThreadWeaver(IUtteranceLog log, IEmbeddingProvider embeddings, IUtteranceConsolidator consolidator,
+    public ThreadWeaver(IFactLog log, IEmbeddingProvider embeddings, IFactConsolidator consolidator,
         IOptions<UtteranceOptions> options, ILogger<ThreadWeaver> logger)
     {
         _log = log;
@@ -58,14 +58,16 @@ public sealed class ThreadWeaver
     }
 
     /// <summary>
-    /// Embeds, threads and files the rows a turn produced.
+    /// Embeds and threads the facts a turn produced. The caller has already
+    /// stamped FirstSeenTurn on them, because the turn counter belongs to the
+    /// utterance log and this class no longer knows about it.
     ///
     /// Off the critical path by construction -- the caller has already
     /// answered -- so this is allowed to be the slowest thing in the turn.
     /// Nothing downstream waits on it, and a row that arrives unthreaded is
     /// merely a row the backfill will get to.
     /// </summary>
-    public async Task<WeaveResult> WeaveAsync(IReadOnlyList<Utterance> incoming, CancellationToken cancellationToken)
+    public async Task<WeaveResult> WeaveAsync(IReadOnlyList<Fact> incoming, CancellationToken cancellationToken)
     {
         if (incoming.Count == 0)
         {
@@ -74,18 +76,17 @@ public sealed class ThreadWeaver
 
         if (!_embeddings.Available)
         {
-            // No vectors, no sweep. The rows are still ground truth and still
-            // worth keeping; ArchiveBackfill's own reasoning applies, which
-            // is that a vector is derived and a missing one is a job, not a
-            // loss.
+            // No vectors, no sweep. The rows are still worth filing
+            // unthreaded: a missing vector is a job for FactBackfill, not a
+            // reason to drop an index row whose source is already on disk.
             return new WeaveResult(incoming, []);
         }
 
         var vectors = await _embeddings.EmbedAsync([.. incoming.Select(u => u.Text)], EmbeddingKind.Passage, cancellationToken).ConfigureAwait(false);
         var corpus = await _log.AllAsync(cancellationToken).ConfigureAwait(false);
         var representatives = Representatives(corpus);
-        var threaded = new List<Utterance>(incoming.Count);
-        var retired = new List<UtteranceDerived>();
+        var threaded = new List<Fact>(incoming.Count);
+        var retired = new List<FactDerived>();
 
         for (var i = 0; i < incoming.Count; i++)
         {
@@ -93,7 +94,6 @@ public sealed class ThreadWeaver
             {
                 Embedding = vectors[i],
                 EmbeddingModelId = _embeddings.ModelId,
-                FirstSeenTurn = _log.TurnsRecorded,
             };
 
             var candidates = Candidates(row, representatives);
@@ -108,7 +108,7 @@ public sealed class ThreadWeaver
             // would need the newcomer's id before it is filed.
             if (verdict?.Supersedes is { Length: > 0 } stale)
             {
-                retired.Add(new UtteranceDerived(stale, SupersededBy: row.Id));
+                retired.Add(new FactDerived(stale, SupersededBy: row.Id));
             }
 
             // A row that minted a thread is itself that thread's frozen
@@ -131,9 +131,9 @@ public sealed class ThreadWeaver
     /// because it is a scan of a list already in memory and a stale
     /// representative set is a silently wrong merge.
     /// </summary>
-    private static List<Utterance> Representatives(IReadOnlyList<Utterance> corpus)
+    private static List<Fact> Representatives(IReadOnlyList<Fact> corpus)
     {
-        var byThread = new Dictionary<string, Utterance>(StringComparer.Ordinal);
+        var byThread = new Dictionary<string, Fact>(StringComparer.Ordinal);
         foreach (var row in corpus)
         {
             if (row.ThreadId is null || row.Embedding is null)
@@ -150,9 +150,9 @@ public sealed class ThreadWeaver
         return [.. byThread.Values];
     }
 
-    private List<(Utterance Row, double Score)> Candidates(Utterance row, List<Utterance> representatives)
+    private List<(Fact Row, double Score)> Candidates(Fact row, List<Fact> representatives)
     {
-        var hits = new List<(Utterance, double)>();
+        var hits = new List<(Fact, double)>();
         foreach (var rep in representatives)
         {
             if (rep.Embedding is null || !rep.HasVector(_embeddings.ModelId))
@@ -180,7 +180,7 @@ public sealed class ThreadWeaver
     /// predicts danger is whether the content words disagree, and that is
     /// free to check.
     /// </summary>
-    private async Task<ConsolidatorVerdict?> ResolveAsync(Utterance row, List<(Utterance Row, double Score)> candidates, CancellationToken cancellationToken)
+    private async Task<ConsolidatorVerdict?> ResolveAsync(Fact row, List<(Fact Row, double Score)> candidates, CancellationToken cancellationToken)
     {
         if (candidates.Count == 0)
         {
@@ -222,8 +222,8 @@ public sealed class ThreadWeaver
 
 /// <summary>
 /// What a weave produced: the rows to append, and the older rows a verdict
-/// retired. Two lists rather than one because they land in different places
-/// -- an append and a derived-column update -- and because ground truth is
-/// never rewritten, only the disposable columns beside it.
+/// retired. Two lists rather than one because they land in different places:
+/// an append for the new rows, and a derived-column update against rows
+/// already on disk.
 /// </summary>
-public sealed record WeaveResult(IReadOnlyList<Utterance> Rows, IReadOnlyList<UtteranceDerived> Retired);
+public sealed record WeaveResult(IReadOnlyList<Fact> Rows, IReadOnlyList<FactDerived> Retired);

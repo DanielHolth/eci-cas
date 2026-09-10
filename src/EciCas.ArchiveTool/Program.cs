@@ -1,4 +1,4 @@
-﻿using EciCas.Agents.Passages;
+using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Utterances;
 using EciCas.Core;
@@ -23,7 +23,7 @@ const string Usage = """
     list | show <[profile:]category> [topic] [subtopic] | showall <[profile:]category> [topic] [subtopic]
     recent [[profile:]recent] | passages [count] | passage <id>
     utterances [count] | threads [count]
-    thread merge <thread> <thread> | thread split <utterance>
+    thread merge <thread> <thread> | thread split <fact> | facts clear
     del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic]
     del [profile:]recent <index[,index...]> | del passage <id>
     embed <model.onnx> <vocab.txt> | reset | help | exit
@@ -89,6 +89,10 @@ while (true)
 
             case "thread" when parts.Length == 3 && parts[1].Equals("split", StringComparison.OrdinalIgnoreCase):
                 await SplitThreadAsync(directory, parts[2]);
+                break;
+
+            case "facts" when parts.Length == 2 && parts[1].Equals("clear", StringComparison.OrdinalIgnoreCase):
+                await ClearFactsAsync(directory);
                 break;
 
             case "threads":
@@ -578,15 +582,16 @@ readonly record struct Scope(string Name, string Directory)
 static async Task ShowUtterancesAsync(string directory, string? count)
 {
     var log = new ParquetUtteranceLog(directory);
-    var rows = await log.AllAsync(CancellationToken.None);
+    var said = await log.AllAsync(CancellationToken.None);
+    var rows = await new ParquetFactLog(directory).AllAsync(CancellationToken.None);
     if (rows.Count == 0)
     {
-        Console.WriteLine("No utterances. The log is written only with Utterances:Enabled=true.");
+        Console.WriteLine($"{said.Count} utterance(s) on file and no facts read out of them yet.");
         return;
     }
 
     var take = int.TryParse(count, out var n) && n > 0 ? n : 20;
-    Console.WriteLine($"{rows.Count} utterance(s) over {log.TurnsRecorded} turn(s); newest {Math.Min(take, rows.Count)}:");
+    Console.WriteLine($"{rows.Count} fact(s) from {said.Count} utterance(s) over {log.TurnsRecorded} turn(s); newest {Math.Min(take, rows.Count)}:");
 
     foreach (var r in rows.OrderByDescending(r => r.Timestamp).Take(take))
     {
@@ -601,6 +606,22 @@ static async Task ShowUtterancesAsync(string directory, string? count)
 }
 
 /// <summary>
+/// Throw the index away. Not destructive in the sense the word usually has
+/// here: facts, vectors and threads are all computed from the utterance log,
+/// which this does not open, so the next boot's backfill reads every line
+/// again and files it under whatever extractor is configured now. It is the
+/// operator's half of "the index is disposable" -- how a better extractor or
+/// a swapped embedder reaches a warm archive.
+/// </summary>
+static async Task ClearFactsAsync(string directory)
+{
+    var facts = new ParquetFactLog(directory);
+    var before = (await facts.AllAsync(CancellationToken.None)).Count;
+    await facts.ClearAsync(CancellationToken.None);
+    Console.WriteLine($"Dropped {before} fact(s). The next boot reads them out of the utterance log again.");
+}
+
+/// <summary>
 /// Threads, largest first. This is the one view that says whether threading
 /// is working: a corpus that is all singletons is one that never merged, and
 /// a thread holding a dozen unrelated sentences is the failure a consolidator
@@ -608,7 +629,7 @@ static async Task ShowUtterancesAsync(string directory, string? count)
 /// </summary>
 static async Task ShowThreadsAsync(string directory, string? count)
 {
-    var rows = await new ParquetUtteranceLog(directory).AllAsync(CancellationToken.None);
+    var rows = await new ParquetFactLog(directory).AllAsync(CancellationToken.None);
     var threads = rows
         .Where(r => r.ThreadId is not null)
         .GroupBy(r => r.ThreadId!)
@@ -642,7 +663,7 @@ static async Task ShowThreadsAsync(string directory, string? count)
 /// </summary>
 static async Task MergeThreadsAsync(string directory, string keep, string absorb)
 {
-    var log = new ParquetUtteranceLog(directory);
+    var log = new ParquetFactLog(directory);
     var rows = await log.AllAsync(CancellationToken.None);
 
     var into = Resolve(rows, keep);
@@ -654,7 +675,7 @@ static async Task MergeThreadsAsync(string directory, string keep, string absorb
     }
 
     var moving = rows.Where(r => r.ThreadId == from).ToList();
-    await log.UpdateDerivedAsync([.. moving.Select(r => new UtteranceDerived(r.Id, ThreadId: into))], CancellationToken.None);
+    await log.UpdateDerivedAsync([.. moving.Select(r => new FactDerived(r.Id, ThreadId: into))], CancellationToken.None);
     Console.WriteLine($"Moved {moving.Count} row(s) from {from[..8]} into {into[..8]}.");
 }
 
@@ -665,7 +686,7 @@ static async Task MergeThreadsAsync(string directory, string keep, string absorb
 /// </summary>
 static async Task SplitThreadAsync(string directory, string utterance)
 {
-    var log = new ParquetUtteranceLog(directory);
+    var log = new ParquetFactLog(directory);
     var rows = await log.AllAsync(CancellationToken.None);
     var matches = rows.Where(r => r.Id.StartsWith(utterance, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -679,12 +700,12 @@ static async Task SplitThreadAsync(string directory, string utterance)
     // And it is no longer retired: the row that superseded it belonged to
     // the thread this row just left, so the link would leave a fact true and
     // unreadable. The empty string is how a supersession is unset.
-    await log.UpdateDerivedAsync([new UtteranceDerived(row.Id, ThreadId: row.Id, SupersededBy: "")], CancellationToken.None);
+    await log.UpdateDerivedAsync([new FactDerived(row.Id, ThreadId: row.Id, SupersededBy: "")], CancellationToken.None);
     Console.WriteLine($"{Oneline(row.Text, 60)} is now its own thread.");
 }
 
 /// <summary>A thread id by prefix, or null when the prefix names none or many.</summary>
-static string? Resolve(IReadOnlyList<Utterance> rows, string prefix)
+static string? Resolve(IReadOnlyList<Fact> rows, string prefix)
 {
     var ids = rows.Where(r => r.ThreadId is not null)
         .Select(r => r.ThreadId!)

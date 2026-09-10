@@ -4,13 +4,13 @@ namespace EciCas.Agents.Utterances;
 
 using EciCas.Core;
 
-/// <summary>One row chosen for a read, with what it scored and why it is here.</summary>
-public sealed record Consulted(Utterance Row, double Score, bool Current);
+/// <summary>One fact chosen for a read, with what it scored and why it is here.</summary>
+public sealed record Consulted(Fact Row, double Score, bool Current);
 
 /// <summary>
 /// Find: the read that means *now*.
 ///
-/// A full-corpus cosine sweep, fused with a lexical lane, collapsed by
+/// A full-corpus cosine sweep over the fact store, fused with a lexical lane, collapsed by
 /// thread, and diversified. No routing, no shelf, no chunk-and-pick -- every
 /// row is a candidate on every read, which is the whole point of the
 /// inversion and is affordable because the corpus is already in memory and
@@ -35,16 +35,24 @@ public sealed record Consulted(Utterance Row, double Score, bool Current);
 /// read; score jitter, tried for the same purpose on the same bench, lost
 /// 0.11. Diversity here is chosen, not randomised.
 /// </summary>
-public sealed class UtteranceConsult
+public sealed class FactConsult
 {
-    private readonly IUtteranceLog _log;
+    private readonly IFactLog _facts;
+    private readonly IUtteranceLog _utterances;
     private readonly IEmbeddingProvider _embeddings;
     private readonly UtteranceOptions _options;
     private readonly RuntimeKnobs _knobs;
 
-    public UtteranceConsult(IUtteranceLog log, IEmbeddingProvider embeddings, IOptions<UtteranceOptions> options, RuntimeKnobs knobs)
+    /// <param name="utterances">
+    /// Only for the turn counter, which is the denominator of every hit rate.
+    /// Nothing on the read path reads what was said -- that is the split: the
+    /// facts are the index and the index is all a read needs.
+    /// </param>
+    public FactConsult(IFactLog facts, IUtteranceLog utterances, IEmbeddingProvider embeddings,
+        IOptions<UtteranceOptions> options, RuntimeKnobs knobs)
     {
-        _log = log;
+        _facts = facts;
+        _utterances = utterances;
         _embeddings = embeddings;
         _options = options.Value;
         _knobs = knobs;
@@ -59,7 +67,7 @@ public sealed class UtteranceConsult
 
     public async Task<IReadOnlyList<Consulted>> FindAsync(string query, CancellationToken cancellationToken)
     {
-        var corpus = await _log.AllAsync(cancellationToken).ConfigureAwait(false);
+        var corpus = await _facts.AllAsync(cancellationToken).ConfigureAwait(false);
         if (corpus.Count == 0 || string.IsNullOrWhiteSpace(query))
         {
             return [];
@@ -78,8 +86,8 @@ public sealed class UtteranceConsult
         var df = KeywordExtractor.DocumentFrequency(corpus.Select(r => r.Keywords));
         var rare = new HashSet<string>(KeywordExtractor.Rare(query, df, _options.RareMax), StringComparer.Ordinal);
 
-        var turnsNow = _log.TurnsRecorded;
-        var scored = new List<(Utterance Row, double Score)>();
+        var turnsNow = _utterances.TurnsRecorded;
+        var scored = new List<(Fact Row, double Score)>();
         foreach (var row in corpus)
         {
             var cosine = queryVector is not null && row.Embedding is not null && row.HasVector(_embeddings.ModelId)
@@ -108,7 +116,7 @@ public sealed class UtteranceConsult
                 .Take(TopK - picked.Count));
         }
 
-        await _log.RecordHitsAsync([.. picked.Select(p => p.Row.Id)], cancellationToken).ConfigureAwait(false);
+        await _facts.RecordHitsAsync([.. picked.Select(p => p.Row.Id)], cancellationToken).ConfigureAwait(false);
         return picked;
     }
 
@@ -117,7 +125,7 @@ public sealed class UtteranceConsult
     /// when the query has none, which is most queries -- the lexical lane is
     /// a rescue for token questions, not a second opinion on every read.
     /// </summary>
-    private static double Lexical(HashSet<string> rare, Utterance row)
+    private static double Lexical(HashSet<string> rare, Fact row)
     {
         if (rare.Count == 0)
         {
@@ -134,7 +142,7 @@ public sealed class UtteranceConsult
     /// it would promote whatever the archive is already in the habit of
     /// saying, which is how a memory gets stuck.
     /// </summary>
-    private static List<Consulted> Collapse(IEnumerable<(Utterance Row, double Score)> scored, IReadOnlyList<Utterance> corpus, long turnsNow, bool current)
+    private static List<Consulted> Collapse(IEnumerable<(Fact Row, double Score)> scored, IReadOnlyList<Fact> corpus, long turnsNow, bool current)
     {
         var best = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var (row, score) in scored)
@@ -146,7 +154,7 @@ public sealed class UtteranceConsult
             }
         }
 
-        var newest = new Dictionary<string, Utterance>(StringComparer.Ordinal);
+        var newest = new Dictionary<string, Fact>(StringComparer.Ordinal);
         foreach (var row in corpus)
         {
             var thread = row.ThreadId ?? row.Id;
@@ -210,7 +218,7 @@ public sealed class UtteranceConsult
     /// maximally distinct from everything and crowd the slots it is least
     /// entitled to.
     /// </summary>
-    private double Similarity(Utterance a, Utterance b)
+    private double Similarity(Fact a, Fact b)
     {
         if (a.Embedding is not null && b.Embedding is not null
             && a.HasVector(_embeddings.ModelId) && b.HasVector(_embeddings.ModelId))

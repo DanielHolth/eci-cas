@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using Parquet.Serialization;
 
 namespace EciCas.Agents.Utterances;
@@ -7,25 +6,24 @@ namespace EciCas.Agents.Utterances;
 using EciCas.Core;
 
 /// <summary>
-/// The log, on disk: one parquet per month under <c>utterances/</c>, named
-/// <c>yyyy-MM.parquet</c>.
+/// Ground truth, on disk: one parquet per month under <c>utterances/</c>,
+/// named <c>yyyy-MM.parquet</c>, plus the turn counter beside them.
 ///
-/// **Nothing routes on a shard.** Every read is a cosine sweep over the whole
-/// corpus, so a shard is a size bound and a backup unit, not a decision --
-/// the roadmap's "Time shards, not importance tiers", and the reason there is
-/// no shard-selection method on <see cref="IUtteranceLog"/> to be tempted by.
-/// What sharding buys is that an append rewrites this month rather than a
-/// decade, and that 2019 can be uploaded once and never again.
+/// **Append-only, and there is no other verb.** No derived-column write, no
+/// hit counter, no supersession. Those all moved to <see cref="ParquetFactLog"/>
+/// when the archive split in two, and the absence of them here is the point:
+/// the file holding what was actually said is now only ever added to, so no
+/// bug in a whole-shard rewrite can eat it.
 ///
-/// **The whole corpus is cached in memory.** Every query sweeps all of it, so
-/// a partial cache would just be a read amplifier. At a hundred thousand rows
-/// this is forty megabytes of float and a few milliseconds of dot product;
-/// the day that stops being true is the day an ANN index earns its keep, and
-/// it can be built from the same cache without touching the format.
+/// **A shard is a size bound, not a decision.** Nothing routes on it -- the
+/// only reader is the backfill, and it reads all of them. What sharding buys
+/// is that an append rewrites this month rather than a decade, and that 2019
+/// can be uploaded once and never again.
 ///
-/// **Writes are whole-shard rewrites through a temp file.** Parquet has no
-/// append, and a torn write here loses a month rather than a row, which is
-/// the same reasoning ParquetPassageStore gives for its single file.
+/// **Small enough to keep.** Without the vector a row is a sentence and four
+/// short strings. A decade of conversation is megabytes, which is what makes
+/// "never delete anything anybody said" an affordable promise rather than a
+/// slogan.
 /// </summary>
 public sealed class ParquetUtteranceLog : IUtteranceLog
 {
@@ -33,11 +31,9 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
     public const string TurnCountFileName = "turns.txt";
 
     /// <summary>
-    /// Flat by design. Ground truth has to be legible to a parquet reader in
-    /// a century with none of our code, so the columns a descendant needs --
-    /// text, when, who -- are plain scalars, and the derived ones are
-    /// nullable so a row written before a pass existed still deserializes
-    /// into the honest answer, which is that nobody has judged it yet.
+    /// Flat by design, and every column a plain scalar. This is the row a
+    /// descendant reads in a century with a parquet reader and none of our
+    /// code, so nothing on it is encoded, packed, or indirected.
     /// </summary>
     private sealed class Row
     {
@@ -46,14 +42,6 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         public string Timestamp { get; set; } = "";
         public string Speaker { get; set; } = "";
         public string? ProfileId { get; set; }
-        public string? Keywords { get; set; }
-
-        public string? Embedding { get; set; }
-        public string? EmbeddingModelId { get; set; }
-        public string? ThreadId { get; set; }
-        public string? SupersededBy { get; set; }
-        public int? HitCount { get; set; }
-        public long? FirstSeenTurn { get; set; }
     }
 
     private readonly string _directory;
@@ -90,66 +78,41 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         }
     }
 
-    public Task AppendAsync(IReadOnlyList<Utterance> utterances, CancellationToken cancellationToken) =>
-        utterances.Count == 0 ? Task.CompletedTask : MutateAsync(rows => rows.AddRange(utterances), cancellationToken);
-
-    public Task UpdateDerivedAsync(IReadOnlyList<UtteranceDerived> updates, CancellationToken cancellationToken)
+    /// <summary>
+    /// Load, add, rewrite only the shards the new rows landed in, swap the
+    /// cache. Since nothing is ever modified in place, the dirty set is just
+    /// the months the arrivals belong to -- no content diff needed.
+    /// </summary>
+    public async Task AppendAsync(IReadOnlyList<Utterance> utterances, CancellationToken cancellationToken)
     {
-        if (updates.Count == 0)
+        if (utterances.Count == 0)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var byId = updates.GroupBy(u => u.Id, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
-
-        return MutateAsync(rows =>
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            for (var i = 0; i < rows.Count; i++)
+            var before = await LoadUnlockedAsync(cancellationToken).ConfigureAwait(false);
+
+            // The copy is not defensive habit: AllAsync hands the warm list
+            // back directly, and a reader walking it while this appends in
+            // place would see the corpus change underneath it.
+            var rows = new List<Utterance>(before);
+            rows.AddRange(utterances);
+            rows.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+
+            foreach (var shard in utterances.Select(Shard).ToHashSet(StringComparer.Ordinal))
             {
-                if (!byId.TryGetValue(rows[i].Id, out var update))
-                {
-                    continue;
-                }
-
-                rows[i] = rows[i] with
-                {
-                    Embedding = update.Embedding ?? rows[i].Embedding,
-                    EmbeddingModelId = update.EmbeddingModelId ?? rows[i].EmbeddingModelId,
-                    ThreadId = update.ThreadId ?? rows[i].ThreadId,
-
-                    // Null means "no opinion", which is what almost every
-                    // caller has. Unsetting a supersession is a deliberate
-                    // empty string, because the consolidator's open question
-                    // is whether it may say *neither* -- and if it ever may,
-                    // that verdict has to be expressible without being
-                    // indistinguishable from silence.
-                    SupersededBy = update.SupersededBy is null
-                        ? rows[i].SupersededBy
-                        : update.SupersededBy.Length == 0 ? null : update.SupersededBy,
-                };
+                await WriteShardAsync(shard, [.. rows.Where(r => Shard(r) == shard)], cancellationToken).ConfigureAwait(false);
             }
-        }, cancellationToken);
-    }
 
-    public Task RecordHitsAsync(IReadOnlyList<string> ids, CancellationToken cancellationToken)
-    {
-        if (ids.Count == 0)
-        {
-            return Task.CompletedTask;
+            _cache = rows;
         }
-
-        var wanted = new HashSet<string>(ids, StringComparer.Ordinal);
-        return MutateAsync(rows =>
+        finally
         {
-            for (var i = 0; i < rows.Count; i++)
-            {
-                if (wanted.Contains(rows[i].Id))
-                {
-                    rows[i] = rows[i] with { HitCount = rows[i].HitCount + 1 };
-                }
-            }
-        }, cancellationToken);
+            _lock.Release();
+        }
     }
 
     /// <summary>
@@ -174,79 +137,6 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         }
     }
 
-    /// <summary>
-    /// Every write goes through here: load, copy, mutate, rewrite the shards
-    /// whose contents changed, swap the cache.
-    ///
-    /// The copy is not defensive habit. <see cref="AllAsync"/> hands the warm
-    /// list back directly, so a read sweeping it while a write edits it in
-    /// place sees the corpus change mid-cosine; and a write that throws
-    /// halfway would otherwise leave rows searchable that nothing persisted.
-    /// </summary>
-    private async Task MutateAsync(Action<List<Utterance>> mutate, CancellationToken cancellationToken)
-    {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var before = await LoadUnlockedAsync(cancellationToken).ConfigureAwait(false);
-            var rows = new List<Utterance>(before);
-            mutate(rows);
-            rows.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
-
-            // Only the shards that actually changed. A derived-column pass
-            // over a decade would otherwise rewrite a decade every time the
-            // backfill touched one old row.
-            var dirty = Changed(before, rows);
-            foreach (var shard in dirty)
-            {
-                await WriteShardAsync(shard, [.. rows.Where(r => Shard(r) == shard)], cancellationToken).ConfigureAwait(false);
-            }
-
-            _cache = rows;
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Which shards differ between two versions of the corpus, by content.
-    ///
-    /// By content rather than by row count, because the writes that matter
-    /// most here do not change a shard's membership at all: a thread id or a
-    /// hit count lands on a row already in the file, and a diff on keys would
-    /// see nothing and persist nothing.
-    /// </summary>
-    private static HashSet<string> Changed(IReadOnlyList<Utterance> before, IReadOnlyList<Utterance> after)
-    {
-        var old = before.ToDictionary(r => r.Id, StringComparer.Ordinal);
-        var dirty = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var row in after)
-        {
-            if (!old.Remove(row.Id, out var previous) || previous != row)
-            {
-                dirty.Add(Shard(row));
-                if (previous is not null)
-                {
-                    dirty.Add(Shard(previous));
-                }
-            }
-        }
-
-        // Whatever is left in `old` was removed. Nothing does that today --
-        // the log is append-only by contract -- but a shard that lost its
-        // last row still has to be rewritten, or deleted, rather than left
-        // behind as a file that disagrees with the cache.
-        foreach (var gone in old.Values)
-        {
-            dirty.Add(Shard(gone));
-        }
-
-        return dirty;
-    }
-
     private async Task<IReadOnlyList<Utterance>> LoadUnlockedAsync(CancellationToken cancellationToken)
     {
         if (_cache is not null)
@@ -266,15 +156,14 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         return rows;
     }
 
+    /// <summary>
+    /// Through a temp file and a move: parquet has no append, so a shard is
+    /// rewritten whole, and a torn write here would lose a month of what was
+    /// said -- the one thing in the system that cannot be recomputed.
+    /// </summary>
     private async Task WriteShardAsync(string shard, List<Utterance> rows, CancellationToken cancellationToken)
     {
         var path = Path.Combine(_directory, shard + ".parquet");
-        if (rows.Count == 0)
-        {
-            File.Delete(path);
-            return;
-        }
-
         var temp = path + ".tmp";
         await using (var stream = File.Create(temp))
         {
@@ -295,13 +184,6 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         Timestamp = u.Timestamp.ToString("O", CultureInfo.InvariantCulture),
         Speaker = u.Speaker,
         ProfileId = u.ProfileId,
-        Keywords = JsonSerializer.Serialize(u.Keywords),
-        Embedding = u.Embedding is null ? null : VectorMath.Encode(u.Embedding),
-        EmbeddingModelId = u.EmbeddingModelId,
-        ThreadId = u.ThreadId,
-        SupersededBy = u.SupersededBy,
-        HitCount = u.HitCount,
-        FirstSeenTurn = u.FirstSeenTurn,
     };
 
     private static Utterance FromRow(Row r) => new(
@@ -310,12 +192,5 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind, out var when) ? when : DateTimeOffset.MinValue,
         r.Speaker,
-        r.ProfileId,
-        JsonSerializer.Deserialize<List<string>>(r.Keywords ?? "[]") ?? [],
-        string.IsNullOrEmpty(r.Embedding) ? null : VectorMath.Decode(r.Embedding),
-        r.EmbeddingModelId ?? "",
-        r.ThreadId,
-        r.SupersededBy,
-        r.HitCount ?? 0,
-        r.FirstSeenTurn ?? 0);
+        r.ProfileId);
 }

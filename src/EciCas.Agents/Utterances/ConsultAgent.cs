@@ -26,7 +26,7 @@ namespace EciCas.Agents.Utterances;
 public sealed class ConsultAgent : AgentBase
 {
     private readonly IMessageBus _bus;
-    private readonly UtteranceConsult _consult;
+    private readonly FactConsult _consult;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -36,7 +36,7 @@ public sealed class ConsultAgent : AgentBase
     /// </summary>
     public const string RecalledFactsKey = "recall.facts";
 
-    public ConsultAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ConsultAgent> logger, UtteranceConsult consult)
+    public ConsultAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ConsultAgent> logger, FactConsult consult)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -67,7 +67,7 @@ public sealed class ConsultAgent : AgentBase
             // A read that failed is a turn with no memory, not a broken turn.
             // The slot is filled below either way, because a silent slot
             // holds the bundle open until Governance times it out.
-            _logger.LogWarning(ex, "{Agent} could not consult the log.", Name);
+            _logger.LogWarning(ex, "{Agent} could not consult the facts.", Name);
         }
 
         _logger.LogInformation("{Agent} {Facts}", Name,
@@ -79,7 +79,7 @@ public sealed class ConsultAgent : AgentBase
     }
 
     /// <summary>
-    /// The utterance, wearing the shape Intent already reads. Everything the
+    /// The fact, wearing the shape Intent already reads. Everything the
     /// old record carried about *where* a fact lived is left empty, and
     /// Importance is the read's own score -- the one number here that still
     /// means what it used to.

@@ -1,4 +1,4 @@
-﻿using EciCas.Agents.Passages;
+using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Utterances;
 using EciCas.Bus;
@@ -56,11 +56,11 @@ internal static class BootChecks
         // The inverted log's half of the same job: a vector and a thread are
         // derived columns, and derived only means derived if something
         // rebuilds them.
-        var utterances = app.Services.GetRequiredService<UtteranceBackfill>();
-        var (embedded, threaded) = await utterances.RunAsync(CancellationToken.None);
-        if (embedded > 0 || threaded > 0)
+        var backfill = app.Services.GetRequiredService<FactBackfill>();
+        var built = await backfill.RunAsync(CancellationToken.None);
+        if (built.Extracted > 0 || built.Embedded > 0 || built.Threaded > 0)
         {
-            Console.WriteLine($"Utterance log: embedded {embedded} row(s), threaded {threaded}.");
+            Console.WriteLine($"Fact store: read {built.Extracted} utterance(s), embedded {built.Embedded} row(s), threaded {built.Threaded}.");
         }
 
         PassageCorpus.EnsureModelAgreement(

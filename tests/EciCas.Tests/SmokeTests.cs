@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using EciCas.Agents.Action;
 using EciCas.Agents.Archivist;
 using EciCas.Agents.Governance;
@@ -275,8 +275,10 @@ public class SmokeTests
             // agents Program.cs starts, not whether they can be built.
             services.AddSingleton(Options.Create(new UtteranceOptions()));
             services.AddSingleton<IUtteranceLog>(new ParquetUtteranceLog(Path.Combine(_dir, "utterances")));
-            services.AddSingleton<IUtteranceConsolidator>(new NullUtteranceConsolidator());
-            services.AddSingleton<UtteranceConsult>();
+            services.AddSingleton<IFactLog>(new ParquetFactLog(Path.Combine(_dir, "utterances")));
+            services.AddSingleton<IFactConsolidator>(new NullFactConsolidator());
+            services.AddSingleton<IFactExtractor>(new VerbatimFactExtractor());
+            services.AddSingleton<FactConsult>();
             services.AddSingleton<ThreadWeaver>();
 
             foreach (var type in typeof(GovernanceAgent).Assembly.GetTypes()

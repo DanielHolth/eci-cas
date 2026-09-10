@@ -46,6 +46,35 @@ public sealed class UtteranceOptions
     public bool ConsolidatorEnabled { get; set; }
 
     /// <summary>
+    /// Whether what was said is broken into standalone facts before it is
+    /// indexed. A substrate call, so it is what a paid tier buys.
+    ///
+    /// With it off, an utterance is its own single fact, verbatim -- the
+    /// archive as it behaved before the split. That degrades exactly where
+    /// you would expect: a ten-sentence paste becomes one row with one
+    /// centroid vector, which clears no read floor and, on the rare read it
+    /// does win, spends a slot on nine facts nobody asked for. It is still
+    /// the right floor for a tier with no call to spend, because ground truth
+    /// is untouched and <see cref="FactBackfill"/> re-reads it later.
+    /// </summary>
+    public bool ExtractorEnabled { get; set; }
+
+    /// <summary>
+    /// Characters below which a single-sentence utterance is taken to be its
+    /// own fact, with no call spent. "Rex is 4" needs no decontextualising,
+    /// and asking a model to restate it can only make it longer or wrong.
+    /// Multi-sentence input is always sent regardless of length.
+    /// </summary>
+    public int ExtractorMinLength { get; set; } = 120;
+
+    /// <summary>
+    /// Ceiling on facts from one utterance. Not a quality knob -- it is the
+    /// stop on a model that has started listing rather than extracting, which
+    /// is the failure mode that turns one paste into a hundred rows.
+    /// </summary>
+    public int ExtractorMaxFacts { get; set; } = 24;
+
+    /// <summary>
     /// How many content words an utterance needs before it earns a row.
     ///
     /// One: a sentence with no content word in it -- "haha ok", "yeah",

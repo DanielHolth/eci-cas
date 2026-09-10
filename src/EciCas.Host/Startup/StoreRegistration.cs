@@ -1,4 +1,4 @@
-﻿using EciCas.Agents.Identity;
+using EciCas.Agents.Identity;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Security;
@@ -121,18 +121,36 @@ internal static class StoreRegistration
         // something asks -- so the flag that swaps the agents does not also
         // have to swap the storage.
         services.AddSingleton<IUtteranceLog>(new ParquetUtteranceLog(archiveDirectory));
-        services.AddSingleton<UtteranceConsult>();
-        services.AddSingleton<ThreadWeaver>();
-        services.AddSingleton<UtteranceBackfill>();
 
-        // The one model call the write path may make, and it is gated. With
+        // The index beside it: facts, one claim per row, every one of them
+        // derived from an utterance and rebuildable from it. Separate files
+        // on purpose -- this store is rewritten constantly (vectors, threads,
+        // hit counts) and the one above is only ever appended to.
+        services.AddSingleton<IFactLog>(new ParquetFactLog(archiveDirectory));
+        services.AddSingleton<FactConsult>();
+        services.AddSingleton<ThreadWeaver>();
+        services.AddSingleton<FactBackfill>();
+
+        // Two gated model calls, both on the write path, both off by default
+        // and both disposable by construction.
+        //
+        // The extractor reads a turn into standalone facts. Without it an
+        // utterance is its own single fact, which is how the archive behaved
+        // before the split and is wrong in one direction only: long input
+        // indexes badly, and re-reading it later fixes it.
+        services.AddSingleton<IFactExtractor>(sp =>
+            sp.GetRequiredService<IOptions<UtteranceOptions>>().Value.ExtractorEnabled
+                ? ActivatorUtilities.CreateInstance<SubstrateFactExtractor>(sp)
+                : new VerbatimFactExtractor());
+
+        // The consolidator files a new fact against the ones near it. With
         // Utterances:ConsolidatorEnabled false the null implementation stands
         // in and every candidate set resolves to a new thread -- a deliberate
         // split, because a wrong merge is the error read time cannot undo.
-        services.AddSingleton<IUtteranceConsolidator>(sp =>
+        services.AddSingleton<IFactConsolidator>(sp =>
             sp.GetRequiredService<IOptions<UtteranceOptions>>().Value.ConsolidatorEnabled
                 ? ActivatorUtilities.CreateInstance<SubstrateConsolidator>(sp)
-                : new NullUtteranceConsolidator());
+                : new NullFactConsolidator());
 
 
         // Profiles live beside the archive they scope — one directory per person

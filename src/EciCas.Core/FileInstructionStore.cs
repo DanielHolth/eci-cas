@@ -1,4 +1,4 @@
-﻿namespace EciCas.Core;
+namespace EciCas.Core;
 
 /// <summary>
 /// Loads every agent's instruction file once, at startup, and validates it
@@ -49,10 +49,8 @@ public sealed class FileInstructionStore : IInstructionStore
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
             ["Intent"] = [],
-            ["Librarian"] = ["options", "max", "text"],
             ["Recall"] = ["rows", "max", "text"],
             ["Archivist"] = ["text"],
-            ["Cataloger"] = ["cat", "topics", "fact", "text"],
             ["Reflection"] = ["turns", "revisit", "moods", "terse", "previous", "topics", "drive"],
             ["Identity"] = ["name"],
             ["Impulse"] = [],
@@ -76,14 +74,8 @@ public sealed class FileInstructionStore : IInstructionStore
     public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string[]>> RequiredPlaceholders =
         new Dictionary<string, IReadOnlyDictionary<string, string[]>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Librarian"] = Sections((InstructionFile.MainSection, ["options", "text"])),
             ["Recall"] = Sections((InstructionFile.MainSection, ["rows", "text"])),
             ["Archivist"] = Sections((InstructionFile.MainSection, ["text"])),
-            ["Cataloger"] = Sections(
-                ("vocabulary", []),
-                ("gloss", []),
-                ("category", ["fact", "text"]),
-                ("topic", ["cat", "topics", "fact", "text"])),
             ["Reflection"] = Sections(
                 (InstructionFile.MainSection, ["turns"]),
                 ("revisit", ["previous", "topics"])),
