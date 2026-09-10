@@ -2312,6 +2312,17 @@ of its top thread when that member is superseded; and whether the class
 comment on `UtteranceConsult` should stop claiming pass B guards against
 an amnesiac archive, which at corpus scale it does not.
 
+*Possibly not a defect.* A read verb named `Find` that means *now*, and
+means it without exception, is a defensible thing to have -- the failure
+it prevents (a retired fact competing with the one that replaced it) is
+the expensive one, and it prevents it absolutely rather than on average.
+On that reading the old car is not missing from `Find`; it is simply not
+what `Find` is for, and the work is additive: a second verb, or a knob
+that opens the door deliberately, rather than a repair. That also keeps
+the two failure modes separately tunable, which a single blended read
+would not. The class comment still needs correcting either way, since it
+credits pass B with a job pass B does not do.
+
 **Does flat retrieval hold at scale?** Flat cosine beat every shelf arm at
 1559 rows on a synthetic corpus, and no batch in the log tests degradation
 under density. The compute is not the question -- 100k rows at 384 dims is
