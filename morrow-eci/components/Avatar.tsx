@@ -64,7 +64,7 @@ function DrawnFace({ expression, speaking }: { expression: Expression; speaking:
   return (
     <svg
         viewBox="0 0 120 120"
-        className="h-28 w-28 overflow-visible"
+        className="h-56 w-56 overflow-visible"
         role="img"
         aria-label={`Avatar expression: ${face.label}`}
         style={{ ["--eci-motion" as string]: face.motion }}
@@ -177,7 +177,7 @@ export function Avatar({
         hidden={drawn}
         role="img"
         aria-label={`Avatar expression: ${FACE[expression].label}`}
-        className="h-28 w-28 rounded-full bg-[#060810] shadow-inner"
+        className="h-56 w-56 rounded-full bg-[#060810] shadow-inner"
       />
       {drawn && <DrawnFace expression={expression} speaking={speaking} />}
 
