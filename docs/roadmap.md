@@ -278,17 +278,31 @@ touch, so Security has something to check it against.
 
 ## Level-ups — features unlocked by interaction (not started)
 
-**Memories are the XP.** Interaction gives Morrow memories, and memories
-level it up, which gives the person a reason to keep talking. The ticks
-around the avatar (the 48-cell telemetry ring) show the level.
+**Facts are the XP.** One XP per fact Morrow extracts. Leaving level L
+takes `2·L` XP, so reaching level n takes `n(n-1)` facts in total: level 10
+is 90 facts, level 14 is 182. The first ten levels go fast, and after that
+each one takes 22+ new facts. The ticks around the avatar (the 48-cell
+telemetry ring) show progress.
 
-**A level-up unlocks something.** In roughly this order:
+**What each level unlocks.** Even levels unlock features and odd levels
+change the avatar:
 
-- **Speech.** Morrow is silent until this is unlocked.
-- **Reply length.** The MaxSentences knob.
-- **Recall depth.**
-- **Modes.**
-- **The rest of the Debug knobs**, one at a time.
+| Lvl | Unlocks |
+|---|---|
+| 1 | Dialog only. The avatar is an empty circle with every other visual hidden. Tier is forced to Default (free for new users). Reflection is off. |
+| 2 | Left side panel: what Morrow has learned. |
+| 3 | Avatar: the pupil that follows the pointer. |
+| 4 | Speech: the voice dropdown, with the default voice picked automatically. |
+| 5 | Avatar: one fixed visual effect. |
+| 6 | Reflection: the first reflection fires, and its highest note is pushed to `perception.self`. After that it runs every 5 turns. |
+| 7 | Avatar change. |
+| 8 | Debug panel, without the knobs. |
+| 9 | Avatar change. |
+| 10 | Tier picker. The tier is swapped to Minimal, which is renamed **Free**. This is a deliberate nerf: Default up to here lets the person feel what Morrow can be. |
+| 11 | Avatar change. |
+| 12 | Dark/light background. It swaps to dark automatically. |
+| 13 | Avatar change. |
+| 14+ | One Debug knob per even level, with an avatar change on each odd level. |
 
 **An unlock is an event.** The avatar animates it, so you can see the knob
 arrive, with a one-line explanation of what Morrow gained.
@@ -302,18 +316,15 @@ arrive, with a one-line explanation of what Morrow gained.
 
 In short, the bus traffic is shown as animation rather than hidden.
 
-**Reflection fires on level-up, not on a turn count.** This replaces
-`ReflectionEvery`: a level-up is the moment enough new memory has arrived
-to be worth reflecting on.
-
 Open:
 
-- What counts as a memory for XP (a stored fact? a fact that is later
-  recalled?). It needs to reward real conversation, not spam.
-- The level curve.
-- Whether tiers cap the level.
-- How the existing knobs behave before they are unlocked: hidden, or
-  locked at a default.
+- Spam: a fact-dense monologue levels fast. Is a per-turn XP cap needed?
+- Where level and XP live: per profile, and on the backend so a cleared
+  browser doesn't reset them.
+- The order of the knobs from level 14 on, and what the odd-level avatar
+  changes are.
+- Renaming Minimal to Free touches the tier convention everywhere:
+  config files, docs, the bench.
 
 ## The archive inverted — open items
 
