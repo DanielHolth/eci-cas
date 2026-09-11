@@ -276,6 +276,45 @@ definitions. A downloaded toolkit is untrusted input: it has to pass through
 Security like any other proposal, and the manifest says what a toolkit may
 touch, so Security has something to check it against.
 
+## Level-ups — features unlocked by interaction (not started)
+
+**Memories are the XP.** Interaction gives Morrow memories, and memories
+level it up, which gives the person a reason to keep talking. The ticks
+around the avatar (the 48-cell telemetry ring) show the level.
+
+**A level-up unlocks something.** In roughly this order:
+
+- **Speech.** Morrow is silent until this is unlocked.
+- **Reply length.** The MaxSentences knob.
+- **Recall depth.**
+- **Modes.**
+- **The rest of the Debug knobs**, one at a time.
+
+**An unlock is an event.** The avatar animates it, so you can see the knob
+arrive, with a one-line explanation of what Morrow gained.
+
+**The machinery becomes visible as it unlocks.** Once recall is deeper:
+
+1. Thought bubbles come in.
+2. An animation shows Morrow sorting over them.
+3. The one it picks is highlighted.
+4. Then the answer starts.
+
+In short, the bus traffic is shown as animation rather than hidden.
+
+**Reflection fires on level-up, not on a turn count.** This replaces
+`ReflectionEvery`: a level-up is the moment enough new memory has arrived
+to be worth reflecting on.
+
+Open:
+
+- What counts as a memory for XP (a stored fact? a fact that is later
+  recalled?). It needs to reward real conversation, not spam.
+- The level curve.
+- Whether tiers cap the level.
+- How the existing knobs behave before they are unlocked: hidden, or
+  locked at a default.
+
 ## The archive inverted — open items
 
 The inversion itself (utterance log, threading, consolidator, keywords,
