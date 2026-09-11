@@ -278,11 +278,20 @@ touch, so Security has something to check it against.
 
 ## Level-ups — features unlocked by interaction (not started)
 
-**Facts are the XP.** One XP per fact Morrow extracts. Leaving level L
-takes `2·L` XP, so reaching level n takes `n(n-1)` facts in total: level 10
-is 90 facts, level 14 is 182. The first ten levels go fast, and after that
+**Facts are the XP.** One XP per fact Morrow extracts, capped at 3 XP per
+turn, so a fact-dense monologue can't farm levels. Leaving level L takes
+`2·L` XP, so reaching level n takes `n(n-1)` facts in total: level 10 is
+90 facts, level 14 is 182. The first ten levels go fast, and after that
 each one takes 22+ new facts. The ticks around the avatar (the 48-cell
-telemetry ring) show progress.
+telemetry ring) show progress; they count as the "empty circle" at
+level 1.
+
+**State lives on the backend, per profile:** level, XP and a global turn
+counter. A cleared browser doesn't reset them.
+
+**The schedule is data.** It lives in a JSON file on the server
+(`levels.json`), not in code. Each level lists what it unlocks and what it
+forces (tier, background, reflection on or off).
 
 **What each level unlocks.** Even levels unlock features and odd levels
 change the avatar:
@@ -293,16 +302,26 @@ change the avatar:
 | 2 | Left side panel: what Morrow has learned. |
 | 3 | Avatar: the pupil that follows the pointer. |
 | 4 | Speech: the voice dropdown, with the default voice picked automatically. |
-| 5 | Avatar: one fixed visual effect. |
+| 5 | Avatar: the aperture blades. |
 | 6 | Reflection: the first reflection fires, and its highest note is pushed to `perception.self`. After that it runs every 5 turns. |
-| 7 | Avatar change. |
+| 7 | Avatar: expressions (brows and lids follow Impulse). |
 | 8 | Debug panel, without the knobs. |
-| 9 | Avatar change. |
+| 9 | Avatar: speaking shockwaves. |
 | 10 | Tier picker. The tier is swapped to Minimal, which is renamed **Free**. This is a deliberate nerf: Default up to here lets the person feel what Morrow can be. |
-| 11 | Avatar change. |
+| 11 | Avatar: inner layers (second blade set, filaments, pulse). |
 | 12 | Dark/light background. It swaps to dark automatically. |
-| 13 | Avatar change. |
-| 14+ | One Debug knob per even level, with an avatar change on each odd level. |
+| 13 | Avatar: hue phasing. |
+| 14 | Knob: MaxSentences (reply length). |
+| 15 | Avatar: wobble and idle shake. |
+| 16 | Knob: Mood. It also binds the face to the slider. |
+| 17 | Avatar: accent colour follows mood. |
+| 18 | Knob: ContextTurns. |
+| 20 | Knob: RecallDepth, along with the thought-bubble recall animation. |
+| 22 | Knob: ReflectionEvery. |
+| 24 | Knob: PerceptionChars. |
+
+Odd levels from 19 on are open. New avatar effects get added to the file
+as they're built.
 
 **An unlock is an event.** The avatar animates it, so you can see the knob
 arrive, with a one-line explanation of what Morrow gained.
@@ -318,11 +337,6 @@ In short, the bus traffic is shown as animation rather than hidden.
 
 Open:
 
-- Spam: a fact-dense monologue levels fast. Is a per-turn XP cap needed?
-- Where level and XP live: per profile, and on the backend so a cleared
-  browser doesn't reset them.
-- The order of the knobs from level 14 on, and what the odd-level avatar
-  changes are.
 - Renaming Minimal to Free touches the tier convention everywhere:
   config files, docs, the bench.
 
