@@ -28,7 +28,7 @@ export function KnobsPanel() {
   // invented payload -- tier "Mock", one tier in the list, the sliders at
   // their compiled-in numbers -- which on a cold boot, where the surface is
   // simply up before the host is, read as a statement about the running host
-  // and said Mock while Minimal was answering. The panel now shows nothing
+  // and said Mock while Free was answering. The panel now shows nothing
   // until it has been told something, and keeps asking.
   useEffect(() => {
     let live = true;
@@ -117,7 +117,7 @@ export function KnobsPanel() {
       {/* A tier is a preset over everything below it -- which models back
           which class, how wide Recall fans out, whether Reflection runs at
           all -- so it sits above them rather than among them. A tier whose
-          keys the host cannot see is listed and disabled: knowing Default
+          keys the host cannot see is listed and disabled: knowing Pro
           exists and why it is unavailable beats it being absent. */}
       <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-300">
         <span className="flex items-center justify-between">

@@ -12,7 +12,7 @@ namespace EciCas.Host;
 /// disk. Left alone, all of that lands on the first turn a person types,
 /// which is exactly the turn they are judging the persona on.
 ///
-/// Deduplicated by provider+model rather than by agent: the minimal tier
+/// Deduplicated by provider+model rather than by agent: the free tier
 /// points every agent at one local 4B, and warming that model eight times
 /// would move the wait rather than remove it. The mock
 /// provider is skipped — it has nothing to warm.

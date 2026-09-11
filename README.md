@@ -46,7 +46,7 @@ morrow-eci/             Next.js UI
 ## Run
 
 ```powershell
-./start.cmd -Tier Default
+./start.cmd -Tier Pro
 ```
 
 Starts llama-server (if the tier needs it), the host on `:5179` and the UI on
@@ -58,14 +58,14 @@ By hand:
 ```powershell
 $env:OPENAI_API_KEY  = "..."   # Default: Intent, extractor, picker, consolidator
 $env:MISTRAL_API_KEY = "..."   # Default: Reflection
-dotnet run --project src/EciCas.Host -- --Tier=Default
+dotnet run --project src/EciCas.Host -- --Tier=Pro
 cd morrow-eci; npm install; npm run dev
 ```
 
-No keys: `--Tier=Mock` echoes prompts (machinery only); `--Tier=Minimal` runs
+No keys: `--Tier=Mock` echoes prompts (machinery only); `--Tier=Free` runs
 everything on a local Qwen3.5 4B for $0 via
 `scripts/get-local-model.ps1 -Start` (needs llama.cpp on `:8080`). Budget is
-Minimal's local extractor and picker with Intent (Mistral) and Reflection
+Free's local extractor and picker with Intent (Mistral) and Reflection
 (OpenAI) on the API.
 
 ```bash
@@ -80,8 +80,8 @@ archive directory.
 
 ## Configure
 
-`--Tier=X` layers `appsettings.<X>.json`: Mock, Minimal, Budget, Default,
-Super. The Debug panel switches tiers live. Any key overrides from the
+`--Tier=X` layers `appsettings.<X>.json`: Mock, Free, Budget, Default,
+Premium. The Debug panel switches tiers live. Any key overrides from the
 command line.
 
 `Substrates:Agents` maps each model consumer — `Intent`, `Reflection`,

@@ -111,7 +111,7 @@ public sealed class RuntimeKnobs
     ///
     /// Zero is a setting, not an off switch. The bound is the smallest
     /// tier's attention rather than its price: a 4B's instruction-following
-    /// decays with prompt length, and Minimal would trade the length bracket
+    /// decays with prompt length, and Free would trade the length bracket
     /// and the mood vocabulary it can obey for a transcript it cannot hold.
     /// It is a free tier, and this is one of the things that makes it free.
     /// </summary>

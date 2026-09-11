@@ -11,7 +11,7 @@ namespace EciCas.Host;
 /// A tier was always a configuration overlay rather than a mode, and this
 /// keeps it one: each preset is the same base-plus-overlay layering that
 /// <c>--Tier=X</c> performs at startup, bound eagerly instead of applied to
-/// the running process. Comparing Minimal against Default used to mean two
+/// the running process. Comparing Free against Pro used to mean two
 /// restarts and a lost session, which is enough friction that nobody
 /// compares.
 ///
@@ -50,8 +50,8 @@ public sealed class TierCatalog
         _knobDefaults = knobDefaults;
 
         // Normalised to the preset's own casing, not whatever --Tier typed:
-        // the dropdown's <option value> is preset.Name, and a raw "minimal"
-        // against an option value of "Minimal" is a match to no one but a
+        // the dropdown's <option value> is preset.Name, and a raw "free"
+        // against an option value of "Free" is a match to no one but a
         // human reading both.
         Active = _presets.TryGetValue(active, out var initial) ? initial.Name : active;
     }
@@ -127,7 +127,7 @@ public sealed class TierPreset
 
     /// <summary>
     /// Where this tier sits on the one axis tiers actually have: base 0
-    /// (unconfigured), Mock 1, up to Super 5. Cost and capability move
+    /// (unconfigured), Mock 1, up to Premium 5. Cost and capability move
     /// together across the set, so one number orders both -- and it is a
     /// number in the tier file rather than a C# enum, because the whole point
     /// of a tier is that adding one is a config change.
@@ -136,7 +136,7 @@ public sealed class TierPreset
 
     /// <summary>
     /// Environment variables this tier's live agents need and that are not
-    /// set right now. Empty does not promise the tier works -- Minimal needs
+    /// set right now. Empty does not promise the tier works -- Free needs
     /// llama-server up and declares no key at all -- it only rules out the
     /// failure that is knowable without making a call.
     /// </summary>

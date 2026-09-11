@@ -9,7 +9,7 @@ namespace EciCas.Tests.Host;
 /// The tier files themselves are the fixture, for the same reason the agent
 /// tests read the shipped instructions: a preset that only ever describes a
 /// hand-written table proves the loader parses its own invention. What a
-/// live switch has to survive is whatever Minimal actually says today.
+/// live switch has to survive is whatever Free actually says today.
 /// </summary>
 public class TierCatalogTests
 {
@@ -26,16 +26,16 @@ public class TierCatalogTests
 
     [Fact]
     public void EveryShippedTierLoads() =>
-        Assert.Contains(TierCatalogLoader.Load(TierDirectory), p => p.Name == "Minimal");
+        Assert.Contains(TierCatalogLoader.Load(TierDirectory), p => p.Name == "Free");
 
     /// <summary>
-    /// Tiers have one axis -- Mock is the worst, Super is the best -- and the
+    /// Tiers have one axis -- Mock is the worst, Premium is the best -- and the
     /// dropdown is a dial along it. Ordering by file name put Budget above
-    /// Minimal, which reads as a claim about cost that is not true.
+    /// Free, which reads as a claim about cost that is not true.
     /// </summary>
     [Fact]
     public void TiersAreOrderedCheapestFirst_NotAlphabetically() =>
-        Assert.Equal(["Mock", "Minimal", "Budget", "Default", "Super"],
+        Assert.Equal(["Mock", "Free", "Budget", "Pro", "Premium"],
             TierCatalogLoader.Load(TierDirectory).Select(p => p.Name));
 
     /// <summary>
@@ -51,7 +51,7 @@ public class TierCatalogTests
 
     /// <summary>
     /// Mock is the tier a host falls back to, so it has to be a destination
-    /// like any other: a host that switched to Minimal and wants out needs
+    /// like any other: a host that switched to Free and wants out needs
     /// somewhere free to land.
     /// </summary>
     [Fact]
@@ -59,7 +59,7 @@ public class TierCatalogTests
     {
         var (catalog, substrates, _) = Build();
 
-        Assert.True(catalog.Switch("Minimal"));
+        Assert.True(catalog.Switch("Free"));
         Assert.True(catalog.Switch("Mock"));
 
         Assert.Equal("Mock", catalog.Active);
@@ -67,7 +67,7 @@ public class TierCatalogTests
     }
 
     /// <summary>
-    /// A tier is not only its models. Minimal also shrinks the Recall
+    /// A tier is not only its models. Free also shrinks the Recall
     /// fan-out and switches Reflection off entirely, and a switch that moved
     /// the substrate table alone would be a different tier wearing the
     /// name — the thing the roadmap warned about before this existed.
@@ -77,9 +77,9 @@ public class TierCatalogTests
     {
         var (catalog, substrates, knobs) = Build();
 
-        Assert.True(catalog.Switch("Minimal"));
+        Assert.True(catalog.Switch("Free"));
 
-        Assert.Equal("Minimal", catalog.Active);
+        Assert.Equal("Free", catalog.Active);
         Assert.All(substrates.Agents.Values, c => Assert.Equal("local", c.Provider));
         Assert.False(substrates.Agents["Reflection"].UseSubstrate);
         Assert.True(substrates.Agents["Intent"].UseSubstrate);
@@ -89,7 +89,7 @@ public class TierCatalogTests
         // writes back to the tier file: pinning it to a number here means
         // every legitimate save breaks this test with a failure that says
         // nothing about whether switching works.
-        var minimal = catalog.Presets.Single(p => p.Name == "Minimal");
+        var minimal = catalog.Presets.Single(p => p.Name == "Free");
 
         // The live knob overrides its option, so leaving it behind would run
         // the new tier at the old one's fan-out.
@@ -108,7 +108,7 @@ public class TierCatalogTests
         catalog.Switch("Mock");
         var before = substrates.Agents;
 
-        catalog.Switch("Minimal");
+        catalog.Switch("Free");
 
         Assert.NotSame(before, substrates.Agents);
         Assert.All(before.Values, c => Assert.Equal("mock", c.Provider));
@@ -118,11 +118,11 @@ public class TierCatalogTests
     public void AnUnknownTierIsRefused_AndChangesNothing()
     {
         var (catalog, substrates, _) = Build();
-        catalog.Switch("Minimal");
+        catalog.Switch("Free");
 
         Assert.False(catalog.Switch("Minmal"));
 
-        Assert.Equal("Minimal", catalog.Active);
+        Assert.Equal("Free", catalog.Active);
         Assert.All(substrates.Agents.Values, c => Assert.Equal("local", c.Provider));
     }
 
@@ -138,6 +138,6 @@ public class TierCatalogTests
         var mock = presets.Single(p => p.Name == "Mock");
 
         Assert.Empty(mock.MissingKeys);
-        Assert.True(Build().Catalog.Switch("Default"));
+        Assert.True(Build().Catalog.Switch("Pro"));
     }
 }

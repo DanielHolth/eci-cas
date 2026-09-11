@@ -34,7 +34,7 @@ public static class TierCatalogLoader
 
         // Ordered by what a tier costs and can do, not by filename: the
         // dropdown is a dial from cheapest to best, and Ordinal on the file
-        // name put Budget above Minimal. Rank lives in the tier file so a
+        // name put Budget above Free. Rank lives in the tier file so a
         // sixth tier still needs no code change to place itself.
         return presets.OrderBy(p => p.Rank).ThenBy(p => p.Name, StringComparer.Ordinal).ToList();
     }
@@ -73,8 +73,8 @@ public static class TierCatalogLoader
             throw new InvalidOperationException($"Tier '{name}' is not loadable:\n" + string.Join("\n", errors));
         }
 
-        // Only the providers this tier actually reaches for. Default needs
-        // both vendor keys; Minimal needs neither and is still the tier most
+        // Only the providers this tier actually reaches for. Pro needs
+        // both vendor keys; Free needs neither and is still the tier most
         // likely to be unreachable, which is why the surface says "keys
         // missing" rather than "unavailable".
         var missing = substrates.Agents.Values

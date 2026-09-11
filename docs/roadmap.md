@@ -301,7 +301,7 @@ change the avatar:
 
 | Lvl | Unlocks |
 |---|---|
-| 1 | Dialog only. The avatar is an empty circle with every other visual hidden. Tier is forced to Default (free for new users). Reflection is off. |
+| 1 | Dialog only. The avatar is an empty circle with every other visual hidden. Tier is forced to Pro (on the house for new users). Reflection is off. |
 | 2 | Left side panel: what Morrow has learned. |
 | 3 | Avatar: the pupil that follows the pointer. |
 | 4 | Speech: the voice dropdown, with the default voice picked automatically. |
@@ -310,7 +310,7 @@ change the avatar:
 | 7 | Avatar: expressions (brows and lids follow Impulse). |
 | 8 | Debug panel, without the knobs. |
 | 9 | Avatar: speaking shockwaves. |
-| 10 | Tier picker. The tier is swapped to Minimal, which is renamed **Free**. This is a deliberate nerf: Default up to here lets the person feel what Morrow can be. |
+| 10 | Tier picker. The tier is swapped to Free. This is a deliberate nerf: Pro up to here lets the person feel what Morrow can be. |
 | 11 | Avatar: inner layers (second blade set, filaments, pulse). |
 | 12 | Dark/light background. It swaps to dark automatically. |
 | 13 | Avatar: hue phasing. |
@@ -338,11 +338,6 @@ arrive, with a one-line explanation of what Morrow gained.
 4. Then the answer starts.
 
 In short, the bus traffic is shown as animation rather than hidden.
-
-Open:
-
-- Renaming Minimal to Free touches the tier convention everywhere:
-  config files, docs, the bench.
 
 ## The archive inverted — open items
 

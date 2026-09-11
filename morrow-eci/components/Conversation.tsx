@@ -102,14 +102,14 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
     // thought -- which is also what wakes Hindsight (HindsightAgent's first
     // trigger is a self-flagged perception).
     //
-    // Not on the two cheap tiers. Mock has no model behind it and Minimal is
+    // Not on the two cheap tiers. Mock has no model behind it and Free is
     // the one people leave running all day; spending a turn on a flourish is
     // a Budget-and-up indulgence. Unknown tier means the knobs have not been
     // fetched yet, so ask -- and if that fails, say nothing and stop, since
     // a failed fetch is not a reason to spend a turn.
     if (opener.egg) {
       const spend = (tier: string) => {
-        if (["mock", "minimal"].includes(tier.toLowerCase())) return;
+        if (["mock", "free"].includes(tier.toLowerCase())) return;
         sendNudge(profile.id).catch(() => {});
       };
       const known = latestKnobs()?.tier;

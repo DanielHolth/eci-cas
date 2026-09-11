@@ -23,19 +23,19 @@ em dash arrives as mojibake in the one output someone is reading for help.
 
 .EXAMPLE
 ./scripts/start.ps1
-Default tier: host, surface, browser.
+Pro tier: host, surface, browser.
 
 .EXAMPLE
-./scripts/start.ps1 -Tier Minimal
-Adds llama-server, because Minimal routes every class at localhost.
+./scripts/start.ps1 -Tier Free
+Adds llama-server, because Free routes every class at localhost.
 
 .EXAMPLE
 ./scripts/start.ps1 -Tier Mock -NoBrowser
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Minimal', 'Budget', 'Default', 'Super', 'Mock')]
-    [string]$Tier = 'Default',
+    [ValidateSet('Free', 'Budget', 'Pro', 'Premium', 'Mock')]
+    [string]$Tier = 'Pro',
 
     # Where the host listens, and where the surface does. Changing these
     # means changing appsettings too; they are parameters so a second
@@ -133,8 +133,8 @@ if ($needsOpenAi -and -not $env:OPENAI_API_KEY) {
 # weights that may not be there. Without them the swarm runs unembedded,
 # which is a supported state, not a fault.
 #
-# Every tier, not every tier but Minimal: the exemption dated from when
-# Minimal had no embedder of its own, and it outlived that by long enough to
+# Every tier, not every tier but Free: the exemption dated from when
+# Free had no embedder of its own, and it outlived that by long enough to
 # hide a real outage.
 #
 # Both files, not just the model: a tokenizer that did not come down with the

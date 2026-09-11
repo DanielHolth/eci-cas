@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-Gets the minimal tier running: weights, llama.cpp, and the server itself.
+Gets the free tier running: weights, llama.cpp, and the server itself.
 
 .DESCRIPTION
-`--Tier=Minimal` points every substrate class at an OpenAI-compatible server
+`--Tier=Free` points every substrate class at an OpenAI-compatible server
 on localhost. That server is llama.cpp and the weights are a Qwen3.5 4B --
 ~2.7GB, deliberately not committed, for the same reason the embedding
 weights are not.
@@ -211,7 +211,7 @@ else {
 Write-Host ''
 Write-Host 'Then, in another terminal:'
 Write-Host ''
-Write-Host '  dotnet run --project src/EciCas.Host -- --Tier=Minimal'
+Write-Host '  dotnet run --project src/EciCas.Host -- --Tier=Free'
 Write-Host ''
 Write-Host "The tier expects http://localhost:8080/v1/ -- change Substrates:Providers:local"
 Write-Host 'in appsettings.json if you serve it somewhere else. No API key is needed.'

@@ -13,7 +13,7 @@ npm run dev
 Needs `EciCas.Host` on `http://localhost:5179` (`dotnet run --project
 ../src/EciCas.Host`); override with `NEXT_PUBLIC_ECI_API_BASE`. Bare like
 that the host runs the free mock tier and every reply is an echo of its
-prompt — add `-- --Tier=Default` plus vendor keys for real ones.
+prompt — add `-- --Tier=Pro` plus vendor keys for real ones.
 
 ## What it may do
 
