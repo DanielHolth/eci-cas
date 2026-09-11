@@ -256,6 +256,26 @@ demoted. These tools adjust scores and pins; they never delete ground
 truth — deletion is its own action, loudly confirmed (and required for
 GDPR regardless).
 
+## Toolkit definitions (not started)
+
+**Two JSON files per toolkit.**
+
+1. **Definition.** What Morrow reads at runtime. It reads much like a skill:
+   when the toolkit applies, what it does, and how to call it.
+2. **Manifest.** What the toolkit is built from. It is complicated and very
+   flexible on purpose, because the definition is generated from it and
+   never written by hand.
+
+**First toolkit: `toolkit_creator`.** Morrow interviews the person and
+builds up both files as the conversation goes, which makes a toolkit a
+conversation rather than a config file. It also needs an edit skill that
+reopens an existing draft, so revising a toolkit is not starting over.
+
+**Second toolkit: a marketplace** for uploading and downloading toolkit
+definitions. A downloaded toolkit is untrusted input: it has to pass through
+Security like any other proposal, and the manifest says what a toolkit may
+touch, so Security has something to check it against.
+
 ## The archive inverted — open items
 
 The inversion itself (utterance log, threading, consolidator, keywords,
