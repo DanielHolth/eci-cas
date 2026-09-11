@@ -282,9 +282,12 @@ touch, so Security has something to check it against.
 turn, so a fact-dense monologue can't farm levels. Leaving level L takes
 `2·L` XP, so reaching level n takes `n(n-1)` facts in total: level 10 is
 90 facts, level 14 is 182. The first ten levels go fast, and after that
-each one takes 22+ new facts. The ticks around the avatar (the 48-cell
-telemetry ring) show progress; they count as the "empty circle" at
-level 1.
+each one takes 22+ new facts.
+
+**The cog shows the level.** Each level adds one tooth to the cog around
+Morrow, so level 1 is one tooth on an empty circle. Once the cog has its
+full count (48, the telemetry ring's cells), further levels turn the teeth
+gold one at a time, starting from the first. A fully gold cog is level 96.
 
 **State lives on the backend, per profile:** level, XP and a global turn
 counter. A cleared browser doesn't reset them.
@@ -316,11 +319,12 @@ change the avatar:
 | 16 | Knob: Mood. It also binds the face to the slider. |
 | 17 | Avatar: accent colour follows mood. |
 | 18 | Knob: ContextTurns. |
-| 20 | Knob: RecallDepth, along with the thought-bubble recall animation. |
+| 20 | Knob: RecallDepth, along with the thought-bubble recall animation. The toolkit marketplace also unlocks here. |
 | 22 | Knob: ReflectionEvery. |
 | 24 | Knob: PerceptionChars. |
+| 30+ | One premium toolkit per even level. |
 
-Odd levels from 19 on are open. New avatar effects get added to the file
+Odd levels from 19 on are open, and so are even levels 26 and 28. New avatar effects get added to the file
 as they're built.
 
 **An unlock is an event.** The avatar animates it, so you can see the knob
