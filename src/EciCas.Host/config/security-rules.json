@@ -35,7 +35,7 @@
     },
     {
       "id": "irreversible-world-effect",
-      "verdict": "Yellow",
+      "verdict": "Red",
       "description": "Action executes literally. Anything destructive must not reach it by accident.",
       "any": [
         "\\brm\\s+-rf\\b",
@@ -44,7 +44,7 @@
         "\\b(?:delete|wipe|erase|purge)\\s+(?:all|every|the\\s+entire)\\b",
         "\\bgit\\s+push\\s+--force\\b"
       ],
-      "concern": "The proposed reply would destroy data irreversibly. Revise if this wasn't intended literally."
+      "concern": "The proposed reply would destroy data irreversibly. Blocked by rule."
     },
     {
       "id": "spend-money",

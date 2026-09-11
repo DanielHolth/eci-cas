@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using EciCas.Core;
 using EciCas.Substrates;
 
@@ -30,6 +31,18 @@ public static class SubstrateWarmup
     /// </summary>
     private const string Prompt = "Reply with one word: ok";
 
+    /// <summary>
+    /// provider/model -> why its last warm-up failed. A timeout is not a
+    /// failure here: a local model still loading off disk would read as down.
+    /// Only models a warm-up has tried appear, so a tier never switched to
+    /// stays unknown rather than claimed healthy.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, string> Failures = new(StringComparer.OrdinalIgnoreCase);
+
+    public static string ModelName(string agent, SubstrateAgentEntry entry) => $"{entry.Provider}/{entry.Model ?? agent}";
+
+    public static string? FailureFor(string modelName) => Failures.TryGetValue(modelName, out var why) ? why : null;
+
     public static async Task RunAsync(
         ISubstrateProvider substrates,
         SubstrateOptions options,
@@ -56,16 +69,27 @@ public static class SubstrateWarmup
         // loading them at once is how a warm-up becomes an out-of-memory.
         foreach (var entry in firstAgentPerModel)
         {
-            var name = $"{entry.Value.Provider}/{entry.Value.Model ?? entry.Key}";
+            var name = ModelName(entry.Key, entry.Value);
             var started = DateTimeOffset.UtcNow;
             try
             {
                 await substrates.CompleteAsync(entry.Key, Prompt, cts.Token);
+                Failures.TryRemove(name, out _);
                 report($"warm: {name} in {(DateTimeOffset.UtcNow - started).TotalSeconds:F1}s");
             }
             catch (Exception ex)
             {
-                report($"warm: {name} skipped ({SubstrateHealth.Classify(ex)})");
+                var why = SubstrateHealth.Classify(ex);
+                if (why == SubstrateHealth.TimedOut)
+                {
+                    Failures.TryRemove(name, out _);
+                }
+                else
+                {
+                    Failures[name] = why;
+                }
+
+                report($"warm: {name} skipped ({why})");
             }
         }
     }

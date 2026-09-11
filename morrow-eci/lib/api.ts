@@ -42,6 +42,8 @@ export interface Tier {
   name: string;
   /** Env vars this tier's live classes need and that the host cannot see. */
   missingKeys: string[];
+  /** provider/models whose last warm-up failed. Empty is unknown, not healthy. */
+  unreachable: string[];
 }
 
 export interface Knobs {

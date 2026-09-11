@@ -144,6 +144,7 @@ export function KnobsPanel() {
             >
               {t.name}
               {t.missingKeys.length > 0 ? ` — needs ${t.missingKeys.join(", ")}` : ""}
+              {t.unreachable.length > 0 ? ` — unreachable: ${t.unreachable.join(", ")}` : ""}
             </option>
           ))}
         </select>

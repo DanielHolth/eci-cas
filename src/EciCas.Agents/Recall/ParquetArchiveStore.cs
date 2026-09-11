@@ -86,14 +86,14 @@ public sealed class ParquetArchiveStore : IArchiveStore
 
     private sealed class RecordRow
     {
-        public string Category { get; set; } = "";
-        public string Topic { get; set; } = "";
-        public string Subtopic { get; set; } = "";
-        public string Subject { get; set; } = "";
-        public string Key { get; set; } = "";
-        public string Value { get; set; } = "";
-        public string Timestamp { get; set; } = "";
-        public string Domain { get; set; } = "";
+        public string? Category { get; set; }
+        public string? Topic { get; set; }
+        public string? Subtopic { get; set; }
+        public string? Subject { get; set; }
+        public string? Key { get; set; }
+        public string? Value { get; set; }
+        public string? Timestamp { get; set; }
+        public string? Domain { get; set; }
         public double Importance { get; set; }
 
         // Nullable so a pair file written before the sentence existed still
@@ -733,8 +733,13 @@ public sealed class ParquetArchiveStore : IArchiveStore
 
         var result = await ParquetSerializer.DeserializeAsync<RecordRow>(path, cancellationToken: cancellationToken).ConfigureAwait(false);
         return [.. result.Data.Select(r => new ArchiveRecord(
-            r.Category, r.Topic, r.Subtopic, r.Subject, r.Key, r.Value,
-            DateTimeOffset.Parse(r.Timestamp, CultureInfo.InvariantCulture), r.Domain, r.Importance, r.Sentence ?? "",
+            ParquetColumn.Required(r.Category, nameof(r.Category)),
+            ParquetColumn.Required(r.Topic, nameof(r.Topic)),
+            r.Subtopic ?? "",
+            ParquetColumn.Required(r.Subject, nameof(r.Subject)),
+            ParquetColumn.Required(r.Key, nameof(r.Key)),
+            ParquetColumn.Required(r.Value, nameof(r.Value)),
+            ParquetColumn.RequiredTime(r.Timestamp, nameof(r.Timestamp)), r.Domain ?? "", r.Importance, r.Sentence ?? "",
             string.IsNullOrEmpty(r.Embedding) ? null : VectorMath.Decode(r.Embedding),
             r.EmbeddingModel ?? "", r.EmbeddingHash ?? "", r.Hits ?? 0,
             string.IsNullOrEmpty(r.LastHit) ? null : DateTimeOffset.Parse(r.LastHit, CultureInfo.InvariantCulture)))];
@@ -746,12 +751,12 @@ public sealed class ParquetArchiveStore : IArchiveStore
         {
             Category = r.Category,
             Topic = r.Topic,
-            Subtopic = r.Subtopic,
+            Subtopic = r.Subtopic.Length == 0 ? null : r.Subtopic,
             Subject = r.Subject,
             Key = r.Key,
             Value = r.Value,
             Timestamp = r.Timestamp.ToString("O", CultureInfo.InvariantCulture),
-            Domain = r.Domain,
+            Domain = r.Domain.Length == 0 ? null : r.Domain,
             Importance = r.Importance,
             Sentence = r.Sentence,
             Embedding = r.Embedding is { Length: > 0 } v ? VectorMath.Encode(v) : null,

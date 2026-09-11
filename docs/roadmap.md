@@ -199,13 +199,14 @@ toolbox handlers, so Morrow can self-diagnose mid-session.
 
 ---
 
-# Open against the archive
+# Backlog
+
+## Open against the archive
 
 - **Retired facts are unreachable.** Pass B in `FactConsult` is a top-up,
   not a lane, so "what did I used to drive" loses to the current car. A
   likely fix: take the top thread and return its members oldest to newest.
-  Open whether that's a second verb, or a slot inside `Find`. The class
-  comment overstates what pass B does either way.
+  Open whether that's a second verb, or a slot inside `Find`.
 - **Characterise is unmeasured.** It needs a longitudinal corpus (v5):
   habits, decoys, dated changes, and a refusal question. First gate, which
   needs no corpus: check whether the keyword extractor keeps the tokens an
@@ -225,7 +226,7 @@ toolbox handlers, so Morrow can self-diagnose mid-session.
   these are different encoders, so merging them changes quality. Measure
   the cost before touching it.
 
-# Open on the surface
+## Open on the surface
 
 - **Attribution on shared devices.** The picker keeps the last person, so
   add a "not me" affordance.
@@ -233,27 +234,16 @@ toolbox handlers, so Morrow can self-diagnose mid-session.
   for a household, not beyond it.
 - **Reflection's colouring isn't per profile.** One person's tone colours
   everyone's persona. Partition the batch by profile.
-- **Two mood vocabularies.** The slider's `Mood` and Reflection's labels
-  are unconnected.
-- **Tier validation is shape-only.** A tier is never checked for whether
-  its providers actually answer.
-- **Blank strings stand in for null.** Parquet row fields default to `""`,
-  so a missing value and an empty one look the same. New columns should be
-  `required`.
 
-# Security rules — low priority
+## Security rules — low priority
 
 The 8 rules in `config/security-rules.json` are a backstop.
 
 - **Every pattern is English.** A Norwegian reply passes all of them.
-  Decide per rule what to do about that.
-- **`irreversible-world-effect` should probably be Red.** It's Yellow, but
-  its own description argues for Red.
+  Decide per rule what to do about that. Revisit when non-authors speak
+  Norwegian to Morrow, or when Action reaches outside the process.
 
-Revisit when non-authors speak Norwegian to Morrow, or when Action reaches
-outside the process.
-
-# Delivery — Android
+## Delivery — Android
 
 - **The whole runtime runs on the phone** (`net10.0-android`). The Android
   host replaces `EciCas.Host`.
@@ -278,7 +268,7 @@ outside the process.
   it's the cheapest open question to answer.
 - **iOS later**, on the same shared logic.
 
-# Companion extensions (not started)
+## Companion extensions (not started)
 
 - **Dictation.** Push-to-talk into the composer. No speaker ID.
 - **Biometric unlock.** A new face creates a profile.
@@ -286,21 +276,21 @@ outside the process.
 - **Profiles from conversation.** Create a profile when a new name comes
   up; also delete and merge profiles.
 
-# Parked
+## Parked
 
 - **Elapsed time on the envelope.** Waits until something downstream wants
   it.
 - **Watchdog / recovery bootstrap / installer.** Waits on the platform
   decision; boot recovery above covers the urgent part.
 
-# Out of scope
+## Out of scope
 
 - The Python prototype's messaging plumbing. The port targets business
   logic.
 - A Budget Mode spend auto-latch.
 - `is_parroting()`: moot without the Librarian.
 
-# Open design questions
+## Open design questions
 
 - **Swappable personas.** Shared recall, per-persona Identity. This is the
   largest piece of unscoped work.

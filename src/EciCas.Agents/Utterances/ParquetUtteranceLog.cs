@@ -96,12 +96,12 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         /// </summary>
         private sealed class Row
         {
-            public string Id { get; set; } = "";
+            public string? Id { get; set; }
             public long Turn { get; set; }
-            public string Timestamp { get; set; } = "";
-            public string Speaker { get; set; } = "";
+            public string? Timestamp { get; set; }
+            public string? Speaker { get; set; }
             public string? ProfileId { get; set; }
-            public string Text { get; set; } = "";
+            public string? Text { get; set; }
         }
 
         private readonly string _directory;
@@ -228,11 +228,10 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
         };
 
         private static Utterance FromRow(Row r) => new(
-            r.Id,
-            r.Text,
-            DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind, out var when) ? when : DateTimeOffset.MinValue,
-            r.Speaker,
+            ParquetColumn.Required(r.Id, nameof(r.Id)),
+            ParquetColumn.Required(r.Text, nameof(r.Text)),
+            ParquetColumn.RequiredTime(r.Timestamp, nameof(r.Timestamp)),
+            ParquetColumn.Required(r.Speaker, nameof(r.Speaker)),
             r.ProfileId,
             r.Turn);
     }

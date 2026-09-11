@@ -39,11 +39,11 @@ public sealed class ParquetFactLog : IFactLog
     /// </summary>
     private sealed class Row
     {
-        public string Id { get; set; } = "";
-        public string SourceId { get; set; } = "";
-        public string Text { get; set; } = "";
-        public string Timestamp { get; set; } = "";
-        public string Speaker { get; set; } = "";
+        public string? Id { get; set; }
+        public string? SourceId { get; set; }
+        public string? Text { get; set; }
+        public string? Timestamp { get; set; }
+        public string? Speaker { get; set; }
         public string? ProfileId { get; set; }
         public string? Keywords { get; set; }
         public string? Embedding { get; set; }
@@ -303,12 +303,11 @@ public sealed class ParquetFactLog : IFactLog
     };
 
     private static Fact FromRow(Row r) => new(
-        r.Id,
-        r.SourceId,
-        r.Text,
-        DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture,
-            DateTimeStyles.RoundtripKind, out var when) ? when : DateTimeOffset.MinValue,
-        r.Speaker,
+        ParquetColumn.Required(r.Id, nameof(r.Id)),
+        ParquetColumn.Required(r.SourceId, nameof(r.SourceId)),
+        ParquetColumn.Required(r.Text, nameof(r.Text)),
+        ParquetColumn.RequiredTime(r.Timestamp, nameof(r.Timestamp)),
+        ParquetColumn.Required(r.Speaker, nameof(r.Speaker)),
         r.ProfileId,
         JsonSerializer.Deserialize<List<string>>(r.Keywords ?? "[]") ?? [],
         string.IsNullOrEmpty(r.Embedding) ? null : VectorMath.Decode(r.Embedding),

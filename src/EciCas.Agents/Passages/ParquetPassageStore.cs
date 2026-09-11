@@ -33,11 +33,11 @@ public sealed class ParquetPassageStore : IPassageStore
 
     private sealed class PassageRow
     {
-        public string Id { get; set; } = "";
-        public string Text { get; set; } = "";
-        public string Pairs { get; set; } = "";
-        public string Timestamp { get; set; } = "";
-        public string Embedding { get; set; } = "";
+        public string? Id { get; set; }
+        public string? Text { get; set; }
+        public string? Pairs { get; set; }
+        public string? Timestamp { get; set; }
+        public string? Embedding { get; set; }
 
         // Nullable so a file written before lineage existed still
         // deserializes: Parquet gives a missing column its default, and for
@@ -186,15 +186,11 @@ public sealed class ParquetPassageStore : IPassageStore
     };
 
     private static Passage FromRow(PassageRow r) => new(
-        r.Id,
-        r.Text,
-        string.IsNullOrEmpty(r.Pairs) ? [] : JsonSerializer.Deserialize<List<ArchivePair>>(r.Pairs) ?? [],
-        // Invariant on both sides, matching ParquetArchiveStore. The fallback
-        // is silent, so a culture mismatch would not surface as an error but
-        // as every note being two millennia old — wrong ages in Hindsight and
-        // LatestAsync picking whichever row parsed.
-        DateTimeOffset.TryParse(r.Timestamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var ts) ? ts : DateTimeOffset.MinValue,
-        DecodeFloats(Convert.FromBase64String(r.Embedding)),
+        ParquetColumn.Required(r.Id, nameof(r.Id)),
+        ParquetColumn.Required(r.Text, nameof(r.Text)),
+        JsonSerializer.Deserialize<List<ArchivePair>>(ParquetColumn.Required(r.Pairs, nameof(r.Pairs))) ?? [],
+        ParquetColumn.RequiredTime(r.Timestamp, nameof(r.Timestamp)),
+        DecodeFloats(Convert.FromBase64String(ParquetColumn.Required(r.Embedding, nameof(r.Embedding)))),
         r.ParentIds is null ? [] : JsonSerializer.Deserialize<List<string>>(r.ParentIds) ?? [],
         r.EchoDepth ?? 0,
         r.Generation ?? 0,

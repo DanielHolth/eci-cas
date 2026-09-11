@@ -155,7 +155,18 @@ internal static class KnobsEndpoints
         static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, KnobDefaults knobDefaults) => new
         {
             tier = tiers.Active,
-            tiers = tiers.Presets.Select(p => new { name = p.Name, missingKeys = p.MissingKeys }),
+            tiers = tiers.Presets.Select(p => new
+            {
+                name = p.Name,
+                missingKeys = p.MissingKeys,
+                // From the last warm-up that tried each model; a tier never
+                // switched to has none listed, which means unknown, not fine.
+                unreachable = p.Agents
+                    .Select(a => SubstrateWarmup.ModelName(a.Key, a.Value))
+                    .Distinct()
+                    .Where(m => SubstrateWarmup.FailureFor(m) is not null)
+                    .ToList(),
+            }),
             maxSentences = knobs.MaxSentences,
             reflectionEvery = knobs.ReflectionEvery,
             perceptionChars = knobs.PerceptionChars,

@@ -81,6 +81,19 @@ public class SecurityRuleSetTests
         Assert.Equal("weapon detail", result.Concern);
     }
 
+    /// The shipped file, not a fixture: destruction is a hard stop, because
+    /// a revision that keeps the command still reaches Action literally.
+    [Fact]
+    public void ShippedRules_IrreversibleWorldEffect_IsRed()
+    {
+        var rules = SecurityRuleSet.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "config", "security-rules.json")));
+
+        var result = rules.Evaluate("sure, just run rm -rf / and it's gone");
+
+        Assert.Equal(Verdict.Red, result.Verdict);
+        Assert.Contains("irreversible-world-effect", result.MatchedRuleIds);
+    }
+
     [Theory]
     [InlineData("""{"rules": []}""")]
     [InlineData("""{"rules": [{"id": "x", "verdict": "Green", "concern": "c", "any": ["a"]}]}""")]
