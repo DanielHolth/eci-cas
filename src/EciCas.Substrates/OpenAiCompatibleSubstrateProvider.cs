@@ -107,7 +107,10 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
                 usage.PromptTokens ?? usage.TotalTokens,
                 usage.CompletionTokens ?? 0);
 
-        return new SubstrateResult(text, elapsed, tokens, cost);
+        return new SubstrateResult(
+            text, elapsed, tokens, cost,
+            entry?.Provider ?? "mock", model,
+            usage?.PromptTokens, usage?.CompletionTokens);
     }
 
     /// <summary>

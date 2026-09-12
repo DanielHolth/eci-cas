@@ -11,7 +11,20 @@ public interface ISubstrateProvider
     Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken);
 }
 
-public sealed record SubstrateResult(string Text, TimeSpan Latency, int? TokenCount, decimal? Cost);
+/// <param name="Provider">Which endpoint served it — "local", "openai", "mistral", "mock".
+/// Optional because a stub has no endpoint, but a real provider must fill it:
+/// the whole reason a person opens the debug panel on a mixed tier is to see
+/// whether a given agent went out to a vendor or stayed on their own GPU.</param>
+/// <param name="Model">The vendor model id actually sent on the wire.</param>
+public sealed record SubstrateResult(
+    string Text,
+    TimeSpan Latency,
+    int? TokenCount,
+    decimal? Cost,
+    string? Provider = null,
+    string? Model = null,
+    int? PromptTokens = null,
+    int? CompletionTokens = null);
 
 /// <summary>
 /// How a substrate failure is named on the bus, so a turn concluded with

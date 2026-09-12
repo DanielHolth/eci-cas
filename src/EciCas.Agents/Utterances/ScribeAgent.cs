@@ -186,9 +186,11 @@ public sealed class ScribeAgent : AgentBase
             // them: Identity and Impulse listen for "the archive grew", not
             // for whichever agent is holding the pen this month.
             var kept = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Text)];
+            var ids = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Id)];
             _bus.Publish(Topics.SystemControl, envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
                 MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)
-                    .With(ArchivistAgent.WrittenRecordsKey, kept)));
+                    .With(ArchivistAgent.WrittenRecordsKey, kept)
+                    .With(ArchivistAgent.WrittenIdsKey, ids)));
         }
     }
 

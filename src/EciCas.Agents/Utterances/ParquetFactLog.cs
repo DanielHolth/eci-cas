@@ -143,6 +143,70 @@ public sealed class ParquetFactLog : IFactLog
         }, cancellationToken);
     }
 
+    public async Task<bool> ReviseAsync(string id, string text, CancellationToken cancellationToken)
+    {
+        text = text.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var hit = false;
+        await MutateAsync(rows =>
+        {
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (!string.Equals(rows[i].Id, id, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                hit = true;
+                rows[i] = rows[i] with
+                {
+                    Text = text,
+                    // Keywords are a pure function of the sentence, so they
+                    // are recomputed rather than kept: a corrected row that
+                    // still carries the invented row's content words would
+                    // keep matching the query that surfaced the mistake.
+                    Keywords = KeywordExtractor.Content(text),
+                    Embedding = null,
+                    EmbeddingModelId = "",
+                };
+            }
+        }, cancellationToken).ConfigureAwait(false);
+
+        return hit;
+    }
+
+    public async Task<int> RemoveAsync(IReadOnlyList<string> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return 0;
+        }
+
+        var wanted = new HashSet<string>(ids, StringComparer.Ordinal);
+        var removed = 0;
+        await MutateAsync(rows =>
+        {
+            removed = rows.RemoveAll(row => wanted.Contains(row.Id));
+
+            // A row that superseded a deleted one would otherwise point at
+            // nothing. Clearing the pointer restores the older row instead of
+            // leaving it retired by a fact that no longer exists.
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].SupersededBy is { } by && wanted.Contains(by))
+                {
+                    rows[i] = rows[i] with { SupersededBy = null };
+                }
+            }
+        }, cancellationToken).ConfigureAwait(false);
+
+        return removed;
+    }
+
     /// <summary>
     /// Deletes every shard and empties the cache. Safe in a way no other
     /// store here is safe: there is nothing in this directory that was not

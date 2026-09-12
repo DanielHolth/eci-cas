@@ -43,7 +43,7 @@ public sealed partial class MockSubstrateProvider : ISubstrateProvider
     public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken)
     {
         var text = EnumeratedCandidates.IsMatch(prompt) ? "0" : $"[mock:{agent}] {Turn(prompt)}";
-        return Task.FromResult(new SubstrateResult(text, TimeSpan.FromMilliseconds(5), prompt.Length / 4, 0m));
+        return Task.FromResult(new SubstrateResult(text, TimeSpan.FromMilliseconds(5), prompt.Length / 4, 0m, "mock", "mock"));
     }
 
     private static string Turn(string prompt)

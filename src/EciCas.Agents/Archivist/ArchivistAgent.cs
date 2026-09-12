@@ -42,6 +42,9 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     /// <summary>What the flush actually put on disk, one "path = value" string per record — the same strings the log line prints, so the surface and the console agree without either reading the other.</summary>
     public const string WrittenRecordsKey = "archivist.written";
 
+    /// <summary>The fact ids behind those strings, in the same order. What lets a surface offer to correct a row rather than only to read it — a made-up fact is worth nothing if the only way to remove it is a parquet tool.</summary>
+    public const string WrittenIdsKey = "archivist.written.ids";
+
     /// <summary>The extracted, still-unaddressed facts, carried on the events.facts envelope's Meta.</summary>
     public const string FactsKey = "archivist.facts";
 

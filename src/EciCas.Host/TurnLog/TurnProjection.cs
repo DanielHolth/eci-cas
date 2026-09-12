@@ -100,6 +100,7 @@ public static class TurnProjection
     private static TurnRecord ApplyControl(TurnRecord record, Envelope envelope) => record with
     {
         Writes = envelope.Meta.Get<IReadOnlyList<string>>(ArchivistAgent.WrittenRecordsKey) ?? record.Writes,
+        WriteIds = envelope.Meta.Get<IReadOnlyList<string>>(ArchivistAgent.WrittenIdsKey) ?? record.WriteIds,
         Passages = envelope.Meta.Get<IReadOnlyList<string>>(ReflectionAgent.PassagesKey) ?? record.Passages,
         Idea = envelope.Meta.Get<string>(ReflectionAgent.IdeaKey) ?? record.Idea,
     };
@@ -116,7 +117,11 @@ public static class TurnProjection
             meta.Get<double>(SubstrateTrace.LatencyKey),
             meta.ContainsKey(SubstrateTrace.TokensKey) ? meta.Get<int>(SubstrateTrace.TokensKey) : null,
             meta.ContainsKey(SubstrateTrace.CostKey) ? meta.Get<decimal>(SubstrateTrace.CostKey) : null,
-            meta.Get<string>(SubstrateHealth.DegradedKey));
+            meta.Get<string>(SubstrateHealth.DegradedKey),
+            meta.Get<string>(SubstrateTrace.ProviderKey),
+            meta.Get<string>(SubstrateTrace.ModelKey),
+            meta.ContainsKey(SubstrateTrace.PromptTokensKey) ? meta.Get<int>(SubstrateTrace.PromptTokensKey) : null,
+            meta.ContainsKey(SubstrateTrace.CompletionTokensKey) ? meta.Get<int>(SubstrateTrace.CompletionTokensKey) : null);
 
         return record with { Calls = [.. record.Calls, call] };
     }

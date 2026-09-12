@@ -228,6 +228,49 @@ public class FactLogTests : IDisposable
     }
 
     [Fact]
+    public async Task CorrectingARowRewritesItAndDropsItsStaleVector()
+    {
+        var log = new ParquetFactLog(_dir);
+        var invented = Embedded(Read("I moved to Bodo in 2019", DateTimeOffset.UtcNow), "t1");
+        await log.AppendAsync([invented], CancellationToken.None);
+
+        Assert.True(await log.ReviseAsync(invented.Id, "I moved to Tromso in 2019", CancellationToken.None));
+
+        var row = Assert.Single(await log.AllAsync(CancellationToken.None));
+        Assert.Equal("I moved to Tromso in 2019", row.Text);
+        // The vector pointed at the sentence that was never said; leaving it
+        // would keep retrieving the row for the wrong question.
+        Assert.Null(row.Embedding);
+        Assert.Contains("tromso", row.Keywords.Select(k => k.ToLowerInvariant()));
+    }
+
+    [Fact]
+    public async Task CorrectingARowThatIsNotThereChangesNothing()
+    {
+        var log = new ParquetFactLog(_dir);
+
+        Assert.False(await log.ReviseAsync("nobody", "something", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RemovingARowTakesItOutAndUnretiresWhateverItReplaced()
+    {
+        var log = new ParquetFactLog(_dir);
+        var stale = Embedded(Read("the boat is called Vega", DateTimeOffset.UtcNow.AddYears(-3)), "t1");
+        var invented = Embedded(Read("the boat is called Nordlys", DateTimeOffset.UtcNow), "t1");
+        await log.AppendAsync([stale, invented], CancellationToken.None);
+        await log.UpdateDerivedAsync([new FactDerived(stale.Id, SupersededBy: invented.Id)], CancellationToken.None);
+
+        Assert.Equal(1, await log.RemoveAsync([invented.Id], CancellationToken.None));
+
+        var row = Assert.Single(await log.AllAsync(CancellationToken.None));
+        Assert.Equal(stale.Id, row.Id);
+        // Retired by a row that turned out to be made up: the older row is
+        // the truth again, not a fact superseded by nothing.
+        Assert.Null(row.SupersededBy);
+    }
+
+    [Fact]
     public async Task TheBackfillGivesABareRowAVectorAndAThread()
     {
         var said = new ParquetUtteranceLog(_dir);

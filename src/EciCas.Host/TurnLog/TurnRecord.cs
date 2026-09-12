@@ -3,7 +3,17 @@ using System.Text.Json.Serialization;
 namespace EciCas.Host.TurnLog;
 
 /// <summary>One substrate call, as the log shows it. Cost and tokens are null when the provider does not report them — the mock tier reports neither, and a rendered $0.0000 would read as free rather than unmeasured.</summary>
-public sealed record SubstrateCall(string Agent, string? Label, double LatencyMs, int? Tokens, decimal? Cost, string? Degraded);
+public sealed record SubstrateCall(
+    string Agent,
+    string? Label,
+    double LatencyMs,
+    int? Tokens,
+    decimal? Cost,
+    string? Degraded,
+    string? Provider = null,
+    string? Model = null,
+    int? PromptTokens = null,
+    int? CompletionTokens = null);
 
 /// <summary>
 /// What happened in one event, in the order a person reads it rather than
@@ -46,6 +56,9 @@ public sealed record TurnRecord
 
     public string? Concern { get; init; }
     public IReadOnlyList<string> Writes { get; init; } = [];
+
+    /// <summary>The archive id of each entry in <see cref="Writes"/>, same order. Empty for a turn logged before ids were carried; a surface must treat a missing id as "not correctable" rather than guess.</summary>
+    public IReadOnlyList<string> WriteIds { get; init; } = [];
     public IReadOnlyList<string> Passages { get; init; } = [];
     public string? Idea { get; init; }
     public IReadOnlyList<SubstrateCall> Calls { get; init; } = [];

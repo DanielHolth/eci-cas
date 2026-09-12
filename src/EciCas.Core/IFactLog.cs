@@ -76,6 +76,30 @@ public interface IFactLog
     Task RecordHitsAsync(IReadOnlyList<string> ids, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Correct what a row says. Returns false for an id that is not there.
+    ///
+    /// A real delete-and-rewrite rather than a supersession: supersession is
+    /// for a fact that *became* untrue, and carries the old row forward as
+    /// history. This is for a fact that was never true — an extractor
+    /// inventing "I moved to Bodø in 2019" out of a sentence that said
+    /// nothing of the kind — and keeping that in the corpus as heritage would
+    /// be keeping the bug.
+    ///
+    /// The vector goes with the text, because a row whose embedding still
+    /// points at the old sentence retrieves for the thing that was wrong.
+    /// FactBackfill re-vectors it on its next pass.
+    /// </summary>
+    Task<bool> ReviseAsync(string id, string text, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Take rows out of the index for good. Returns how many were actually
+    /// there. The utterance they were read from is untouched — ground truth
+    /// is not the surface's to edit, and a backfill would legitimately mint
+    /// the row again if the sentence really did say it.
+    /// </summary>
+    Task<int> RemoveAsync(IReadOnlyList<string> ids, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Throw the index away. The backfill's first move when it rebuilds from
     /// ground truth, and the reason a wrong extraction is never permanent.
     /// </summary>

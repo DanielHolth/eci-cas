@@ -100,6 +100,15 @@ export interface SubstrateCall {
   tokens: number | null;
   cost: number | null;
   degraded: string | null;
+  /** Which endpoint served it ("local", "openai", "mistral", "mock") and the
+   * model id sent on the wire. Null on a call logged before these were
+   * carried. A tier mixes local and vendor agents freely, so whether a turn
+   * ran on your own hardware is only answerable per call. */
+  provider: string | null;
+  model: string | null;
+  /** The split behind `tokens`, when the provider reports one. */
+  promptTokens: number | null;
+  completionTokens: number | null;
 }
 
 /**
@@ -123,6 +132,9 @@ export interface TurnRecord {
   verdict: string | null;
   concern: string | null;
   writes: string[];
+  /** Archive id per entry in `writes`, same order. Empty on a turn logged
+   * before ids were carried — that row can be read but not corrected. */
+  writeIds: string[];
   passages: string[];
   idea: string | null;
   calls: SubstrateCall[];

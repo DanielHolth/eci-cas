@@ -32,6 +32,32 @@ function latency(calls: SubstrateCall[], wallClockMs: number): string {
   return addends ? `${addends} → ${total}` : total;
 }
 
+/** Token usage rolled up per model, not per call: what a person wants off
+ * this panel is "which model did the work and what did it read", and on a
+ * mixed tier the same model backs several agents. Sorted by spend so the
+ * expensive one is never below the fold. A call whose provider never
+ * reported a model is grouped under "unreported" rather than dropped. */
+function byModel(calls: SubstrateCall[]) {
+  const rows = new Map<string, { provider: string; model: string; calls: number; in: number; out: number; total: number; cost: number | null }>();
+  for (const c of calls) {
+    const provider = c.provider ?? "?";
+    const model = c.model ?? "unreported";
+    const key = `${provider}/${model}`;
+    const row = rows.get(key) ?? { provider, model, calls: 0, in: 0, out: 0, total: 0, cost: null };
+    row.calls += 1;
+    row.in += c.promptTokens ?? 0;
+    row.out += c.completionTokens ?? 0;
+    row.total += c.tokens ?? 0;
+    if (c.cost !== null) row.cost = (row.cost ?? 0) + c.cost;
+    rows.set(key, row);
+  }
+  return [...rows.values()].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0) || b.total - a.total);
+}
+
+/** Local hardware costs nothing and is worth seeing at a glance — the whole
+ * question on a mixed tier is which half of the fan-out left the machine. */
+const LOCAL = new Set(["local", "ollama", "llamacpp", "mock"]);
+
 function Line({ agent, children }: { agent: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-2 py-0.5">
@@ -162,6 +188,25 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
                 </span>
               </Line>
               <Line agent="Latency">{latency(record.calls, record.wallClockMs)}</Line>
+              <Line agent="Models">
+                <span className="flex flex-col gap-0.5">
+                  {byModel(record.calls).map((r) => (
+                    <span key={`${r.provider}/${r.model}`} className="flex flex-wrap gap-x-2 font-mono text-[11px]">
+                      <span className={LOCAL.has(r.provider) ? "text-emerald-600 dark:text-emerald-400" : "text-sky-600 dark:text-sky-400"}>
+                        {LOCAL.has(r.provider) ? "local" : "remote"}
+                      </span>
+                      <span className="text-neutral-800 dark:text-neutral-200">{r.provider}/{r.model}</span>
+                      <span className="text-neutral-400 dark:text-neutral-500">
+                        ×{r.calls}
+                        {" · "}
+                        {r.in || r.out ? `${r.in} in / ${r.out} out` : `${r.total} tok`}
+                        {" · "}
+                        {money(r.cost)}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              </Line>
             </>
           )}
           {record.calls.some((c) => c.degraded) && (

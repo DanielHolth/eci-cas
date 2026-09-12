@@ -136,3 +136,29 @@ export async function saveKnobs(): Promise<Knobs> {
   }
   return publish(await response.json());
 }
+
+/**
+ * Correcting the index. The extractor is a small model and it will
+ * sometimes keep a sentence nobody said; everything downstream treats facts
+ * as recomputable, so a person is allowed to fix one directly. The utterance
+ * behind it is ground truth and is never touched from here.
+ */
+export async function reviseFact(id: string, text: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/facts/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) {
+    throw new Error(`fact revise failed: ${response.status}`);
+  }
+}
+
+export async function deleteFact(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/facts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  // 404 is success as far as the panel is concerned: the row is not there,
+  // which is what was asked for. Anything else is worth surfacing.
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`fact delete failed: ${response.status}`);
+  }
+}

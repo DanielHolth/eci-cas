@@ -64,6 +64,7 @@ var jsonOptions = app.Services.GetRequiredService<JsonSerializerOptions>();
 app.MapPersona(jsonOptions);
 app.MapKnobs(jsonOptions, surface.WarmupBudgetMs);
 app.MapVitals(jsonOptions);
+app.MapFacts(jsonOptions);
 app.MapStreams(jsonOptions, surface.ExcludedMetaKeys);
 
 await app.StartAsync();
