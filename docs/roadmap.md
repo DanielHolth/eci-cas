@@ -448,11 +448,21 @@ file — and only the display names change.
   until it is installed.
 - **Local is desktop-only.** It needs the 4B for Intent, which a phone
   cannot sustain. See the Android chapter.
-- **Only Local needs a GPU.** Everything local in Balanced — extractor,
-  picker, consolidator — is background work that nobody waits on, so CPU
-  prefill latency does not matter there. The two agents where latency is
-  felt, Intent and Reflection, are already remote in Balanced. A person
-  with no capable GPU therefore has a real middle tier, not just Pro.
+- **Only Local needs fast hardware**, and "has a GPU" is the wrong test in
+  both directions. An old laptop's integrated graphics share system memory
+  and are often no faster than its own CPU; an old discrete card with 2–4GB
+  cannot hold a 4B at Q4 plus its KV cache at all. A modern thin laptop
+  with no discrete GPU and fast unified memory can be fine. The gate is
+  memory bandwidth and room for the model, which correlates with neither
+  machine age nor the presence of a GPU — which is what the probe is for.
+- **Everything local in Balanced is background work** — extractor, picker,
+  consolidator — so prefill latency does not matter there, and the two
+  agents where latency is felt are already remote. An old laptop is a
+  Balanced machine, and that is a real middle tier rather than a
+  consolation.
+- **Defer background extraction to AC power and idle.** It is the most
+  deferrable work in the system, and on an old or fanless laptop the cost
+  is heat and battery rather than time.
 - Base R still has to leave an empty Pro user slowed rather than stranded,
   but it is no longer the only thing standing between them and a wall.
 
@@ -665,9 +675,8 @@ build, so community toolkits are a desktop feature and stay one.
 - **1.7B is the only model on the phone**, serving extractor, picker and
   consolidator. Short bursty jobs nobody waits on, ~1.1GB rather than
   ~2.5GB to download.
-- **Defer that work to charging and idle.** Background fact extraction is
-  the most deferrable thing in the system; it can wait for a charging
-  window without anyone noticing.
+- Deferring that work to charging and idle is the common rule, not an
+  Android one — see the tiers section.
 - **On-device decode speed is still unmeasured**, and it now gates only the
   1.7B. Cheaper question than it was.
 - **No Workshop.** Community toolkits stay a desktop feature.
