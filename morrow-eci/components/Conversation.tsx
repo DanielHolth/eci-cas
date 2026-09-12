@@ -14,6 +14,8 @@ import { useSpeech } from "@/lib/useSpeech";
 import { greeting } from "@/lib/greeting";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
+import { useVitals } from "@/lib/useVitals";
+import { EnergyMeter, TIRED_LINE } from "@/components/EnergyMeter";
 import { fetchKnobs, latestKnobs, sendNudge, sendPerceive, subscribeKnobs } from "@/lib/api";
 import type { Account } from "@/lib/account";
 import type { Expression } from "@/types/events";
@@ -42,6 +44,9 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
   // which leaves the field unbounded for that instant rather than guessing a
   // number and contradicting the host.
   const limit = usePerceptionLimit(log.length);
+  // Same revision as the persona card: energy is spent and XP earned by a
+  // turn, so a settled turn is the only moment either can have moved.
+  const { vitals, levelledUp } = useVitals(log.length);
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -256,7 +261,20 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
             expression={face || (turn?.impulse?.expression ?? "neutral")}
             speaking={speaking}
             identity={account.avatar}
+            level={vitals.level.level}
+            /* 150 % on a full meter, 50 % on an empty one: energy is
+               literally how fast Morrow is moving. */
+            vigor={0.5 + vitals.energy.fraction}
+            levelledUp={levelledUp}
           />
+
+          <EnergyMeter vitals={vitals} />
+
+          {vitals.energy.isEmpty && (
+            <p className="max-w-prose px-4 text-center text-xs italic text-neutral-400 dark:text-neutral-500">
+              {TIRED_LINE}
+            </p>
+          )}
 
           {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
             <SecurityIcon outcomes={turn.security} />

@@ -191,3 +191,27 @@ h3 {
     animation: none !important;
   }
 }
+
+/* The level-up flourish: a +1 that leaves the face and takes itself away.
+   Keyed on the level number in Avatar, so each one plays from the start. */
+.eci-levelup {
+  animation: eci-levelup 2.2s cubic-bezier(0.16, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes eci-levelup {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.85); }
+  12%  { opacity: 1; transform: translateY(0) scale(1.1); }
+  30%  { opacity: 1; transform: translateY(-8px) scale(1); }
+  100% { opacity: 0; transform: translateY(-58px) scale(0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eci-levelup {
+    animation: eci-levelup-still 2.2s linear forwards;
+  }
+
+  @keyframes eci-levelup-still {
+    0%, 80% { opacity: 1; }
+    100%    { opacity: 0; }
+  }
+}

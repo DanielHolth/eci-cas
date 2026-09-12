@@ -132,12 +132,13 @@ vec3 scene(vec2 fc, vec4 R, vec4 A, vec4 B, vec4 M, vec4 E) {
   col += A.rgb * band * tick * (0.10 + 0.70 * lit);
 
   float ap = mix(0.075, 0.225, aperK) * (1.0 + 0.025 * breath);
-  float blades = ngon(p, ap, 9.0, t * 0.09);
+  float teeth = max(3.0, E.w);
+  float blades = ngon(p, ap, teeth, t * 0.09);
   float irisMask = smoothstep(px, -px, r - 0.335) * smoothstep(-px, px, blades);
   vec3 iris = mix(B.rgb * 0.30, A.rgb * (0.55 + 0.45 * warm), smoothstep(0.34, 0.05, r));
   col = mix(col, iris, irisMask);
 
-  float sa = fract((atan(p.y, p.x) + t * 0.09) / (6.28318530718 / 9.0));
+  float sa = fract((atan(p.y, p.x) + t * 0.09) / (6.28318530718 / teeth));
   col += A.rgb * 0.30 * smoothstep(0.46, 0.5, abs(sa - 0.5)) * irisMask;
   col += A.rgb * smoothstep(0.005, 0.0, abs(blades)) * 1.15 * smoothstep(px, -px, r - 0.345);
 
@@ -291,12 +292,13 @@ fn waves(r: f32, t: f32) -> f32 {
   col = col + A.rgb * band * tick * (0.10 + 0.70 * lit);
 
   let ap = mix(0.075, 0.225, aperK) * (1.0 + 0.025 * breath);
-  let blades = ngon(p, ap, 9.0, t * 0.09);
+  let teeth = max(3.0, E.w);
+  let blades = ngon(p, ap, teeth, t * 0.09);
   let irisMask = smoothstep(-px, px, 0.335 - r) * smoothstep(-px, px, blades);
   let iris = mix(B.rgb * 0.30, A.rgb * (0.55 + 0.45 * warm), 1.0 - smoothstep(0.05, 0.34, r));
   col = mix(col, iris, irisMask);
 
-  let sa = fract((atan2(p.y, p.x) + t * 0.09) / (6.28318530718 / 9.0));
+  let sa = fract((atan2(p.y, p.x) + t * 0.09) / (6.28318530718 / teeth));
   col = col + A.rgb * 0.30 * smoothstep(0.46, 0.5, abs(sa - 0.5)) * irisMask;
   col = col + A.rgb * (1.0 - smoothstep(0.0, 0.005, abs(blades))) * 1.15 * smoothstep(-px, px, 0.345 - r);
 
@@ -350,6 +352,10 @@ export type Backend = "webgpu" | "webgl2" | "none";
 export interface FaceHandle {
   setMood(expression: Expression): void;
   setSpeaking(speaking: boolean): void;
+  /** One tooth per level. Eased in, so a level-up grows a blade. */
+  setTeeth(teeth: number): void;
+  /** Animation rate: 1.5 on a full energy meter, 0.5 on an empty one. */
+  setVigor(vigor: number): void;
   /** Which path actually started, once one has. Null until then. */
   backend(): Backend | null;
   destroy(): void;
@@ -385,6 +391,8 @@ export function mountApertureFace(
     warm: start.warm,
     speak: initial.speaking ? 1 : 0,
     gaze: [0, 0],
+    teeth: 9,
+    vigor: 1,
   };
   const T = {
     a: [...start.a] as number[],
@@ -395,6 +403,8 @@ export function mountApertureFace(
     warm: start.warm,
     speak: initial.speaking ? 1 : 0,
     gaze: [0, 0],
+    teeth: 9,
+    vigor: 1,
   };
 
   let disposed = false;
@@ -414,6 +424,11 @@ export function mountApertureFace(
     S.alert = lerp(S.alert, T.alert, k);
     S.warm = lerp(S.warm, T.warm, k);
     S.speak = lerp(S.speak, T.speak, Math.min(1, dt * 8));
+    // Slower than the mood easing: a tooth arriving and the whole face
+    // changing tempo are both structural, and snapping either reads as a
+    // glitch rather than as growth.
+    S.teeth = lerp(S.teeth, T.teeth, Math.min(1, dt * 1.2));
+    S.vigor = lerp(S.vigor, T.vigor, Math.min(1, dt * 0.9));
     S.gaze[0] = lerp(S.gaze[0], T.gaze[0], Math.min(1, dt * 5));
     S.gaze[1] = lerp(S.gaze[1], T.gaze[1], Math.min(1, dt * 5));
   }
@@ -486,14 +501,14 @@ export function mountApertureFace(
 
   const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-  function pack(w: number, h: number, t: number) {
+  function pack(w: number, h: number, t: number, wall: number) {
     const d = push(t);
     U[0] = w; U[1] = h; U[2] = reduced ? 0 : t; U[3] = S.speak;
     U[4] = clamp01(S.a[0] * (1 + d.lift)); U[5] = clamp01(S.a[1] * (1 + d.lift)); U[6] = clamp01(S.a[2] * (1 + d.lift)); U[7] = S.brow;
     U[8] = S.b[0] * (1 - d.lift * 0.5); U[9] = S.b[1] * (1 - d.lift * 0.5); U[10] = S.b[2] * (1 - d.lift * 0.5); U[11] = clamp01(S.aper + d.aper);
     U[12] = S.alert; U[13] = clamp01(S.warm + d.warm); U[14] = S.gaze[0]; U[15] = S.gaze[1];
-    const e = idleShake(t * 1000);
-    U[16] = e[0]; U[17] = e[1]; U[18] = e[2]; U[19] = 0;
+    const e = idleShake(wall);
+    U[16] = e[0]; U[17] = e[1]; U[18] = e[2]; U[19] = S.teeth;
   }
 
   const dpr = Math.min(typeof devicePixelRatio === "number" ? devicePixelRatio : 1, 2);
@@ -532,13 +547,21 @@ export function mountApertureFace(
 
   function loop(render: (t: number) => void) {
     let last = performance.now();
+    // The shader's own clock, advanced by wall time *scaled by vigor* rather
+    // than read from it. Every animation in the fragment shader is a
+    // function of t, so one multiplier makes the whole face run at 150 %
+    // when the meter is full and 50 % when it is empty — and because the
+    // clock accumulates instead of being recomputed, changing the rate
+    // never jumps the phase.
+    let clock = 0;
     const frame = (now: number) => {
       if (disposed) return;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+      clock += dt * S.vigor;
       sizeTo();
       step(dt);
-      pack(canvas.width, canvas.height, now / 1000);
+      pack(canvas.width, canvas.height, clock, now);
       render(now);
       raf = requestAnimationFrame(frame);
     };
@@ -622,7 +645,7 @@ export function mountApertureFace(
       gl.uniform4f(uA, U[4], U[5], U[6], U[7]);
       gl.uniform4f(uB, U[8], U[9], U[10], U[11]);
       gl.uniform4f(uM, U[12], U[13], U[14], U[15]);
-      gl.uniform4f(uE, U[16], U[17], U[18], 0);
+      gl.uniform4f(uE, U[16], U[17], U[18], U[19]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     });
     return true;
@@ -659,6 +682,13 @@ export function mountApertureFace(
     setSpeaking(speaking: boolean) {
       T.speak = speaking ? 1 : 0;
       poke();
+    },
+    setTeeth(teeth: number) {
+      T.teeth = Math.max(3, Math.round(teeth));
+      poke();
+    },
+    setVigor(vigor: number) {
+      T.vigor = Math.max(0.1, vigor);
     },
     backend: () => backend,
     destroy() {

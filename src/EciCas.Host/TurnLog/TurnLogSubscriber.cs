@@ -31,6 +31,8 @@ public sealed class TurnLogSubscriber : AgentBase
     private readonly IReadOnlyList<ITurnLogSink> _sinks;
     private readonly CostLedger _ledger;
     private readonly EnergyMeter _energy;
+    private readonly LevelMeter? _levels;
+    private readonly EnergyFallback? _fallback;
     private readonly ILogger _logger;
 
     private readonly Dictionary<Guid, Entry> _entries = [];
@@ -48,13 +50,15 @@ public sealed class TurnLogSubscriber : AgentBase
 
     public TurnLogSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<TurnLogSubscriber> logger,
         IOptions<TurnLogOptions> options, IEnumerable<ITurnLogSink> sinks, CostLedger ledger,
-        EnergyMeter energy)
+        EnergyMeter energy, LevelMeter? levels = null, EnergyFallback? fallback = null)
         : base(bus, activity, logger)
     {
         _options = options.Value;
         _sinks = [.. sinks];
         _ledger = ledger;
         _energy = energy;
+        _levels = levels;
+        _fallback = fallback;
         _logger = logger;
     }
 
@@ -74,7 +78,7 @@ public sealed class TurnLogSubscriber : AgentBase
         {
             var cost = envelope.Meta.Get<decimal>(SubstrateTrace.CostKey);
             _ledger.Add(cost);
-            _energy.Spend(cost);
+            _fallback?.Apply(_energy.Spend(cost));
         }
 
         TurnRecord record;
@@ -193,6 +197,15 @@ public sealed class TurnLogSubscriber : AgentBase
         // thing.
         await _ledger.PersistAsync(cancellationToken).ConfigureAwait(false);
         await _energy.PersistAsync(cancellationToken).ConfigureAwait(false);
+
+        // XP is settled-turn arithmetic, not per-envelope: Writes is rebuilt
+        // on every envelope, so crediting as they land would count the same
+        // fact several times. One award per event, capped inside the meter.
+        if (_levels is not null && record.Writes.Count > 0)
+        {
+            _levels.Award(record.Writes.Count);
+            await _levels.PersistAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private void Evict()

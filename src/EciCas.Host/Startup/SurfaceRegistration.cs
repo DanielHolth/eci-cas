@@ -76,6 +76,20 @@ internal static class SurfaceRegistration
             energy,
             string.IsNullOrWhiteSpace(energy.Path) ? null : Path.Combine(AppContext.BaseDirectory, energy.Path)));
 
+        // Beside it, for the same reason: a level that reset on restart would
+        // make the cog a decoration.
+        var levelPath = configuration["Energy:LevelPath"] ?? "level.json";
+        services.AddSingleton(new LevelMeter(
+            string.IsNullOrWhiteSpace(levelPath) ? null : Path.Combine(AppContext.BaseDirectory, levelPath)));
+
+        // The consequence of an empty meter. Configurable because which tier
+        // is "all local" is a tier-file fact, not a code one.
+        var localTier = configuration["Energy:LocalTier"] ?? "Free";
+        services.AddSingleton(sp => new EnergyFallback(
+            sp.GetRequiredService<TierCatalog>(),
+            sp.GetRequiredService<ILogger<EnergyFallback>>(),
+            localTier));
+
         return new HostSurface(
             CorsPolicyName,
             int.TryParse(configuration["Substrates:WarmupMs"], out var warmup) ? warmup : 60_000,

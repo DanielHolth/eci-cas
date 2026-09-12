@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ding } from "@/lib/ding";
 import { mountApertureFace, type Backend } from "@/lib/apertureFace";
 import type { Expression } from "@/types/events";
 
@@ -135,6 +136,9 @@ export function Avatar({
   expression,
   speaking = false,
   identity,
+  level = 1,
+  vigor = 1,
+  levelledUp = 0,
 }: {
   expression: Expression;
   /** Drives the standing ripples across the iris while a reply is voiced. */
@@ -143,6 +147,12 @@ export function Avatar({
    * whose conversation this is, kept strictly separate from the colour,
    * which is Impulse's alone. */
   identity?: string;
+  /** One blade per level: the cog visibly grows teeth as the bond does. */
+  level?: number;
+  /** Animation rate — 1.5 on a full energy meter, 0.5 on an empty one. */
+  vigor?: number;
+  /** The level just reached, or 0. A change here rings the ding once. */
+  levelledUp?: number;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const handle = useRef<ReturnType<typeof mountApertureFace>>(null);
@@ -164,6 +174,20 @@ export function Avatar({
 
   useEffect(() => { handle.current?.setMood(expression); }, [expression]);
   useEffect(() => { handle.current?.setSpeaking(speaking); }, [speaking]);
+  useEffect(() => { handle.current?.setTeeth(level); }, [level]);
+  useEffect(() => { handle.current?.setVigor(vigor); }, [vigor]);
+
+  // The flourish: a ding and a +1 that rises off the face and fades. Keyed
+  // on the level number so React remounts the span and replays the
+  // animation, which a class toggle on a surviving element would not.
+  const [flash, setFlash] = useState(0);
+  useEffect(() => {
+    if (!levelledUp) return;
+    setFlash(levelledUp);
+    ding();
+    const timer = setTimeout(() => setFlash(0), 2200);
+    return () => clearTimeout(timer);
+  }, [levelledUp]);
 
   const drawn = backend === "none";
 
@@ -180,6 +204,16 @@ export function Avatar({
         className="h-56 w-56 rounded-full bg-[#060810] shadow-inner"
       />
       {drawn && <DrawnFace expression={expression} speaking={speaking} />}
+
+      {flash > 0 && (
+        <span
+          key={flash}
+          aria-live="polite"
+          className="eci-levelup pointer-events-none absolute inset-x-0 top-1/3 text-center text-lg font-semibold text-amber-400 drop-shadow"
+        >
+          +1 level
+        </span>
+      )}
 
       {identity && (
         <span

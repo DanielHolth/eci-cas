@@ -35,7 +35,13 @@ item below is an event the system already detects and then discards.
 - **Use `EchoDepth`.** Reflection reads it, but no reply is shaped by it
   yet. Log what a damper would suppress before letting it act.
 
-## Level-ups (not started)
+## Level-ups (XP, cog teeth and the flourish are in; unlocks are not)
+
+Built: `LevelMeter` (XP, levels, persisted to `level.json`), `/api/vitals`
+alongside the energy meter, one cog tooth per level on the avatar, and the
+ding plus floating "+1 level" on a level-up. The per-level *feature*
+unlocks below are deliberately still on paper — energy has taken over most
+of what they were for, and the table will be rewritten around it.
 
 **XP.** One XP per extracted fact, capped at 3 per turn. Leaving level L
 costs `2·L` XP, so reaching level n takes `n(n-1)` facts in total (90 for
