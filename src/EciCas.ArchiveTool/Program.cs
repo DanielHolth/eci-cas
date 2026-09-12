@@ -34,7 +34,7 @@ const string Usage = """
     said [count] | replies [count]
     passages [count] | passage <id> | passage del <id>
     internal | internal del <category> <topic> <index[,index...]>
-    embed <model.onnx> <sentencepiece.bpe.model> | erase | help | exit
+    files | embed <model.onnx> <sentencepiece.bpe.model> | erase | help | exit
     """;
 
 Console.WriteLine($"EciCas Archive Tool — {Path.GetFullPath(directory)}");
@@ -126,6 +126,10 @@ while (true)
 
             case "internal":
                 await ShowInternalAsync(directory);
+                break;
+
+            case "files":
+                ShowFiles(directory);
                 break;
 
             case "embed" when parts.Length >= 3:
@@ -639,6 +643,121 @@ static bool IsIndexList(string token) =>
     token.Split(',', StringSplitOptions.RemoveEmptyEntries).All(t => int.TryParse(t, out _));
 
 // --------------------------------------------------------------- upkeep ----
+
+/// <summary>
+/// Every file in the directory, with the store that owns it.
+///
+/// This is what the old `list` was reached for and never was: it listed pair
+/// names only, so after the inversion it showed two stale files and nothing
+/// of the live corpus, which reads as an archive that lost everything.
+///
+/// The owner column is the point. A file no store claims is the interesting
+/// row — a pair file left over from before the inversion, a passages.parquet
+/// in an archive whose passages never ran — and that is invisible in a plain
+/// directory listing, where every parquet looks equally alive.
+/// </summary>
+static void ShowFiles(string directory)
+{
+    var files = Directory.GetFiles(directory, "*", SearchOption.AllDirectories)
+        .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (files.Count == 0)
+    {
+        Console.WriteLine("Empty directory. A booted host seeds it.");
+        return;
+    }
+
+    long total = 0;
+
+    // Grouped by directory, because the logs are sharded by month: a year in
+    // and a flat listing is mostly 2026-04.parquet twelve times over, which
+    // buries the two or three files at the root that are the ones worth
+    // looking at. The root itself groups under "" and prints first.
+    foreach (var group in files.GroupBy(f => Path.GetDirectoryName(Path.GetRelativePath(directory, f))?.Replace('\\', '/') ?? "")
+        .OrderBy(g => g.Key.Length == 0 ? "" : "z" + g.Key, StringComparer.OrdinalIgnoreCase))
+    {
+        var rows = group.Select(f => new FileInfo(f)).OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        total += rows.Sum(r => r.Length);
+
+        if (group.Key.Length > 0)
+        {
+            var owner = OwnerOf(group.Key + "/" + rows[0].Name);
+            Console.WriteLine($"{group.Key}/ — {rows.Count} file(s), {rows.Sum(r => r.Length):n0} bytes — {owner}");
+        }
+
+        // Shards are listed by name and nothing else once there are enough of
+        // them to scroll: the month is in the filename, so a size and a date
+        // per row says nothing a person reading a year of them can use.
+        if (group.Key.Length > 0 && rows.Count > 6)
+        {
+            Console.WriteLine($"  {string.Join(", ", rows.Select(r => Path.GetFileNameWithoutExtension(r.Name)))}");
+            continue;
+        }
+
+        foreach (var info in rows)
+        {
+            Console.Write($"  {info.Name,-30} {info.Length,9:n0}  {info.LastWriteTime:yyyy-MM-dd HH:mm}");
+            Console.WriteLine(group.Key.Length == 0 ? $"  {OwnerOf(info.Name)}" : "");
+        }
+    }
+
+    Console.WriteLine($"{files.Count} file(s), {total:n0} bytes in {Path.GetFullPath(directory)}.");
+}
+
+/// <summary>
+/// Which store reads a file, by the only thing available without opening it:
+/// where it sits and what it is called. Each name is the store's own constant
+/// rather than a copy of it, so a rename over there turns into a file nobody
+/// claims here rather than a label that quietly lies.
+/// </summary>
+static string OwnerOf(string relative)
+{
+    var directoryPart = Path.GetDirectoryName(relative)?.Replace('\\', '/');
+    var name = Path.GetFileName(relative);
+
+    if (directoryPart == ParquetUtteranceLog.DirectoryName)
+    {
+        return name == ParquetUtteranceLog.TurnCountFileName
+            ? "utterances — the turn counter"
+            : "utterances — ground truth, append-only";
+    }
+
+    if (directoryPart == ParquetUtteranceLog.RepliesDirectoryName)
+    {
+        return "replies — what the persona said back";
+    }
+
+    if (directoryPart == ParquetFactLog.DirectoryName)
+    {
+        return "facts — derived index, rebuildable";
+    }
+
+    if (directoryPart is { Length: > 0 })
+    {
+        return "unread — no store looks in this directory";
+    }
+
+    if (name == ParquetPassageStore.FileName)
+    {
+        return "passages — Reflection and Hindsight";
+    }
+
+    if (name == ParquetArchiveStore.RecentFileName)
+    {
+        return "recent — derived lane, retrimmed at boot";
+    }
+
+    // A pair file is named category~topic.parquet, and after the inversion
+    // only three of those are still written to. One holding anything else is
+    // a pre-inversion leftover that nothing reads and `erase` would clear.
+    if (name.Contains('~') && name.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
+    {
+        return $"internal — pair {name[..name.IndexOf('~')]}/{name[(name.IndexOf('~') + 1)..^".parquet".Length]}";
+    }
+
+    return "unread — no store claims this name";
+}
 
 // Backfill, for an archive no host is booting: the same job runs at startup
 // against the embedder the host resolved, so a running deployment never needs
