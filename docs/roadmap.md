@@ -390,19 +390,24 @@ bucket, which is both the correct rate limiter and the better fiction.
 
 ### The yearly pass
 
-**Triple everything about energy: 3×R and 3×M, for a year.** One
-multiplier over the two dials that already exist, which makes it a single
-store bullet and a single number in the relay.
+**Triple the energy cap, and energy refills faster.** That is the wording,
+and the imprecision is deliberate: the cap is a promise, the regen rate
+stays a tunable.
 
+- **Multiply the two dials separately.** The cap is what a person feels —
+  a big session works. The regen is what we pay. 3×M and roughly 1.5×R
+  gives triple the felt benefit at half the cost of tripling both, and the
+  store line is true either way.
 - **The pass sets R, not the base price.** It self-selects heavy users, so
   the blended average that makes the base tier safe does not rescue this
-  one. Choose R so that 3R at ~70% utilisation still clears the pass's net
-  revenue with room; the base tier at R is then safe by a wide margin.
-  Worked once: a $20 pass nets ~$14, leave ~60% for inference, and R lands
-  near $0.075/week — about half the first guess, which was set from the
-  base product and the wrong constraint.
-- Tripling M is what a person feels; tripling R is what they cost. Both
-  ship, but only one is the bill.
+  one. Choose R so that the pass's regen at ~70% utilisation still clears
+  its net revenue with room; the base tier at R is then safe by a wide
+  margin. Worked once: a $20 pass nets ~$14, leave ~60% for inference, and
+  at 1.5×R that puts R near $0.15/week. At 3×R it would be half that —
+  which is what separating the dials buys.
+- **Never state the regen multiplier in store copy, and never hide it
+  in-app.** Vague on the page, exact numbers in settings. The first keeps
+  R tunable; the second keeps it honest.
 - **Buying again extends the duration; the multiplier never compounds.**
 - **Lapsing drains, it does not confiscate.** R and M return to base and
   banked energy above the new M is spent down, not deleted. The opposite
@@ -413,11 +418,38 @@ store bullet and a single number in the relay.
   Steam needs a consumable microtransaction item, because a DLC is owned
   permanently and cannot expire; Play has real subscriptions natively.
 
-### Tier rule
+### Tiers
 
-The Qwen is a Free/Budget engine only. Pro and Premium go to the API for
-every agent, including the extractor — a paid tier that quietly downgrades
-a stage to a 4B is the one thing a paid tier must not do.
+Three, not five. `Premium` is dropped and `Mock` stays a dev tier nobody
+sees. Config keys keep their names — they are spread across every tier
+file — and only the display names change.
+
+| Key | Shown as | Engines | Energy |
+|---|---|---|---|
+| `Free` | Local | all five agents on the Qwen | none |
+| `Budget` | Balanced | Intent and Reflection remote, the rest local | some |
+| `Pro` | Pro | all five remote | full |
+
+- **Only five agents ever call a model:** `Intent` (the reply),
+  `Reflection`, `extractor`, `picker`, `consolidator`. Everything else —
+  Action, Governance, Identity, Perception, Security, TurnWindow, Recall,
+  Scribe, Hindsight — is deterministic or embeddings-only, and embeddings
+  are local ONNX already. So the tier ladder is those five entries and
+  nothing more.
+- **Which agents go remote is config, not code.** `CognitiveAgent`
+  resolves per-agent from `Substrates:Agents`, so the balance point moves
+  without a build. Budget already ships this shape.
+- **Balanced is the interesting one:** the reply and reflection are where a
+  remote model is felt, and the three fact-pipeline agents are where the
+  volume is. Spend the energy where it shows.
+- **The Qwen never serves Pro.** A paid tier that quietly downgrades a
+  stage to a 4B is the one thing a paid tier must not do.
+- **Local and Balanced need the offline pack**, so they are unavailable
+  until it is installed and the machine can run it.
+- **Constraint that follows from that:** a person with no capable GPU has
+  only Pro, and "install the offline pack" is not an answer for them. Base
+  R must leave them slowed when empty, never stranded. Easy to lose while
+  tuning R downward, so it is written here.
 
 ### The offline pack
 
@@ -546,8 +578,8 @@ build, so community toolkits are a desktop feature and stay one.
   host replaces `EciCas.Host`.
 - **Play Billing replaces Steam's**, against the same relay and the same
   energy bucket.
-- **Tiers become plans:** Free / Budget / Pro / Premium, verified on the
-  server. Level-ups gate how a new user meets them.
+- **Tiers become plans**, verified on the server. Level-ups gate how a new
+  user meets them.
 - **Reflection as the paid hook.** Give free users a small permanent taste,
   not a trial.
 - **Background thought is dropped.** Android kills background work, so
