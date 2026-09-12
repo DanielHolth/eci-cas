@@ -546,6 +546,27 @@ install and time prefill and generation separately.
 - It also makes an honest sentence possible — "your machine runs Local at
   about X" — instead of selling someone a disappointment.
 
+**Say "slower", not "worse".** Weak hardware does not degrade quality: the
+same weights and sampling produce the same reply, just later. The only real
+quality variable is quantization, if the probe drops a constrained machine
+to a smaller file to make it fit.
+
+- A warning about quality misdirects. The person enables Local anyway and
+  is surprised by the wait, which is the refund.
+- **Prefer the measurement over the disclaimer.** Clear the bar: offer
+  Local with no warning. Marginal: offer it with the number — "about 6
+  seconds per reply on this machine" — which is a fact they can act on.
+  Below the floor: do not offer it, recommend Balanced.
+- Keep a disclaimer only as the net for machines that change under us — an
+  external GPU unplugged, thermal throttling, a driver update.
+
+**Local is never a trap.** The person can switch back to Balanced or Pro at
+any moment; it simply costs energy again. That is what makes the honest
+version safe to say — a slow machine is a room they chose to walk into and
+can walk out of, not a downgrade they are stuck with until the week turns
+over. `TierCatalog.Switch` already does this live, so the setting is the
+whole mechanism.
+
 ### Gaming contention
 
 A loaded 4B holds ~3GB of VRAM resident and idle, which hurts a game
