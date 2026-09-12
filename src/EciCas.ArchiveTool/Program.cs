@@ -201,7 +201,7 @@ static async Task ShowFactsAsync(string directory, string? count)
             r.Embedding is { Length: > 0 } ? "v" : "-",
             r.ThreadId is null ? "-" : "t",
             r.SupersededBy is null ? "-" : "x");
-        Console.WriteLine($"  {r.Id[..8]}  {r.Timestamp:yyyy-MM-dd HH:mm} [{marks}] {r.HitCount,3} hits  {Oneline(r.Text, 68)}");
+        Console.WriteLine($"  {r.Id[..8]}  {r.Timestamp:yyyy-MM-dd HH:mm} [{marks}] {r.HitCount,3} hits  {Oneline(r.Text)}");
     }
 
     Console.WriteLine("  flags: v=vector t=threaded x=superseded; the first column is the id every `fact` command takes.");
@@ -235,7 +235,7 @@ static async Task ShowFactAsync(string directory, string prefix)
     Console.WriteLine();
     Console.WriteLine(source is null
         ? $"out of utterance {row.SourceId}, which is not in the log — so this row cannot be rebuilt."
-        : $"out of: {Oneline(source.Text, 200)}");
+        : $"out of: {Oneline(source.Text)}");
 }
 
 /// <summary>
@@ -267,7 +267,7 @@ static async Task DeleteFactsAsync(string directory, string[] prefixes)
     var gone = await log.RemoveAsync([.. wanted.Select(r => r.Id)], CancellationToken.None);
     foreach (var row in wanted)
     {
-        Console.WriteLine($"  removed {Oneline(row.Text, 70)}");
+        Console.WriteLine($"  removed {Oneline(row.Text)}");
     }
 
     Console.WriteLine($"Deleted {gone} row(s). The utterances they came from are untouched.");
@@ -287,9 +287,9 @@ static async Task EditFactAsync(string directory, string prefix, string text)
         return;
     }
 
-    Console.WriteLine($"  was  {Oneline(row.Text, 70)}");
+    Console.WriteLine($"  was  {Oneline(row.Text)}");
     await log.ReviseAsync(row.Id, text, CancellationToken.None);
-    Console.WriteLine($"  now  {Oneline(text, 70)}");
+    Console.WriteLine($"  now  {Oneline(text)}");
     Console.WriteLine("Re-embed to give it a vector again: `embed <model.onnx> <sentencepiece.bpe.model>`, or just boot the host.");
 }
 
@@ -359,7 +359,7 @@ static async Task ShowThreadsAsync(string directory, string? count)
     foreach (var thread in threads.Take(take))
     {
         var newest = thread.OrderByDescending(r => r.Timestamp).First();
-        Console.WriteLine($"  {thread.Key[..8]}  {thread.Count(),3} row(s)  {Oneline(newest.Text, 72)}");
+        Console.WriteLine($"  {thread.Key[..8]}  {thread.Count(),3} row(s)  {Oneline(newest.Text)}");
     }
 }
 
@@ -406,7 +406,7 @@ static async Task SplitThreadAsync(string directory, string prefix)
     // the thread this row just left, so the link would leave a fact true and
     // unreadable. The empty string is how a supersession is unset.
     await log.UpdateDerivedAsync([new FactDerived(row.Id, ThreadId: row.Id, SupersededBy: "")], CancellationToken.None);
-    Console.WriteLine($"{Oneline(row.Text, 60)} is now its own thread.");
+    Console.WriteLine($"{Oneline(row.Text)} is now its own thread.");
 }
 
 /// <summary>A thread id by prefix, or null when the prefix names none or many.</summary>
@@ -447,7 +447,7 @@ static async Task ShowSaidAsync(string directory, string? count, bool replies)
 
     foreach (var u in rows.OrderByDescending(u => u.Timestamp).Take(take))
     {
-        Console.WriteLine($"  {u.Id[..8]}  {u.Timestamp:yyyy-MM-dd HH:mm} turn {u.Turn,-5} {u.Speaker,-9} {Oneline(u.Text, 58)}");
+        Console.WriteLine($"  {u.Id[..8]}  {u.Timestamp:yyyy-MM-dd HH:mm} turn {u.Turn,-5} {u.Speaker,-9} {Oneline(u.Text)}");
     }
 }
 
@@ -478,7 +478,7 @@ static async Task ShowPassagesAsync(string directory, string? countArg)
     {
         var pairs = p.Pairs.Count == 0 ? "-" : string.Join(" ", p.Pairs.Select(x => $"{x.Category}/{x.Topic}"));
         Console.WriteLine($"{p.Id}  {p.Timestamp:yyyy-MM-dd HH:mm}  gen={p.Generation} echo={p.EchoDepth}  {pairs}");
-        Console.WriteLine($"  {Oneline(p.Text, 160)}");
+        Console.WriteLine($"  {Oneline(p.Text)}");
     }
 
     Console.WriteLine($"{all.Count} passage(s); showing up to {count}. `passage <id>` for one in full.");
@@ -519,7 +519,7 @@ static async Task DeletePassageAsync(string directory, string id)
     // The store's own replace path: one write, one temp file, one move. A
     // delete here is a revisit that adds nothing.
     await Passages(directory).WriteAsync([], passage.Id, CancellationToken.None);
-    Console.WriteLine($"Deleted passage {passage.Id}: {Oneline(passage.Text, 70)}");
+    Console.WriteLine($"Deleted passage {passage.Id}: {Oneline(passage.Text)}");
 }
 
 static async Task<Passage?> FindPassageAsync(string directory, string id)
@@ -592,7 +592,7 @@ static async Task ShowInternalAsync(string directory)
         Console.WriteLine($"{group.Key.Category}/{group.Key.Topic} — {group.Count()} row(s)");
         foreach (var (_, index, row) in group)
         {
-            Console.WriteLine($"  [{index}] {row.Timestamp:yyyy-MM-dd} {row.Subtopic}/{row.Subject}/{row.Key} = {Oneline(row.Value, 60)}");
+            Console.WriteLine($"  [{index}] {row.Timestamp:yyyy-MM-dd} {row.Subtopic}/{row.Subject}/{row.Key} = {Oneline(row.Value)}");
         }
     }
 
@@ -620,7 +620,7 @@ static async Task DeleteInternalAsync(string directory, string category, string 
             continue;
         }
 
-        Console.WriteLine($"  removed {records[i].Subtopic}/{records[i].Subject}/{records[i].Key} = {Oneline(records[i].Value, 60)}");
+        Console.WriteLine($"  removed {records[i].Subtopic}/{records[i].Subject}/{records[i].Key} = {Oneline(records[i].Value)}");
         records.RemoveAt(i);
     }
 
@@ -686,15 +686,10 @@ static void ShowFiles(string directory)
             Console.WriteLine($"{group.Key}/ — {rows.Count} file(s), {rows.Sum(r => r.Length):n0} bytes — {owner}");
         }
 
-        // Shards are listed by name and nothing else once there are enough of
-        // them to scroll: the month is in the filename, so a size and a date
-        // per row says nothing a person reading a year of them can use.
-        if (group.Key.Length > 0 && rows.Count > 6)
-        {
-            Console.WriteLine($"  {string.Join(", ", rows.Select(r => Path.GetFileNameWithoutExtension(r.Name)))}");
-            continue;
-        }
-
+        // Every shard, however many there are. A year of months is a page of
+        // output and a page of output is fine; a listing that summarises the
+        // shards is one that cannot show you the empty month or the one that
+        // stopped growing, which is the thing a per-file size is for.
         foreach (var info in rows)
         {
             Console.Write($"  {info.Name,-30} {info.Length,9:n0}  {info.LastWriteTime:yyyy-MM-dd HH:mm}");
@@ -846,8 +841,18 @@ static async Task EraseAsync(string directory)
     Console.WriteLine("Erased.");
 }
 
-static string Oneline(string text, int width)
-{
-    var flat = string.Join(" ", text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()));
-    return flat.Length <= width ? flat : flat[..width] + "...";
-}
+/// <summary>
+/// Paragraphs onto one line, and nothing else — this used to cut at a width
+/// and no longer does anywhere in the tool.
+///
+/// A truncated row is worse than a long one here: the whole reason to open
+/// an archive by hand is a sentence that looks wrong, and the wrong part is
+/// as likely to be past the cut as before it. The terminal wraps. That is a
+/// better answer than an ellipsis that hides the evidence.
+///
+/// The newlines still go, because one row per record is what makes the
+/// listings scannable at all, and a value that spans lines would otherwise
+/// break the column the id sits in.
+/// </summary>
+static string Oneline(string text) =>
+    string.Join(" ", text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()));
