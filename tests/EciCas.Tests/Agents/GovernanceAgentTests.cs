@@ -143,6 +143,65 @@ public class GovernanceAgentTests
         Assert.True(conclusionReader.TryRead(out _));
     }
 
+    /// <summary>
+    /// A turn speaks once. Retiring the bundle after a verdict did not make
+    /// that true: the GetOrAdd at the top of the verdict path mints a fresh
+    /// empty state for a late second verdict, which then falls straight
+    /// through carrying the same reply text — and the person sees Morrow say
+    /// the same thing twice, with a race behind it, so it never reproduces
+    /// on demand.
+    /// </summary>
+    [Fact]
+    public async Task ASecondVerdictForOneTurn_DoesNotSpeakAgain()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, []);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var verdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "said once"));
+
+        await agent.HandleAsync(verdict, CancellationToken.None);
+        await agent.HandleAsync(verdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var spoken));
+        Assert.Equal("said once", spoken!.Meta.Get<string>(IntentAgent.ReplyKey));
+        Assert.False(actionReader.TryRead(out _));
+    }
+
+    /// <summary>
+    /// The one exception, and it is the design: a reflex speaks ahead of
+    /// Intent and deliberately does not conclude the turn, so Intent's
+    /// considered reply must still get through behind it.
+    /// </summary>
+    [Fact]
+    public async Task AReflex_DoesNotUseUpTheTurnsOneChanceToSpeak()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = CreateAgent(bus, activity, []);
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        await agent.HandleAsync(perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green)
+                .With(ImpulseAgent.ReflexKey, true).With(IntentAgent.ReplyKey, "oh!")), CancellationToken.None);
+
+        await agent.HandleAsync(perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "considered")), CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var reflex));
+        Assert.Equal("oh!", reflex!.Meta.Get<string>(IntentAgent.ReplyKey));
+        Assert.True(actionReader.TryRead(out var considered));
+        Assert.Equal("considered", considered!.Meta.Get<string>(IntentAgent.ReplyKey));
+    }
+
     [Fact]
     public async Task RedVerdict_AttachesExpressionAndNudgesImpulse()
     {

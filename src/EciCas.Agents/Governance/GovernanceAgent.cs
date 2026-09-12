@@ -58,6 +58,50 @@ public sealed class GovernanceAgent : AgentBase
     private readonly IInstructionStore _instructions;
     private readonly ConcurrentDictionary<Guid, BundleState> _bundles = new();
 
+    /// <summary>
+    /// Turns that have already been concluded, so a second verdict for one
+    /// of them cannot speak again.
+    ///
+    /// TryComplete is guarded and publishes its bundle once; OnVerdictAsync
+    /// was not, and every verdict it saw published an Action. Retiring the
+    /// bundle at the end did not close it either -- the GetOrAdd at the top
+    /// mints a fresh empty state for a late verdict, which then falls
+    /// straight through to the speaking path carrying the same reply text
+    /// the first one did. The person sees Morrow say the same thing twice,
+    /// with nothing in the log to say why, and it needs a race to happen at
+    /// all so it does not reproduce on demand.
+    ///
+    /// A bounded queue rather than a set that grows: this only has to
+    /// outlive the window in which a duplicate verdict could still arrive,
+    /// which is seconds, and a companion meant to run for years cannot keep
+    /// a guid per turn forever.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, byte> _concluded = new();
+    private readonly Queue<Guid> _concludedOrder = new();
+    private readonly Lock _concludedGate = new();
+
+    private const int ConcludedMemory = 64;
+
+    /// <summary>True the first time a turn is concluded, false every time after.</summary>
+    private bool ClaimConclusion(Guid correlationId)
+    {
+        lock (_concludedGate)
+        {
+            if (!_concluded.TryAdd(correlationId, 0))
+            {
+                return false;
+            }
+
+            _concludedOrder.Enqueue(correlationId);
+            while (_concludedOrder.Count > ConcludedMemory)
+            {
+                _concluded.TryRemove(_concludedOrder.Dequeue(), out _);
+            }
+
+            return true;
+        }
+    }
+
     public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options, IAgentStateStore store,
         IInstructionStore instructions)
         : base(bus, activity, logger)
@@ -263,6 +307,20 @@ public sealed class GovernanceAgent : AgentBase
                 _bus.Publish(Topics.Bundle, revisionBundle);
                 return;
             }
+        }
+
+        // Past the revision pass, this verdict is going to speak — so claim
+        // the turn first, and say nothing if another verdict already spoke
+        // for it. Before the frustration call below, which is a substrate
+        // call and would otherwise be spent on a reply nobody hears.
+        //
+        // A reflex is exempt: it deliberately speaks ahead of Intent and
+        // deliberately does not conclude, so it is the one case where two
+        // Actions on one turn are the design rather than a race.
+        if (!isReflex && !ClaimConclusion(verdict.CorrelationId))
+        {
+            _logger.LogWarning("Governance saw a second verdict for {CorrelationId} and did not speak twice.", verdict.CorrelationId);
+            return;
         }
 
         // Intent's own failure is read off the verdict — Security merges the
