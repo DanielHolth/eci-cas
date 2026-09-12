@@ -44,7 +44,17 @@ public static class ArchiveBackfill
         // -- utterances/ and facts/ sit under the same root in another schema,
         // and reading them as shelf records keeps only Timestamp, then
         // rewrites them blank.
-        foreach (var file in Directory.GetFiles(directory, "*.parquet"))
+        //
+        // And not everything at the top level either. passages.parquet sits
+        // right beside the pair files in another schema again, so a glob that
+        // trusts the extension read it as a shelf row and threw on the
+        // missing Category -- at boot, before anything else could run. The
+        // name is the schema here, so the name is what selects: a pair file
+        // decodes, the recency lane is named, and a file that is neither
+        // belongs to a store that is not this one.
+        foreach (var file in Directory.GetFiles(directory, "*.parquet")
+            .Where(f => ParquetArchiveStore.TryDecodeName(Path.GetFileNameWithoutExtension(f), out _)
+                || string.Equals(Path.GetFileName(f), ParquetArchiveStore.RecentFileName, StringComparison.OrdinalIgnoreCase)))
         {
             var records = await ParquetArchiveStore.ReadRecordsAsync(file, cancellationToken).ConfigureAwait(false);
             var pending = records
