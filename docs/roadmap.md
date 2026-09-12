@@ -191,12 +191,33 @@ because this is not the person speaking.
 - Shares `ParquetUtteranceLog`'s shelf shape and its month shard, so
   retention, export and delete land on one mechanism.
 
+**One row per sentence, keyed by turn.** A dump is split on sentence
+boundaries at ingest and each sentence stored as its own row, all rows from
+one invocation sharing the same `Turn`. The row shape already has
+`long Turn` — no schema change.
+
+Why sentences: it is what lets screening drop one sentence instead of
+refusing a page, deterministically and without a model.
+
+*Does splitting break fact extraction later?* No, as long as nothing reads
+a single row and calls it the input. Rows are a storage unit; the **turn is
+the unit of meaning**. Any later reader — the fact splitter above included
+— selects by `Turn`, orders by row, and rejoins before it extracts, so a
+fact that spans two sentences ("He left. She followed.") survives. The one
+real loss is a sentence screening removed, which is the point. Splitting is
+only safe under that rule, so the reader must never iterate rows.
+
 ### Reading a toolkit log back
 
 "From the last screen dump, what was the plot that led to X, excluding Y?"
 Morrow answers "let me get back to you" and hands a background job a
 toolkit name plus the question. The job is lazy, and the LLM is the last
-resort, not the default:
+resort, not the default.
+
+**Only on invocation.** The whole pipeline below runs when the parquet
+reader toolkit is called and at no other time: nothing ambient, no
+boot-time backfill over toolkit logs, no sweep on write. A person who never
+asks never pays for an extraction.
 
 1. Read `toolkit_facts.parquet` for that toolkit. A hit answers.
 2. Miss: run the fact splitter over the current month's shard, write the
@@ -225,9 +246,14 @@ secret. Over-blocking is the worse failure, so a story containing the word
   `disclose-credentials` already matches what this needs: `sk-`, `ghp_`,
   `AKIA`, private-key headers, and `password: <6+ chars>`. The bare word
   matches nothing, which is the intended weakness.
-- **Redact the span, don't block the dump.** Speak and store the rest.
-  Blocking a page because one line looked like a key is the failure mode
-  that makes a screen reader useless.
+- **Screen per sentence, not per dump.** Rules run over each sentence row.
+  A Red sentence is dropped; its siblings on the same turn are spoken and
+  stored. Blocking a page because one line looked like a key is the failure
+  mode that makes a screen reader useless.
+- So "this screenshot can't be read because it contains passwords" is never
+  said. Morrow reads the page and says one line was held back — which is
+  what resolves the conflict between blocking and not using a model: the
+  split is a sentence boundary, not a judgement.
 - Screening decides two things separately: what is spoken, and what is
   written to the toolkit parquet.
 - Leaks will happen and are accepted. The goal is the obvious cases only.
