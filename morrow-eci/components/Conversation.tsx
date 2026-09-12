@@ -266,12 +266,20 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
                literally how fast Morrow is moving. */
             vigor={0.5 + vitals.energy.fraction}
             levelledUp={levelledUp}
+            spent={vitals.energy.isEmpty}
           />
 
           <EnergyMeter vitals={vitals} />
 
+          {/* Loud, because the quiet version did not work: a grey italic
+              aside under the face read as decoration, and the tier swap went
+              unnoticed for several turns. Amber rather than red — Morrow is
+              spent, not broken, and the state undoes itself. */}
           {vitals.energy.isEmpty && (
-            <p className="max-w-prose px-4 text-center text-xs italic text-neutral-400 dark:text-neutral-500">
+            <p
+              role="status"
+              className="mx-4 max-w-prose rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm font-medium text-amber-700 dark:text-amber-300"
+            >
               {TIRED_LINE}
             </p>
           )}

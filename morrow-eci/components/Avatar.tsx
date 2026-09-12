@@ -139,6 +139,7 @@ export function Avatar({
   level = 1,
   vigor = 1,
   levelledUp = 0,
+  spent = false,
 }: {
   expression: Expression;
   /** Drives the standing ripples across the iris while a reply is voiced. */
@@ -153,6 +154,18 @@ export function Avatar({
   vigor?: number;
   /** The level just reached, or 0. A change here rings the ding once. */
   levelledUp?: number;
+  /**
+   * Empty meter: drain the face to a shell. Colour is Impulse's only
+   * channel on this component, so removing it is the honest way to show
+   * that the faculty behind it is not running — what is left is the
+   * aperture and the pupil still tracking, which is exactly what is left
+   * of Morrow at the free tier.
+   *
+   * Done in CSS over the live canvas rather than as a mode inside the
+   * shader: the face keeps rendering and keeps moving, and nothing about
+   * the animation has to know this state exists.
+   */
+  spent?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const handle = useRef<ReturnType<typeof mountApertureFace>>(null);
@@ -192,7 +205,14 @@ export function Avatar({
   const drawn = backend === "none";
 
   return (
-    <div className="relative shrink-0">
+    // On the wrapper rather than the canvas so the no-WebGPU drawn face
+    // drains with it — the two are the same six colours and must not
+    // disagree about whether the soul is home.
+    <div
+      className={`relative shrink-0 transition-[filter,opacity] duration-1000 ${
+        spent ? "opacity-60 grayscale" : ""
+      }`}
+    >
       {/* Kept mounted even when the drawn face is showing: unmounting the
           canvas would take the context with it, and "none" is decided by
           the canvas itself. Hidden rather than removed. */}
@@ -200,7 +220,7 @@ export function Avatar({
         ref={canvas}
         hidden={drawn}
         role="img"
-        aria-label={`Avatar expression: ${FACE[expression].label}`}
+        aria-label={spent ? "Avatar: spent, running on local hardware" : `Avatar expression: ${FACE[expression].label}`}
         className="h-56 w-56 rounded-full bg-[#060810] shadow-inner"
       />
       {drawn && <DrawnFace expression={expression} speaking={speaking} />}

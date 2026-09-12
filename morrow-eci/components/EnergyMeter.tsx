@@ -2,8 +2,19 @@
 
 import type { Vitals } from "@/lib/useVitals";
 
-/** The line shown when the meter is dry — Morrow saying what changed, in its own voice. */
-export const TIRED_LINE = "[im tired and dumber now, using your local hardware to answer questions]";
+/**
+ * The line shown when the meter is dry — Morrow saying what changed, in its
+ * own voice. Deterministic on purpose: this is the surface reporting a fact
+ * it already holds, not a thought Morrow had, so nothing publishes it and no
+ * substrate is asked to phrase it.
+ *
+ * Rewritten because the old wording was too polite to land. Observed live:
+ * the tier swapped and the first couple of questions went by before the
+ * person noticed the answers had got shorter and duller — the only notice on
+ * screen was a grey italic aside that read like flavour text.
+ */
+export const TIRED_LINE =
+  "I'm spent. You're talking to the free, dumber version of me now — let Morrow rest to regain itself.";
 
 function whenFull(fullAt: string | null): string {
   if (!fullAt) return "full";
