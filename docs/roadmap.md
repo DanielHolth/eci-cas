@@ -426,7 +426,7 @@ file — and only the display names change.
 
 | Key | Shown as | Engines | Energy |
 |---|---|---|---|
-| `Free` | Local | all five agents local; 4B for Intent | none |
+| `Free` | Local | all five agents local on the 2B | none |
 | `Budget` | Balanced | Intent and Reflection remote, the rest local | some |
 | `Pro` | Pro | all five remote | full |
 
@@ -443,23 +443,15 @@ file — and only the display names change.
   remote model is felt, and the three fact-pipeline agents are where the
   volume is. Spend the energy where it shows.
 - **The Qwen never serves Pro.** A paid tier that quietly downgrades a
-  stage to a 4B is the one thing a paid tier must not do.
+  stage to a local model is the one thing a paid tier must not do.
 - **Local and Balanced need the offline pack**, so they are unavailable
   until it is installed.
-- **Local is desktop-only.** It needs the 4B for Intent, which a phone
-  cannot sustain. See the Android chapter.
-- **Only Local needs fast hardware**, and "has a GPU" is the wrong test in
-  both directions. An old laptop's integrated graphics share system memory
-  and are often no faster than its own CPU; an old discrete card with 2–4GB
-  cannot hold a 4B at Q4 plus its KV cache at all. A modern thin laptop
-  with no discrete GPU and fast unified memory can be fine. The gate is
-  memory bandwidth and room for the model, which correlates with neither
-  machine age nor the presence of a GPU — which is what the probe is for.
-- **Everything local in Balanced is background work** — extractor, picker,
-  consolidator — so prefill latency does not matter there, and the two
-  agents where latency is felt are already remote. An old laptop is a
-  Balanced machine, and that is a real middle tier rather than a
-  consolation.
+- **Local runs everywhere**, desktop and phone alike. The 2B is what makes
+  that true; see the offline pack for the measurement.
+- **Local is a quality step down, and is sold as one.** Not slower — the
+  measurements say a weak machine keeps up — but dumber. It misreads
+  recalled facts and sometimes loses track of who is speaking. That is the
+  trade the person is choosing, and it should be stated in those words.
 - **Defer background extraction to AC power and idle.** It is the most
   deferrable work in the system, and on an old or fanless laptop the cost
   is heat and battery rather than time.
@@ -471,44 +463,87 @@ file — and only the display names change.
 The local model is an opt-in download, not the default and not the cheap
 version: *your hardware, your turn* — offline, private, unmetered.
 
-- **~3GB of weights plus the inference runtime**, shipped together and
+- **~1.3GB of weights plus the inference runtime**, shipped together and
   never in the base install, so base minimum specs stay tiny and nobody
-  who only ever uses the relay pays for a GPU requirement on the page.
+  who only ever uses the relay pays for a hardware requirement on the page.
 - **Suggested at the moment it is useful** — when energy runs out — with
-  the download size and the GPU cost stated plainly.
+  the download size and the quality trade stated plainly.
 - **Confirm the weights are redistributable** before this is committed to.
   Shipping them is redistribution; a research-only licence kills it.
 
-**Two sizes, split by whether the person feels the difference.** Qwen3
-ships 0.6B / 1.7B / 4B / 8B and up.
+**One model: Qwen3.5-2B.** The 4B is dropped. The size ladder here is
+Qwen3.**5** — 0.8B / 2B / 4B / 9B / 27B and up — not Qwen3's
+0.6B / 1.7B / 4B, which is what earlier drafts of this section assumed.
 
-- **4B for Intent.** It is the only agent whose quality lands directly on
-  the person, and it gets the good model or it goes remote.
-- **1.7B for extractor, picker and consolidator.** Background work, diffuse
-  errors, and where the token volume is. Roughly 2.5x cheaper per token on
-  memory bandwidth, which is the binding constraint, and ~1.1GB at Q4.
-- **Grammar-constrained decoding (GBNF) is what makes that safe.** Those
-  three emit structure, and format compliance is the first thing to
-  collapse at small sizes. With a grammar it is guaranteed rather than
-  hoped for. Worth applying to the 4B too, independently.
-- **0.6B is not a candidate** for any of them, grammar or not.
-- **Quantization is the other axis:** Q4 / Q5 / Q8 plus layer offload,
+Measured on the twelve-case Intent suite, prompts rebuilt exactly as
+`IntentAgent.BuildPrompt` composes them, same `UD-Q4_K_XL` quant for both,
+`-t 4`:
+
+| | wall | time-to-first | decode |
+|---|---|---|---|
+| 4B, GPU | 2.96s | 0.16s | 89 tok/s |
+| 2B, GPU | 2.46s | 0.14s | 133 tok/s |
+| 4B, CPU only | 7.70s | 0.59s | 13.4 tok/s |
+| 2B, CPU only | **3.51s** | 0.27s | **32.1 tok/s** |
+
+- **The 2B with no GPU lands where the 4B lands on a gaming GPU.** That is
+  the whole case. One model covers the gaming rig, the old laptop and the
+  phone, so Local stops being a desktop-only tier and the hardware fork
+  disappears from the product.
+- **Halve the download** — 1.25GB against 2.71GB — which matters most on
+  the platform that was going to be excluded.
+- **It leaves the GPU to the game.** 1.33GB resident instead of 2.9GB, and
+  far less compute taken mid-frame. A gamer trades quality for framerate
+  without being asked; the reverse is not a trade anyone accepts.
+- The CPU numbers are four threads of a *fast desktop* CPU. An old DDR4
+  laptop has roughly half the memory bandwidth, so read it as ~16 tok/s and
+  ~6–7s a turn — usable. The same machine on the 4B would be ~7 tok/s,
+  which is not.
+- **Quantization is the remaining axis:** Q4 / Q5 / Q8 plus layer offload,
   chosen by what the machine has.
 - Per-agent `Model` in `Substrates:Agents` already carries all of this. No
   new mechanism.
 
-**The hardware fallback for Intent is Balanced, not a smaller model.** A
-1.7B companion reply is worse than no local companion in a product whose
-first priority is feeling premium. A machine that cannot run the 4B for
-Intent should run Intent remotely and keep everything else local — which
-is Balanced, which already ships and already works on CPU. The tier ladder
-covers that case better than a smaller model would, so the forked
-evaluation cost stays bounded to three agents with gradeable, structured
-output.
+**What the 2B actually costs, measured on the same suite.** Format
+compliance is not the casualty — that was the thing earlier drafts feared:
 
-**Verify the model string.** The tier files say `qwen3.5-4b` against a
-Qwen3 family; confirm the tag is what the runtime actually pulls, since a
-wrong one fails quietly.
+| n=12 | 4B | 2B |
+|---|---|---|
+| length in range | 12/12 | 12/12 |
+| said its own name (never) | 1 | 0 |
+| said "we" (never) | 1 | 1 |
+| said "I" (always) | 9/12 | 11/12 |
+| leaked a bracket tag | 0 | 0 |
+
+The 2B is marginally *better* on the checkable rules. Two real regressions,
+both about content rather than form:
+
+- **It garbles recalled facts.** Given *caffeine after 4pm ruins his sleep*
+  and *8am standup*, it produced "a shot of cold water and salt". Given two
+  notes it fused them into a claim the person never made and quoted it back
+  at him. **Acceptable:** the raw utterances are ground truth and the shelf
+  is derived, so a bad read is a bad turn and a bad write is a re-derive —
+  see the archive inversion. Neither is a loss.
+- **It loses track of who is speaking**, answering as the person rather than
+  to them, and reciting the Identity advisory as though it were a body it
+  had. **This is the one to fix.** It is not recoverable from the archive,
+  and the persona is the product. Prompt work, not model size — the 4B does
+  the same thing when no Identity advisory is present and recovers the
+  moment there is one, so the lever is the advisory's framing.
+- Sample is twelve cases at one seed. Enough to choose a direction, not
+  enough to tune against.
+
+**The fallback string leaks into replies — on both models.** `intent.txt`
+carries its own `## fallback` text inside the instruction blob, so the model
+sees its error message as candidate output and sometimes emits it while the
+substrate call *succeeded*. Measured at 1/32 on the 4B and 1/32 on the 2B —
+identical, so this is a prompt bug and not a capability gap. ~3% of turns
+are indistinguishable from an outage, and Governance cannot tell, because
+the call returned 200. Keep the fallback out of the prompt.
+
+**The model string is confirmed.** `models/local/Qwen3.5-4B-UD-Q4_K_XL.gguf`
+is what is on disk, so `qwen3.5-4b` in the tier files was right; the new tag
+is the 2B.
 
 **Anchor the context window instead of sliding it.** The highest-leverage
 change for local latency, and it helps the remote tiers too.
@@ -539,26 +574,29 @@ install and time prefill and generation separately.
   bandwidth, iGPU capability.
 - The result picks the quantization and decides which tiers are offered,
   against the latency budget in the Steam chapter.
-- Prefill is the number that disqualifies a machine, not generation. A 4B
-  generates acceptably on CPU; it is the 1–2k token prompt that costs tens
-  of seconds, which is why Intent cannot live there and the background
-  agents can.
+- Prefill is the number that disqualifies a machine, not generation. On the
+  2B both are cheap enough that the probe's job shrinks to a floor check —
+  enough RAM, and not so slow that a turn outlasts patience.
 - It also makes an honest sentence possible — "your machine runs Local at
   about X" — instead of selling someone a disappointment.
 
-**Say "slower", not "worse".** Weak hardware does not degrade quality: the
-same weights and sampling produce the same reply, just later. The only real
-quality variable is quantization, if the probe drops a constrained machine
-to a smaller file to make it fit.
+**Two different warnings, and only one of them is about hardware.**
 
-- A warning about quality misdirects. The person enables Local anyway and
-  is surprised by the wait, which is the refund.
-- **Prefer the measurement over the disclaimer.** Clear the bar: offer
-  Local with no warning. Marginal: offer it with the number — "about 6
-  seconds per reply on this machine" — which is a fact they can act on.
-  Below the floor: do not offer it, recommend Balanced.
-- Keep a disclaimer only as the net for machines that change under us — an
-  external GPU unplugged, thermal throttling, a driver update.
+- **Speed is a hardware question, and the answer is "slower", not "worse".**
+  Weak hardware does not change the weights or the sampling; the same reply
+  arrives later. Prefer the measurement over a disclaimer: clear the bar and
+  say nothing, marginal and say the number — "about 6 seconds per reply on
+  this machine" — below the floor and do not offer it. Keep a disclaimer
+  only as the net for machines that change under us: an external GPU
+  unplugged, thermal throttling, a driver update.
+- **Quality is a model question, and here the warning is earned.** Local is
+  the 2B and it is measurably dumber than Balanced and Pro — it mishandles
+  recalled facts and can slip on whose voice it is speaking in. Say so at
+  the moment Local is selected, in plain words, because the person is
+  choosing it and has a right to know what they are choosing. This is
+  Morrow, just dumber.
+- Do not merge the two. A hardware warning that says "quality" sends the
+  person looking for a better GPU to fix something a better GPU cannot fix.
 
 **Local is never a trap.** The person can switch back to Balanced or Pro at
 any moment; it simply costs energy again. That is what makes the honest
@@ -569,12 +607,18 @@ whole mechanism.
 
 ### Gaming contention
 
-A loaded 4B holds ~3GB of VRAM resident and idle, which hurts a game
-before any inference happens.
+A loaded model holds VRAM resident and idle, which hurts a game before any
+inference happens. Dropping to the 2B more than halves it — ~1.33GB against
+~2.9GB — which is most of why the 2B wins, and it does not remove the need
+to unload.
 
 - **Unload on game detect**, don't merely stop inferring. Sustained GPU
   load plus a foreground fullscreen app, with a manual override — guessing
   wrong here is infuriating.
+- **Or keep it on the CPU while a game is running.** The 2B holds 32 tok/s
+  on four threads, so a gamer can talk to Morrow without the GPU being
+  touched at all. That is a live tier switch like any other, and it is the
+  version of "keep gaming" that costs no framerate.
 - **This is a live tier switch**, and `TierCatalog.Switch` already performs
   those on a running session. "Out of energy" and "a game started" are the
   same mechanism with different triggers. Only the trigger is new.
@@ -687,19 +731,17 @@ build, so community toolkits are a desktop feature and stay one.
   not a trial.
 - **Background thought is dropped.** Android kills background work, so
   notify on reflection instead.
-- **Local does not exist on Android.** Intent gets the 4B or goes remote,
-  and a 4B generating replies on a phone throttles and drains the battery
-  within a minute. Both rules cannot hold on a handset, so the tier does
-  not ship there. Android offers Balanced and Pro, and Intent is always
-  remote. Phones are always networked, so the offline story — most of
-  Local's value — is worth far less here than on the desktop.
-- **1.7B is the only model on the phone**, serving extractor, picker and
-  consolidator. Short bursty jobs nobody waits on, ~1.1GB rather than
-  ~2.5GB to download.
-- Deferring that work to charging and idle is the common rule, not an
-  Android one — see the tiers section.
-- **On-device decode speed is still unmeasured**, and it now gates only the
-  1.7B. Cheaper question than it was.
+- **Local ships on Android too.** Dropping to a single 2B is what makes
+  this true: the tier that was going to be cut from the phone is now the
+  same tier the desktop runs, with the same weights and the same 1.25GB
+  download. Android is no longer a reduced product, and there is no
+  per-platform model matrix to maintain.
+- Deferring background extraction to charging and idle is the common rule,
+  not an Android one — see the tiers section.
+- **On-device decode is still unmeasured**, and it is the one number that
+  could still take Local off the phone. Sustained generation throttles and
+  drains regardless of size; the 2B moves the ceiling, it does not remove
+  it. Measure before promising Local on the store page.
 - **No Workshop.** Community toolkits stay a desktop feature.
 - **iOS later**, on the same shared logic.
 
