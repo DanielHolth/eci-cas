@@ -273,12 +273,17 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
 
           {/* Loud, because the quiet version did not work: a grey italic
               aside under the face read as decoration, and the tier swap went
-              unnoticed for several turns. Amber rather than red — Morrow is
-              spent, not broken, and the state undoes itself. */}
+              unnoticed for several turns.
+              Red, and deliberately the security palette. Not because
+              anything is broken -- the state undoes itself -- but because
+              what it reports is the same kind of fact a verdict reports: the
+              thing answering you is not the thing you were talking to, and
+              every reply after this line is shorter, flatter and worse. A
+              person who misses this misreads Morrow, not the meter. */}
           {vitals.energy.isEmpty && (
             <p
-              role="status"
-              className="mx-4 max-w-prose rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm font-medium text-amber-700 dark:text-amber-300"
+              role="alert"
+              className="mx-4 max-w-prose rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-center text-sm font-medium text-red-700 dark:text-red-400"
             >
               {TIRED_LINE}
             </p>
