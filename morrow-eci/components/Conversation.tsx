@@ -6,7 +6,7 @@ import { SecurityIcon } from "@/components/SecurityIcon";
 import { Transcript } from "@/components/Transcript";
 import { EventLog } from "@/components/EventLog";
 import { ThoughtsPanel, reflectionCount } from "@/components/ThoughtsPanel";
-import { ProfileChip } from "@/components/ProfileChip";
+import { AccountChip } from "@/components/AccountChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEciStream } from "@/lib/useEciStream";
 import { usePersona } from "@/lib/usePersona";
@@ -15,7 +15,7 @@ import { greeting } from "@/lib/greeting";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { fetchKnobs, latestKnobs, sendNudge, sendPerceive, subscribeKnobs } from "@/lib/api";
-import type { Profile } from "@/lib/profiles";
+import type { Account } from "@/lib/account";
 import type { Expression } from "@/types/events";
 
 // The Mood knob pins the face. Neutral is absent on purpose: an untouched
@@ -28,20 +28,15 @@ const MOOD_FACE: Record<string, Expression> = {
   Ecstatic: "alert",
 };
 
-/**
- * One person's live view of the persona. Mount this with `key={profile.id}`:
- * the stream subscription and the accumulated turns both belong to the
- * profile, so switching people should discard them wholesale rather than
- * clear them in place.
- */
-export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch: () => void }) {
-  const { turns, connected } = useEciStream(profile.id);
-  const log = useTurnLog(profile.id);
+/** The live view of the persona. */
+export function Conversation({ account, onEdit }: { account: Account; onEdit: () => void }) {
+  const { turns, connected } = useEciStream();
+  const log = useTurnLog();
 
   // A rename is an ordinary archive write, so nothing pushes it. Re-reading
   // once a turn has settled is the cheapest correct trigger: settling is
   // exactly the point at which Archivist has finished writing.
-  const persona = usePersona(profile.id, log.length);
+  const persona = usePersona(log.length);
 
   // What the host will actually accept. Null until the first fetch answers,
   // which leaves the field unbounded for that instant rather than guessing a
@@ -93,7 +88,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
   // different sentence than the one it sent.
   const [hello, setHello] = useState("");
   useEffect(() => {
-    const opener = greeting(profile.displayName, profile.id);
+    const opener = greeting(account.displayName);
     setHello(opener.text);
 
     // A rare opening earns a real one. The greeting itself is canned, so on
@@ -110,15 +105,14 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
     if (opener.egg) {
       const spend = (tier: string) => {
         if (["mock", "free"].includes(tier.toLowerCase())) return;
-        sendNudge(profile.id).catch(() => {});
+        sendNudge().catch(() => {});
       };
       const known = latestKnobs()?.tier;
       if (known) spend(known);
       else fetchKnobs().then((knobs) => spend(knobs.tier)).catch(() => {});
     }
     // Deliberately not in the dependency list: this is the opening line, and
-    // it is said once per mount. Conversation is keyed by profile id, so a
-    // different person is a different mount and gets their own.
+    // it is said once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -161,7 +155,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
     unlock(hello);
     setSending(true);
     try {
-      await sendPerceive(text.trim(), profile.id);
+      await sendPerceive(text.trim());
       setText("");
     } catch {
       // Surface layer is down or unreachable — the connection indicator
@@ -185,7 +179,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
             Three grid tracks rather than absolute positioning. The side
             tracks are equal fractions, so the auto-sized middle one lands on
             main's centre -- the same centre the avatar below it uses -- and
-            the title cannot overlap a cluster however wide the profile name
+            the title cannot overlap a cluster however wide the name
             grows, because a grid track will not let it. */}
         <div className="grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-4 pb-2">
           <div className="flex items-center justify-self-start">
@@ -232,7 +226,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
                 ))}
               </select>
             )}
-            <ProfileChip profile={profile} onSwitch={onSwitch} />
+            <AccountChip account={account} onEdit={onEdit} />
             <ThemeToggle />
             {/* Rightmost of the cluster, deliberately: Debug opens EventLog,
                 which docks at the true right edge of the screen, so the
@@ -261,7 +255,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
           <Avatar
             expression={face || (turn?.impulse?.expression ?? "neutral")}
             speaking={speaking}
-            identity={profile.avatar}
+            identity={account.avatar}
           />
 
           {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
@@ -283,7 +277,7 @@ export function Conversation({ profile, onSwitch }: { profile: Profile; onSwitch
               value={text}
               maxLength={limit ?? undefined}
               onChange={(e) => setText(e.target.value)}
-              placeholder={`Say something to ${persona.name || "ECI-CAS"}, ${profile.displayName}…`}
+              placeholder={`Say something to ${persona.name || "ECI-CAS"}, ${account.displayName}…`}
               className="morrow-hand flex-1 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-neutral-500"
             />
             <button

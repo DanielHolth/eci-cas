@@ -108,17 +108,17 @@ public class IdentityAgentTests
     }
 
     [Fact]
-    public async Task Advisory_CarriesTheNameThisProfileGaveIt()
+    public async Task Advisory_CarriesTheNameGivenToIt()
     {
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var advisories = bus.Subscribe(Topics.Advisories);
         var archive = new InMemoryArchiveStore();
-        await archive.WriteAsync([Named("Sol")], "daniel", CancellationToken.None);
+        await archive.WriteAsync([Named("Sol")], CancellationToken.None);
         var agent = CreateAgent(bus, activity, archive: archive, instructions: TellsIntentTheName());
 
         var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            MetaBag.Empty.With(EciCas.Agents.Perception.PerceptionAgent.ProfileKey, "daniel"));
+            MetaBag.Empty);
         await agent.HandleAsync(perception, CancellationToken.None);
 
         Assert.True(advisories.TryRead(out var advisory));
@@ -197,7 +197,7 @@ public class IdentityAgentTests
         Assert.True(advisories.TryRead(out var before));
         Assert.Contains("Morrow", before!.Meta.Get<string>(IdentityAgent.AdviceKey)!, StringComparison.Ordinal);
 
-        await archive.WriteAsync([Named("Sol")], null, CancellationToken.None);
+        await archive.WriteAsync([Named("Sol")], CancellationToken.None);
         await agent.HandleAsync(Envelope.Create(Topics.SystemControl, "Archivist", Severity.Neutral,
             MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)), CancellationToken.None);
 
@@ -205,15 +205,6 @@ public class IdentityAgentTests
         Assert.True(advisories.TryRead(out var after));
         Assert.Contains("Sol", after!.Meta.Get<string>(IdentityAgent.AdviceKey)!, StringComparison.Ordinal);
     }
-
-    /// <summary>
-    /// The per-profile promise rests entirely on this: "assistant" is in
-    /// Archive:SharedCategories, so a name filed there would be one name for
-    /// every person on the device.
-    /// </summary>
-    [Fact]
-    public void PersonaCategory_IsNotShared() =>
-        Assert.DoesNotContain(PersonaName.Pair.Category, ParquetArchiveStore.DefaultSharedCategories, StringComparer.OrdinalIgnoreCase);
 
     private static ArchiveRecord Named(string name) => new(
         PersonaName.Pair.Category, PersonaName.Pair.Topic, "this", PersonaName.Subject, PersonaName.NameKey,

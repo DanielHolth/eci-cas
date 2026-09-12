@@ -21,10 +21,9 @@ public class TurnLogTests
         "person", "family", "daniel", "daughter", "name", "vera",
         DateTimeOffset.UnixEpoch, ArchiveDomain.External, 0.8);
 
-    private static Envelope Perception(string text, string? profileId = null) =>
+    private static Envelope Perception(string text) =>
         Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            MetaBag.Empty.With(PerceptionAgent.TextKey, text)
-                .With(PerceptionAgent.ProfileKey, profileId));
+            MetaBag.Empty.With(PerceptionAgent.TextKey, text));
 
     private static TurnRecord Project(params Envelope[] envelopes)
     {
@@ -61,7 +60,7 @@ public class TurnLogTests
         await log.HandleAsync(second, CancellationToken.None);
         await log.HandleAsync(Telemetry(second, "Intent", 0.75m), CancellationToken.None);
 
-        var records = log.Recent(null);
+        var records = log.Recent();
         Assert.Equal(0.25m, records[0].Cost);
         Assert.Equal(0.25m, records[0].SessionCost);
         Assert.Equal(0.75m, records[1].Cost);
@@ -249,22 +248,6 @@ public class TurnLogTests
     }
 
     [Fact]
-    public async Task Subscriber_ScopedToAProfile_SkipsAnotherPersonsEventButKeepsTheUnowned()
-    {
-        var log = Subscriber(new CapturingSink(), settleMs: 10_000);
-        await log.HandleAsync(Perception("mine", "daniel"), CancellationToken.None);
-        await log.HandleAsync(Perception("theirs", "vera"), CancellationToken.None);
-        await log.HandleAsync(Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
-            MetaBag.Empty.With(ReflectionAgent.IdeaKey, "a thought")), CancellationToken.None);
-
-        var seen = log.Recent("daniel");
-
-        Assert.Equal(2, seen.Count);
-        Assert.Equal("mine", seen[0].Perception);
-        Assert.Equal("a thought", seen[1].Idea);
-    }
-
-    [Fact]
     public async Task Subscriber_BeyondRetain_ForgetsTheOldestEvent()
     {
         var log = Subscriber(new CapturingSink(), settleMs: 10_000, retain: 2);
@@ -272,7 +255,7 @@ public class TurnLogTests
         await log.HandleAsync(Perception("two"), CancellationToken.None);
         await log.HandleAsync(Perception("three"), CancellationToken.None);
 
-        Assert.Equal(["two", "three"], log.Recent(null).Select(r => r.Perception));
+        Assert.Equal(["two", "three"], log.Recent().Select(r => r.Perception));
     }
 
     private static TurnLogSubscriber Subscriber(ITurnLogSink sink, int settleMs, int retain = 100,

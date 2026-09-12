@@ -21,10 +21,10 @@ using Microsoft.Extensions.Options;
 // Deliberately before the model check, because listing needs no weights.
 if (args.Length == 2 && args[0].TrimStart('-') == "list")
 {
-    var listing = new ParquetArchiveStore(System.IO.Path.GetFullPath(args[1]), null);
-    foreach (var pair in listing.IndexFor(null))
+    var listing = new ParquetArchiveStore(System.IO.Path.GetFullPath(args[1]));
+    foreach (var pair in listing.IndexFor())
     {
-        foreach (var row in await listing.LookupAsync(pair, null, CancellationToken.None))
+        foreach (var row in await listing.LookupAsync(pair, CancellationToken.None))
         {
             Console.WriteLine($"{row.Category}/{row.Topic}/{row.Subtopic}/{row.Subject}/{row.Key} = {row.Value}");
         }
@@ -64,14 +64,12 @@ if (!embeddings.Available)
     return 1;
 }
 
-// Shared categories left at the default: the probe reads the shared tier
-// only, which is every row a profile-less turn would see.
-var store = new ParquetArchiveStore(args_.ArchiveDirectory, null);
-var pairs = store.IndexFor(null);
+var store = new ParquetArchiveStore(args_.ArchiveDirectory);
+var pairs = store.IndexFor();
 var rows = new List<ArchiveRecord>();
 foreach (var pair in pairs)
 {
-    rows.AddRange(await store.LookupAsync(pair, null, CancellationToken.None));
+    rows.AddRange(await store.LookupAsync(pair, CancellationToken.None));
 }
 
 if (rows.Count == 0)

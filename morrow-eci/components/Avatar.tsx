@@ -139,7 +139,7 @@ export function Avatar({
   expression: Expression;
   /** Drives the standing ripples across the iris while a reply is voiced. */
   speaking?: boolean;
-  /** The active profile's chosen emoji, worn as a badge beside the face —
+  /** The person's chosen emoji, worn as a badge beside the face —
    * whose conversation this is, kept strictly separate from the colour,
    * which is Impulse's alone. */
   identity?: string;

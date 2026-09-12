@@ -43,7 +43,7 @@ const VOICE_STORAGE_KEY = "morrow.voiceURI";
  * of the same turn.
  *
  * **The backlog is never spoken.** Whatever is already on screen when this
- * mounts is marked as said. Switching profiles remounts Conversation, and a
+ * mounts is marked as said. A remount of Conversation means a
  * remount that read twenty turns aloud would be a worse bug than silence.
  */
 export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
@@ -206,7 +206,7 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
     }
   }, [turns, enabled, drain]);
 
-  // Leaving an utterance in flight would go on talking over the next profile,
+  // Leaving an utterance in flight would go on talking over the next view,
   // since speechSynthesis is a window-wide singleton and outlives this mount.
   useEffect(() => {
     return () => {

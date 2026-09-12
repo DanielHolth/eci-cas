@@ -16,13 +16,13 @@ public sealed class PersonaNameOptions
 }
 
 /// <summary>
-/// The name this profile has given the persona.
+/// The name the person has given the persona.
 ///
-/// Per profile, not shared: two people on one device each get their own
-/// Morrow, and each may rename it without the other's changing. That is why
-/// the record lives under the "persona" category rather than "assistant" —
-/// "assistant" is in <c>Archive:SharedCategories</c>, so a name written there
-/// would be one name for everybody.
+/// It lives under the "persona" category rather than "assistant" because the
+/// two are addressed apart on the shelf — see <see cref="AssistantScope"/>.
+/// It used to be scoped per profile as well, so that two people on one
+/// device each got their own Morrow; an account has one profile, and the
+/// name is simply the name.
 ///
 /// Nothing seeds it. The default is a fallback, not a row, so a rename is the
 /// first write that ever happens at this address and there is no stale seed to
@@ -42,7 +42,7 @@ public sealed class PersonaName
     public const string NameKey = "name";
 
     private readonly IArchiveStore _archive;
-    private readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.Ordinal);
+    private string? _cached;
 
     public PersonaName(IArchiveStore archive, IOptions<PersonaNameOptions> options)
     {
@@ -52,22 +52,21 @@ public sealed class PersonaName
 
     public string DefaultName { get; }
 
-    public async Task<string> ForAsync(string? profileId, CancellationToken cancellationToken)
+    public async Task<string> ForAsync(CancellationToken cancellationToken)
     {
-        var cacheKey = profileId ?? string.Empty;
-        if (_cache.TryGetValue(cacheKey, out var cached))
+        if (_cached is { } cached)
         {
             return cached;
         }
 
-        var rows = await _archive.LookupAsync(Pair, profileId, cancellationToken).ConfigureAwait(false);
+        var rows = await _archive.LookupAsync(Pair, cancellationToken).ConfigureAwait(false);
         var stored = rows.FirstOrDefault(r =>
             r.Subject.Equals(Subject, StringComparison.OrdinalIgnoreCase)
             && r.Key.Equals(NameKey, StringComparison.OrdinalIgnoreCase)
             && r.Value.Trim().Length > 0);
 
         var name = stored?.Value.Trim() ?? DefaultName;
-        _cache[cacheKey] = name;
+        _cached = name;
         return name;
     }
 
@@ -132,5 +131,5 @@ public sealed class PersonaName
     /// write that renames it looks like every other write from here — and a
     /// wrong name is a worse fault than a redundant parquet read.
     /// </summary>
-    public void Forget() => _cache.Clear();
+    public void Forget() => _cached = null;
 }

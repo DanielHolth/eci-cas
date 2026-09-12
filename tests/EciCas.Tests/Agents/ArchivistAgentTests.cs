@@ -210,26 +210,6 @@ public class ArchivistAgentTests
     }
 
     /// <summary>
-    /// The profile rides on the published envelope: Envelope.Derive starts a
-    /// fresh Meta, and by the time Cataloger's batch flushes the speaker is
-    /// long out of scope.
-    /// </summary>
-    [Fact]
-    public async Task PublishedFactsCarryTheProfileThatStatedThem()
-    {
-        var activity = new BusActivityTracker();
-        var bus = new ChannelBus(activity);
-        var facts = bus.Subscribe(Topics.Facts);
-        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(FactLine, TimeSpan.Zero, 10, 0m)));
-
-        await Agent(bus, activity, substrate).HandleAsync(
-            Bundle("a turn", MetaBag.Empty.With(PerceptionAgent.ProfileKey, "daniel")), CancellationToken.None);
-
-        Assert.True(facts.TryRead(out var published));
-        Assert.Equal("daniel", published!.Meta.Get<string>(PerceptionAgent.ProfileKey));
-    }
-
-    /// <summary>
     /// The bundle carries both Librarian's selected pairs and the rows Recall
     /// actually read, and neither belongs in an extraction prompt. The pairs
     /// used to be shown, to bias the model toward reusing an existing address

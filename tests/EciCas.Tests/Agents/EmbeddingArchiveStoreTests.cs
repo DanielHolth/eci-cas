@@ -22,7 +22,7 @@ public class EmbeddingArchiveStoreTests
         var embeddings = Counting();
         var store = new EmbeddingArchiveStore(inner, embeddings);
 
-        await store.WriteAsync([Row("home", "oslo"), Row("work", "bergen")], null, CancellationToken.None);
+        await store.WriteAsync([Row("home", "oslo"), Row("work", "bergen")], CancellationToken.None);
 
         Assert.All(inner.All, r => Assert.True(r.HasVector(embeddings.ModelId)));
     }
@@ -37,7 +37,7 @@ public class EmbeddingArchiveStoreTests
         var inner = new InMemoryArchiveStore();
         var store = new EmbeddingArchiveStore(inner, new StubEmbeddings());
 
-        await store.WriteAsync([Row("home", "oslo")], null, CancellationToken.None);
+        await store.WriteAsync([Row("home", "oslo")], CancellationToken.None);
 
         var written = Assert.Single(inner.All);
         Assert.Null(written.Embedding);
@@ -54,7 +54,7 @@ public class EmbeddingArchiveStoreTests
         var inner = new InMemoryArchiveStore();
         var store = new EmbeddingArchiveStore(inner, new StubEmbeddings(_ => throw new HttpRequestException("no endpoint")));
 
-        await store.WriteAsync([Row("home", "oslo")], null, CancellationToken.None);
+        await store.WriteAsync([Row("home", "oslo")], CancellationToken.None);
 
         Assert.Null(Assert.Single(inner.All).Embedding);
     }
@@ -80,11 +80,11 @@ public class EmbeddingArchiveStoreTests
         var inner = new InMemoryArchiveStore();
         var store = new EmbeddingArchiveStore(inner, embeddings);
 
-        await store.WriteAsync([Row("home", "oslo")], null, CancellationToken.None);
+        await store.WriteAsync([Row("home", "oslo")], CancellationToken.None);
         var stamped = Assert.Single(inner.All);
 
         embedded.Clear();
-        await store.WriteAsync([stamped], null, CancellationToken.None);
+        await store.WriteAsync([stamped], CancellationToken.None);
 
         Assert.Empty(embedded);
     }
@@ -101,10 +101,10 @@ public class EmbeddingArchiveStoreTests
         var embeddings = Counting();
         var store = new EmbeddingArchiveStore(inner, embeddings);
 
-        await store.WriteAsync([Row("home", "x")], null, CancellationToken.None);
+        await store.WriteAsync([Row("home", "x")], CancellationToken.None);
         var oslo = Assert.Single(inner.All);
 
-        await store.WriteAsync([oslo with { Value = "xxxxxx" }], null, CancellationToken.None);
+        await store.WriteAsync([oslo with { Value = "xxxxxx" }], CancellationToken.None);
         var bergen = inner.All[^1];
 
         Assert.True(bergen.HasVector(embeddings.ModelId));

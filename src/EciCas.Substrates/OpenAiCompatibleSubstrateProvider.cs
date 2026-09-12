@@ -96,8 +96,16 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         Interlocked.Exchange(ref _openUntil, 0);
 
         var text = StripThinking(payload.Choices.Count > 0 ? payload.Choices[0].Message.Content : string.Empty);
-        var tokens = payload.Usage?.TotalTokens;
-        var cost = tokens is int t ? t * (entry?.CostPerTokenUsd ?? 0m) : (decimal?)null;
+        var usage = payload.Usage;
+        var tokens = usage?.TotalTokens;
+        // Priced per direction. Providers that omit the split still report a
+        // total; charging that at the input rate understates rather than
+        // inflates, which is the safer error for a meter that gates a reply.
+        var cost = usage is null
+            ? (decimal?)null
+            : entry?.CostUsd(
+                usage.PromptTokens ?? usage.TotalTokens,
+                usage.CompletionTokens ?? 0);
 
         return new SubstrateResult(text, elapsed, tokens, cost);
     }
@@ -142,5 +150,8 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
     private sealed record ChatCompletionResponse(List<ChatChoice> Choices, ChatUsage? Usage);
     private sealed record ChatChoice(ChatMessage Message);
 
-    private sealed record ChatUsage([property: JsonPropertyName("total_tokens")] int TotalTokens);
+    private sealed record ChatUsage(
+        [property: JsonPropertyName("total_tokens")] int TotalTokens,
+        [property: JsonPropertyName("prompt_tokens")] int? PromptTokens = null,
+        [property: JsonPropertyName("completion_tokens")] int? CompletionTokens = null);
 }

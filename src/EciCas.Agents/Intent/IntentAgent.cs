@@ -63,8 +63,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// </summary>
     protected override string BuildPrompt(Envelope envelope)
     {
-        var recent = _window.Recent(_knobs.ContextTurns, envelope.CorrelationId,
-            envelope.Meta.Get<string>(PerceptionAgent.ProfileKey));
+        var recent = _window.Recent(_knobs.ContextTurns, envelope.CorrelationId);
 
         var window = recent.Count == 0
             ? string.Empty

@@ -25,14 +25,13 @@ internal static class StreamEndpoints
             await context.Response.StartAsync(cancellationToken);
 
             // An SSE comment, flushed immediately: browsers hold `onopen` until the
-            // first byte of the body arrives, and a profile-scoped client may wait
-            // minutes for its first real envelope — long enough to sit there
-            // reading "Disconnected" while perfectly connected.
+            // first byte of the body arrives, and a quiet client may wait minutes
+            // for its first real envelope — long enough to sit there reading
+            // "Disconnected" while perfectly connected.
             await context.Response.WriteAsync(": connected\n\n", cancellationToken);
             await context.Response.Body.FlushAsync(cancellationToken);
 
-            var profileId = context.Request.Query["profileId"].ToString();
-            var reader = broadcaster.Connect(string.IsNullOrEmpty(profileId) ? null : profileId, out var clientId);
+            var reader = broadcaster.Connect(out var clientId);
             try
             {
                 await foreach (var envelope in reader.ReadAllAsync(cancellationToken))
@@ -55,11 +54,7 @@ internal static class StreamEndpoints
         // The same projection the disk sink reads, served two ways: what a client
         // missed, and what happens next. A client holds no reduction logic of its
         // own — see TurnLogSubscriber.
-        app.MapGet("/api/log", (HttpContext context, TurnLogSubscriber log) =>
-        {
-            var profileId = context.Request.Query["profileId"].ToString();
-            return Results.Json(log.Recent(string.IsNullOrEmpty(profileId) ? null : profileId), jsonOptions);
-        });
+        app.MapGet("/api/log", (TurnLogSubscriber log) => Results.Json(log.Recent(), jsonOptions));
 
         app.MapGet("/api/log/stream", async (HttpContext context, TurnLogSubscriber log, CancellationToken cancellationToken) =>
         {
@@ -69,8 +64,7 @@ internal static class StreamEndpoints
             await context.Response.WriteAsync(": connected\n\n", cancellationToken);
             await context.Response.Body.FlushAsync(cancellationToken);
 
-            var profileId = context.Request.Query["profileId"].ToString();
-            var reader = log.Connect(string.IsNullOrEmpty(profileId) ? null : profileId, out var clientId);
+            var reader = log.Connect(out var clientId);
             try
             {
                 await foreach (var record in reader.ReadAllAsync(cancellationToken))

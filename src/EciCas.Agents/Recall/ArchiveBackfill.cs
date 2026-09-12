@@ -21,10 +21,9 @@ using EciCas.Core;
 public static class ArchiveBackfill
 {
     /// <summary>
-    /// Every parquet in the archive, the recency lane and each profile tier
-    /// included: a lane row is read like any other and needs its vector just
-    /// as much. Reports rows and files touched; both zero is the ordinary
-    /// case on a warm archive.
+    /// Every parquet in the archive, the recency lane included: a lane row is
+    /// read like any other and needs its vector just as much. Reports rows
+    /// and files touched; both zero is the ordinary case on a warm archive.
     /// </summary>
     public static async Task<(int Rows, int Files)> RunAsync(
         string directory,
@@ -41,16 +40,11 @@ public static class ArchiveBackfill
         var rows = 0;
         var files = 0;
 
-        // Shelf tiers only: the root and each profile's own directory, top
-        // level. Not a recursive sweep -- utterances/ and facts/ sit under the
-        // same root in another schema, and reading them as shelf records keeps
-        // only Timestamp, then rewrites them blank.
-        var profiles = Path.Combine(directory, ParquetArchiveStore.ProfilesDirectoryName);
-        var tiers = Directory.Exists(profiles)
-            ? Directory.GetDirectories(profiles).Prepend(directory)
-            : [directory];
-
-        foreach (var file in tiers.SelectMany(t => Directory.GetFiles(t, "*.parquet")))
+        // The shelf only: the archive root, top level. Not a recursive sweep
+        // -- utterances/ and facts/ sit under the same root in another schema,
+        // and reading them as shelf records keeps only Timestamp, then
+        // rewrites them blank.
+        foreach (var file in Directory.GetFiles(directory, "*.parquet"))
         {
             var records = await ParquetArchiveStore.ReadRecordsAsync(file, cancellationToken).ConfigureAwait(false);
             var pending = records

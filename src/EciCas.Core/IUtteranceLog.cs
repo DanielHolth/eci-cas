@@ -23,7 +23,6 @@ public sealed record Utterance(
     string Text,
     DateTimeOffset Timestamp,
     string Speaker,
-    string? ProfileId,
     long Turn = 0);
 
 /// <summary>
@@ -78,8 +77,7 @@ public static class UtteranceContext
 {
     /// <summary>
     /// The reply an input was answering: the newest reply from an earlier
-    /// turn that this person could have seen (theirs, or one with no
-    /// profile). One rule for the live write and the rebuild.
+    /// turn. One rule for the live write and the rebuild.
     /// </summary>
     public static string? PreviousReply(IReadOnlyList<Utterance> replies, Utterance input)
     {
@@ -91,7 +89,7 @@ public static class UtteranceContext
         for (var i = replies.Count - 1; i >= 0; i--)
         {
             var reply = replies[i];
-            if (reply.Turn < input.Turn && (reply.ProfileId is null || reply.ProfileId == input.ProfileId))
+            if (reply.Turn < input.Turn)
             {
                 return reply.Text;
             }

@@ -11,33 +11,30 @@ namespace EciCas.Core;
 /// entry, and lets Recall slice one pair across as many parallel workers as
 /// its row count warrants.
 ///
-/// Every member takes the profile whose turn this is — the opaque id
-/// PerceptionAgent.ProfileKey carries — because personal knowledge is
-/// scoped per person while world knowledge is shared. Null means no profile
-/// (the console loop, Reflection's own ideas) and addresses the shared tier
-/// alone, which is exactly the single-user behaviour that predates profiles.
+/// One archive, one person. The store used to scope every member by a
+/// profile id, tiering personal facts under a per-profile directory and
+/// leaving world knowledge shared. An account holds a single profile, so
+/// that tier was always empty of anyone else and the id was always the same
+/// value — a partition key with one partition. It is gone.
 /// </summary>
 public interface IArchiveStore
 {
-    /// <summary>Distinct (Category, Topic) pairs visible to this profile — shared plus its own — for Librarian's selection prompt.</summary>
-    IReadOnlyList<ArchivePair> IndexFor(string? profileId);
+    /// <summary>Distinct (Category, Topic) pairs the archive holds, for Librarian's selection prompt.</summary>
+    IReadOnlyList<ArchivePair> IndexFor();
 
     /// <summary>
-    /// Every row under this pair, in a stable Importance-descending order,
-    /// unioned across the shared tier and this profile's own — the profile
-    /// winning where both hold the same subtopic/subject/key.
+    /// Every row under this pair, in a stable Importance-descending order.
     /// Deliberately uncapped: a subtopic discussed at great length must not
     /// be truncated away. Recall reads a pair exactly once and chunks the
     /// result across its workers in memory, so a deep pair costs one file
     /// read no matter how many substrate calls it fans out into.
     /// </summary>
-    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, string? profileId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, CancellationToken cancellationToken);
 
     /// <summary>
     /// The recency lane: the newest rows written anywhere in the archive,
-    /// Timestamp-descending, unioned across the shared tier and this
-    /// profile's own. Not a pair and not in the index — a second lane beside
-    /// the shelf, always read, whatever Librarian selected.
+    /// Timestamp-descending. Not a pair and not in the index — a second lane
+    /// beside the shelf, always read, whatever Librarian selected.
     ///
     /// It exists because the shelf is weakest exactly where "lately" is
     /// asked: a fact filed an hour ago into a drawer no question names is
@@ -45,10 +42,10 @@ public interface IArchiveStore
     /// view of rows the pair files already hold, so nothing here is the only
     /// copy of anything.
     /// </summary>
-    Task<IReadOnlyList<ArchiveRecord>> RecentAsync(string? profileId, int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ArchiveRecord>> RecentAsync(int limit, CancellationToken cancellationToken);
 
-    /// <summary>Writes to this profile's own tier, except for categories the store treats as shared.</summary>
-    Task WriteAsync(IReadOnlyList<ArchiveRecord> records, string? profileId, CancellationToken cancellationToken);
+    /// <summary>Writes rows to the archive, one pair file each, plus the recency lane.</summary>
+    Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken);
 
     /// <summary>
     /// How many turns have been recorded against this archive — the
@@ -67,7 +64,7 @@ public interface IArchiveStore
     /// statistic. An empty list still counts the turn — a turn that recalled
     /// nothing is exactly the kind of turn a hit *rate* has to know about.
     /// </summary>
-    Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, string? profileId, CancellationToken cancellationToken);
+    Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, CancellationToken cancellationToken);
 }
 
 public sealed record ArchivePair(string Category, string Topic);

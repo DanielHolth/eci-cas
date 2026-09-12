@@ -6,7 +6,7 @@ import { API_BASE } from "@/lib/api";
 export type Persona = {
   /** The tone card, as it will reach Intent this turn. */
   text: string | null;
-  /** What this profile calls it — the configured default until someone renames it. */
+  /** What it is called — the configured default until someone renames it. */
   name: string | null;
 };
 
@@ -19,18 +19,17 @@ export type Persona = {
  * failure — not knowing the persona is a reason to say nothing, not a reason
  * to show an error where a sentence about a personality should be.
  *
- * The name is per profile and can change mid-conversation, so this refetches
- * when the profile changes and whenever `revision` moves. Nothing pushes a
+ * The name can change mid-conversation, so this refetches whenever
+ * `revision` moves. Nothing pushes a
  * rename — Archivist writes it during a turn like any other fact — so the
  * caller bumps `revision` once a turn has settled rather than this polling.
  */
-export function usePersona(profileId?: string | null, revision = 0): Persona {
+export function usePersona(revision = 0): Persona {
   const [persona, setPersona] = useState<Persona>({ text: null, name: null });
 
   useEffect(() => {
     const abort = new AbortController();
-    const query = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
-    fetch(`${API_BASE}/api/persona${query}`, { signal: abort.signal })
+    fetch(`${API_BASE}/api/persona`, { signal: abort.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) =>
         setPersona({
@@ -40,7 +39,7 @@ export function usePersona(profileId?: string | null, revision = 0): Persona {
       )
       .catch(() => {});
     return () => abort.abort();
-  }, [profileId, revision]);
+  }, [revision]);
 
   return persona;
 }

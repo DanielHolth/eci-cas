@@ -22,9 +22,6 @@ public sealed record TurnRecord
     public required long Seq { get; init; }
     public required Guid CorrelationId { get; init; }
 
-    /// <summary>Null for events nobody owns — the console loop, and Reflection's own batches.</summary>
-    public string? ProfileId { get; init; }
-
     public required DateTimeOffset StartedAt { get; init; }
     public required DateTimeOffset EndedAt { get; init; }
 

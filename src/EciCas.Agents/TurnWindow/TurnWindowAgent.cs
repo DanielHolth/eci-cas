@@ -56,7 +56,6 @@ public sealed class TurnWindowAgent : AgentBase
                 _turns.Add(new Turn(
                     envelope.CorrelationId,
                     envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty,
-                    envelope.Meta.Get<string>(PerceptionAgent.ProfileKey),
                     envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self"));
 
                 if (_turns.Count > Capacity)
@@ -98,7 +97,7 @@ public sealed class TurnWindowAgent : AgentBase
     /// prompt length, and a transcript it cannot hold costs it the length
     /// bracket and the mood vocabulary it could otherwise obey.
     /// </summary>
-    public IReadOnlyList<(string Given, string Replied)> Recent(int turns, Guid exclude, string? profileId)
+    public IReadOnlyList<(string Given, string Replied)> Recent(int turns, Guid exclude)
     {
         if (turns <= 0)
         {
@@ -107,12 +106,8 @@ public sealed class TurnWindowAgent : AgentBase
 
         lock (_lock)
         {
-            // An idea belongs to nobody, so it is visible to everyone; a
-            // person's own turns are not, which is what keeps two profiles
-            // on one device out of each other's transcripts.
             var mine = _turns
                 .Where(t => t.Reply is not null && t.CorrelationId != exclude)
-                .Where(t => t.SelfTriggered || t.ProfileId is null || t.ProfileId == profileId)
                 .ToList();
 
             var slice = mine.TakeLast(turns).ToList();
@@ -147,11 +142,10 @@ public sealed class TurnWindowAgent : AgentBase
     /// </summary>
     public const int TranscriptChars = 400;
 
-    private sealed class Turn(Guid correlationId, string utterance, string? profileId, bool selfTriggered)
+    private sealed class Turn(Guid correlationId, string utterance, bool selfTriggered)
     {
         public Guid CorrelationId { get; } = correlationId;
         public string Utterance { get; } = utterance;
-        public string? ProfileId { get; } = profileId;
         public bool SelfTriggered { get; } = selfTriggered;
         public string? Reply { get; set; }
     }

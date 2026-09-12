@@ -6,13 +6,11 @@
  */
 export const API_BASE = process.env.NEXT_PUBLIC_ECI_API_BASE ?? "http://localhost:5179";
 
-/** `profileId` names who is talking; the host keys drive state on it, so an
- * omitted profile lands on the device-wide state rather than anyone's own. */
-export async function sendPerceive(text: string, profileId?: string): Promise<void> {
+export async function sendPerceive(text: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/perceive`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(profileId ? { text, profileId } : { text }),
+    body: JSON.stringify({ text }),
   });
 
   if (!response.ok) {
@@ -26,11 +24,11 @@ export async function sendPerceive(text: string, profileId?: string): Promise<vo
  * anybody. 204 when it has not written one yet, which is an ordinary early
  * state and not an error: nothing to resume, nothing to say.
  */
-export async function sendNudge(profileId?: string): Promise<void> {
+export async function sendNudge(): Promise<void> {
   const response = await fetch(`${API_BASE}/api/nudge`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(profileId ? { profileId } : {}),
+    body: JSON.stringify({}),
   });
 
   if (!response.ok && response.status !== 204) {

@@ -61,8 +61,7 @@ public class FactLogTests : IDisposable
         Id: Guid.NewGuid().ToString("n"),
         Text: text,
         Timestamp: when,
-        Speaker: "user",
-        ProfileId: "default");
+        Speaker: "user");
 
     private static Fact Read(string text, DateTimeOffset when) => new(
         Id: Guid.NewGuid().ToString("n"),
@@ -70,7 +69,6 @@ public class FactLogTests : IDisposable
         Text: text,
         Timestamp: when,
         Speaker: "user",
-        ProfileId: "default",
         Keywords: KeywordExtractor.Content(text));
 
     private static Fact Embedded(Fact fact, string thread) =>
@@ -111,18 +109,16 @@ public class FactLogTests : IDisposable
     public async Task RepliesKeepTheirTurnAndPairWithTheNextInput()
     {
         var log = new ParquetUtteranceLog(_dir);
-        await log.AppendReplyAsync(new Utterance("r1", "The first knob is Tier.", DateTimeOffset.UtcNow, "assistant", null, 1), CancellationToken.None);
+        await log.AppendReplyAsync(new Utterance("r1", "The first knob is Tier.", DateTimeOffset.UtcNow, "assistant", 1), CancellationToken.None);
         Assert.Equal(1, await log.RecordTurnAsync(CancellationToken.None));
 
         var reopened = new ParquetUtteranceLog(_dir);
         var replies = await reopened.RepliesAsync(CancellationToken.None);
         Assert.Equal(1, Assert.Single(replies).Turn);
 
-        var next = new Utterance("u2", "I totally agree.", DateTimeOffset.UtcNow, "user", null, reopened.TurnsRecorded + 1);
+        var next = new Utterance("u2", "I totally agree.", DateTimeOffset.UtcNow, "user", reopened.TurnsRecorded + 1);
         Assert.Equal("The first knob is Tier.", UtteranceContext.PreviousReply(replies, next));
         Assert.Null(UtteranceContext.PreviousReply(replies, next with { Turn = 1 }));
-        Assert.Null(UtteranceContext.PreviousReply(
-            [new Utterance("r", "theirs", DateTimeOffset.UtcNow, "assistant", "other", 1)], next with { ProfileId = "me" }));
     }
 
     /// <summary>

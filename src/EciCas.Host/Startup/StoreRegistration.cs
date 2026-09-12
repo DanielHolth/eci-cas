@@ -88,14 +88,13 @@ internal static class StoreRegistration
         // Archivist judges it worth writing down. That is the whole point of having
         // an Archivist, and it was never once exercised while the name was a seed.
         var seedNeeded = !File.Exists(ParquetArchiveStore.PairPathFor(archiveDirectory, new ArchivePair("assistant", "system")));
-        var archiveStore = new ParquetArchiveStore(archiveDirectory,
-            builder.Configuration.GetSection("Archive:SharedCategories").Get<string[]>());
+        var archiveStore = new ParquetArchiveStore(archiveDirectory);
         if (seedNeeded)
         {
             var seedRecord = new ArchiveRecord(
                 Category: "assistant", Topic: "system", Subtopic: "eci", Subject: "this", Key: "version", Value: "0.1",
                 Timestamp: DateTimeOffset.UtcNow, Domain: ArchiveDomain.External, Importance: 0.5);
-            await archiveStore.WriteAsync([seedRecord], profileId: null, CancellationToken.None);
+            await archiveStore.WriteAsync([seedRecord], CancellationToken.None);
         }
 
         // Wrapped, not replaced: the parquet store still owns the files, and the
@@ -110,9 +109,7 @@ internal static class StoreRegistration
         // every agent gets the same loaded instance.
         services.AddSingleton<IInstructionStore>(instructionStore);
 
-        // The passage corpus lives beside the pair files, in the shared tier only —
-        // a self-critique belongs to the persona the way the "assistant" category
-        // already does.
+        // The passage corpus lives beside the pair files.
         services.AddSingleton<IPassageStore>(new ParquetPassageStore(archiveDirectory));
 
         // The inverted archive: an append-only log of what was said, beside
@@ -152,11 +149,6 @@ internal static class StoreRegistration
             sp.GetRequiredService<IOptions<UtteranceOptions>>().Value.ConsolidatorEnabled
                 ? ActivatorUtilities.CreateInstance<SubstrateConsolidator>(sp)
                 : new NullFactConsolidator());
-
-
-        // Profiles live beside the archive they scope — one directory per person
-        // under archive/profiles/. A surface concern, not a bus citizen.
-        services.AddSingleton(new ProfileStore(archiveDirectory));
 
         // Upkeep as a service rather than a handle handed back out of band: the
         // pass needs the concrete store and the directory, and this is the last

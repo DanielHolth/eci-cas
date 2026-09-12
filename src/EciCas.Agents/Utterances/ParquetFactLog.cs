@@ -44,7 +44,6 @@ public sealed class ParquetFactLog : IFactLog
         public string? Text { get; set; }
         public string? Timestamp { get; set; }
         public string? Speaker { get; set; }
-        public string? ProfileId { get; set; }
         public string? Keywords { get; set; }
         public string? Embedding { get; set; }
         public string? EmbeddingModelId { get; set; }
@@ -292,7 +291,6 @@ public sealed class ParquetFactLog : IFactLog
         Text = f.Text,
         Timestamp = f.Timestamp.ToString("O", CultureInfo.InvariantCulture),
         Speaker = f.Speaker,
-        ProfileId = f.ProfileId,
         Keywords = JsonSerializer.Serialize(f.Keywords),
         Embedding = f.Embedding is null ? null : VectorMath.Encode(f.Embedding),
         EmbeddingModelId = f.EmbeddingModelId,
@@ -308,7 +306,6 @@ public sealed class ParquetFactLog : IFactLog
         ParquetColumn.Required(r.Text, nameof(r.Text)),
         ParquetColumn.RequiredTime(r.Timestamp, nameof(r.Timestamp)),
         ParquetColumn.Required(r.Speaker, nameof(r.Speaker)),
-        r.ProfileId,
         JsonSerializer.Deserialize<List<string>>(r.Keywords ?? "[]") ?? [],
         string.IsNullOrEmpty(r.Embedding) ? null : VectorMath.Decode(r.Embedding),
         r.EmbeddingModelId ?? "",

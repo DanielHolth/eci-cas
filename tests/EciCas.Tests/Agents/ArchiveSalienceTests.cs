@@ -98,13 +98,13 @@ public class ArchiveSalienceTests : IDisposable
     {
         var store = new ParquetArchiveStore(_directory);
         var pair = new ArchivePair("person", "daniel");
-        await store.WriteAsync([Row("city", 0.5, ageDays: 1)], null, CancellationToken.None);
+        await store.WriteAsync([Row("city", 0.5, ageDays: 1)], CancellationToken.None);
 
-        var stored = await store.LookupAsync(pair, null, CancellationToken.None);
-        await store.RecordRecallAsync(stored, null, CancellationToken.None);
-        await store.WriteAsync([Row("city", 0.5, ageDays: 0)], null, CancellationToken.None);
+        var stored = await store.LookupAsync(pair, CancellationToken.None);
+        await store.RecordRecallAsync(stored, CancellationToken.None);
+        await store.WriteAsync([Row("city", 0.5, ageDays: 0)], CancellationToken.None);
 
-        var after = Assert.Single(await store.LookupAsync(pair, null, CancellationToken.None));
+        var after = Assert.Single(await store.LookupAsync(pair, CancellationToken.None));
         Assert.Equal(1, after.Hits);
         Assert.NotNull(after.LastHitAt);
     }
@@ -119,8 +119,8 @@ public class ArchiveSalienceTests : IDisposable
     {
         var store = new ParquetArchiveStore(_directory);
 
-        await store.RecordRecallAsync([], null, CancellationToken.None);
-        await store.RecordRecallAsync([], null, CancellationToken.None);
+        await store.RecordRecallAsync([], CancellationToken.None);
+        await store.RecordRecallAsync([], CancellationToken.None);
 
         Assert.Equal(2, store.TurnsRecorded);
         Assert.Equal(2, new ParquetArchiveStore(_directory).TurnsRecorded);
@@ -136,14 +136,14 @@ public class ArchiveSalienceTests : IDisposable
     public async Task BothTheDrawerAndTheLaneAreCredited()
     {
         var store = new ParquetArchiveStore(_directory);
-        await store.WriteAsync([Row("city", 0.5, ageDays: 0)], null, CancellationToken.None);
-        var stored = await store.LookupAsync(new ArchivePair("person", "daniel"), null, CancellationToken.None);
+        await store.WriteAsync([Row("city", 0.5, ageDays: 0)], CancellationToken.None);
+        var stored = await store.LookupAsync(new ArchivePair("person", "daniel"), CancellationToken.None);
 
-        await store.RecordRecallAsync(stored, null, CancellationToken.None);
+        await store.RecordRecallAsync(stored, CancellationToken.None);
 
         store.Invalidate();
         var fresh = new ParquetArchiveStore(_directory);
-        Assert.Equal(1, Assert.Single(await fresh.LookupAsync(new ArchivePair("person", "daniel"), null, CancellationToken.None)).Hits);
-        Assert.Equal(1, Assert.Single(await fresh.RecentAsync(null, 10, CancellationToken.None)).Hits);
+        Assert.Equal(1, Assert.Single(await fresh.LookupAsync(new ArchivePair("person", "daniel"), CancellationToken.None)).Hits);
+        Assert.Equal(1, Assert.Single(await fresh.RecentAsync(10, CancellationToken.None)).Hits);
     }
 }

@@ -98,14 +98,19 @@ public sealed class SubstrateAgentEntry
     public PricePerMillionTokens? PricePerMtok { get; set; }
 
     /// <summary>
-    /// Blended per-token cost derived from PricePerMtok, computed once
-    /// wherever this entry is bound rather than asking every appsettings.json
-    /// to carry a pre-converted per-token rate that varies by model. Simple
-    /// average of input/output rather than tracking the two token counts
-    /// separately through SubstrateResult — good enough for a cost estimate.
+    /// Cost of one call, priced per direction. Output runs several times the
+    /// price of input on every provider we use, and this system is heavily
+    /// input-weighted — a six-turn window and a fistful of advisories go in,
+    /// two sentences come out — so a blended rate applied to the total is not
+    /// an approximation, it is an overcharge of roughly the output/input
+    /// ratio. The energy meter debits this number, so being wrong here means
+    /// draining a person's day at the wrong speed.
     /// Zero (not priced) when PricePerMtok is unset, e.g. "mock".
     /// </summary>
-    public decimal CostPerTokenUsd => PricePerMtok is { } p ? (p.Input + p.Output) / 2m / 1_000_000m : 0m;
+    public decimal CostUsd(int promptTokens, int completionTokens) =>
+        PricePerMtok is { } p
+            ? (promptTokens * p.Input + completionTokens * p.Output) / 1_000_000m
+            : 0m;
 }
 
 public sealed class PricePerMillionTokens

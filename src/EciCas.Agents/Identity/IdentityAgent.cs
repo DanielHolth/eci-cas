@@ -87,11 +87,9 @@ public sealed class IdentityAgent : AgentBase
     {
         var identity = await GetIdentityAsync(cancellationToken).ConfigureAwait(false);
 
-        // The tone is one persona for the whole device; the name belongs to
-        // whoever is talking. They arrive as one line because Intent reads one
-        // bracketed aside, not a structure.
-        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
-        var name = await _names.ForAsync(profileId, cancellationToken).ConfigureAwait(false);
+        // Tone and name arrive as one line because Intent reads one bracketed
+        // aside, not a structure.
+        var name = await _names.ForAsync(cancellationToken).ConfigureAwait(false);
 
         // An emptied name section removes the clause rather than leaving a
         // dangling space in front of it: whether the persona is reminded of

@@ -111,7 +111,6 @@ export interface SubstrateCall {
 export interface TurnRecord {
   seq: number;
   correlationId: string;
-  profileId: string | null;
   startedAt: string;
   endedAt: string;
   perception: string | null;

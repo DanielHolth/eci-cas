@@ -71,18 +71,18 @@ const EGG: Partial<Record<Band, string>> = {
 /** Roughly how many greetings pass between eggs. */
 const ODDS = 40;
 
-const LAST_KEY = "morrow.lastGreeting.";
+const LAST_KEY = "morrow.lastGreeting";
 
 /**
- * One greeting. `name` is what to call the person, `key` identifies them (the
- * profile id), and `at` is the clock the bands are read off. `roll` is the
- * randomness, injectable so a test can pin it.
+ * One greeting. `name` is what to call the person and `at` is the clock the
+ * bands are read off. `roll` is the randomness, injectable so a test can pin
+ * it.
  *
- * Random per open, but never the same line twice in a row for one person: a
+ * Random per open, but never the same line twice in a row: a
  * deterministic day-and-band seed meant the same word all evening, which read
  * as broken rather than as familiar.
  */
-export function greeting(name: string, key: string, at: Date = new Date(), roll: () => number = Math.random): Greeting {
+export function greeting(name: string, at: Date = new Date(), roll: () => number = Math.random): Greeting {
   const band = bandFor(at.getHours());
 
   const egg = EGG[band];
@@ -91,10 +91,10 @@ export function greeting(name: string, key: string, at: Date = new Date(), roll:
   }
 
   let last: string | null = null;
-  try { last = window.localStorage.getItem(LAST_KEY + key); } catch { /* no storage: plain random */ }
+  try { last = window.localStorage.getItem(LAST_KEY); } catch { /* no storage: plain random */ }
 
   const pool = GREETING[band].filter((g) => g !== last);
   const pick = pool[Math.floor(roll() * pool.length)];
-  try { window.localStorage.setItem(LAST_KEY + key, pick); } catch { /* holds for this open only */ }
+  try { window.localStorage.setItem(LAST_KEY, pick); } catch { /* holds for this open only */ }
   return { text: pick.replace("{name}", name), egg: false };
 }

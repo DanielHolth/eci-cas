@@ -55,7 +55,6 @@ public static class TurnProjection
     private static TurnRecord ApplyPerception(TurnRecord record, Envelope envelope) => record with
     {
         Perception = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? record.Perception,
-        ProfileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey) ?? record.ProfileId,
 
         // A pushed idea rides the same topic as something a person typed.
         // Only this key tells them apart, and drawing one as the other puts

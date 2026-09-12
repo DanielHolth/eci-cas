@@ -90,7 +90,7 @@ export function KnobsPanel() {
   }
 
   // Mood, not tone: the slider sets how the persona feels this turn, where
-  // Identity's profile says who it standingly is. Both used to say "tone".
+  // Identity's seed section says who it standingly is. Both used to say "tone".
   const moodIndex = knobs ? Math.max(0, knobs.moods.indexOf(knobs.mood)) : 2;
   const moodMax = (knobs?.moods.length ?? 5) - 1;
 

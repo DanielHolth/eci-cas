@@ -123,20 +123,13 @@ public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
     }
 
     /// <summary>
-    /// Text and profile ride along explicitly: Envelope.Derive starts a fresh
-    /// Meta rather than merging the parent's, and Cataloger needs both — the
-    /// message to judge the fact against, and the profile whose archive tier
-    /// the fact eventually lands in, by which time the speaker is long out of
-    /// scope.
+    /// Text rides along explicitly: Envelope.Derive starts a fresh Meta
+    /// rather than merging the parent's, and Cataloger needs the message to
+    /// judge the fact against, by which time the speaker is long out of scope.
     /// </summary>
     private void Publish(Envelope envelope, IReadOnlyList<ArchiveRecord> facts, string text)
     {
         var meta = MetaBag.Empty.With(FactsKey, facts).With(PerceptionAgent.TextKey, text);
-        if (envelope.Meta.Get<string>(PerceptionAgent.ProfileKey) is { Length: > 0 } profileId)
-        {
-            meta = meta.With(PerceptionAgent.ProfileKey, profileId);
-        }
-
         _bus.Publish(Topics.Facts, envelope.Derive(Topics.Facts, Name, envelope.Severity, meta));
     }
 

@@ -45,22 +45,12 @@ public sealed class ImpulseAgent : AgentBase
 
     /// <summary>
     /// Archive path holding the current DriveVectors, JSON-serialized. Read
-    /// directly by ReflectionAgent and GovernanceAgent. This is the
-    /// device-wide state — the path used when no profile owns the input.
+    /// directly by ReflectionAgent and GovernanceAgent. One record: this used
+    /// to fan out to impulse/drive/{profileId} so that the persona held a
+    /// separate emotional relationship with each person on a device. An
+    /// account has one profile, so the fan-out had one branch.
     /// </summary>
     public const string DrivePath = "impulse/drive";
-
-    /// <summary>
-    /// Drive state is per profile: the persona holds a separate emotional
-    /// relationship with each person, so what warms it toward one child does
-    /// not pre-colour how it meets the parent an hour later. That is a
-    /// keying change, not a redesign — one state record per profile under
-    /// the same path prefix, and <see cref="DrivePath"/> when the input
-    /// belongs to nobody in particular (the console loop, a self-generated
-    /// idea), which is also what a single-user install keeps using.
-    /// </summary>
-    public static string DrivePathFor(string? profileId) =>
-        string.IsNullOrEmpty(profileId) ? DrivePath : $"{DrivePath}/{profileId}";
 
 
     /// <summary>
@@ -171,26 +161,20 @@ public sealed class ImpulseAgent : AgentBase
         if (envelope.Topic == Topics.SystemControl)
         {
             var kind = envelope.Meta.Get<string>(ArchivistAgent.ControlKindKey);
-            var signalledProfile = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
             if (kind == GovernanceAgent.FrustrationKind)
             {
-                await NudgeAsync(FrustrationNudge, signalledProfile, cancellationToken).ConfigureAwait(false);
+                await NudgeAsync(FrustrationNudge, cancellationToken).ConfigureAwait(false);
             }
             else if (kind == ReflectionAgent.ReflectedKind
                 && envelope.Meta.Get<string>(ReflectionAgent.MoodKey) is { } mood
                 && SlowColoring.TryGetValue(mood, out var colouring))
             {
-                // Slow colouring is still device-wide: Reflection scores a
-                // whole batch of concluded turns in one substrate call, and
-                // that batch can span profiles. Splitting it per profile is
-                // a Reflection-side change, tracked in docs/roadmap.md.
-                await NudgeAsync(colouring, signalledProfile, cancellationToken).ConfigureAwait(false);
+                await NudgeAsync(colouring, cancellationToken).ConfigureAwait(false);
             }
 
             return;
         }
 
-        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
         var text = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
         var isCritical = await _reflex.IsEmergencyAsync(text, cancellationToken).ConfigureAwait(false);
 
@@ -205,19 +189,19 @@ public sealed class ImpulseAgent : AgentBase
                 MetaBag.Empty.With(IntentAgent.ReplyKey, reply).With(ReflexKey, true));
             _bus.Publish(Topics.Proposal, proposal);
 
-            await NudgeAsync(CriticalNudge, profileId, cancellationToken).ConfigureAwait(false);
+            await NudgeAsync(CriticalNudge, cancellationToken).ConfigureAwait(false);
         }
 
         var appraised = isCritical;
 
         if (PositiveTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
         {
-            await NudgeAsync(PositiveNudge, profileId, cancellationToken).ConfigureAwait(false);
+            await NudgeAsync(PositiveNudge, cancellationToken).ConfigureAwait(false);
             appraised = true;
         }
         else if (NegativeTriggers.Any(trigger => text.Contains(trigger, StringComparison.OrdinalIgnoreCase)))
         {
-            await NudgeAsync(NegativeNudge, profileId, cancellationToken).ConfigureAwait(false);
+            await NudgeAsync(NegativeNudge, cancellationToken).ConfigureAwait(false);
             appraised = true;
         }
 
@@ -233,28 +217,28 @@ public sealed class ImpulseAgent : AgentBase
         // reads as a lean rather than a spike.
         if (!appraised)
         {
-            await SettleAsync(profileId, cancellationToken).ConfigureAwait(false);
+            await SettleAsync(cancellationToken).ConfigureAwait(false);
         }
 
         // Advisory goes out last so the face it carries is the one this turn
         // just produced, not the one it inherited. The nudges above are cache
         // hits and a state write, not a substrate call, so the bundle waits
         // on nothing that matters.
-        var vectors = await GetVectorsAsync(DrivePathFor(profileId), cancellationToken).ConfigureAwait(false);
+        var vectors = await GetVectorsAsync(DrivePath, cancellationToken).ConfigureAwait(false);
         var advisory = envelope.Derive(Topics.Advisories, Name, severity,
             MetaBag.Empty.With(AdviceKey, advice).With(ExpressionKey, vectors.Expression()));
         _bus.Publish(Topics.Advisories, advisory);
     }
 
-    private Task NudgeAsync(DriveVectors nudge, string? profileId, CancellationToken cancellationToken) =>
-        UpdateAsync(profileId, current => current.Add(nudge), cancellationToken);
+    private Task NudgeAsync(DriveVectors nudge, CancellationToken cancellationToken) =>
+        UpdateAsync(current => current.Add(nudge), cancellationToken);
 
-    private Task SettleAsync(string? profileId, CancellationToken cancellationToken) =>
-        UpdateAsync(profileId, current => current.Drift(), cancellationToken);
+    private Task SettleAsync(CancellationToken cancellationToken) =>
+        UpdateAsync(current => current.Drift(), cancellationToken);
 
-    private async Task UpdateAsync(string? profileId, Func<DriveVectors, DriveVectors> change, CancellationToken cancellationToken)
+    private async Task UpdateAsync(Func<DriveVectors, DriveVectors> change, CancellationToken cancellationToken)
     {
-        var path = DrivePathFor(profileId);
+        const string path = DrivePath;
         var current = await GetVectorsAsync(path, cancellationToken).ConfigureAwait(false);
         var updated = change(current);
 
@@ -301,7 +285,7 @@ public sealed class ImpulseAgent : AgentBase
         await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // Another nudge for the same profile may have landed while the
+            // Another nudge may have landed while the
             // store read was in flight; that value is newer than this one.
             if (_cached.TryGetValue(path, out var raced))
             {

@@ -35,7 +35,7 @@ public sealed class TurnLogSubscriber : AgentBase
 
     private readonly Dictionary<Guid, Entry> _entries = [];
     private readonly Queue<Guid> _order = new();
-    private readonly Dictionary<Guid, Client> _clients = [];
+    private readonly Dictionary<Guid, ChannelWriter<TurnRecord>> _clients = [];
     private readonly object _gate = new();
     private long _seq;
 
@@ -45,8 +45,6 @@ public sealed class TurnLogSubscriber : AgentBase
         public int Version { get; set; }
         public bool Settled { get; set; }
     }
-
-    private sealed record Client(ChannelWriter<TurnRecord> Writer, string? ProfileId);
 
     public TurnLogSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<TurnLogSubscriber> logger,
         IOptions<TurnLogOptions> options, IEnumerable<ITurnLogSink> sinks, CostLedger ledger,
@@ -104,9 +102,9 @@ public sealed class TurnLogSubscriber : AgentBase
             record = entry.Record;
             version = entry.Version;
 
-            foreach (var client in _clients.Values.Where(c => Wants(c, record)))
+            foreach (var writer in _clients.Values)
             {
-                client.Writer.TryWrite(record);
+                writer.TryWrite(record);
             }
         }
 
@@ -117,23 +115,21 @@ public sealed class TurnLogSubscriber : AgentBase
     }
 
     /// <summary>Events a client that just connected has missed, oldest first.</summary>
-    public IReadOnlyList<TurnRecord> Recent(string? profileId)
+    public IReadOnlyList<TurnRecord> Recent()
     {
         lock (_gate)
         {
-            return [.. _order
-                .Select(id => _entries[id].Record)
-                .Where(r => profileId is null || r.ProfileId is null || r.ProfileId == profileId)];
+            return [.. _order.Select(id => _entries[id].Record)];
         }
     }
 
-    public ChannelReader<TurnRecord> Connect(string? profileId, out Guid clientId)
+    public ChannelReader<TurnRecord> Connect(out Guid clientId)
     {
         var channel = Channel.CreateUnbounded<TurnRecord>();
         var id = Guid.NewGuid();
         lock (_gate)
         {
-            _clients[id] = new Client(channel.Writer, profileId);
+            _clients[id] = channel.Writer;
         }
 
         clientId = id;
@@ -146,7 +142,7 @@ public sealed class TurnLogSubscriber : AgentBase
         {
             if (_clients.Remove(clientId, out var client))
             {
-                client.Writer.TryComplete();
+                client.TryComplete();
             }
         }
     }
@@ -198,10 +194,6 @@ public sealed class TurnLogSubscriber : AgentBase
         await _ledger.PersistAsync(cancellationToken).ConfigureAwait(false);
         await _energy.PersistAsync(cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>A client that named no profile sees everything; one that did also sees the events nobody owns, since the persona's own thinking belongs to every window rather than to none.</summary>
-    private static bool Wants(Client client, TurnRecord record) =>
-        client.ProfileId is null || record.ProfileId is null || record.ProfileId == client.ProfileId;
 
     private void Evict()
     {

@@ -73,8 +73,8 @@ public sealed class ScribeAgent : AgentBase
     /// <summary>The speaker every reply row is stamped with.</summary>
     public const string ReplySpeaker = "assistant";
 
-    /// <summary>Open turns: the number and profile each input took, until its conclusion.</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (long Turn, string? ProfileId)> _open = new();
+    /// <summary>Open turns: the number each input took, until its conclusion.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, long> _open = new();
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
@@ -91,8 +91,7 @@ public sealed class ScribeAgent : AgentBase
         // turns take a number too: the denominator of every hit rate has to
         // count the turns that wanted nothing as honestly as the rest.
         var turn = _utterances.TurnsRecorded + 1;
-        var profileId = envelope.Meta.Get<string>(PerceptionAgent.ProfileKey);
-        _open[envelope.CorrelationId] = (turn, profileId);
+        _open[envelope.CorrelationId] = turn;
 
         if (text.Length == 0 || Self(envelope))
         {
@@ -103,8 +102,7 @@ public sealed class ScribeAgent : AgentBase
             Id: Guid.NewGuid().ToString("n"),
             Text: text,
             Timestamp: envelope.Timestamp,
-            Speaker: profileId ?? "user",
-            ProfileId: profileId,
+            Speaker: "user",
             Turn: turn);
 
         try
@@ -164,7 +162,6 @@ public sealed class ScribeAgent : AgentBase
                 Text: sentence,
                 Timestamp: utterance.Timestamp,
                 Speaker: utterance.Speaker,
-                ProfileId: utterance.ProfileId,
                 Keywords: keywords,
                 FirstSeenTurn: turnsNow));
         }
@@ -213,8 +210,7 @@ public sealed class ScribeAgent : AgentBase
                     Text: reply,
                     Timestamp: envelope.Timestamp,
                     Speaker: ReplySpeaker,
-                    ProfileId: open.ProfileId,
-                    Turn: open.Turn), cancellationToken).ConfigureAwait(false);
+                    Turn: open), cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {

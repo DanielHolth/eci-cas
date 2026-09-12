@@ -47,56 +47,26 @@ public class ImpulseAgentTests
     }
 
     [Fact]
-    public async Task TwoProfiles_KeepSeparateDriveState()
+    public async Task Praise_NudgesTheDriveState()
     {
-        // The point of per-profile drive state: warmth earned by one person
-        // must not colour how the persona meets the next one. Asserted on
-        // what each profile's record ends up holding, not on the nudge math.
         var (agent, _, _, store) = Create();
 
-        await agent.HandleAsync(Perceive("thanks, great job", "daniel"), CancellationToken.None);
-        await agent.HandleAsync(Perceive("that's wrong, terrible", "ada"), CancellationToken.None);
-
-        var daniel = await ReadDriveAsync(store, ImpulseAgent.DrivePathFor("daniel"));
-        var ada = await ReadDriveAsync(store, ImpulseAgent.DrivePathFor("ada"));
-
-        // Compared against the resting baseline, not zero — Temperature is
-        // clamped to 0..1 and starts at its default, so "cooler" means below
-        // where a profile that had said nothing would still be.
-        var baseline = new DriveVectors();
-        Assert.True(daniel.Temperature > baseline.Temperature);
-        Assert.True(ada.Temperature < baseline.Temperature);
-
-        // And the device-wide state neither of them named stays untouched.
-        Assert.Empty(await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task InputWithNoProfile_NudgesTheDeviceWideDriveState()
-    {
-        // The console loop and Reflection's own ideas belong to nobody, and a
-        // single-user install never sends a profile at all — both keep using
-        // the unsuffixed path they always did.
-        var (agent, _, _, store) = Create();
-
-        await agent.HandleAsync(Perceive("thanks, great job", profileId: null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("thanks, great job"), CancellationToken.None);
 
         Assert.True((await ReadDriveAsync(store, ImpulseAgent.DrivePath)).Temperature > new DriveVectors().Temperature);
     }
 
     [Fact]
-    public async Task FrustrationCarryingAProfile_NudgesOnlyThatProfile()
+    public async Task Frustration_NudgesUrgency()
     {
         var (agent, _, _, store) = Create();
         var control = Envelope.Create(Topics.SystemControl, "Governance", Severity.Elevated,
             MetaBag.Empty
-                .With(ArchivistAgent.ControlKindKey, GovernanceAgent.FrustrationKind)
-                .With(PerceptionAgent.ProfileKey, "daniel"));
+                .With(ArchivistAgent.ControlKindKey, GovernanceAgent.FrustrationKind));
 
         await agent.HandleAsync(control, CancellationToken.None);
 
-        Assert.True((await ReadDriveAsync(store, ImpulseAgent.DrivePathFor("daniel"))).Urgency > new DriveVectors().Urgency);
-        Assert.Empty(await store.LookupAsync([ImpulseAgent.DrivePath], maxPerPath: 1, CancellationToken.None));
+        Assert.True((await ReadDriveAsync(store, ImpulseAgent.DrivePath)).Urgency > new DriveVectors().Urgency);
     }
 
     /// <summary>
@@ -111,11 +81,11 @@ public class ImpulseAgentTests
         var (agent, _, _, store) = Create();
         var baseline = new DriveVectors();
 
-        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance"), CancellationToken.None);
         var alarmed = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
         Assert.True(alarmed.Urgency > baseline.Urgency);
 
-        await agent.HandleAsync(Perceive("what's the weather", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("what's the weather"), CancellationToken.None);
         var settling = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
 
         Assert.True(settling.Urgency < alarmed.Urgency);
@@ -133,10 +103,10 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
 
-        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("thanks, great job"), CancellationToken.None);
         var once = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
 
-        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("thanks, great job"), CancellationToken.None);
         var twice = await ReadDriveAsync(store, ImpulseAgent.DrivePath);
 
         var first = once.Temperature - new DriveVectors().Temperature;
@@ -152,22 +122,19 @@ public class ImpulseAgentTests
     public async Task QuietTurns_ArriveAtBaselineRatherThanApproachingItForever()
     {
         var (agent, _, _, store) = Create();
-        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance"), CancellationToken.None);
 
         for (var i = 0; i < 100; i++)
         {
-            await agent.HandleAsync(Perceive("what's the weather", null), CancellationToken.None);
+            await agent.HandleAsync(Perceive("what's the weather"), CancellationToken.None);
         }
 
         Assert.Equal(new DriveVectors(), await ReadDriveAsync(store, ImpulseAgent.DrivePath));
     }
 
-    private static Envelope Perceive(string text, string? profileId)
-    {
-        var meta = MetaBag.Empty.With(PerceptionAgent.TextKey, text);
-        return Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
-            profileId is null ? meta : meta.With(PerceptionAgent.ProfileKey, profileId));
-    }
+    private static Envelope Perceive(string text) =>
+        Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, text));
 
     private static async Task<DriveVectors> ReadDriveAsync(IAgentStateStore store, string path)
     {
@@ -332,11 +299,11 @@ public class ImpulseAgentTests
     {
         var (agent, advisories, _, _) = Create();
 
-        await agent.HandleAsync(Perceive("nothing much", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("nothing much"), CancellationToken.None);
         Assert.True(advisories.TryRead(out var calm));
         Assert.Equal("neutral", calm!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
 
-        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance"), CancellationToken.None);
         Assert.True(advisories.TryRead(out var urgent));
         Assert.Equal("alert", urgent!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
     }
@@ -351,11 +318,11 @@ public class ImpulseAgentTests
     {
         var (agent, advisories, _, _) = Create();
 
-        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
-        await agent.HandleAsync(Perceive("thanks, great job", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("thanks, great job"), CancellationToken.None);
+        await agent.HandleAsync(Perceive("thanks, great job"), CancellationToken.None);
         while (advisories.TryRead(out _)) { }
 
-        await agent.HandleAsync(Perceive("call an ambulance", null), CancellationToken.None);
+        await agent.HandleAsync(Perceive("call an ambulance"), CancellationToken.None);
         Assert.True(advisories.TryRead(out var advisory));
         Assert.Equal("alert", advisory!.Meta.Get<string>(ImpulseAgent.ExpressionKey));
     }

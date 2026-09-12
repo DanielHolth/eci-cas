@@ -30,7 +30,7 @@ public class FactPickerTests
     ];
 
     private static Consulted Hit(string text) =>
-        new(new Fact(Guid.NewGuid().ToString("n"), "u", text, DateTimeOffset.UnixEpoch, "user", null, []), 0.8, true);
+        new(new Fact(Guid.NewGuid().ToString("n"), "u", text, DateTimeOffset.UnixEpoch, "user", []), 0.8, true);
 
     private static Task<IReadOnlyList<Consulted>?> Pick(string reply, int max = 8) =>
         new FactPicker(new StubSubstrate(reply), NullLogger<FactPicker>.Instance)
@@ -68,7 +68,7 @@ public class FactPickerTests
             NullLogger<SubstrateFactExtractor>.Instance);
 
         var facts = await extractor.ExtractAsync(
-            new Utterance("u", "how many kids do i have?", DateTimeOffset.UnixEpoch, "user", null), null, CancellationToken.None);
+            new Utterance("u", "how many kids do i have?", DateTimeOffset.UnixEpoch, "user"), null, CancellationToken.None);
 
         Assert.Empty(facts);
     }
@@ -81,7 +81,7 @@ public class FactPickerTests
             Options.Create(new UtteranceOptions { ExtractorEnabled = true }),
             NullLogger<SubstrateFactExtractor>.Instance);
 
-        await extractor.ExtractAsync(new Utterance("u", "maia is my girl", DateTimeOffset.UnixEpoch, "user", null), null, CancellationToken.None);
+        await extractor.ExtractAsync(new Utterance("u", "maia is my girl", DateTimeOffset.UnixEpoch, "user"), null, CancellationToken.None);
 
         Assert.NotNull(substrate.Prompt);
         Assert.DoesNotContain("JUST BEFORE", substrate.Prompt);
@@ -95,7 +95,7 @@ public class FactPickerTests
             Options.Create(new UtteranceOptions { ExtractorEnabled = true, ExtractorSeesPreviousReply = false }),
             NullLogger<SubstrateFactExtractor>.Instance);
 
-        await extractor.ExtractAsync(new Utterance("u", "I totally agree.", DateTimeOffset.UnixEpoch, "user", null),
+        await extractor.ExtractAsync(new Utterance("u", "I totally agree.", DateTimeOffset.UnixEpoch, "user"),
             "The first knob is Tier.", CancellationToken.None);
 
         Assert.DoesNotContain("The first knob", substrate.Prompt);

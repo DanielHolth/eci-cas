@@ -252,9 +252,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 FixedCategory, FixedTopic, candidate.Subtopic, FixedSubject, FixedKey, candidate.Idea,
                 now, ArchiveDomain.Internal, candidate == best && shouldPush ? PushedImportance : QuietImportance))
             .ToList();
-        // profileId null: Reflection's own ideas belong to the persona, not
-        // to whoever happened to be talking when it had them.
-        await _store.WriteAsync(internalRecords, profileId: null, cancellationToken).ConfigureAwait(false);
+        await _store.WriteAsync(internalRecords, cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("{Agent} wrote {Count} record(s): {Paths}", Name, internalRecords.Count,
             string.Join(", ", internalRecords.Select(r => $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value} (importance {r.Importance})")));
 

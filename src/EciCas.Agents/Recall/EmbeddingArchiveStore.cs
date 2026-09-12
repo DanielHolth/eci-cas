@@ -21,23 +21,22 @@ using EciCas.Core;
 /// </summary>
 public sealed class EmbeddingArchiveStore(IArchiveStore inner, IEmbeddingProvider embeddings) : IArchiveStore
 {
-    public IReadOnlyList<ArchivePair> IndexFor(string? profileId) => inner.IndexFor(profileId);
+    public IReadOnlyList<ArchivePair> IndexFor() => inner.IndexFor();
 
-    public Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, string? profileId, CancellationToken cancellationToken) =>
-        inner.LookupAsync(pair, profileId, cancellationToken);
+    public Task<IReadOnlyList<ArchiveRecord>> LookupAsync(ArchivePair pair, CancellationToken cancellationToken) =>
+        inner.LookupAsync(pair, cancellationToken);
 
     public long TurnsRecorded => inner.TurnsRecorded;
 
-    public Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, string? profileId, CancellationToken cancellationToken) =>
-        inner.RecordRecallAsync(recalled, profileId, cancellationToken);
+    public Task RecordRecallAsync(IReadOnlyList<ArchiveRecord> recalled, CancellationToken cancellationToken) =>
+        inner.RecordRecallAsync(recalled, cancellationToken);
 
-    public Task<IReadOnlyList<ArchiveRecord>> RecentAsync(string? profileId, int limit, CancellationToken cancellationToken) =>
-        inner.RecentAsync(profileId, limit, cancellationToken);
+    public Task<IReadOnlyList<ArchiveRecord>> RecentAsync(int limit, CancellationToken cancellationToken) =>
+        inner.RecentAsync(limit, cancellationToken);
 
-    public async Task WriteAsync(IReadOnlyList<ArchiveRecord> records, string? profileId, CancellationToken cancellationToken) =>
+    public async Task WriteAsync(IReadOnlyList<ArchiveRecord> records, CancellationToken cancellationToken) =>
         await inner.WriteAsync(
             await EmbeddedAsync(records, cancellationToken).ConfigureAwait(false),
-            profileId,
             cancellationToken).ConfigureAwait(false);
 
     private async Task<IReadOnlyList<ArchiveRecord>> EmbeddedAsync(

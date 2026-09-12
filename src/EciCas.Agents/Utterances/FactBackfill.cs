@@ -119,7 +119,6 @@ public sealed class FactBackfill
                     Text: sentence,
                     Timestamp: utterance.Timestamp,
                     Speaker: utterance.Speaker,
-                    ProfileId: utterance.ProfileId,
                     Keywords: keywords,
 
                     // The utterance's own turn, not today's: a recovered fact

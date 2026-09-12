@@ -15,11 +15,10 @@ import type { TurnRecord } from "@/types/events";
  * only thing that knows the meta-key table, which is what lets the disk sink
  * and this drawer show the same event without either one being the source.
  */
-export function useTurnLog(profileId?: string): TurnRecord[] {
+export function useTurnLog(): TurnRecord[] {
   const [records, setRecords] = useState<TurnRecord[]>([]);
 
   useEffect(() => {
-    const query = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
     const abort = new AbortController();
     let source: EventSource | undefined;
 
@@ -32,7 +31,7 @@ export function useTurnLog(profileId?: string): TurnRecord[] {
       });
     }
 
-    fetch(`${API_BASE}/api/log${query}`, { signal: abort.signal })
+    fetch(`${API_BASE}/api/log`, { signal: abort.signal })
       .then((response) => (response.ok ? response.json() : []))
       .then((replayed: TurnRecord[]) => setRecords(replayed))
       .catch(() => {
@@ -41,7 +40,7 @@ export function useTurnLog(profileId?: string): TurnRecord[] {
       })
       .finally(() => {
         if (abort.signal.aborted) return;
-        source = new EventSource(`${API_BASE}/api/log/stream${query}`);
+        source = new EventSource(`${API_BASE}/api/log/stream`);
         source.onmessage = (event) => merge(JSON.parse(event.data) as TurnRecord);
       });
 
@@ -49,7 +48,7 @@ export function useTurnLog(profileId?: string): TurnRecord[] {
       abort.abort();
       source?.close();
     };
-  }, [profileId]);
+  }, []);
 
   return records;
 }

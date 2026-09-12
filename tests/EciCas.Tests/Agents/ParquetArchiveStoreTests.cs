@@ -56,10 +56,10 @@ public class ParquetArchiveStoreTests : IDisposable
         var store = new ParquetArchiveStore(_directory);
         await store.WriteAsync(
             [Record("person", "family", "son", "birthdate", "2020-08-28") with { Sentence = "Marcus was born on 28 August 2020." }],
-            null, CancellationToken.None);
+            CancellationToken.None);
 
         var reopened = new ParquetArchiveStore(_directory);
-        var row = Assert.Single(await reopened.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None));
+        var row = Assert.Single(await reopened.LookupAsync(new ArchivePair("person", "family"), CancellationToken.None));
         Assert.Equal("Marcus was born on 28 August 2020.", row.Sentence);
     }
 
@@ -86,16 +86,16 @@ public class ParquetArchiveStoreTests : IDisposable
         }, path);
 
         var store = new ParquetArchiveStore(_directory);
-        var row = Assert.Single(await store.LookupAsync(pair, null, CancellationToken.None));
+        var row = Assert.Single(await store.LookupAsync(pair, CancellationToken.None));
         Assert.Equal("", row.Sentence);
 
         // And it heals on the next write to that pair rather than needing a
         // migration: the row is rewritten through the same widened schema.
-        await store.WriteAsync([row with { Sentence = "Marcus was born on 28 August 2020." }], null, CancellationToken.None);
+        await store.WriteAsync([row with { Sentence = "Marcus was born on 28 August 2020." }], CancellationToken.None);
         var reopened = new ParquetArchiveStore(_directory);
         Assert.Equal(
             "Marcus was born on 28 August 2020.",
-            Assert.Single(await reopened.LookupAsync(pair, null, CancellationToken.None)).Sentence);
+            Assert.Single(await reopened.LookupAsync(pair, CancellationToken.None)).Sentence);
     }
 
     [Theory]
@@ -135,14 +135,14 @@ public class ParquetArchiveStoreTests : IDisposable
         await store.WriteAsync([
             Record("person", "family", "son", "birthdate", "2020-08-28"),
             Record("event", "wedding: oslo", "venue", "location", "drammen kirke"),
-        ], null, CancellationToken.None);
+        ], CancellationToken.None);
 
         Assert.DoesNotContain(Directory.EnumerateFiles(_directory), f => Path.GetFileName(f).StartsWith("index", StringComparison.OrdinalIgnoreCase));
 
         var reopened = new ParquetArchiveStore(_directory);
-        Assert.Contains(new ArchivePair("person", "family"), reopened.IndexFor(null));
-        Assert.Contains(new ArchivePair("event", "wedding: oslo"), reopened.IndexFor(null));
-        Assert.Equal(2, reopened.IndexFor(null).Count);
+        Assert.Contains(new ArchivePair("person", "family"), reopened.IndexFor());
+        Assert.Contains(new ArchivePair("event", "wedding: oslo"), reopened.IndexFor());
+        Assert.Equal(2, reopened.IndexFor().Count);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class ParquetArchiveStoreTests : IDisposable
         await store.WriteAsync([
             Record("person", "family", "son", "birthdate", "2020-08-28"),
             Record("person", "work", "employer", "role", "engineer"),
-        ], null, CancellationToken.None);
+        ], CancellationToken.None);
 
         Assert.Equal(2, PairFiles(_directory).Count());
     }
@@ -168,9 +168,9 @@ public class ParquetArchiveStoreTests : IDisposable
         var store = new ParquetArchiveStore(_directory);
         await store.WriteAsync(
             [.. Enumerable.Range(0, 250).Select(i => Record("science", "thermodynamics", "entropy", $"note{i}", $"value {i}"))],
-            null, CancellationToken.None);
+            CancellationToken.None);
 
-        var rows = await store.LookupAsync(new ArchivePair("science", "thermodynamics"), null, CancellationToken.None);
+        var rows = await store.LookupAsync(new ArchivePair("science", "thermodynamics"), CancellationToken.None);
         Assert.Equal(250, rows.Count);
     }
 
@@ -182,9 +182,9 @@ public class ParquetArchiveStoreTests : IDisposable
             Record("person", "family", "son", "low", "l", importance: 0.1),
             Record("person", "family", "son", "high", "h", importance: 0.9),
             Record("person", "family", "daughter", "mid", "m", importance: 0.5),
-        ], null, CancellationToken.None);
+        ], CancellationToken.None);
 
-        var rows = await store.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None);
+        var rows = await store.LookupAsync(new ArchivePair("person", "family"), CancellationToken.None);
         Assert.Equal(["high", "mid", "low"], rows.Select(r => r.Key));
     }
 
@@ -192,7 +192,7 @@ public class ParquetArchiveStoreTests : IDisposable
     public async Task LookupOfAnUnknownPairIsEmpty_NotAnError()
     {
         var store = new ParquetArchiveStore(_directory);
-        Assert.Empty(await store.LookupAsync(new ArchivePair("nothing", "here"), null, CancellationToken.None));
+        Assert.Empty(await store.LookupAsync(new ArchivePair("nothing", "here"), CancellationToken.None));
     }
 
     /// <summary>
@@ -204,79 +204,16 @@ public class ParquetArchiveStoreTests : IDisposable
     {
         var store = new ParquetArchiveStore(_directory);
         await Task.WhenAll(Enumerable.Range(0, 20).Select(i =>
-            store.WriteAsync([Record("person", $"topic{i % 4}", "sub", $"key{i}", $"value {i}")], null, CancellationToken.None)));
+            store.WriteAsync([Record("person", $"topic{i % 4}", "sub", $"key{i}", $"value {i}")], CancellationToken.None)));
 
         var total = 0;
-        foreach (var pair in store.IndexFor(null))
+        foreach (var pair in store.IndexFor())
         {
-            total += (await store.LookupAsync(pair, null, CancellationToken.None)).Count;
+            total += (await store.LookupAsync(pair, CancellationToken.None)).Count;
         }
 
         Assert.Equal(20, total);
-        Assert.Equal(4, store.IndexFor(null).Count);
-    }
-
-    // --- profile tiering -------------------------------------------------
-
-    [Fact]
-    public async Task PersonalFactsLandInTheProfileDirectory_SharedCategoriesStayShared()
-    {
-        var store = new ParquetArchiveStore(_directory);
-        await store.WriteAsync([
-            Record("person", "family", "son", "birthdate", "2020-08-28"),
-            Record("assistant", "identity", "persona", "name", "morrow"),
-        ], "daniel", CancellationToken.None);
-
-        var profileDirectory = ParquetArchiveStore.ProfileDirectoryFor(_directory, "daniel");
-        Assert.Single(PairFiles(profileDirectory));
-        Assert.Single(PairFiles(_directory));
-        Assert.Contains(new ArchivePair("person", "family"), ParquetArchiveStore.PairsIn(profileDirectory));
-        Assert.Contains(new ArchivePair("assistant", "identity"), ParquetArchiveStore.PairsIn(_directory));
-    }
-
-    [Fact]
-    public async Task OneProfileNeverSeesAnother()
-    {
-        var store = new ParquetArchiveStore(_directory);
-        await store.WriteAsync([Record("person", "family", "son", "name", "aksel")], "daniel", CancellationToken.None);
-        await store.WriteAsync([Record("person", "pets", "dog", "name", "rex")], "ada", CancellationToken.None);
-
-        Assert.Contains(new ArchivePair("person", "family"), store.IndexFor("daniel"));
-        Assert.DoesNotContain(new ArchivePair("person", "pets"), store.IndexFor("daniel"));
-        Assert.Empty(await store.LookupAsync(new ArchivePair("person", "pets"), "daniel", CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task ReadsUnionSharedAndProfile_WithTheProfileWinningOnCollision()
-    {
-        var store = new ParquetArchiveStore(_directory);
-        await store.WriteAsync([
-            Record("person", "family", "son", "name", "shared-answer"),
-            Record("person", "family", "son", "city", "oslo"),
-        ], null, CancellationToken.None);
-        await store.WriteAsync([Record("person", "family", "son", "name", "profile-answer")], "daniel", CancellationToken.None);
-
-        var rows = await store.LookupAsync(new ArchivePair("person", "family"), "daniel", CancellationToken.None);
-        Assert.Equal("profile-answer", Assert.Single(rows, r => r.Key == "name").Value);
-        Assert.Equal(2, rows.Count);
-
-        // The shared tier alone is what a profile-less turn still sees.
-        var unscoped = await store.LookupAsync(new ArchivePair("person", "family"), null, CancellationToken.None);
-        Assert.Equal("shared-answer", Assert.Single(unscoped, r => r.Key == "name").Value);
-    }
-
-    [Fact]
-    public async Task SharedCategoriesAreConfigurable()
-    {
-        var store = new ParquetArchiveStore(_directory, ["world"]);
-        await store.WriteAsync([
-            Record("world", "geography", "norway", "capital", "oslo"),
-            Record("assistant", "identity", "persona", "name", "morrow"),
-        ], "daniel", CancellationToken.None);
-
-        Assert.Contains(new ArchivePair("world", "geography"), ParquetArchiveStore.PairsIn(_directory));
-        Assert.Contains(new ArchivePair("assistant", "identity"),
-            ParquetArchiveStore.PairsIn(ParquetArchiveStore.ProfileDirectoryFor(_directory, "daniel")));
+        Assert.Equal(4, store.IndexFor().Count);
     }
 
     [Fact]
@@ -286,10 +223,10 @@ public class ParquetArchiveStoreTests : IDisposable
         var store = new ParquetArchiveStore(directory);
         var pair = new ArchivePair("person", "daniel");
 
-        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)], null, CancellationToken.None);
-        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "Daniel", "City", "bergen", DateTimeOffset.UtcNow)], null, CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)], CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "Daniel", "City", "bergen", DateTimeOffset.UtcNow)], CancellationToken.None);
 
-        var rows = await store.LookupAsync(pair, null, CancellationToken.None);
+        var rows = await store.LookupAsync(pair, CancellationToken.None);
         Assert.Equal("bergen", Assert.Single(rows).Value);
     }
 
@@ -304,9 +241,9 @@ public class ParquetArchiveStoreTests : IDisposable
         [
             new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now),
             new ArchiveRecord("person", "daniel", "home", "daniel", "city", "bergen", now),
-        ], null, CancellationToken.None);
+        ], CancellationToken.None);
 
-        var rows = await store.LookupAsync(new ArchivePair("person", "daniel"), null, CancellationToken.None);
+        var rows = await store.LookupAsync(new ArchivePair("person", "daniel"), CancellationToken.None);
         Assert.Equal("bergen", Assert.Single(rows).Value);
     }
 
@@ -323,10 +260,10 @@ public class ParquetArchiveStoreTests : IDisposable
         [
             new ArchiveRecord("person", "family", "son", "marcus", "birthdate", "2020-08-28", now.AddDays(-2)),
             new ArchiveRecord("record", "passport", "renewal", "daniel", "expiry", "2027-03", now),
-        ], null, CancellationToken.None);
+        ], CancellationToken.None);
 
         var reopened = new ParquetArchiveStore(_directory);
-        var rows = await reopened.RecentAsync(null, 10, CancellationToken.None);
+        var rows = await reopened.RecentAsync(10, CancellationToken.None);
         Assert.Equal(["2027-03", "2020-08-28"], rows.Select(r => r.Value));
     }
 
@@ -344,9 +281,9 @@ public class ParquetArchiveStoreTests : IDisposable
         [
             new ArchiveRecord("vehicle", "service", "renewal", "daniel", "cost", "4000", now),
             new ArchiveRecord("record", "passport", "renewal", "daniel", "cost", "1300", now),
-        ], null, CancellationToken.None);
+        ], CancellationToken.None);
 
-        var rows = await store.RecentAsync(null, 10, CancellationToken.None);
+        var rows = await store.RecentAsync(10, CancellationToken.None);
         Assert.Equal(2, rows.Count);
     }
 
@@ -356,10 +293,10 @@ public class ParquetArchiveStoreTests : IDisposable
     {
         var store = new ParquetArchiveStore(_directory);
         var now = DateTimeOffset.UtcNow;
-        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now.AddDays(-1))], null, CancellationToken.None);
-        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "bergen", now)], null, CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now.AddDays(-1))], CancellationToken.None);
+        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "bergen", now)], CancellationToken.None);
 
-        var rows = await store.RecentAsync(null, 10, CancellationToken.None);
+        var rows = await store.RecentAsync(10, CancellationToken.None);
         Assert.Equal("bergen", Assert.Single(rows).Value);
     }
 
@@ -376,13 +313,13 @@ public class ParquetArchiveStoreTests : IDisposable
         [
             new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow - ParquetArchiveStore.RecentWindow.Add(TimeSpan.FromDays(1))),
             new ArchiveRecord("person", "daniel", "work", "daniel", "role", "builder", DateTimeOffset.UtcNow),
-        ], null, CancellationToken.None);
+        ], CancellationToken.None);
 
         var reopened = new ParquetArchiveStore(_directory);
         await reopened.TrimRecentAsync(CancellationToken.None);
 
-        Assert.Equal("builder", Assert.Single(await reopened.RecentAsync(null, 10, CancellationToken.None)).Value);
-        Assert.Equal(2, (await reopened.LookupAsync(pair, null, CancellationToken.None)).Count);
+        Assert.Equal("builder", Assert.Single(await reopened.RecentAsync(10, CancellationToken.None)).Value);
+        Assert.Equal(2, (await reopened.LookupAsync(pair, CancellationToken.None)).Count);
     }
 
     /// <summary>The lane file is not a pair, so nothing may find it through the index.</summary>
@@ -390,23 +327,10 @@ public class ParquetArchiveStoreTests : IDisposable
     public async Task TheLaneFileNeverAppearsInTheIndex()
     {
         var store = new ParquetArchiveStore(_directory);
-        await store.WriteAsync([Record("person", "family", "son", "birthdate", "2020-08-28")], null, CancellationToken.None);
+        await store.WriteAsync([Record("person", "family", "son", "birthdate", "2020-08-28")], CancellationToken.None);
 
         Assert.True(File.Exists(Path.Combine(_directory, ParquetArchiveStore.RecentFileName)));
-        Assert.Equal([new ArchivePair("person", "family")], new ParquetArchiveStore(_directory).IndexFor(null));
-    }
-
-    /// <summary>A profile's own facts stay in its own lane, and it reads both.</summary>
-    [Fact]
-    public async Task AProfilesLaneIsItsOwn_AndUnionsWithTheSharedOne()
-    {
-        var store = new ParquetArchiveStore(_directory, ["assistant"]);
-        var now = DateTimeOffset.UtcNow;
-        await store.WriteAsync([new ArchiveRecord("assistant", "system", "eci", "this", "version", "0.1", now.AddDays(-1))], "ada", CancellationToken.None);
-        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now)], "ada", CancellationToken.None);
-
-        Assert.Equal(["oslo", "0.1"], (await store.RecentAsync("ada", 10, CancellationToken.None)).Select(r => r.Value));
-        Assert.Equal(["0.1"], (await store.RecentAsync(null, 10, CancellationToken.None)).Select(r => r.Value));
+        Assert.Equal([new ArchivePair("person", "family")], new ParquetArchiveStore(_directory).IndexFor());
     }
 
     /// <summary>
@@ -418,7 +342,7 @@ public class ParquetArchiveStoreTests : IDisposable
     [Fact]
     public async Task AVector_SurvivesTheRoundTrip()
     {
-        var store = new ParquetArchiveStore(_directory, null);
+        var store = new ParquetArchiveStore(_directory);
         var row = new ArchiveRecord("person", "family", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)
         {
             Embedding = [0.5f, -0.25f, 0.125f],
@@ -426,7 +350,7 @@ public class ParquetArchiveStoreTests : IDisposable
             EmbeddingHash = "abc123",
         };
 
-        await store.WriteAsync([row], null, CancellationToken.None);
+        await store.WriteAsync([row], CancellationToken.None);
 
         var reread = await ParquetArchiveStore.ReadRecordsAsync(
             ParquetArchiveStore.PairPathFor(_directory, new ArchivePair("person", "family")), CancellationToken.None);
@@ -445,10 +369,10 @@ public class ParquetArchiveStoreTests : IDisposable
     [Fact]
     public async Task AnUnembeddedRow_ReadsBackAsNoVector_NotAnEmptyOne()
     {
-        var store = new ParquetArchiveStore(_directory, null);
+        var store = new ParquetArchiveStore(_directory);
         await store.WriteAsync(
             [new ArchiveRecord("person", "family", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)],
-            null, CancellationToken.None);
+            CancellationToken.None);
 
         var reread = await ParquetArchiveStore.ReadRecordsAsync(
             ParquetArchiveStore.PairPathFor(_directory, new ArchivePair("person", "family")), CancellationToken.None);

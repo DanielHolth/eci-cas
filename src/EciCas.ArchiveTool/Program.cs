@@ -20,12 +20,12 @@ if (!Directory.Exists(directory))
 }
 
 const string Usage = """
-    list | show <[profile:]category> [topic] [subtopic] | showall <[profile:]category> [topic] [subtopic]
-    recent [[profile:]recent] | passages [count] | passage <id>
+    list | show <category> [topic] [subtopic] | showall <category> [topic] [subtopic]
+    recent | passages [count] | passage <id>
     utterances [count] | threads [count]
     thread merge <thread> <thread> | thread split <fact> | facts clear
-    del <[profile:]category> <topic> <index[,index...]> | del <[profile:]category> <topic> [subtopic]
-    del [profile:]recent <index[,index...]> | del passage <id>
+    del <category> <topic> <index[,index...]> | del <category> <topic> [subtopic]
+    del recent <index[,index...]> | del passage <id>
     embed <model.onnx> <sentencepiece.bpe.model> | reset | help | exit
     """;
 
@@ -72,7 +72,7 @@ while (true)
                 break;
 
             case "recent":
-                await ShowRecentAsync(directory, parts.ElementAtOrDefault(1));
+                await ShowRecentAsync(directory);
                 break;
 
             case "passages":
@@ -104,7 +104,7 @@ while (true)
                 break;
 
             case "del" when parts.Length >= 3 && IsLane(parts[1]) && IsIndexList(parts[2]):
-                await DeleteRecentAsync(directory, parts[1], parts[2]);
+                await DeleteRecentAsync(directory, parts[2]);
                 break;
 
             case "del" when parts.Length >= 3 && parts[1].Equals("passage", StringComparison.OrdinalIgnoreCase):
@@ -178,82 +178,32 @@ static async Task EmbedAsync(string directory, string modelPath, string vocabPat
 
 // The directory listing IS the index — there is no index file to consult or
 // rebuild, so this can't disagree with what the store would report.
-//
-// Both tiers, because the archive has two. Only shared categories sit at the
-// root; everything belonging to a person lives under profiles/<id>/, which on
-// a real archive is most of it. Listing the root alone showed three assistant
-// pairs and hid fourteen, and an archive whose facts a tool cannot see is one
-// it cannot edit either.
 static void ListPairs(string directory)
 {
-    foreach (var scope in Scopes(directory))
+    foreach (var pair in ParquetArchiveStore.PairsIn(directory)
+        .OrderBy(p => p.Category, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(p => p.Topic, StringComparer.OrdinalIgnoreCase))
     {
-        foreach (var pair in ParquetArchiveStore.PairsIn(scope.Directory)
-            .OrderBy(p => p.Category, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(p => p.Topic, StringComparer.OrdinalIgnoreCase))
-        {
-            Console.WriteLine($"{scope.Prefix}{pair.Category}/{pair.Topic}");
-        }
+        Console.WriteLine($"{pair.Category}/{pair.Topic}");
     }
 }
 
 /// <summary>
-/// The shared root first, then every profile tier. Profile ids are slugs, so
-/// the directory name is the id — the store's escaping is a no-op for every
-/// legitimate one, and a directory that needed escaping was not written by us.
-/// </summary>
-static IReadOnlyList<Scope> Scopes(string directory)
-{
-    var scopes = new List<Scope> { new(string.Empty, directory) };
-    var profiles = Path.Combine(directory, ParquetArchiveStore.ProfilesDirectoryName);
-    if (Directory.Exists(profiles))
-    {
-        scopes.AddRange(Directory.EnumerateDirectories(profiles)
-            .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
-            .Select(d => new Scope(Path.GetFileName(d), d)));
-    }
-
-    return scopes;
-}
-
-/// <summary>
-/// Splits an optional "profile:" off the front of a category argument. Absent
-/// a prefix the command spans every tier, which is what someone who typed a
-/// category actually wants: they know the fact, not which directory the
-/// writer decided it belonged in.
-/// </summary>
-static (string? Profile, string Category) SplitScope(string token)
-{
-    var colon = token.IndexOf(':');
-    return colon < 0 ? (null, token) : (token[..colon], token[(colon + 1)..]);
-}
-
-static IEnumerable<Scope> ScopesFor(string directory, string? profile) =>
-    profile is null
-        ? Scopes(directory)
-        : Scopes(directory).Where(s => string.Equals(s.Name, profile, StringComparison.OrdinalIgnoreCase));
-
-/// <summary>
-/// Rows across every pair matching the given category (and topic, if given),
-/// in every tier the argument allows. `show` may span several files; `del`
-/// never does, so it resolves to one pair and reads that file directly.
+/// Rows across every pair matching the given category (and topic, if given).
+/// `show` may span several files; `del` never does, so it resolves to one
+/// pair and reads that file directly.
 /// </summary>
 static async Task<List<ArchiveRecord>> FilteredRecordsAsync(string directory, string category, string? topic, string? subtopic)
 {
-    var (profile, name) = SplitScope(category);
-
     var records = new List<ArchiveRecord>();
-    foreach (var scope in ScopesFor(directory, profile))
-    {
-        var pairs = ParquetArchiveStore.PairsIn(scope.Directory)
-            .Where(p => p.Category.Contains(name, StringComparison.OrdinalIgnoreCase))
-            .Where(p => topic is null || p.Topic.Contains(topic, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.Topic, StringComparer.OrdinalIgnoreCase);
+    var pairs = ParquetArchiveStore.PairsIn(directory)
+        .Where(p => p.Category.Contains(category, StringComparison.OrdinalIgnoreCase))
+        .Where(p => topic is null || p.Topic.Contains(topic, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(p => p.Topic, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var pair in pairs)
-        {
-            records.AddRange(await ParquetArchiveStore.ReadRecordsAsync(ParquetArchiveStore.PairPathFor(scope.Directory, pair), CancellationToken.None));
-        }
+    foreach (var pair in pairs)
+    {
+        records.AddRange(await ParquetArchiveStore.ReadRecordsAsync(ParquetArchiveStore.PairPathFor(directory, pair), CancellationToken.None));
     }
 
     return subtopic is null
@@ -279,35 +229,17 @@ static async Task ShowAsync(string directory, string category, string? topic, st
 static bool IsIndexList(string token) =>
     token.Split(',', StringSplitOptions.RemoveEmptyEntries).All(t => int.TryParse(t, out _));
 
-/// <summary>
-/// The one file a delete is allowed to touch. An unprefixed pair that exists
-/// in two tiers is refused rather than guessed at: deleting the wrong
-/// person's copy of a fact is not something to recover from, and the prefix
-/// that resolves it is right there in the listing.
-/// </summary>
+/// <summary>The one file a delete is allowed to touch.</summary>
 static string? ResolvePairPath(string directory, string category, string topic)
 {
-    var (profile, name) = SplitScope(category);
-    var pair = new ArchivePair(name, topic);
-
-    var paths = ScopesFor(directory, profile)
-        .Select(s => (s.Prefix, Path: ParquetArchiveStore.PairPathFor(s.Directory, pair)))
-        .Where(x => File.Exists(x.Path))
-        .ToList();
-
-    switch (paths.Count)
+    var path = ParquetArchiveStore.PairPathFor(directory, new ArchivePair(category, topic));
+    if (File.Exists(path))
     {
-        case 0:
-            Console.WriteLine($"No pair {category}/{topic}. Try 'list'.");
-            return null;
-
-        case 1:
-            return paths[0].Path;
-
-        default:
-            Console.WriteLine($"{name}/{topic} exists in more than one tier: {string.Join(", ", paths.Select(x => $"{x.Prefix}{name}/{topic}"))}. Name one.");
-            return null;
+        return path;
     }
+
+    Console.WriteLine($"No pair {category}/{topic}. Try 'list'.");
+    return null;
 }
 
 // Index-based delete reads one pair file, so the indices it takes are the
@@ -369,7 +301,7 @@ static async Task DeleteByFilterAsync(string directory, string category, string 
 // An emptied pair loses its file rather than keeping a zero-row one: the
 // file's existence is what puts the pair in the index, so leaving it behind
 // would keep offering Librarian a topic with nothing under it.
-// Wipes every pair file — shared tier and all profiles' own — and reseeds the
+// Wipes every pair file and reseeds the
 // single fact "reset parquet" always leaves behind, so a fresh archive is
 // never truly empty: assistant/system/eci/this/version = 0.1.
 static async Task ResetAsync(string directory)
@@ -414,25 +346,21 @@ static async Task SaveAsync(string path, List<ArchiveRecord> records)
 // per tier beside the index rather than inside it. It still holds rows a
 // person might want gone -- a fact the persona picked up wrong is in here as
 // well as in its pair -- so it gets a view and a delete of its own.
-static async Task ShowRecentAsync(string directory, string? scopeArg)
+static async Task ShowRecentAsync(string directory)
 {
-    var (profile, _) = SplitScope(scopeArg ?? string.Empty);
-
-    foreach (var scope in ScopesFor(directory, profile))
+    var path = Path.Combine(directory, ParquetArchiveStore.RecentFileName);
+    if (!File.Exists(path))
     {
-        var path = Path.Combine(scope.Directory, ParquetArchiveStore.RecentFileName);
-        if (!File.Exists(path))
-        {
-            continue;
-        }
+        Console.WriteLine("No recent lane there.");
+        return;
+    }
 
-        var records = await LaneAsync(path);
-        Console.WriteLine($"{scope.Prefix}recent - {records.Count} record(s)");
-        for (var i = 0; i < records.Count; i++)
-        {
-            var r = records[i];
-            Console.WriteLine($"  [{i}] {r.Timestamp:yyyy-MM-dd HH:mm} {r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}");
-        }
+    var records = await LaneAsync(path);
+    Console.WriteLine($"recent - {records.Count} record(s)");
+    for (var i = 0; i < records.Count; i++)
+    {
+        var r = records[i];
+        Console.WriteLine($"  [{i}] {r.Timestamp:yyyy-MM-dd HH:mm} {r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}");
     }
 }
 
@@ -443,28 +371,18 @@ static async Task<List<ArchiveRecord>> LaneAsync(string path) =>
     [.. (await ParquetArchiveStore.ReadRecordsAsync(path, CancellationToken.None)).OrderByDescending(r => r.Timestamp)];
 
 static bool IsLane(string token) =>
-    SplitScope(token).Category.Equals("recent", StringComparison.OrdinalIgnoreCase);
+    token.Equals("recent", StringComparison.OrdinalIgnoreCase);
 
-static async Task DeleteRecentAsync(string directory, string scopeArg, string indexList)
+static async Task DeleteRecentAsync(string directory, string indexList)
 {
-    var (profile, _) = SplitScope(scopeArg);
-    var lanes = ScopesFor(directory, profile)
-        .Select(s => (s.Prefix, Path: Path.Combine(s.Directory, ParquetArchiveStore.RecentFileName)))
-        .Where(x => File.Exists(x.Path))
-        .ToList();
-
-    // Same rule as a pair: one lane per delete. Indices printed for two tiers
-    // are two numberings, and applying one to the other quietly removes the
-    // wrong rows.
-    if (lanes.Count != 1)
+    var path = Path.Combine(directory, ParquetArchiveStore.RecentFileName);
+    if (!File.Exists(path))
     {
-        Console.WriteLine(lanes.Count == 0
-            ? "No recent lane there."
-            : $"More than one lane: {string.Join(", ", lanes.Select(x => $"{x.Prefix}recent"))}. Name one.");
+        Console.WriteLine("No recent lane there.");
         return;
     }
 
-    var records = await LaneAsync(lanes[0].Path);
+    var records = await LaneAsync(path);
     foreach (var i in indexList.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).OrderByDescending(i => i))
     {
         if (i < 0 || i >= records.Count)
@@ -475,8 +393,8 @@ static async Task DeleteRecentAsync(string directory, string scopeArg, string in
         records.RemoveAt(i);
     }
 
-    await SaveAsync(lanes[0].Path, records);
-    Console.WriteLine($"Deleted. {records.Count} record(s) remain in {lanes[0].Prefix}recent.");
+    await SaveAsync(path, records);
+    Console.WriteLine($"Deleted. {records.Count} record(s) remain in recent.");
 }
 
 // Reflection's corpus, which no other command touches: it is prose the
@@ -710,9 +628,3 @@ static string? Resolve(IReadOnlyList<Fact> rows, string prefix)
     return ids.Count == 1 ? ids[0] : null;
 }
 
-/// <summary>A tier of the archive: the shared root, or one person's own directory under it.</summary>
-readonly record struct Scope(string Name, string Directory)
-{
-    /// <summary>What `list` prints and what a command may type back: "daniel:" for a profile, nothing for the shared root.</summary>
-    public string Prefix => Name.Length == 0 ? string.Empty : $"{Name}:";
-}

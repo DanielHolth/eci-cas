@@ -25,7 +25,6 @@ public sealed record Fact(
     string Text,
     DateTimeOffset Timestamp,
     string Speaker,
-    string? ProfileId,
     IReadOnlyList<string> Keywords,
     float[]? Embedding = null,
     string EmbeddingModelId = "",

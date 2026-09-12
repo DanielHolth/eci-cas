@@ -12,10 +12,7 @@ namespace EciCas.Core;
 /// `household` and hope to win — it has to be decided BEFORE ranking, by
 /// who the question is about, and then only its own drawers compete.
 ///
-/// That is already how the archive stores it: these categories are the
-/// default of <c>Archive:SharedCategories</c>, so their rows are filed
-/// per-device rather than per-profile and never mix with a person's. This
-/// type exists so the scope is declared in one place instead of as a
+/// This type exists so the scope is declared in one place instead of as a
 /// string literal in each agent that writes into it — a fourth drawer
 /// added by hand in one file and not the others is the failure it
 /// prevents.
@@ -29,7 +26,7 @@ namespace EciCas.Core;
 /// </summary>
 public static class AssistantScope
 {
-    /// <summary>The scope name, which is also the archive category. Shared across profiles.</summary>
+    /// <summary>The scope name, which is also the archive category.</summary>
     public const string Name = "assistant";
 
     /// <summary>What the persona is: its description, as facts rather than as the snippet IdentityAgent serves.</summary>
@@ -53,7 +50,7 @@ public static class AssistantScope
     /// about the persona. Nothing in any instruction file asks for that -- it
     /// is the extraction that already happens, read for what it says.
     ///
-    /// Deliberately not the persona's current name. A name is per profile and
+    /// Deliberately not the persona's current name. A name
     /// changes on request; a routing rule that moved with it would file the
     /// same sentence to two different shelves on either side of a rename.
     /// </summary>

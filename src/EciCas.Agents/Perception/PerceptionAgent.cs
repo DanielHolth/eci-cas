@@ -14,16 +14,6 @@ public sealed class PerceptionAgent : AgentBase
 {
     public const string TextKey = "perception.text";
 
-    /// <summary>
-    /// Which person this input came from, opaque to every agent that reads
-    /// it — a profile id from the surface, absent on input that no profile
-    /// owns (the console loop, Reflection's self-generated ideas). Impulse
-    /// keys its drive state on it so the persona holds a separate emotional
-    /// relationship with each person; Governance carries it onto the
-    /// frustration signal for the same reason.
-    /// </summary>
-    public const string ProfileKey = "perception.profile";
-
     private readonly IMessageBus _bus;
     private readonly RuntimeKnobs _knobs;
 
@@ -58,14 +48,9 @@ public sealed class PerceptionAgent : AgentBase
     /// note it already wrote. Hindsight wakes on it (HindsightAgent's first
     /// trigger) and the display layer draws it as an idea, not an utterance.
     /// </summary>
-    public void Perceive(string text, string? profileId = null, bool self = false)
+    public void Perceive(string text, bool self = false)
     {
         var meta = MetaBag.Empty.With(TextKey, PromptCap.Apply(text, _knobs.PerceptionChars));
-        if (!string.IsNullOrEmpty(profileId))
-        {
-            meta = meta.With(ProfileKey, profileId);
-        }
-
         if (self)
         {
             meta = meta.With(ReflectionAgent.TriggeredByKey, "self");

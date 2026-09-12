@@ -100,7 +100,6 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
             public long Turn { get; set; }
             public string? Timestamp { get; set; }
             public string? Speaker { get; set; }
-            public string? ProfileId { get; set; }
             public string? Text { get; set; }
         }
 
@@ -223,7 +222,6 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
             Turn = u.Turn,
             Timestamp = u.Timestamp.ToString("O", CultureInfo.InvariantCulture),
             Speaker = u.Speaker,
-            ProfileId = u.ProfileId,
             Text = u.Text,
         };
 
@@ -232,7 +230,6 @@ public sealed class ParquetUtteranceLog : IUtteranceLog
             ParquetColumn.Required(r.Text, nameof(r.Text)),
             ParquetColumn.RequiredTime(r.Timestamp, nameof(r.Timestamp)),
             ParquetColumn.Required(r.Speaker, nameof(r.Speaker)),
-            r.ProfileId,
             r.Turn);
     }
 }
