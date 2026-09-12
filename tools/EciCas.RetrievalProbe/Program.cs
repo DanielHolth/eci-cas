@@ -33,6 +33,72 @@ if (args.Length == 2 && args[0].TrimStart('-') == "list")
     return 0;
 }
 
+// --passages: the floor question, which is a different question from the one
+// the rest of this file answers. MinScore was picked as "the midpoint between
+// the old floor and a perfect match" — arithmetic over a 0..1 range. e5 does
+// not use a 0..1 range. So: score every note against every prompt and print
+// the distribution, including prompts chosen to match nothing. Whatever the
+// unrelated prompts score is where the real floor starts.
+if (args.Length >= 3 && args[0].TrimStart('-') == "passages")
+{
+    var modelDir = args.Length >= 4 ? args[3] : "models/embedding/multilingual-e5-small";
+    var embedder = new OnnxEmbeddingProvider(
+        Options.Create(new EmbeddingOptions
+        {
+            Provider = "onnx",
+            ModelPath = System.IO.Path.Combine(modelDir, "model.onnx"),
+            VocabPath = System.IO.Path.Combine(modelDir, "sentencepiece.bpe.model"),
+        }),
+        NullLogger<OnnxEmbeddingProvider>.Instance);
+
+    if (!embedder.Available)
+    {
+        Console.Error.WriteLine($"No embedding model under {modelDir} — run ./scripts/get-embedding-model.ps1 first.");
+        return 1;
+    }
+
+    var passages = new EciCas.Agents.Passages.ParquetPassageStore(System.IO.Path.GetFullPath(args[1]));
+
+    var prompts = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(args[2])) ?? [];
+    var all = new List<double>();
+
+    foreach (var prompt in prompts)
+    {
+        var q = await embedder.EmbedAsync([prompt], EmbeddingKind.Query, CancellationToken.None);
+        // Floor 0 and a topK past any plausible corpus: every note, scored.
+        var hits = await passages.SearchAsync(q[0], 10_000, 0d, CancellationToken.None);
+        if (hits.Count == 0)
+        {
+            Console.Error.WriteLine($"No passages under {args[1]}.");
+            return 1;
+        }
+
+        var scores = hits.Select(h => h.Score).OrderByDescending(s => s).ToList();
+        all.AddRange(scores);
+        Console.WriteLine($"\n\"{prompt}\"  ({scores.Count} notes)");
+        Console.WriteLine($"  best {scores[0]:F3}  p90 {Pick(scores, 0.10):F3}  median {Pick(scores, 0.50):F3}  worst {scores[^1]:F3}");
+        foreach (var hit in hits.Take(3))
+        {
+            var text = hit.Passage.Text.Replace('\n', ' ');
+            Console.WriteLine($"    {hit.Score:F3}  {text[..Math.Min(96, text.Length)]}");
+        }
+    }
+
+    all.Sort();
+    all.Reverse();
+    Console.WriteLine($"\n=== all {all.Count} prompt×note pairs ===");
+    foreach (var q in new[] { 0.00, 0.01, 0.05, 0.25, 0.50, 0.95, 1.00 })
+    {
+        Console.WriteLine($"  top {q,4:P0}: {Pick(all, q):F3}");
+    }
+
+    Console.WriteLine($"\n  pairs clearing the current floor of 0.625: {all.Count(s => s >= 0.625)} / {all.Count} ({all.Count(s => s >= 0.625) / (double)all.Count:P0})");
+    return 0;
+
+    static double Pick(List<double> descending, double quantile) =>
+        descending[Math.Clamp((int)(quantile * (descending.Count - 1)), 0, descending.Count - 1)];
+}
+
 var args_ = Args.Parse(args);
 if (args_ is null)
 {
