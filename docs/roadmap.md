@@ -378,6 +378,37 @@ bucket, which is both the correct rate limiter and the better fiction.
 - **Energy regenerates at rate R up to a maximum M.** R alone sets the
   annual cost. M sets how good a heavy session feels, and must be worth
   more than one day's regen so a quiet week banks a reserve.
+- **Both dials are now numbers. R = $5 of inference per person per year;
+  M = 48 hours of regen.** Built, in `Energy/EnergyMeter.cs`.
+  - **The bucket is denominated in dollars, not turns.** A turn on a full
+    six-turn window costs several times a turn on an empty one, and a
+    bucket counting turns would be most generous to exactly the sessions
+    that cost the most. It debits `SubstrateTrace`'s cost — the same signal
+    `CostLedger` records — so the history and the remaining budget cannot
+    disagree about what a call cost.
+  - **M is stated as a duration, not a sum.** That is what keeps the
+    invariant above visible: at 48 hours it is self-evidently worth more
+    than a day, and R can be retuned without silently changing what a full
+    meter is worth relative to a day. Two days is also the smallest ceiling
+    that survives a weekend.
+  - **What that buys, on Pro's prices** (`gpt-5.6-luna`, $0.20/$1.20 per
+    Mtok; Reflection is Mistral at zero): a turn is roughly 3,200 input and
+    340 output tokens across the four paid agents, so ~$0.001. R is then
+    **~14 turns a day** and M is **~27 turns** banked. The yearly pass at
+    3×M / 1.5×R gives ~82 banked and ~21 a day, costing ~$7.50 against
+    ~$14 net — which is the worked example above, reached independently.
+  - **Regeneration is computed from elapsed wall-clock time, not ticked by
+    a timer.** A timer has to be running to be correct, which makes every
+    restart and every suspended laptop a small theft.
+  - **The balance floors at zero; it never goes negative.** One expensive
+    turn must not leave a person owing time before anything works again.
+  - **Not authoritative, and not trying to be.** The file is editable. The
+    relay meters what actually costs money, server-side, per owning
+    account; this is the client's honest copy so the bar can move without a
+    round trip.
+  - **Still to do:** overnight weighting (it redistributes R rather than
+    changing it, so no number here moves), the pass's multipliers, and
+    surfacing the meter to the client.
 - Recovery is faster overnight. "Rested" is good fiction and it smooths
   provider load off-peak.
 - A daily full reset was considered and rejected: 365 buckets a year
@@ -550,8 +581,17 @@ compliance is not the casualty — that was the thing earlier drafts feared:
 
 Format compliance splits: the 2B is better on pronouns and no worse on the
 never-rules, but it undershoots the sentence cap and writes replies a little
-over half the length. Two real regressions, both about content rather than
-form:
+over half the length.
+
+**The terseness is in character, so it is not a defect.** A tired Morrow
+running on the person's own hardware *should* be curt — short answers are
+what being low on energy sounds like, and the fallback announces exactly
+that. So undershooting the cap is accepted rather than tuned out, and the
+2B's 140 characters against the 4B's 253 is the voice working, not the
+model failing. This is the one place where the cheap model and the fiction
+point the same way; take it.
+
+Two real regressions remain, both about content rather than form:
 
 - **It garbles recalled facts.** Given *caffeine after 4pm ruins his sleep*
   and *8am standup*, it produced "a shot of cold water and salt". Given two

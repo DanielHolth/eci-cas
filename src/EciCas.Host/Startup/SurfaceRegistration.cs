@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using EciCas.Host.Energy;
 using EciCas.Host.TurnLog;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -65,6 +66,15 @@ internal static class SurfaceRegistration
         var costPath = configuration["TurnLog:CostPath"] ?? "cost.json";
         services.AddSingleton(new CostLedger(
             string.IsNullOrWhiteSpace(costPath) ? null : Path.Combine(AppContext.BaseDirectory, costPath)));
+
+        // Resolved the same way and for the same reason: a balance that reset
+        // every restart would make the meter a decoration, since restarting is
+        // cheaper than waiting.
+        var energy = configuration.GetSection("Energy").Get<EnergyOptions>() ?? new EnergyOptions();
+        services.AddSingleton(energy);
+        services.AddSingleton(new EnergyMeter(
+            energy,
+            string.IsNullOrWhiteSpace(energy.Path) ? null : Path.Combine(AppContext.BaseDirectory, energy.Path)));
 
         return new HostSurface(
             CorsPolicyName,

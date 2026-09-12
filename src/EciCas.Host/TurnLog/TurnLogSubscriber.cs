@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using EciCas.Bus;
 using EciCas.Core;
+using EciCas.Host.Energy;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -29,6 +30,7 @@ public sealed class TurnLogSubscriber : AgentBase
     private readonly TurnLogOptions _options;
     private readonly IReadOnlyList<ITurnLogSink> _sinks;
     private readonly CostLedger _ledger;
+    private readonly EnergyMeter _energy;
     private readonly ILogger _logger;
 
     private readonly Dictionary<Guid, Entry> _entries = [];
@@ -47,12 +49,14 @@ public sealed class TurnLogSubscriber : AgentBase
     private sealed record Client(ChannelWriter<TurnRecord> Writer, string? ProfileId);
 
     public TurnLogSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<TurnLogSubscriber> logger,
-        IOptions<TurnLogOptions> options, IEnumerable<ITurnLogSink> sinks, CostLedger ledger)
+        IOptions<TurnLogOptions> options, IEnumerable<ITurnLogSink> sinks, CostLedger ledger,
+        EnergyMeter energy)
         : base(bus, activity, logger)
     {
         _options = options.Value;
         _sinks = [.. sinks];
         _ledger = ledger;
+        _energy = energy;
         _logger = logger;
     }
 
@@ -65,9 +69,14 @@ public sealed class TurnLogSubscriber : AgentBase
         // rebuilt on every envelope and re-summing it would double-count. A
         // telemetry envelope is published once per call and never replayed,
         // so adding as it lands is the one place the arithmetic is exact.
+        // The meter debits the same envelope for the same reason, so the
+        // ledger's history and the meter's remaining budget can never
+        // disagree about what a call cost. One signal, two consumers.
         if (envelope.Topic == Topics.Telemetry && envelope.Meta.ContainsKey(SubstrateTrace.CostKey))
         {
-            _ledger.Add(envelope.Meta.Get<decimal>(SubstrateTrace.CostKey));
+            var cost = envelope.Meta.Get<decimal>(SubstrateTrace.CostKey);
+            _ledger.Add(cost);
+            _energy.Spend(cost);
         }
 
         TurnRecord record;
@@ -187,6 +196,7 @@ public sealed class TurnLogSubscriber : AgentBase
         // substrate trace would write five times per turn to say the same
         // thing.
         await _ledger.PersistAsync(cancellationToken).ConfigureAwait(false);
+        await _energy.PersistAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>A client that named no profile sees everything; one that did also sees the events nobody owns, since the persona's own thinking belongs to every window rather than to none.</summary>

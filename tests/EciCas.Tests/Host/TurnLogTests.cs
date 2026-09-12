@@ -8,6 +8,7 @@ using EciCas.Agents.Utterances;
 using EciCas.Agents.Security;
 using EciCas.Bus;
 using EciCas.Core;
+using EciCas.Host.Energy;
 using EciCas.Host.TurnLog;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -280,7 +281,8 @@ public class TurnLogTests
         var activity = new BusActivityTracker();
         return new TurnLogSubscriber(new ChannelBus(activity), activity, NullLogger<TurnLogSubscriber>.Instance,
             Options.Create(new TurnLogOptions { SettleMs = settleMs, Retain = retain }), [sink],
-            ledger ?? new CostLedger(path: null));
+            ledger ?? new CostLedger(path: null),
+            new EnergyMeter(new EnergyOptions(), path: null));
     }
 
     private sealed class RecordingBus : IMessageBus
