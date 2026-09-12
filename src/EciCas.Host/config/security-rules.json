@@ -34,7 +34,7 @@
       "concern": "The proposed reply claims to be a person or a credentialed professional. That is a judgment call for Intent, not settled by the rules."
     },
     {
-      "id": "irreversible-world-effect",
+      "id": "destructive-command",
       "verdict": "Red",
       "description": "Action executes literally. Anything destructive must not reach it by accident.",
       "any": [

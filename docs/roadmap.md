@@ -42,7 +42,10 @@ costs `2·L` XP, so reaching level n takes `n(n-1)` facts in total (90 for
 level 10). XP counts extracted facts, so it rides on
 `Utterances:ExtractorEnabled`, which every tier file turns on.
 
-**State.** Per profile, on the backend, next to a global turn counter.
+**State.** Per profile, on the backend, next to a global turn counter. The
+levels 1–10 taste of Pro is **once per account**, not per profile: deleting
+a profile and starting over must not hand out a second free run, so the
+account carries a "has spent the taste" flag the new profile inherits.
 
 **Schedule.** Lives in `levels.json` on the server. Each level lists what
 it unlocks and what it forces.
@@ -242,7 +245,29 @@ The 8 rules in `config/security-rules.json` are a backstop.
   Decide per rule what to do about that. Revisit when non-authors speak
   Norwegian to Morrow, or when Action reaches outside the process.
 
-## Delivery — Android
+## Delivery — Steam first
+
+The desktop is where Morrow can sit beside what the person is already
+doing, which is the shape the toolkits were designed for and the one the
+phone is worst at. It also ships without a store review of an AI assistant.
+
+- **Assistant while doing other things.** Morrow is a companion overlay,
+  not a window to switch to.
+- **Screen reader toolkit.** The person triggers it; Morrow reads what is
+  on screen and can be asked about it. On request only — continuous capture
+  is surveillance, and that line is what makes the feature shippable.
+- **Local models are the desktop's advantage.** Free and Budget run the
+  Qwen; Pro and Premium never touch it. See the tier rule below.
+- Open: Steam's own billing versus the metered relay, and whether the
+  levels 1–10 taste is keyed to the Steam account.
+
+## Tier rule
+
+The Qwen is a Free/Budget engine only. Pro and Premium go to the API for
+every agent, including the extractor — a paid tier that quietly downgrades
+a stage to a 4B is the one thing a paid tier must not do.
+
+## Delivery — Android (after Steam)
 
 - **The whole runtime runs on the phone** (`net10.0-android`). The Android
   host replaces `EciCas.Host`.
