@@ -172,8 +172,24 @@ The toolkits planned so far:
   - **Speech:** compose and speak, and hear atypical speech.
   - **Vision:** describe, read aloud, find an object.
   - **Cognition:** reminders, and step-by-step prompting.
-- **Screen as perception.** Read the device's own screen, or another screen
-  through the camera. On request only; continuous capture is surveillance.
+- **Screen reader.** Read the device's own screen, or another screen
+  through the camera, and speak it. On request only; continuous capture is
+  surveillance. The point is accessibility — text to voice — not memory,
+  so nothing it reads becomes a fact about the person.
+
+### Toolkit input log
+
+Every toolkit writes its raw input to its own parquet, sharded by month:
+`2026_09_screen_reader.parquet`. Separate files, not the utterance log,
+because this is not the person speaking.
+
+- **No fact split by default.** The extractor never runs over it, so a page
+  of read-aloud email produces no facts. A toolkit may opt in.
+- **Why keep it at all:** analytics later — what people actually point a
+  toolkit at — and it is the raw record a handler can re-read without
+  having had to guess in advance what mattered.
+- Shares `ParquetUtteranceLog`'s shelf shape and its month shard, so
+  retention, export and delete land on one mechanism.
 
 ### Deferred answers
 
