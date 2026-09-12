@@ -388,6 +388,31 @@ bucket, which is both the correct rate limiter and the better fiction.
 - **Empty is never a brick.** Out of energy offers the local model instead
   of a wall. See the offline pack below.
 
+### The yearly pass
+
+**Triple everything about energy: 3×R and 3×M, for a year.** One
+multiplier over the two dials that already exist, which makes it a single
+store bullet and a single number in the relay.
+
+- **The pass sets R, not the base price.** It self-selects heavy users, so
+  the blended average that makes the base tier safe does not rescue this
+  one. Choose R so that 3R at ~70% utilisation still clears the pass's net
+  revenue with room; the base tier at R is then safe by a wide margin.
+  Worked once: a $20 pass nets ~$14, leave ~60% for inference, and R lands
+  near $0.075/week — about half the first guess, which was set from the
+  base product and the wrong constraint.
+- Tripling M is what a person feels; tripling R is what they cost. Both
+  ship, but only one is the bill.
+- **Buying again extends the duration; the multiplier never compounds.**
+- **Lapsing drains, it does not confiscate.** R and M return to base and
+  banked energy above the new M is spent down, not deleted. The opposite
+  writes its own reviews.
+- **Lapsed is still a working product** — base energy plus the offline
+  pack. The pass is more of Morrow, never permission to run her.
+- **The entitlement is the relay's and is common. The purchase is not:**
+  Steam needs a consumable microtransaction item, because a DLC is owned
+  permanently and cannot expire; Play has real subscriptions natively.
+
 ### Tier rule
 
 The Qwen is a Free/Budget engine only. Pro and Premium go to the API for
@@ -474,17 +499,17 @@ The feature that sells it, and the one with a real hazard.
 - **$10 base, including a permanent energy allowance that never expires.**
   What they bought keeps working forever; that is what stops a one-time
   purchase from feeling volatile.
-- **A Steam DLC is owned permanently, so a yearly pass cannot be DLC.**
-  The supported mechanism is a consumable item through the Steam
-  Microtransaction API, consumed into a dated entitlement on the relay.
+- **The yearly pass is common; only its purchase is Steam's.** A DLC is
+  owned permanently and cannot expire, so the pass is a consumable item
+  through the Steam Microtransaction API, consumed into a dated entitlement
+  on the relay. See the pass above for what it grants.
 - **The offline pack is free DLC, auto-granted** to owners of the base app,
   so the floor is universal and only the download is a choice.
 - **Never sell more quota for a one-time fee.** A recurring cost sold once
   is the trap the $10 price exists to avoid.
-- Open: the pass as "more energy and the better models" at ~$20/yr, and
-  bring-your-own-key as a cheap permanent unlock — low-priced rather than
-  free, because it costs us nothing per use and converts the heaviest
-  users, who are otherwise the worst margin. Neither is settled.
+- Open: bring-your-own-key as a cheap permanent unlock — low-priced rather
+  than free, because it costs us nothing per use and converts the heaviest
+  users, who are otherwise the worst margin. Not settled.
 - Valve takes 30% and tax comes off the top: $10 nets roughly $6–7. Model
   the blended average, not the ceiling — the ceiling is insurance.
 
