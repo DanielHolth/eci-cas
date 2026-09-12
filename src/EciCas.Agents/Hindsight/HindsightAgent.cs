@@ -123,7 +123,7 @@ public sealed class HindsightAgent : AgentBase
         if (woken.Count > 0)
         {
             meta = meta
-                .With(NotesKey, (IReadOnlyList<string>)[.. woken.Select(h => $"{Age(h.Passage.Timestamp)}: {h.Passage.Text}")])
+                .With(NotesKey, (IReadOnlyList<string>)[.. woken.Select(h => Age(h.Passage.Timestamp) is { } age ? $"{age}: {h.Passage.Text}" : h.Passage.Text)])
                 .With(NoteIdsKey, (IReadOnlyList<string>)[.. woken.Select(h => h.Passage.Id)])
                 .With(EchoDepthKey, woken.Max(h => h.Passage.EchoDepth));
         }
@@ -209,13 +209,21 @@ public sealed class HindsightAgent : AgentBase
     ///
     /// Reads the passage timestamp, which a revisit deliberately preserves:
     /// a sharpened thought keeps the age of the thought it sharpens.
+    ///
+    /// Null for anything from the last half-day, and the note then reaches
+    /// Intent bare. "Earlier today" is the default case and so carries no
+    /// information: during a working session every woken note is from
+    /// earlier today, and a prefix that is always the same is a prefix the
+    /// model learns to skip -- while making the rarer "months ago", the one
+    /// the prefix exists for, look like more of the same. Now age is only
+    /// stated when age is the point.
     /// </summary>
-    private static string Age(DateTimeOffset written)
+    private static string? Age(DateTimeOffset written)
     {
         var span = DateTimeOffset.UtcNow - written;
         return span switch
         {
-            { TotalHours: < 12 } => "earlier today",
+            { TotalHours: < 12 } => null,
             { TotalHours: < 36 } => "yesterday",
             { TotalDays: < 14 } => $"{(int)span.TotalDays} days ago",
             { TotalDays: < 60 } => $"{(int)(span.TotalDays / 7)} weeks ago",

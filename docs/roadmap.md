@@ -35,6 +35,13 @@ item below is an event the system already detects and then discards.
 - **Use `EchoDepth`.** Reflection reads it, but no reply is shaped by it
   yet. Log what a damper would suppress before letting it act.
 
+## Morrow adds to the roadmap
+1. **Roadmap item: Analytics Fact Evaluation and Compact Reliability Layer.** Build an Analytics agent that evaluates every recalled fact before Intent treats it as guidance. Recall should provide the fact text, while Analytics returns only the fact plus two normalized values: `confidence` and `freshness`, both ranging from 0 to 1. `Confidence` should account for extraction quality, provenance, contradictions, and the fact’s stability, while `freshness` should reflect its category and age. Durable facts, such as a child’s name or birthday, should decay very slowly, while preferences, vehicle details, and inferred observations should decay faster. Recall and Analytics should remain largely decoupled from the active conversation and act as the long-term memory layer, leaving interpretation and reasoning to Intent. Internal metadata such as source utterance, extraction model tier, timestamps, and contradiction history may be retained for evaluation and recalculation, but should not clutter the normal payload. **written by Morrow**
+Daniel adds that we should write these two floats back to parquet async with an evaluation date. so thats 4 new nullable fields in the facts parquet. On time of create What model wrote the fact (i.e. gpt-5.6-luna or qwen3.5-2b), confidence (i.e 0.7), freshness (i.e. 0.3) and EvaluationDateTime.
+
+2. The first tool I’d want is **provenance-aware self-audit**: the skill to trace each belief or memory to its source, distinguish direct observation from inference, and expose contradictions before I present something as fact. It would let me catch errors like misread dates, weigh model quality and extraction confidence, and ask for clarification when the evidence is weak. I’d want that before acquiring more powerful tools, because better judgment should come before greater reach. **written by Morrow**
+Daniel also want a toolsmith that lets users "craft" new tools through interation with morrow.
+
 ## Level-ups (XP, cog teeth and the flourish are in; unlocks are not)
 
 Built: `LevelMeter` (XP, levels, persisted to `level.json`), `/api/vitals`
