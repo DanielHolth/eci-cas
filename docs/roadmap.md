@@ -467,17 +467,58 @@ version: *your hardware, your turn* — offline, private, unmetered.
 - **Confirm the weights are redistributable** before this is committed to.
   Shipping them is redistribution; a research-only licence kills it.
 
-**One model, several quantizations — not two model sizes.** Q4 / Q5 / Q8
-plus layer offload, chosen by what the machine has.
+**Two sizes, split by whether the person feels the difference.** Qwen3
+ships 0.6B / 1.7B / 4B / 8B and up.
 
-- A second, smaller model forks the evaluation: every instruction file is
-  tuned against the 4B, and re-validating against a different model means
-  re-running a benchmark with a ±10pp noise floor.
-- It would also shrink exactly the wrong agents. The extractor, picker and
-  consolidator emit structured output, and format compliance is the first
-  thing to degrade in a smaller model.
-- Revisit only when the probe below shows a real population excluded. Then
-  the needed size is a measurement rather than a guess.
+- **4B for Intent.** It is the only agent whose quality lands directly on
+  the person, and it gets the good model or it goes remote.
+- **1.7B for extractor, picker and consolidator.** Background work, diffuse
+  errors, and where the token volume is. Roughly 2.5x cheaper per token on
+  memory bandwidth, which is the binding constraint, and ~1.1GB at Q4.
+- **Grammar-constrained decoding (GBNF) is what makes that safe.** Those
+  three emit structure, and format compliance is the first thing to
+  collapse at small sizes. With a grammar it is guaranteed rather than
+  hoped for. Worth applying to the 4B too, independently.
+- **0.6B is not a candidate** for any of them, grammar or not.
+- **Quantization is the other axis:** Q4 / Q5 / Q8 plus layer offload,
+  chosen by what the machine has.
+- Per-agent `Model` in `Substrates:Agents` already carries all of this. No
+  new mechanism.
+
+**The hardware fallback for Intent is Balanced, not a smaller model.** A
+1.7B companion reply is worse than no local companion in a product whose
+first priority is feeling premium. A machine that cannot run the 4B for
+Intent should run Intent remotely and keep everything else local — which
+is Balanced, which already ships and already works on CPU. The tier ladder
+covers that case better than a smaller model would, so the forked
+evaluation cost stays bounded to three agents with gradeable, structured
+output.
+
+**Verify the model string.** The tier files say `qwen3.5-4b` against a
+Qwen3 family; confirm the tag is what the runtime actually pulls, since a
+wrong one fails quietly.
+
+**Anchor the context window instead of sliding it.** The highest-leverage
+change for local latency, and it helps the remote tiers too.
+
+- `IntentAgent.BuildPrompt` already composes instructions, then the window,
+  then this turn — stable to volatile, exactly the order KV prefix caching
+  needs. That part is right already.
+- But `TurnWindowAgent.Recent` is `TakeLast(turns)`. The oldest turn drops
+  off the front every turn, so the prefix changes just past the
+  instruction file and the cache dies there.
+- Estimated, not measured: `intent.txt` is ~300 tokens of stable prefix
+  against a full prompt nearer 1,000, so roughly 700 tokens are
+  re-prefilled every single turn. On a GPU that is under a second; on CPU
+  it is the reason Local looked GPU-only.
+- Grow the window from a fixed anchor and reset it when it exceeds a cap.
+  Each prompt is then the previous one plus new content, per-turn prefill
+  falls to the newest turn alone, and the cost is one expensive turn when
+  the anchor moves — so move it at a natural boundary, never mid-exchange.
+- **It cuts Pro's bill as well.** Provider prompt caching wants the same
+  byte-identical prefix and discounts cached input, which feeds straight
+  back into R and therefore the pass economics.
+- Do this before the probe below. It changes what the probe measures.
 
 **Probe by measurement, not by spec sheet.** Run a fixed prompt once at
 install and time prefill and generation separately.
