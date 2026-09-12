@@ -44,7 +44,7 @@ internal static class KnobsEndpoints
                 // that first slow call is the one that used to time out.
                 //
                 // Not awaited: the switch has already taken effect, so the surface
-                // has its answer, and a POST that blocked for a 4B loading off disk
+                // has its answer, and a POST that blocked for a 2B loading off disk
                 // would look like a hung slider. Errors are SubstrateWarmup's own
                 // business; it cannot throw.
                 _ = SubstrateWarmup.RunAsync(

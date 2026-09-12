@@ -63,7 +63,7 @@ cd morrow-eci; npm install; npm run dev
 ```
 
 No keys: `--Tier=Mock` echoes prompts (machinery only); `--Tier=Free` runs
-everything on a local Qwen3.5 4B for $0 via
+everything on a local Qwen3.5 2B for $0 via
 `scripts/get-local-model.ps1 -Start` (needs llama.cpp on `:8080`). Budget is
 Free's local extractor and picker with Intent (Mistral) and Reflection
 (OpenAI) on the API.

@@ -94,7 +94,7 @@ public sealed class TurnWindowAgent : AgentBase
     /// if the plain slice missed it -- and any older one is dropped.
     ///
     /// A window of zero is a real answer, not a disabled feature: the
-    /// smallest tier runs a 4B whose instruction-following degrades with
+    /// smallest tier runs a 2B whose instruction-following degrades with
     /// prompt length, and a transcript it cannot hold costs it the length
     /// bracket and the mood vocabulary it could otherwise obey.
     /// </summary>

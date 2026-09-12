@@ -93,7 +93,7 @@ public sealed class RuntimeKnobs
     /// and a half, and pasting a log into it lost the log without saying so.
     ///
     /// It is a knob rather than no limit because the ceiling is the
-    /// smallest tier's attention, not money: a 4B stops obeying the length
+    /// smallest tier's attention, not money: a 2B stops obeying the length
     /// bracket and the mood vocabulary long before the prompt stops fitting.
     /// And it is announced on the input field rather than applied quietly --
     /// a counter that stops climbing is a limit a person can work with, a
@@ -110,7 +110,7 @@ public sealed class RuntimeKnobs
     /// answering -- the running transcript, verbatim, oldest first.
     ///
     /// Zero is a setting, not an off switch. The bound is the smallest
-    /// tier's attention rather than its price: a 4B's instruction-following
+    /// tier's attention rather than its price: a 2B's instruction-following
     /// decays with prompt length, and Free would trade the length bracket
     /// and the mood vocabulary it can obey for a transcript it cannot hold.
     /// It is a free tier, and this is one of the things that makes it free.

@@ -4,9 +4,14 @@ Gets the free tier running: weights, llama.cpp, and the server itself.
 
 .DESCRIPTION
 `--Tier=Free` points every substrate class at an OpenAI-compatible server
-on localhost. That server is llama.cpp and the weights are a Qwen3.5 4B --
-~2.7GB, deliberately not committed, for the same reason the embedding
+on localhost. That server is llama.cpp and the weights are a Qwen3.5 2B --
+~1.25GB, deliberately not committed, for the same reason the embedding
 weights are not.
+
+The 2B is the only local size. Measured on the Intent suite, it decodes at
+~31 tok/s on four CPU threads, which is where the 4B lands on a gaming GPU
+-- so one model covers the rig, the old laptop and the phone, and there is
+no hardware fork to pick from.
 
 This does the whole path, because the parts a person is left to do by hand
 are exactly where it breaks: winget installs llama-server somewhere that is
@@ -35,11 +40,12 @@ Downloads if needed, then starts the server in a window of its own.
 #>
 [CmdletBinding()]
 param(
-    [string]$Repo = 'unsloth/Qwen3.5-4B-GGUF',
+    [string]$Repo = 'unsloth/Qwen3.5-2B-GGUF',
 
-    # UD-Q4_K_XL is Unsloth's dynamic 4-bit: ~2.7GB, which leaves an 8GB card
-    # room for KV cache across a couple of slots. Go up only if there is VRAM
-    # to spare; the fan-out wants slots more than it wants bits.
+    # UD-Q4_K_XL is Unsloth's dynamic 4-bit: ~1.25GB, which leaves even a 4GB
+    # card room for KV cache across a couple of slots -- and leaves the rest of
+    # the GPU to whatever game is running. Go up only if there is VRAM to
+    # spare; the fan-out wants slots more than it wants bits.
     [string]$Quant = 'UD-Q4_K_XL',
 
     [string]$Destination,
@@ -64,7 +70,7 @@ if (-not (Test-Path $Destination)) { New-Item -ItemType Directory -Path $Destina
 # ---------------------------------------------------------------- weights --
 
 # Ask the Hub what it actually holds rather than assuming a filename. Quant
-# naming drifts between repos and a 404 halfway through 2.7GB is a poor way
+# naming drifts between repos and a 404 halfway through the download is a poor way
 # to find that out. A large quant may also be split across several parts.
 Write-Host "looking up $Quant in $Repo"
 $manifest = Invoke-RestMethod -Uri "https://huggingface.co/api/models/$Repo"
@@ -157,9 +163,10 @@ if (-not $server) {
 Write-Host ''
 Write-Host "llama-server: $server"
 
-# Report what it can actually compute on. A build that sees no GPU still
-# runs, at roughly a tenth of the speed -- slow enough that a person assumes
-# the swarm is broken rather than the backend unaccelerated.
+# Report what it can actually compute on. On the 2B a CPU-only build is
+# usable rather than broken -- ~31 tok/s on four threads against ~138 on a
+# GPU -- but it is still worth saying which one is happening, because a
+# person debugging a slow turn should not have to guess.
 $devices = & $server --list-devices 2>&1 | Out-String
 $gpu = ($devices -split "`n" | Where-Object { $_ -match '^\s+(Vulkan|CUDA|ROCm|SYCL|Metal)\d+:' })
 
@@ -171,8 +178,8 @@ if ($gpu) {
     Write-Host 'take several seconds. Warm picking calls land in tens of milliseconds.'
 }
 else {
-    Write-Host 'WARNING: no GPU device visible -- this will run on CPU.'
-    Write-Host 'Expect a turn to take long enough that it feels broken rather than slow.'
+    Write-Host 'No GPU device visible -- this will run on CPU.'
+    Write-Host 'On the 2B that is slower, not broken: expect a turn in a few seconds.'
 }
 
 # ----------------------------------------------------------------- launch --

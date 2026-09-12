@@ -385,8 +385,8 @@ bucket, which is both the correct rate limiter and the better fiction.
   the same exposure, and a legitimately heavy day feels stingy.
 - Exact numbers stay available in settings. The meter is flavour, not
   concealment.
-- **Empty is never a brick.** Out of energy offers the local model instead
-  of a wall. See the offline pack below.
+- **Empty is never a brick.** Out of energy drops to Local rather than
+  stopping. See *Empty falls back to Local* under Tiers.
 
 ### The yearly pass
 
@@ -458,16 +458,48 @@ file — and only the display names change.
 - Base R still has to leave an empty Pro user slowed rather than stranded,
   but it is no longer the only thing standing between them and a wall.
 
+**Empty falls back to Local.** Running out of energy switches the tier to
+`Free` and keeps answering, rather than presenting a wall and a store page.
+
+- **The mechanism already exists.** `TierCatalog.Switch` swaps tiers live,
+  which is the same lever the settings toggle pulls. Falling back is a
+  `Switch` on an energy-exhausted event and a `Switch` back when regen
+  crosses the threshold. No new machinery.
+- **Morrow says it herself, in character, once.** *"I'm tired and dumber
+  now — I'm using your hardware to answer."* Not a modal, not a banner that
+  stays up nagging. She is allowed to be diminished; she is not allowed to
+  become an upsell.
+- **Coming back is silent.** Announce the drop, not the recovery. A person
+  who has been told she is tired will notice when she is not.
+- **This makes regen a patchable cost lever.** Today R is bounded by how
+  bad it feels to hit zero, because hitting zero is a wall. Once zero means
+  *degraded but working*, R can be tuned down in a patch to chase inference
+  costs without shipping a worse product — the floor stops being nothing
+  and starts being Local. That is the real reason to build this.
+- **It does not rescue a person who has no pack.** Fallback needs the
+  weights on disk, so this argues for shipping the pack by default rather
+  than on demand — 1.25GB against never being stranded. **Open:** default
+  install versus opt-in download is not yet decided, and it trades install
+  size against the fallback ever being available when it is needed.
+- **The fallback must never touch Pro's paid stages silently.** Dropping to
+  Local when energy is gone is a tier switch the person is told about;
+  quietly downgrading one agent inside Pro is the thing that is forbidden
+  above. Same rule, and the announcement is what separates them.
+
 ### The offline pack
 
-The local model is an opt-in download, not the default and not the cheap
-version: *your hardware, your turn* — offline, private, unmetered.
+The local model is not the cheap version: *your hardware, your turn* —
+offline, private, unmetered. Whether it is an opt-in download or part of the
+base install is open, and the energy fallback above is the argument for the
+latter.
 
-- **~1.3GB of weights plus the inference runtime**, shipped together and
-  never in the base install, so base minimum specs stay tiny and nobody
-  who only ever uses the relay pays for a hardware requirement on the page.
-- **Suggested at the moment it is useful** — when energy runs out — with
-  the download size and the quality trade stated plainly.
+- **~1.3GB of weights plus the inference runtime**, shipped together. If
+  they stay out of the base install, minimum specs stay tiny and nobody who
+  only ever uses the relay pays for a hardware requirement on the page — but
+  then the energy fallback has nothing to fall back to on first use.
+- **If it stays opt-in, suggest it at the moment it is useful** — when
+  energy runs out — with the download size and the quality trade stated
+  plainly.
 - **Confirm the weights are redistributable** before this is committed to.
   Shipping them is redistribution; a research-only licence kills it.
 
@@ -481,10 +513,10 @@ Measured on the twelve-case Intent suite, prompts rebuilt exactly as
 
 | | wall | time-to-first | decode |
 |---|---|---|---|
-| 4B, GPU | 2.96s | 0.16s | 89 tok/s |
-| 2B, GPU | 2.46s | 0.14s | 133 tok/s |
-| 4B, CPU only | 7.70s | 0.59s | 13.4 tok/s |
-| 2B, CPU only | **3.51s** | 0.27s | **32.1 tok/s** |
+| 4B, GPU | 2.81s | 0.11s | 86.8 tok/s |
+| 2B, GPU | 2.35s | 0.06s | 138.1 tok/s |
+| 4B, CPU only | 7.20s | 0.55s | 12.6 tok/s |
+| 2B, CPU only | **3.21s** | 0.24s | **31.3 tok/s** |
 
 - **The 2B with no GPU lands where the 4B lands on a gaming GPU.** That is
   the whole case. One model covers the gaming rig, the old laptop and the
@@ -509,14 +541,17 @@ compliance is not the casualty — that was the thing earlier drafts feared:
 
 | n=12 | 4B | 2B |
 |---|---|---|
-| length in range | 12/12 | 12/12 |
-| said its own name (never) | 1 | 0 |
-| said "we" (never) | 1 | 1 |
+| length in range | 12/12 | **10/12** |
+| said its own name (never) | 2 | 1 |
+| said "we" (never) | 0 | 0 |
 | said "I" (always) | 9/12 | 11/12 |
 | leaked a bracket tag | 0 | 0 |
+| mean reply length | 253ch | 140ch |
 
-The 2B is marginally *better* on the checkable rules. Two real regressions,
-both about content rather than form:
+Format compliance splits: the 2B is better on pronouns and no worse on the
+never-rules, but it undershoots the sentence cap and writes replies a little
+over half the length. Two real regressions, both about content rather than
+form:
 
 - **It garbles recalled facts.** Given *caffeine after 4pm ruins his sleep*
   and *8am standup*, it produced "a shot of cold water and salt". Given two
@@ -527,23 +562,42 @@ both about content rather than form:
 - **It loses track of who is speaking**, answering as the person rather than
   to them, and reciting the Identity advisory as though it were a body it
   had. **This is the one to fix.** It is not recoverable from the archive,
-  and the persona is the product. Prompt work, not model size — the 4B does
-  the same thing when no Identity advisory is present and recovers the
-  moment there is one, so the lever is the advisory's framing.
+  and the persona is the product. The 4B does the same thing when no
+  Identity advisory is present and recovers the moment there is one, so the
+  lever is the advisory's framing rather than model size.
 - Sample is twelve cases at one seed. Enough to choose a direction, not
   enough to tune against.
 
-**The fallback string leaks into replies — on both models.** `intent.txt`
-carries its own `## fallback` text inside the instruction blob, so the model
-sees its error message as candidate output and sometimes emits it while the
-substrate call *succeeded*. Measured at 1/32 on the 4B and 1/32 on the 2B —
-identical, so this is a prompt bug and not a capability gap. ~3% of turns
-are indistinguishable from an outage, and Governance cannot tell, because
-the call returned 200. Keep the fallback out of the prompt.
+**Rewording `intent.txt` is a partial fix, not a fix.** Tested directly:
+twelve cases × three seeds, the current main section against a revision
+that opens *"You are replying to another person"* instead of *"You are
+speaking as yourself"* and forbids quote-wrapping.
 
-**The model string is confirmed.** `models/local/Qwen3.5-4B-UD-Q4_K_XL.gguf`
-is what is on disk, so `qwen3.5-4b` in the tier files was right; the new tag
-is the 2B.
+| n=36, 2B | current | revised |
+|---|---|---|
+| addressed the person as "you" | 14 | **19** |
+| wrapped the reply in quotes | 5 | **2** |
+| said its own name (never) | 2 | **5** |
+
+It buys real ground on addressing and on quote-wrapping, and loses ground on
+the name rule. And the collapse survives in a shorter shape — the 2B holds
+the speaker frame for about one sentence, then slips: *"You're finally done
+with that report. I hate the way I had to stare at it all week."* So take
+the wording change for what it is worth and treat the Identity advisory as
+the actual fix; do not record this as closed.
+
+**There is no fallback leak.** An earlier draft of this section claimed
+`intent.txt` shipped its `## fallback` text to the model at ~1/32 on both
+sizes. That was a harness bug, not a product bug, and the claim is
+withdrawn. `InstructionFile.Parse` splits on `## ` and strips `#`
+commentary; `BuildPrompt` calls `_instructions.For(Name)`, which is the
+**main** section only — 378 characters of the file's 1,184. The fallback
+string reaches the model never, and reaches replies only through
+`FallbackResult`, which is what it is for.
+
+**What is on disk.** `models/local/Qwen3.5-2B-UD-Q4_K_XL.gguf`, 1.25GB, is
+the shipping weight and what `qwen3.5-2b` in the tier files resolves to. The
+4B GGUF is still in `models/local/` and is now referenced by nothing.
 
 **Anchor the context window instead of sliding it.** The highest-leverage
 change for local latency, and it helps the remote tiers too.

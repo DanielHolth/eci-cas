@@ -1,7 +1,7 @@
 ﻿# Rules before rows before turn, for the prefix-caching reason given in
 # librarian.txt. The rows move whenever the archive does; the rules do not.
 #
-# The bar is "answering without it would be wrong", not "relevant" — a 4B
+# The bar is "answering without it would be wrong", not "relevant" — a 2B
 # reads "relevant" as "same subject" and picks the nearest topic every time.
 # The one-line contrast does more than the rule above it: a small model
 # imitates a worked example where it only nods at a criterion.

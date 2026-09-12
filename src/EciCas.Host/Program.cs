@@ -69,7 +69,7 @@ await app.StartAsync();
 
 // Before the REPL prompt, not after: the point is that the first thing a
 // person types does not pay for the model load. Configurable because a
-// mock-only or vendor-only tier wants far less of a budget than a local 4B
+// mock-only or vendor-only tier wants far less of a budget than a local 2B
 // reading weights off disk; 0 turns it off.
 if (surface.WarmupBudgetMs > 0)
 {

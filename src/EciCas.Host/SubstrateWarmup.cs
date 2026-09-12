@@ -14,7 +14,7 @@ namespace EciCas.Host;
 /// which is exactly the turn they are judging the persona on.
 ///
 /// Deduplicated by provider+model rather than by agent: the free tier
-/// points every agent at one local 4B, and warming that model eight times
+/// points every agent at one local 2B, and warming that model eight times
 /// would move the wait rather than remove it. The mock
 /// provider is skipped — it has nothing to warm.
 ///

@@ -54,8 +54,8 @@ model call on every turn's critical path.
 
 | Tier | extractor, picker | Intent | Reflection |
 |---|---|---|---|
-| Free | local qwen3.5-4b | local | local |
-| Budget | local qwen3.5-4b | Mistral | OpenAI |
+| Free | local qwen3.5-2b | local | local |
+| Budget | local qwen3.5-2b | Mistral | OpenAI |
 | Pro | OpenAI | OpenAI | Mistral |
 | Premium | OpenAI | Mistral | OpenAI |
 
