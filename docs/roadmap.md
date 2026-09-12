@@ -191,6 +191,47 @@ because this is not the person speaking.
 - Shares `ParquetUtteranceLog`'s shelf shape and its month shard, so
   retention, export and delete land on one mechanism.
 
+### Reading a toolkit log back
+
+"From the last screen dump, what was the plot that led to X, excluding Y?"
+Morrow answers "let me get back to you" and hands a background job a
+toolkit name plus the question. The job is lazy, and the LLM is the last
+resort, not the default:
+
+1. Read `toolkit_facts.parquet` for that toolkit. A hit answers.
+2. Miss: run the fact splitter over the current month's shard, write the
+   facts, and try again.
+3. Still nothing: walk backwards a shard at a time, skipping any shard
+   already extracted. Facts are written once and reused after that.
+
+**The ledger.** The job keeps its own table of shards it has extracted:
+filename plus when. The open month is never in it — it is still growing.
+A ledger rather than deriving it from `SourceId` coverage, because a shard
+that honestly yields zero facts would otherwise be re-extracted forever.
+
+**Reuse.** This is the existing pipeline pointed at a different directory:
+`ParquetUtteranceLog` (the dump), `ParquetFactLog` (the toolkit facts) and
+`FactBackfill` — which already takes `(IUtteranceLog, IFactLog,
+IFactExtractor)` and fills gaps — with `FactConsult` as the reader. New
+code is the ledger, the shard-at-a-time walk, and the dispatch.
+
+### Screening a screen dump
+
+Accessibility comes first: a dump is read aloud unless it is *obviously* a
+secret. Over-blocking is the worse failure, so a story containing the word
+"password" must pass.
+
+- **Reuse `SecurityRuleSet`** — deterministic regex, no model, and
+  `disclose-credentials` already matches what this needs: `sk-`, `ghp_`,
+  `AKIA`, private-key headers, and `password: <6+ chars>`. The bare word
+  matches nothing, which is the intended weakness.
+- **Redact the span, don't block the dump.** Speak and store the rest.
+  Blocking a page because one line looked like a key is the failure mode
+  that makes a screen reader useless.
+- Screening decides two things separately: what is spoken, and what is
+  written to the toolkit parquet.
+- Leaks will happen and are accepted. The goal is the obvious cases only.
+
 ### Deferred answers
 
 "Let me ponder that", with the answer arriving minutes later. This covers
