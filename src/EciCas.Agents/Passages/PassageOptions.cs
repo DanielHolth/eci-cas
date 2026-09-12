@@ -60,4 +60,29 @@ public sealed class PassageOptions
     /// consult sweep. Bounds the extra work a hit can buy.
     /// </summary>
     public int MaxPairsFromPassages { get; set; } = 3;
+
+    /// <summary>
+    /// How many recent wakes a note has to sit out before it may wake again.
+    ///
+    /// The sweep is stateless and deterministic: score every note, keep the
+    /// best few over the floor. So when a conversation stays in one
+    /// neighbourhood -- and a conversation about the system itself stays
+    /// there for eighty turns -- the same three notes are the best three on
+    /// every single turn, and arrive in every single prompt. Measured in a
+    /// live session: three identical notes, turn after turn, until Intent
+    /// began apologising for them.
+    ///
+    /// Repetition is not what the floor filters. MinScore rejects a weak
+    /// match; it has nothing to say about a strong one that was already in
+    /// the last two prompts and added everything it had to add the first
+    /// time. The fourth-best note it displaces is, by construction, the one
+    /// the persona has not just been told.
+    ///
+    /// A window rather than a permanent exclusion because a note can be
+    /// genuinely central for a stretch of turns, and because a hard forget
+    /// would make the corpus behave differently depending on how recently
+    /// the host booted. Three turns is the corpus's own design number. Zero
+    /// disables it and restores the deterministic sweep exactly.
+    /// </summary>
+    public int RepeatWindowTurns { get; set; } = 3;
 }

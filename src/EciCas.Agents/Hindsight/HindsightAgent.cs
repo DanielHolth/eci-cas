@@ -180,7 +180,17 @@ public sealed class HindsightAgent : AgentBase
             return [];
         }
 
-        var hits = await _passages.SearchAsync(query[0], topK, _options.MinScore, cancellationToken).ConfigureAwait(false);
+        // Deeper than topK by exactly the number a repeat could cost, so the
+        // damper displaces rather than shortens: suppressing two notes
+        // should promote the fourth and fifth, not hand Intent one note.
+        var suppressed = Suppressed();
+        var hits = Damp(
+            await _passages.SearchAsync(query[0], topK + suppressed.Count, _options.MinScore, cancellationToken).ConfigureAwait(false),
+            suppressed,
+            topK);
+
+        Remember(hits);
+
         if (hits.Count == 0)
         {
             _logger.LogDebug("{Agent} woke nothing for \"{Text}\" (topK {TopK}, min score {MinScore})", Name, text, topK, _options.MinScore);
@@ -196,6 +206,84 @@ public sealed class HindsightAgent : AgentBase
         }
 
         return hits;
+    }
+
+    /// <summary>
+    /// The last few turns' worth of woken ids, newest last. In memory only:
+    /// this is a property of a conversation in progress, not of the corpus,
+    /// and a restart is allowed to forget it.
+    /// </summary>
+    private readonly Queue<IReadOnlyList<string>> _recent = new();
+    private readonly Lock _recentGate = new();
+
+    private HashSet<string> Suppressed()
+    {
+        if (_options.RepeatWindowTurns <= 0)
+        {
+            return [];
+        }
+
+        lock (_recentGate)
+        {
+            return [.. _recent.SelectMany(ids => ids)];
+        }
+    }
+
+    private void Remember(IReadOnlyList<PassageHit> woken)
+    {
+        if (_options.RepeatWindowTurns <= 0)
+        {
+            return;
+        }
+
+        lock (_recentGate)
+        {
+            // A turn that woke nothing still counts as a turn. Otherwise a
+            // stretch of quiet turns never ages anything out, and a note
+            // stays suppressed long after the conversation moved on.
+            _recent.Enqueue([.. woken.Select(h => h.Passage.Id)]);
+            while (_recent.Count > _options.RepeatWindowTurns)
+            {
+                _recent.Dequeue();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Drops notes woken in the last few turns, then takes the budget.
+    ///
+    /// With one exception, and it is Morrow's own objection: a note can be
+    /// genuinely central for a stretch of turns, and a hard exclusion would
+    /// silence hindsight entirely on a turn whose only real match is the one
+    /// just used. So if damping empties the list, the single best hit comes
+    /// back. Saying the same thing again beats saying nothing; saying it
+    /// alongside three others that were also just said is what this is for.
+    /// </summary>
+    private IReadOnlyList<PassageHit> Damp(IReadOnlyList<PassageHit> hits, HashSet<string> suppressed, int topK)
+    {
+        if (suppressed.Count == 0 || hits.Count == 0)
+        {
+            return [.. hits.Take(topK)];
+        }
+
+        var kept = hits.Where(h => !suppressed.Contains(h.Passage.Id)).Take(topK).ToList();
+        if (kept.Count == 0)
+        {
+            _logger.LogDebug("{Agent} damped every hit and kept the best one back: {Id}", Name, hits[0].Passage.Id);
+            return [hits[0]];
+        }
+
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            var dropped = hits.Where(h => suppressed.Contains(h.Passage.Id)).Select(h => h.Passage.Id).ToList();
+            if (dropped.Count > 0)
+            {
+                _logger.LogDebug("{Agent} damped {Count} note(s) woken in the last {Turns} turn(s): {Ids}",
+                    Name, dropped.Count, _options.RepeatWindowTurns, string.Join(", ", dropped));
+            }
+        }
+
+        return kept;
     }
 
     /// <summary>
