@@ -426,7 +426,7 @@ file — and only the display names change.
 
 | Key | Shown as | Engines | Energy |
 |---|---|---|---|
-| `Free` | Local | all five agents on the Qwen | none |
+| `Free` | Local | all five agents local; 4B for Intent | none |
 | `Budget` | Balanced | Intent and Reflection remote, the rest local | some |
 | `Pro` | Pro | all five remote | full |
 
@@ -446,6 +446,8 @@ file — and only the display names change.
   stage to a 4B is the one thing a paid tier must not do.
 - **Local and Balanced need the offline pack**, so they are unavailable
   until it is installed.
+- **Local is desktop-only.** It needs the 4B for Intent, which a phone
+  cannot sustain. See the Android chapter.
 - **Only Local needs a GPU.** Everything local in Balanced — extractor,
   picker, consolidator — is background work that nobody waits on, so CPU
   prefill latency does not matter there. The two agents where latency is
@@ -654,12 +656,20 @@ build, so community toolkits are a desktop feature and stay one.
   not a trial.
 - **Background thought is dropped.** Android kills background work, so
   notify on reflection instead.
-- **On-device decode speed is unmeasured.** It gates the local model on
-  phones, and it's the cheapest open question to answer. A 4B does run on
-  current flagships, gated by RAM — 8GB devices struggle, 12GB+ is fine —
-  but sustained generation throttles within a minute and drains the
-  battery. Running in a demo and running as an always-on companion are
-  different claims, and only the first is safe to assume.
+- **Local does not exist on Android.** Intent gets the 4B or goes remote,
+  and a 4B generating replies on a phone throttles and drains the battery
+  within a minute. Both rules cannot hold on a handset, so the tier does
+  not ship there. Android offers Balanced and Pro, and Intent is always
+  remote. Phones are always networked, so the offline story — most of
+  Local's value — is worth far less here than on the desktop.
+- **1.7B is the only model on the phone**, serving extractor, picker and
+  consolidator. Short bursty jobs nobody waits on, ~1.1GB rather than
+  ~2.5GB to download.
+- **Defer that work to charging and idle.** Background fact extraction is
+  the most deferrable thing in the system; it can wait for a charging
+  window without anyone noticing.
+- **On-device decode speed is still unmeasured**, and it now gates only the
+  1.7B. Cheaper question than it was.
 - **No Workshop.** Community toolkits stay a desktop feature.
 - **iOS later**, on the same shared logic.
 
