@@ -445,11 +445,14 @@ file — and only the display names change.
 - **The Qwen never serves Pro.** A paid tier that quietly downgrades a
   stage to a 4B is the one thing a paid tier must not do.
 - **Local and Balanced need the offline pack**, so they are unavailable
-  until it is installed and the machine can run it.
-- **Constraint that follows from that:** a person with no capable GPU has
-  only Pro, and "install the offline pack" is not an answer for them. Base
-  R must leave them slowed when empty, never stranded. Easy to lose while
-  tuning R downward, so it is written here.
+  until it is installed.
+- **Only Local needs a GPU.** Everything local in Balanced — extractor,
+  picker, consolidator — is background work that nobody waits on, so CPU
+  prefill latency does not matter there. The two agents where latency is
+  felt, Intent and Reflection, are already remote in Balanced. A person
+  with no capable GPU therefore has a real middle tier, not just Pro.
+- Base R still has to leave an empty Pro user slowed rather than stranded,
+  but it is no longer the only thing standing between them and a wall.
 
 ### The offline pack
 
@@ -463,6 +466,32 @@ version: *your hardware, your turn* — offline, private, unmetered.
   the download size and the GPU cost stated plainly.
 - **Confirm the weights are redistributable** before this is committed to.
   Shipping them is redistribution; a research-only licence kills it.
+
+**One model, several quantizations — not two model sizes.** Q4 / Q5 / Q8
+plus layer offload, chosen by what the machine has.
+
+- A second, smaller model forks the evaluation: every instruction file is
+  tuned against the 4B, and re-validating against a different model means
+  re-running a benchmark with a ±10pp noise floor.
+- It would also shrink exactly the wrong agents. The extractor, picker and
+  consolidator emit structured output, and format compliance is the first
+  thing to degrade in a smaller model.
+- Revisit only when the probe below shows a real population excluded. Then
+  the needed size is a measurement rather than a guess.
+
+**Probe by measurement, not by spec sheet.** Run a fixed prompt once at
+install and time prefill and generation separately.
+
+- Reported specs hide what matters: shared versus dedicated VRAM, memory
+  bandwidth, iGPU capability.
+- The result picks the quantization and decides which tiers are offered,
+  against the latency budget in the Steam chapter.
+- Prefill is the number that disqualifies a machine, not generation. A 4B
+  generates acceptably on CPU; it is the 1–2k token prompt that costs tens
+  of seconds, which is why Intent cannot live there and the background
+  agents can.
+- It also makes an honest sentence possible — "your machine runs Local at
+  about X" — instead of selling someone a disappointment.
 
 ### Gaming contention
 
@@ -585,7 +614,11 @@ build, so community toolkits are a desktop feature and stay one.
 - **Background thought is dropped.** Android kills background work, so
   notify on reflection instead.
 - **On-device decode speed is unmeasured.** It gates the local model on
-  phones, and it's the cheapest open question to answer.
+  phones, and it's the cheapest open question to answer. A 4B does run on
+  current flagships, gated by RAM — 8GB devices struggle, 12GB+ is fine —
+  but sustained generation throttles within a minute and drains the
+  battery. Running in a demo and running as an always-on companion are
+  different claims, and only the first is safe to assume.
 - **No Workshop.** Community toolkits stay a desktop feature.
 - **iOS later**, on the same shared logic.
 
