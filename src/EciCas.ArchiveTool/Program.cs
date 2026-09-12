@@ -24,6 +24,7 @@ const string Usage = """
     recent | passages [count] | passage <id>
     utterances [count] | threads [count]
     thread merge <thread> <thread> | thread split <fact> | facts clear
+    fact del <id...> | fact edit <id> <corrected sentence>
     del <category> <topic> <index[,index...]> | del <category> <topic> [subtopic]
     del recent <index[,index...]> | del passage <id>
     embed <model.onnx> <sentencepiece.bpe.model> | reset | help | exit
@@ -89,6 +90,14 @@ while (true)
 
             case "thread" when parts.Length == 3 && parts[1].Equals("split", StringComparison.OrdinalIgnoreCase):
                 await SplitThreadAsync(directory, parts[2]);
+                break;
+
+            case "fact" when parts.Length >= 3 && parts[1].Equals("del", StringComparison.OrdinalIgnoreCase):
+                await DeleteFactsAsync(directory, parts[2..]);
+                break;
+
+            case "fact" when parts.Length >= 4 && parts[1].Equals("edit", StringComparison.OrdinalIgnoreCase):
+                await EditFactAsync(directory, parts[2], string.Join(' ', parts[3..]));
                 break;
 
             case "facts" when parts.Length == 2 && parts[1].Equals("clear", StringComparison.OrdinalIgnoreCase):
@@ -510,10 +519,84 @@ static async Task ShowUtterancesAsync(string directory, string? count)
             r.Embedding is { Length: > 0 } ? "v" : "-",
             r.ThreadId is null ? "-" : "t",
             r.SupersededBy is null ? "-" : "x");
-        Console.WriteLine($"  {r.Timestamp:yyyy-MM-dd HH:mm} [{marks}] {r.HitCount,3} hits  {Oneline(r.Text, 78)}");
+        Console.WriteLine($"  {r.Id[..8]}  {r.Timestamp:yyyy-MM-dd HH:mm} [{marks}] {r.HitCount,3} hits  {Oneline(r.Text, 68)}");
     }
 
-    Console.WriteLine("  flags: v=vector t=threaded x=superseded");
+    Console.WriteLine("  flags: v=vector t=threaded x=superseded; the first column is the id `fact del`/`fact edit` take.");
+}
+
+/// <summary>
+/// Take one wrong row out, by id prefix — the surgical form of `facts clear`,
+/// for the case that does not want the whole index rebuilt: an extractor that
+/// minted a sentence nobody said. The utterance it was read from is untouched,
+/// so if the sentence really did say it, the next backfill mints it again;
+/// that is the signal that the extractor and not the row is the thing to fix.
+/// </summary>
+static async Task DeleteFactsAsync(string directory, string[] prefixes)
+{
+    var log = new ParquetFactLog(directory);
+    var rows = await log.AllAsync(CancellationToken.None);
+
+    var wanted = new List<Fact>();
+    foreach (var prefix in prefixes)
+    {
+        if (ResolveFact(rows, prefix) is { } row)
+        {
+            wanted.Add(row);
+        }
+    }
+
+    if (wanted.Count == 0)
+    {
+        return;
+    }
+
+    var gone = await log.RemoveAsync([.. wanted.Select(r => r.Id)], CancellationToken.None);
+    foreach (var row in wanted)
+    {
+        Console.WriteLine($"  removed {Oneline(row.Text, 70)}");
+    }
+
+    Console.WriteLine($"Deleted {gone} row(s). The utterances they came from are untouched.");
+}
+
+/// <summary>
+/// Correct what a row says, keeping its place in its thread. The vector goes
+/// with the text — a row still pointing at the old sentence answers the old
+/// question — so the corrected row is bare until the next `embed` or boot.
+/// </summary>
+static async Task EditFactAsync(string directory, string prefix, string text)
+{
+    var log = new ParquetFactLog(directory);
+    var rows = await log.AllAsync(CancellationToken.None);
+    if (ResolveFact(rows, prefix) is not { } row)
+    {
+        return;
+    }
+
+    Console.WriteLine($"  was  {Oneline(row.Text, 70)}");
+    await log.ReviseAsync(row.Id, text, CancellationToken.None);
+    Console.WriteLine($"  now  {Oneline(text, 70)}");
+    Console.WriteLine("Re-embed to give it a vector again: `embed <model.onnx> <sentencepiece.bpe.model>`, or just boot the host.");
+}
+
+/// <summary>One fact by id prefix, or null when the prefix names none or many.</summary>
+static Fact? ResolveFact(IReadOnlyList<Fact> rows, string prefix)
+{
+    var matches = rows.Where(r => r.Id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+    switch (matches.Count)
+    {
+        case 0:
+            Console.WriteLine($"No fact {prefix}. Try 'utterances'.");
+            return null;
+
+        case 1:
+            return matches[0];
+
+        default:
+            Console.WriteLine($"{prefix} names more than one fact. Say more of it.");
+            return null;
+    }
 }
 
 /// <summary>
