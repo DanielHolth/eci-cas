@@ -45,7 +45,9 @@ level 10). XP counts extracted facts, so it rides on
 **State.** Per profile, on the backend, next to a global turn counter. The
 levels 1–10 taste of Pro is **once per account**, not per profile: deleting
 a profile and starting over must not hand out a second free run, so the
-account carries a "has spent the taste" flag the new profile inherits.
+account carries a "has spent the taste" flag the new profile inherits. The
+account is the relay's, which is why the relay is required before this can
+be enforced at all.
 
 **Schedule.** Lives in `levels.json` on the server. Each level lists what
 it unlocks and what it forces.
@@ -328,51 +330,206 @@ The 8 rules in `config/security-rules.json` are a backstop.
   Decide per rule what to do about that. Revisit when non-authors speak
   Norwegian to Morrow, or when Action reaches outside the process.
 
-## Delivery — Steam first
+## Delivery — common to every platform
+
+The runtime, the archive and the relay are the same everywhere. What
+changes per platform is delivery, billing and the input surface. Anything
+in this section is shared; anything in a platform chapter is not.
+
+### The relay
+
+Every paid path goes through one server. It is not Android's — it was
+written down there first, but Steam needs it first.
+
+- **It proxies; it never dispenses provider credentials.** Provider keys
+  cannot be scoped per user or per spend, so any key that reaches a client
+  is a key someone drains. The client gets a token for *our* relay; the
+  relay holds the provider keys and forwards.
+- **It speaks the OpenAI wire format**, which means
+  `OpenAiCompatibleSubstrateProvider` needs no change at all — a tier file
+  points `BaseUrl` at the relay and carries a token instead of a key. The
+  whole substrate layer is relay-ready already.
+- **Model choice moves server-side.** Swapping a lab model, or failing over
+  when one stops answering, ships without a client update. Reuse the shape
+  already built for tiers: an ordered list per agent, health-driven
+  failover, `SubstrateHealth.Classify`'s TimedOut / Refused / Unreachable
+  as the signal.
+  - Record which model served each turn. A weaker fallback feels like a
+    quality drop with no explanation, and without this we are guessing.
+- **Keep the hot path dumb.** Stream through, meter asynchronously; never
+  block a token on a billing write.
+- **Not hosted from home.** Residential ISP, no SLA, a dynamic IP, and an
+  outage only fixable from the kitchen — against a proxy so I/O-bound that
+  a small VPS absorbs it. Self-hosting saves nothing and buys downtime
+  inside Steam's refund window. Home hardware is for the local-model box,
+  analytics over the archives, and a warm failover origin.
+- **Metering state lives in managed storage**, so the relay itself is
+  disposable and rebuildable anywhere in minutes.
+- One origin, an anycast edge in front to terminate TLS near the person.
+  A second region when measurements demand one, not before.
+- **Meter per owning account, not per playing account** — otherwise family
+  sharing turns one purchase into several buckets.
+
+### Energy and focus
+
+The spend ceiling is Morrow's own energy, not a quota error. A token
+bucket, which is both the correct rate limiter and the better fiction.
+
+- **Energy regenerates at rate R up to a maximum M.** R alone sets the
+  annual cost. M sets how good a heavy session feels, and must be worth
+  more than one day's regen so a quiet week banks a reserve.
+- Recovery is faster overnight. "Rested" is good fiction and it smooths
+  provider load off-peak.
+- A daily full reset was considered and rejected: 365 buckets a year
+  instead of 52 means each day's ceiling shrinks to a few requests to hold
+  the same exposure, and a legitimately heavy day feels stingy.
+- Exact numbers stay available in settings. The meter is flavour, not
+  concealment.
+- **Empty is never a brick.** Out of energy offers the local model instead
+  of a wall. See the offline pack below.
+
+### Tier rule
+
+The Qwen is a Free/Budget engine only. Pro and Premium go to the API for
+every agent, including the extractor — a paid tier that quietly downgrades
+a stage to a 4B is the one thing a paid tier must not do.
+
+### The offline pack
+
+The local model is an opt-in download, not the default and not the cheap
+version: *your hardware, your turn* — offline, private, unmetered.
+
+- **~3GB of weights plus the inference runtime**, shipped together and
+  never in the base install, so base minimum specs stay tiny and nobody
+  who only ever uses the relay pays for a GPU requirement on the page.
+- **Suggested at the moment it is useful** — when energy runs out — with
+  the download size and the GPU cost stated plainly.
+- **Confirm the weights are redistributable** before this is committed to.
+  Shipping them is redistribution; a research-only licence kills it.
+
+### Gaming contention
+
+A loaded 4B holds ~3GB of VRAM resident and idle, which hurts a game
+before any inference happens.
+
+- **Unload on game detect**, don't merely stop inferring. Sustained GPU
+  load plus a foreground fullscreen app, with a manual override — guessing
+  wrong here is infuriating.
+- **This is a live tier switch**, and `TierCatalog.Switch` already performs
+  those on a running session. "Out of energy" and "a game started" are the
+  same mechanism with different triggers. Only the trigger is new.
+
+### Legacy
+
+The archive format is the product: Parquet/JSONL readable without our code.
+
+- Re-embedding is a deliberate overnight job.
+- Encrypted backup with a passphrase key.
+- An export the person owns.
+- Inheritance: the archive *of* someone, versus a persona speaking *as*
+  them, is undecided.
+- **Personas are content** (instruction files), not engines.
+
+## Delivery — Steam (first)
 
 The desktop is where Morrow can sit beside what the person is already
 doing, which is the shape the toolkits were designed for and the one the
-phone is worst at. It also ships without a store review of an AI assistant.
+phone is worst at.
 
 - **Assistant while doing other things.** Morrow is a companion overlay,
   not a window to switch to.
 - **Screen reader toolkit.** The person triggers it; Morrow reads what is
   on screen and can be asked about it. On request only — continuous capture
   is surveillance, and that line is what makes the feature shippable.
-- **Local models are the desktop's advantage.** Free and Budget run the
-  Qwen; Pro and Premium never touch it. See the tier rule below.
-- Open: Steam's own billing versus the metered relay, and whether the
-  levels 1–10 taste is keyed to the Steam account.
 
-## Tier rule
+### The shell
 
-The Qwen is a Free/Budget engine only. Pro and Premium go to the API for
-every agent, including the extractor — a paid tier that quietly downgrades
-a stage to a 4B is the one thing a paid tier must not do.
+- A thin WPF/WinForms window hosting **WebView2**, running the existing
+  ASP.NET Core host **in the same process**: one exe, one language, no
+  sidecar to supervise and no orphaned processes.
+- The client is already a single-page app — `app/` has one `page.tsx` and
+  no route handlers — so `output: 'export'` is the whole port.
+- Corner-sitting is the work: transparent always-on-top window,
+  click-through outside the character, per-monitor DPI, remembered corner,
+  tray icon, summon hotkey. Finite, fiddly, not architectural.
+
+### Voice while gaming
+
+The feature that sells it, and the one with a real hazard.
+
+- **`RegisterHotKey`, never a `WH_KEYBOARD_LL` hook.** Low-level hooks are
+  what kernel anti-cheat dislikes.
+- **Never inject into the game process.** Audio in, audio out; no
+  injection is needed and it is the whole anti-cheat surface.
+- **Exclusive fullscreen cannot be drawn over.** So gaming is voice-only
+  and the character is the desktop presentation. That is also the same
+  audio path as the accessibility story.
+- **Snappy is a latency budget**: under a second from releasing the button
+  to first audio. That forces local STT streaming while the person still
+  talks, first LLM token forwarded not buffered, and TTS streamed a
+  sentence at a time — which `MaxSentences` already suits.
+
+### Money
+
+- **$10 base, including a permanent energy allowance that never expires.**
+  What they bought keeps working forever; that is what stops a one-time
+  purchase from feeling volatile.
+- **A Steam DLC is owned permanently, so a yearly pass cannot be DLC.**
+  The supported mechanism is a consumable item through the Steam
+  Microtransaction API, consumed into a dated entitlement on the relay.
+- **The offline pack is free DLC, auto-granted** to owners of the base app,
+  so the floor is universal and only the download is a choice.
+- **Never sell more quota for a one-time fee.** A recurring cost sold once
+  is the trap the $10 price exists to avoid.
+- Open: the pass as "more energy and the better models" at ~$20/yr, and
+  bring-your-own-key as a cheap permanent unlock — low-priced rather than
+  free, because it costs us nothing per use and converts the heaviest
+  users, who are otherwise the worst margin. Neither is settled.
+- Valve takes 30% and tax comes off the top: $10 nets roughly $6–7. Model
+  the blended average, not the ceiling — the ceiling is insurance.
+
+### Store
+
+- **Steam Direct is $100 per app, recoupable**, with a 30-day wait between
+  paying and being allowed to release. Start that clock early.
+- **AI disclosure is mandatory** and asks what the guardrails are.
+  `SecurityRuleSet` is the answer, which is a better position than most
+  submissions manage.
+- **Screen reading must be disclosed plainly**, to Valve and to the person.
+  "On request only, never continuous capture" is the sentence.
+- The risk is category, not quality: a companion is Steam-shaped, a
+  productivity utility is on the line. Write the page accordingly.
+- Discovery, not approval, is the hard part. Software gets little
+  algorithmic traffic.
+- Streamers are the cheapest marketing available — a reactive character on
+  screen is inherently streamable — and also the heaviest users, which is
+  what the BYO-key question above is really about.
+
+### Workshop toolkits — Steam only
+
+Steam Workshop is hosting, moderation and discovery we would otherwise
+build, so community toolkits are a desktop feature and stay one.
+
+- **Gated on a capability model.** `SecurityRuleSet` screens *output*; it
+  says nothing about what a toolkit is *allowed to do*. Strangers' toolkits
+  cannot reach IoT or the filesystem until capabilities are declared and
+  sandboxed. This gate ships before Workshop does.
 
 ## Delivery — Android (after Steam)
 
 - **The whole runtime runs on the phone** (`net10.0-android`). The Android
   host replaces `EciCas.Host`.
-- **A metered relay** holds the API key, validates Play Billing, counts
-  tokens and issues short-lived tier tokens. The spend ceiling is the risk
-  control; the tail of heavy users is the threat, not the median.
+- **Play Billing replaces Steam's**, against the same relay and the same
+  energy bucket.
 - **Tiers become plans:** Free / Budget / Pro / Premium, verified on the
   server. Level-ups gate how a new user meets them.
 - **Reflection as the paid hook.** Give free users a small permanent taste,
   not a trial.
 - **Background thought is dropped.** Android kills background work, so
   notify on reflection instead.
-- **Legacy.** The archive format is the product: Parquet/JSONL readable
-  without our code. That means:
-  - Re-embedding is a deliberate overnight job.
-  - Encrypted backup with a passphrase key.
-  - An export the person owns.
-  - Inheritance: the archive *of* someone, versus a persona speaking *as*
-    them, is undecided.
-- **Personas are content** (instruction files), not engines.
-- **On-device decode speed is unmeasured.** It gates the whole plan, and
-  it's the cheapest open question to answer.
+- **On-device decode speed is unmeasured.** It gates the local model on
+  phones, and it's the cheapest open question to answer.
+- **No Workshop.** Community toolkits stay a desktop feature.
 - **iOS later**, on the same shared logic.
 
 ## Companion extensions (not started)
