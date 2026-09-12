@@ -50,4 +50,34 @@ public sealed class EnergyFallback(TierCatalog tiers, ILogger<EnergyFallback> lo
             }
         }
     }
+
+    /// <summary>
+    /// How full the meter has to be before a person may climb back out of the
+    /// local tier. Deliberately not zero.
+    /// </summary>
+    public const double MinimumFractionToLeave = 0.01;
+
+    /// <summary>
+    /// Whether the surface may switch to <paramref name="target"/> right now.
+    ///
+    /// Falling in happens at 0%; climbing out needs 1%. The gap is the whole
+    /// point — with a single threshold the meter sits exactly on the edge
+    /// after a fallback, and regen puts a fraction of a cent back within
+    /// seconds. That was chooseable from the dropdown: swap to Free, swap
+    /// straight back to Pro, and the next prompt is answered by the paid
+    /// model on a meter that is empty in every sense that matters. Repeat per
+    /// turn and the budget is decorative.
+    ///
+    /// So this is hysteresis, not a paywall. One percent is small enough that
+    /// a genuine refill clears it instantly and large enough that trickle
+    /// regen has to accumulate for a while first, which is the same reason
+    /// <see cref="Apply"/> never switches back on its own.
+    ///
+    /// The local tier is always reachable: choosing to be tired is not a
+    /// privilege, and a person who wants to save energy must never be told
+    /// they lack the energy to save energy.
+    /// </summary>
+    public bool MaySwitchTo(string target, EnergyLevel level) =>
+        string.Equals(target, LocalTier, StringComparison.OrdinalIgnoreCase)
+            || level.Fraction >= MinimumFractionToLeave;
 }

@@ -23,7 +23,10 @@ export function EventLog({
 }) {
   return (
     <ResizableAside side="right" title="Debug" onClose={onClose}>
-      <KnobsPanel />
+      {/* Re-reads the live knobs as turns land: the host moves the tier by
+          itself when energy runs out, and the panel is the only thing that
+          could say so. */}
+      <KnobsPanel revision={records.length} />
       <ol className="text-xs">
         {records.length === 0 && (
           <li className="px-3 py-4 text-neutral-400 dark:text-neutral-500">Nothing has happened yet.</li>

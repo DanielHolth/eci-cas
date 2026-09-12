@@ -20,7 +20,7 @@ import {
  * tier's file on the next restart unless Save writes it there first (see
  * EciCas.Core.RuntimeKnobs / KnobDefaults).
  */
-export function KnobsPanel() {
+export function KnobsPanel({ revision = 0 }: { revision?: number }) {
   const [knobs, setKnobs] = useState<Knobs | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -49,7 +49,19 @@ export function KnobsPanel() {
       live = false;
       clearTimeout(timer);
     };
-  }, []);
+    // Re-asked whenever a turn settles, because the host can move these
+    // without being told to. Running out of energy switches the tier from
+    // under the panel (EnergyFallback), and a switch re-seeds every knob --
+    // so a panel that only ever fetched on mount kept saying Pro, mood
+    // "helpful", five sentences, recall depth five, while Free was answering
+    // at three and three. Observed live: the swap eluded the first couple of
+    // questions entirely, because the only thing that could have reported it
+    // was showing a snapshot from boot.
+    //
+    // Same revision as useVitals and usePersona, and for the same reason:
+    // these change only as a consequence of a turn, so polling would be
+    // asking a question whose answer cannot have moved.
+  }, [revision]);
 
   async function apply<K extends keyof Knobs>(key: K, value: Knobs[K], write: (v: never) => Promise<Knobs>) {
     setKnobs((prev) => (prev ? { ...prev, [key]: value } : prev));

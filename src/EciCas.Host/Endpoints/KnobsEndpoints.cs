@@ -26,12 +26,23 @@ internal static class KnobsEndpoints
             Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions));
 
         app.MapPost("/api/knobs", (KnobsRequest request, RuntimeKnobs knobs, TierCatalog tiers, IOptions<KnobDefaults> knobDefaults,
-            ISubstrateProvider substrates, IOptions<SubstrateOptions> substrateConfig) =>
+            ISubstrateProvider substrates, IOptions<SubstrateOptions> substrateConfig,
+            Energy.EnergyMeter meter, Energy.EnergyFallback fallback) =>
         {
             // First, because it re-seeds RecallDepth: a request that sets both
             // should end with the explicit depth, not with the tier's answer to it.
             if (request.Tier is { } tierName)
             {
+                // Before the switch, not after: an empty meter may always go
+                // local, and may not come back until it has something to
+                // spend. See EnergyFallback.MaySwitchTo for why the two
+                // thresholds differ.
+                if (!fallback.MaySwitchTo(tierName, meter.Read()))
+                {
+                    return Results.Conflict(
+                        $"Not enough energy to leave {fallback.LocalTier} — needs at least {Energy.EnergyFallback.MinimumFractionToLeave:P0}.");
+                }
+
                 if (!tiers.Switch(tierName))
                 {
                     return Results.BadRequest($"No such tier '{tierName}'.");
