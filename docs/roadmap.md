@@ -39,9 +39,8 @@ item below is an event the system already detects and then discards.
 
 **XP.** One XP per extracted fact, capped at 3 per turn. Leaving level L
 costs `2·L` XP, so reaching level n takes `n(n-1)` facts in total (90 for
-level 10). XP needs the fact extractor, which is off on Free and Budget
-today (`Utterances:ExtractorEnabled`). Either count verbatim facts there, or
-turn the extractor on.
+level 10). XP counts extracted facts, so it rides on
+`Utterances:ExtractorEnabled`, which every tier file turns on.
 
 **State.** Per profile, on the backend, next to a global turn counter.
 
