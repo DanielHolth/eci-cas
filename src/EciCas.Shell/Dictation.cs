@@ -210,13 +210,18 @@ internal sealed class Dictation : IDisposable
 
         // A processor per take, deliberately: it carries the decoder's state,
         // and one take should not be understood in the light of the last one.
-        await using var processor = factory.CreateBuilder()
+        var builder = factory.CreateBuilder()
             .WithLanguage(_options.Language)
 
             // Half the machine at most. The other half is running whatever the
             // person was doing when they held the key down.
-            .WithThreads(Math.Max(1, Environment.ProcessorCount / 2))
-            .Build();
+            .WithThreads(Math.Max(1, Environment.ProcessorCount / 2));
+
+        // Names the decoder would otherwise spell as whatever English word
+        // they sound closest to -- see DictationOptions.Vocabulary.
+        if (!string.IsNullOrWhiteSpace(_options.Vocabulary)) builder = builder.WithPrompt(_options.Vocabulary);
+
+        await using var processor = builder.Build();
 
         var said = new StringBuilder();
         await foreach (var segment in processor.ProcessAsync(take))

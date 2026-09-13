@@ -23,6 +23,23 @@ internal sealed class DictationOptions
     /// </summary>
     public string ModelPath { get; set; } = "models/whisper/ggml-base.bin";
 
+    /// <summary>
+    /// Words the decoder should expect to hear, as a sentence handed to
+    /// whisper before the take.
+    ///
+    /// Whisper decodes towards what is likely, and "Morrow" is not: spoken
+    /// with a Norwegian accent it lands on Morrow, Marrow, Morro, Moro or
+    /// Morau, all of which are more probable English than a name the model
+    /// has never met. An initial prompt is the supported way to say
+    /// otherwise -- it is not a grammar and it forbids nothing, it just moves
+    /// the odds, and a handful of proper nouns is the whole of what it is
+    /// good for. Keep it short: it is prepended to every take, and a long one
+    /// starts colouring the transcript with its own phrasing.
+    ///
+    /// Empty switches the bias off.
+    /// </summary>
+    public string Vocabulary { get; set; } = "Morrow";
+
     /// <summary>An ISO code to pin the language, or "auto" to let the model
     /// decide per take -- which is what a bilingual speaker wants, at the cost
     /// of the occasional take understood in the wrong one.</summary>
