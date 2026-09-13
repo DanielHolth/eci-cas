@@ -51,6 +51,17 @@ public sealed class ParquetFactLog : IFactLog
         public string? SupersededBy { get; set; }
         public int? HitCount { get; set; }
         public long? FirstSeenTurn { get; set; }
+
+        // Nullable all the way down, and null means "nobody has said" for
+        // every one of them -- which is also exactly what a file written
+        // before these columns existed reads as.
+        public string? OriginModel { get; set; }
+        public string? Class { get; set; }
+        public string? Entity { get; set; }
+        public int? Sensitivity { get; set; }
+        public double? Confidence { get; set; }
+        public double? Freshness { get; set; }
+        public string? EvaluatedAt { get; set; }
     }
 
     private readonly string _directory;
@@ -362,6 +373,13 @@ public sealed class ParquetFactLog : IFactLog
         SupersededBy = f.SupersededBy,
         HitCount = f.HitCount,
         FirstSeenTurn = f.FirstSeenTurn,
+        OriginModel = f.OriginModel,
+        Class = f.Class,
+        Entity = f.Entity,
+        Sensitivity = f.Sensitivity,
+        Confidence = f.Confidence,
+        Freshness = f.Freshness,
+        EvaluatedAt = f.EvaluatedAt?.ToString("O", CultureInfo.InvariantCulture),
     };
 
     private static Fact FromRow(Row r) => new(
@@ -376,5 +394,15 @@ public sealed class ParquetFactLog : IFactLog
         r.ThreadId,
         r.SupersededBy,
         r.HitCount ?? 0,
-        r.FirstSeenTurn ?? 0);
+        r.FirstSeenTurn ?? 0,
+        r.OriginModel,
+        r.Class,
+        r.Entity,
+        r.Sensitivity,
+        r.Confidence,
+        r.Freshness,
+        // Unparseable reads as never-judged, which is the safe direction:
+        // the row goes back on Analytics' queue rather than carrying a date
+        // nothing can interpret.
+        DateTimeOffset.TryParse(r.EvaluatedAt, CultureInfo.InvariantCulture, out var judged) ? judged : null);
 }

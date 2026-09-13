@@ -31,7 +31,67 @@ public sealed record Fact(
     string? ThreadId = null,
     string? SupersededBy = null,
     int HitCount = 0,
-    long FirstSeenTurn = 0)
+    long FirstSeenTurn = 0,
+
+    // ---- Provenance and judgement -------------------------------------
+    // All nullable, and null is never "zero" -- it is "nobody has said".
+    // Everything below survives no rebuild: a re-derived row is a newborn
+    // that happens to know when it was said and by whom.
+
+    /// <summary>
+    /// Which model read this sentence out of the utterance. Null means a
+    /// row written before this column existed, and is treated exactly like
+    /// a local model wrote it -- the conservative reading, and the one that
+    /// makes the first selective rebuild a full one without a flag.
+    /// </summary>
+    string? OriginModel = null,
+
+    /// <summary>
+    /// One word from <see cref="FactClasses"/>. Written for freshness, but
+    /// deliberately not named for it: the same word scopes supersession,
+    /// filters a wipe, and gives Analytics something to group by.
+    /// </summary>
+    string? Class = null,
+
+    /// <summary>
+    /// What the fact is about, in the speaker's own words -- a person, a
+    /// place, a car, a game. Open vocabulary on purpose; a closed one would
+    /// need every entity to exist before it is mentioned.
+    ///
+    /// This is the supersession key. "Is anything already on file about
+    /// this?" is a lookup on (Entity, Class) rather than a comparison
+    /// against every row in the archive. It drifts -- "Ingrid", "my wife" --
+    /// and normalising it is a later pass, affordable because facts rebuild.
+    /// </summary>
+    string? Entity = null,
+
+    /// <summary>
+    /// 0 none, 1 personal, 2 private. An ordinal rather than a score
+    /// because both things that read it want a crisp answer: an overlay
+    /// deciding whether a row may appear on a shared screen, and a wipe
+    /// deciding what goes first. A 0-1 float would be a threshold argument
+    /// forever, and a small model cannot calibrate one anyway.
+    /// </summary>
+    int? Sensitivity = null,
+
+    /// <summary>How sure the writer was. Null until somebody judges.</summary>
+    double? Confidence = null,
+
+    /// <summary>
+    /// How much of this is still true. Mostly a function of
+    /// <see cref="Class"/> and <see cref="Timestamp"/> -- a resolved date
+    /// never goes stale, a state of mind goes stale in hours -- which is
+    /// why it is Analytics' job and not the boot job's.
+    /// </summary>
+    double? Freshness = null,
+
+    /// <summary>
+    /// When the judgement columns were last written. Null means never, and
+    /// that is the work queue: a rebuilt row nulls this precisely so it is
+    /// picked up again rather than carrying a verdict about a sentence that
+    /// no longer exists.
+    /// </summary>
+    DateTimeOffset? EvaluatedAt = null)
 {
     public bool HasVector(string modelId) =>
         Embedding is { Length: > 0 } && string.Equals(EmbeddingModelId, modelId, StringComparison.OrdinalIgnoreCase);
@@ -42,6 +102,51 @@ public sealed record Fact(
     /// archive because it was used once out of one.
     /// </summary>
     public double HitRate(long turnsNow) => HitCount / (double)Math.Max(turnsNow - FirstSeenTurn, 10);
+
+    /// <summary>
+    /// Whether this row is owed a re-derivation by a better extractor. Null
+    /// is deliberately included: a row from before the column existed was
+    /// written by whatever the tier was running, and the only safe guess is
+    /// the weakest one.
+    /// </summary>
+    public bool WrittenBy(IReadOnlyCollection<string> models) =>
+        OriginModel is null || models.Contains(OriginModel);
+}
+
+/// <summary>
+/// The closed vocabulary for <see cref="Fact.Class"/>.
+///
+/// Hardcoded, with <c>other</c> as the valve, because that is what the
+/// cataloger bench already measured: a second pass spent trying to empty
+/// <c>other</c> bought nothing, and a vocabulary the writer can invent into
+/// is not a vocabulary anything downstream can group by.
+///
+/// Adding a word here is cheap and needs no migration -- the column is
+/// derived, so a rebuild reclassifies the whole archive against the new
+/// list. That is the reason to keep the list short rather than defensive.
+/// </summary>
+public static class FactClasses
+{
+    public const string Other = "other";
+
+    public static readonly IReadOnlyList<string> All =
+    [
+        "date",       // an event pinned to a calendar day, resolved absolute
+        "preference", // what somebody likes, wants, or chooses
+        "relation",   // how somebody stands to somebody else
+        "location",   // where something or somebody is
+        "state",      // how somebody is right now; the fastest to go stale
+        "event",      // something that happened
+        "skill",      // what somebody can do
+        "possession", // what somebody has
+        Other,
+    ];
+
+    /// <summary>Anything unrecognised lands in the valve rather than on the row.</summary>
+    public static string Normalise(string? written) =>
+        written is not null && All.Contains(written.Trim().ToLowerInvariant())
+            ? written.Trim().ToLowerInvariant()
+            : Other;
 }
 
 /// <summary>
