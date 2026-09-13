@@ -26,6 +26,20 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+
+    <!-- Dictation. whisper.cpp, in this process, on the CPU: the microphone is
+         the one input that would otherwise have to leave the machine to be
+         understood, and a key held in a game is not a thing to send to a
+         vendor. Whisper.net is the managed binding and .Runtime carries the
+         native library, so there is no second executable to ship.
+
+         NAudio.WinMM rather than the NAudio meta-package: waveIn capture and a
+         WAV writer is the whole of what is used here, and the meta-package
+         drags in ASIO, MIDI, DirectX Media Objects and a WinForms control
+         besides. -->
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="NAudio.WinMM" Version="3.1.0" />
   </ItemGroup>
 
   <!-- The exported client, copied in beside the exe so one process serves both

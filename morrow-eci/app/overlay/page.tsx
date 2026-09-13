@@ -18,6 +18,10 @@ const LINGER_MS = 6000;
  * the window. */
 const DRAG_SLOP = 4;
 
+/** How long a transcript stays up. Shorter than a reply lingers: it is a
+ * receipt, and the reply arriving behind it is the real answer. */
+const HEARD_MS = 4000;
+
 /**
  * Morrow as a desktop watermark: a face in a corner, the last thing she said,
  * and whether she is listening. Nothing else.
@@ -41,13 +45,24 @@ export default function Overlay() {
   // Unmuted, unlike the window: this surface is the one with the mouth.
   const { speaking, unlock } = useSpeech(turns, { ready: replayed });
 
-  const [state, setState] = useState({ listening: false, interactable: false });
+  const [state, setState] = useState({ listening: false, interactable: false, heard: "", heardAt: 0 });
 
   // Where a gesture started, while it is still undecided between a click and
   // a drag. Undefined means no button is down.
   const [drag, setDrag] = useState<{ x: number; y: number }>();
 
   useEffect(() => onShellState((next) => setState((current) => ({ ...current, ...next }))), []);
+
+  // What the shell heard, until it goes stale. Keyed on the counter rather than
+  // the text so saying the same thing twice shows twice, and cleared on a new
+  // take so an old transcript never sits under a new answer.
+  const [heard, setHeard] = useState("");
+  useEffect(() => {
+    if (!state.heardAt) return;
+    setHeard(state.heard);
+    const timer = setTimeout(() => setHeard(""), HEARD_MS);
+    return () => clearTimeout(timer);
+  }, [state.heardAt, state.heard]);
 
   const turn = turns[turns.length - 1];
   const said = turn?.output?.text;
@@ -141,6 +156,16 @@ export default function Overlay() {
         {state.listening ? (
           <p className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
             Listening…
+          </p>
+        ) : heard ? (
+          /* Quieter than the reply bubble and in the place the status pill
+             uses, because it is the same kind of thing: a note about the
+             machinery, not something Morrow said. */
+          <p
+            className="max-w-xs truncate rounded-full bg-neutral-800/85 px-3 py-1 text-xs italic text-neutral-200 shadow"
+            role="status"
+          >
+            {heard}
           </p>
         ) : state.interactable ? (
           <p className="rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">

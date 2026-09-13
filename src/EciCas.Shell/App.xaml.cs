@@ -1,4 +1,5 @@
 using System.Windows;
+using EciCas.Agents.Perception;
 using EciCas.Host.Startup;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -27,6 +28,7 @@ public partial class App : System.Windows.Application
     private OverlayWindow? _overlay;
     private SessionWindow? _session;
     private HotKeys? _hotKeys;
+    private Dictation? _dictation;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -82,21 +84,37 @@ public partial class App : System.Windows.Application
         _overlay.SessionRequested += () => _ = _session.RevealAsync();
         _overlay.Show();
 
+        _dictation = new Dictation(options.Dictation);
+
+        // The microphone and the text box arrive at the same place. Not over
+        // HTTP: /api/perceive exists for surfaces that are not in this process,
+        // and this one is -- the agent it would reach is a field away, and the
+        // cap on an utterance is applied inside Perceive either way.
+        var perception = _host.Services.GetRequiredService<PerceptionAgent>();
+
+        _dictation.Listening += listening => _overlay.Listening = listening;
+        _dictation.Trouble += note => _overlay.Heard = note;
+        _dictation.Transcribed += text =>
+        {
+            // On screen before it is acted on. A wrong transcript and a bad
+            // reply look identical unless the words are shown.
+            _overlay.Heard = text;
+            perception.Perceive(text);
+        };
+
         if (_hotKeys is not null)
         {
             _hotKeys.Interact += () => _overlay.Interactable = !_overlay.Interactable;
 
-            // Held means listening; released means it is not. What is missing
-            // between those two is dictation itself: there is no speech-to-text
-            // anywhere in this repository yet, so for now the key tells the
-            // face it is being listened to and nothing transcribes. The seam is
-            // exactly here -- on release, POST the transcript to /api/perceive,
-            // which is the same call the text box makes.
-            _hotKeys.VoiceDown += () => _overlay.Listening = true;
-            _hotKeys.VoiceUp += () => _overlay.Listening = false;
+            // Held is the whole gesture: down opens the microphone, up closes
+            // it and transcribes the take. The face follows Dictation rather
+            // than the key, because the key is a hyphen that still types and a
+            // tap of it must not so much as flicker -- see DictationOptions.HoldMs.
+            _hotKeys.VoiceDown += _dictation.Press;
+            _hotKeys.VoiceUp += _dictation.Release;
         }
 
-        _tray.Text = "Morrow";
+        _tray.Text = _dictation.Ready ? "Morrow" : "Morrow — no speech model";
         _tray.DoubleClick += (_, _) => _ = _session.RevealAsync();
         _tray.ContextMenuStrip = TrayMenu();
     }
@@ -144,6 +162,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _hotKeys?.Dispose();
+        _dictation?.Dispose();
         if (_tray is not null)
         {
             _tray.Visible = false;

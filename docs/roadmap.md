@@ -814,10 +814,25 @@ ways. Built as `/overlay/` plus `lib/shell.ts`.
   browser tab has no query string and speaks, as before. The overlay also
   needs `--autoplay-policy=no-user-gesture-required`, because a
   click-through window can never receive the gesture the policy wants.
-- **Still no dictation.** The voice hotkey drives the listening state and
-  nothing transcribes — there is no speech-to-text in the repo. The seam is
-  named in `App.xaml.cs`: on key release, POST the transcript to
-  `/api/perceive`, the same call the composer makes.
+- **Dictation is local, and only local.** whisper.cpp in the shell's own
+  process, on the CPU, roughly 140MB of weights and well under a second for a
+  spoken sentence. Every other model here may be a vendor's if the tier says
+  so; this one may not, because it is the only input that carries the room.
+  Held is the whole gesture: down opens the microphone, up closes it and
+  transcribes the take in one pass. The transcript goes to
+  `PerceptionAgent.Perceive` directly rather than over loopback HTTP —
+  `/api/perceive` is for surfaces outside the process, and this one is a field
+  away.
+- **Three guards, because a held key is not a button.** The voice key is a
+  hyphen that still types, so it must be held past `HoldMs` before anything
+  records; a key stuck down by a game must not record the afternoon, hence
+  `MaxSeconds`; and whisper asked to transcribe a quiet room answers with
+  words nobody said, hence the peak gate and the dropped `[BLANK_AUDIO]`
+  annotations. Each failure is a sentence under the face, never a silence.
+- **What she heard is shown before it is answered.** Dictation is the one
+  input the person cannot check for themselves — they know what they typed,
+  they do not know what a model made of what they said — and a transcript that
+  arrived wrong is indistinguishable from a persona that answered badly.
 
 ### What a window opened mid-session knows
 
@@ -895,9 +910,12 @@ The feature that sells it, and the one with a real hazard.
   and the character is the desktop presentation. That is also the same
   audio path as the accessibility story.
 - **Snappy is a latency budget**: under a second from releasing the button
-  to first audio. That forces local STT streaming while the person still
-  talks, first LLM token forwarded not buffered, and TTS streamed a
-  sentence at a time — which `MaxSentences` already suits.
+  to first audio. STT is local and in-process now, but it runs on the whole
+  take after release rather than streaming while the person still talks —
+  ~1.5s for a five-second sentence on `base`, which spends most of the budget
+  before the LLM has seen a word. Streaming the transcription, forwarding the
+  first LLM token rather than buffering, and TTS a sentence at a time — which
+  `MaxSentences` already suits — are what is left.
 
 ### Money
 
@@ -973,7 +991,6 @@ build, so community toolkits are a desktop feature and stay one.
 
 ## Companion extensions (not started)
 
-- **Dictation.** Push-to-talk into the composer. No speaker ID.
 - **Biometric unlock.** A new face creates a profile.
 - **Diary category.** Entries that accumulate rather than supersede.
 - **Profiles from conversation.** Create a profile when a new name comes

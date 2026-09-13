@@ -80,6 +80,30 @@ internal partial class OverlayWindow : Window
 
     private bool _listening;
 
+    /// <summary>
+    /// What the shell just heard, or why it heard nothing -- one line, shown
+    /// under the face and then forgotten.
+    ///
+    /// Dictation is the one thing the person cannot check for themselves. They
+    /// know what they typed; they do not know what a model made of what they
+    /// said, and a transcript that arrived wrong is indistinguishable from a
+    /// persona that answered badly unless the words are put on screen. The
+    /// counter goes with it so the page can show the same sentence twice
+    /// running and still restart its own timer.
+    /// </summary>
+    public string Heard
+    {
+        set
+        {
+            _heard = value;
+            _heardAt++;
+            Publish();
+        }
+    }
+
+    private string _heard = string.Empty;
+    private int _heardAt;
+
     /// <summary>The page's half of the contract -- see morrow-eci/lib/shell.ts.
     /// Two messages, and anything else is ignored rather than trusted: the page
     /// is the one part of this that can be updated without rebuilding the
@@ -126,6 +150,12 @@ internal partial class OverlayWindow : Window
     {
         if (View.CoreWebView2 is null) return;
         View.CoreWebView2.PostWebMessageAsJson(
-            JsonSerializer.Serialize(new { listening = _listening, interactable = _interactable }));
+            JsonSerializer.Serialize(new
+            {
+                listening = _listening,
+                interactable = _interactable,
+                heard = _heard,
+                heardAt = _heardAt,
+            }));
     }
 }

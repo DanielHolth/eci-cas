@@ -20,6 +20,16 @@ export interface ShellState {
   listening?: boolean;
   /** Clicks reach the page rather than passing through to the desktop. */
   interactable?: boolean;
+  /**
+   * What the shell's transcriber made of the last thing said into the
+   * microphone, or a sentence about why it made nothing of it. Shown and then
+   * dropped: this is not conversation, it is the person checking that they
+   * were heard correctly.
+   */
+  heard?: string;
+  /** Bumped on every `heard`, so the same sentence twice running still reads
+   * as a new one. */
+  heardAt?: number;
 }
 
 /**

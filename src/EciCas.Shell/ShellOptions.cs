@@ -38,6 +38,10 @@ internal sealed class ShellOptions
     public string SessionPath { get; set; } = "/?mute=1";
     public string OverlayPath { get; set; } = "/overlay/";
 
+    /// <summary>Speech to text, which is what the voice key is for. Its own
+    /// section because it is the only part of the shell with weights.</summary>
+    public DictationOptions Dictation { get; set; } = new();
+
     public KeySpec Voice => KeySpec.Parse(VoiceKey, "voice");
     public KeySpec Interact => KeySpec.Parse(InteractKey, "interact");
 }

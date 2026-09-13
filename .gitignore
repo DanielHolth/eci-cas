@@ -13,7 +13,8 @@ src/EciCas.Host/telemetry/
 .env.*
 !.env.example
 
-# Embedding model â€” ~90MB, downloaded not committed.
+# Weights: the embedder (~90MB) and the speech model (~150MB). Downloaded by
+# scripts/get-embedding-model.ps1 and scripts/get-whisper-model.ps1, never committed.
 models/
 __pycache__/
 *.pyc

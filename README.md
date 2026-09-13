@@ -57,6 +57,16 @@ of the screen. Hold `-` to talk, `|` to make her clickable, then click
 her for the full session in a second window; quit from the tray. The client
 export is built once if `morrow-eci/out` is missing.
 
+Talking to her needs the speech model, once:
+
+```powershell
+./scripts/get-whisper-model.ps1
+```
+
+~140MB of whisper.cpp weights into `models/whisper/`. Multilingual `base`
+rather than `base.en`, and `-Model small` is the upgrade. Without it the voice
+key says so in the tray and records nothing.
+
 ```powershell
 ./start.cmd -NoBuild
 ```
@@ -83,10 +93,19 @@ The hotkeys are watched, not claimed: a timer asks the OS whether those two
 keys are down, so they are neither a keyboard hook (invisible to anti-cheat)
 nor a registered hotkey (nothing is taken from other applications -- `-` still
 types a hyphen in a game, a chat box or a terminal). The cost of that is the
-other half: typing a hyphen also opens the microphone. Keys are named by the
-character they type, resolved through whatever keyboard layout is in front, and
-take optional `Ctrl+` / `Shift+` / `Alt+` / `Win+` prefixes -- see the `Shell`
-section of `appsettings.json`.
+other half: typing a hyphen would also open the microphone, so the key has to
+be held for `Dictation:HoldMs` (350ms) before anything records. Keys are named
+by the character they type, resolved through whatever keyboard layout is in
+front, and take optional `Ctrl+` / `Shift+` / `Alt+` / `Win+` prefixes -- see
+the `Shell` section of `appsettings.json`.
+
+Speech to text runs on the CPU inside that same process: the microphone is the
+one input that carries the room, so it never leaves the machine whatever the
+tier says. Release the key and the take is transcribed in one pass -- under a
+second for a spoken sentence -- and what she heard appears under the face
+before it is answered, because a transcript that arrived wrong is otherwise
+indistinguishable from a bad reply. A take with nothing in it says so instead
+of being transcribed into words nobody said.
 
 By hand:
 
@@ -130,6 +149,12 @@ boot; `Agent substrate manifest drift` usually means a stale build
 `src/EciCas.Host/instructions/` holds every sentence the persona speaks, one
 `.txt` per agent. `identity.txt` only seeds an empty store; delete
 `bin/.../memory.jsonl` to re-seed (`--Identity:Profile=grump|educator|playmate`).
+
+Speech: whisper.cpp `ggml-base.bin`, in-process on the CPU, fetched by
+`scripts/get-whisper-model.ps1` into `models/whisper/`. Any single `ggml*.bin`
+in that directory is used, so a bigger download needs no config edit. See the
+`Dictation` block in the `Shell` section for the hold threshold, the ceiling on
+one take, and the silence gate.
 
 Embeddings: multilingual-e5-small, in-process ONNX, fetched by
 `scripts/get-embedding-model.ps1` into `models/embedding/multilingual-e5-small/`
