@@ -24,6 +24,10 @@ using EciCas.Core;
 /// <see cref="RebuildAsync"/> throws the whole index away and reads every
 /// utterance again. That is what a better extractor, a better prompt, or a
 /// suspected corruption is worth, and it is only ever run by hand.
+/// <see cref="RedriveAsync"/> is the same idea aimed: it re-reads only the
+/// turns whose facts were written by a model it is allowed to replace, with
+/// a stronger extractor passed in. It runs at boot like the gap-fill, and it
+/// converges, because the rows it writes name a model it may not replace.
 ///
 /// **It threads without a consolidator, always.** A boot job is the wrong
 /// place to spend a substrate call per row: a thousand-row backlog would be a
@@ -57,6 +61,76 @@ public sealed class FactBackfill
     /// zero is the ordinary case.
     /// </summary>
     public sealed record Result(int Extracted, int Embedded, int Threaded);
+
+    /// <summary>What a re-derivation touched, and why it stopped if it did.</summary>
+    public sealed record Redrive(int Turns, int Rows, string? Stopped);
+
+    /// <summary>
+    /// Reads the turns behind weak facts again, with a better extractor.
+    ///
+    /// **Nothing is deleted before its replacement exists.** The model call
+    /// comes first, the old rows come out and the new ones go in afterwards,
+    /// and a turn whose call failed is left exactly as it was. That ordering
+    /// is the whole safety argument: <see cref="IFactExtractor"/> is
+    /// contractually forbidden to throw and degrades to the utterance
+    /// verbatim instead, so a rebuild that deleted first would answer a dead
+    /// network by replacing good facts with paragraphs.
+    ///
+    /// **A failure stops the pass rather than skipping the turn.** A verbatim
+    /// row is how a failed call announces itself -- no model answered, so no
+    /// model is named -- and one of those means the substrate is gone, not
+    /// that this one sentence was hard. Everything already rewritten stands;
+    /// the next boot picks up the rest, because the rows it has not reached
+    /// still name a model it is allowed to replace.
+    ///
+    /// **Written per turn, not in one batch at the end.** It costs a store
+    /// rewrite per turn against a store that is rewritten constantly anyway,
+    /// and it buys the thing that actually matters here: a rebuild killed
+    /// halfway keeps the calls it already paid for.
+    /// </summary>
+    public async Task<Redrive> RedriveAsync(IFactExtractor extractor, IReadOnlyCollection<string> replaces,
+        CancellationToken cancellationToken)
+    {
+        var owed = (await _facts.AllAsync(cancellationToken).ConfigureAwait(false))
+            .Where(f => f.WrittenBy(replaces))
+            .GroupBy(f => f.Turn)
+            .ToDictionary(g => g.Key, g => g.Select(f => f.Id).ToList());
+
+        if (owed.Count == 0)
+        {
+            return new Redrive(0, 0, null);
+        }
+
+        var utterances = await _utterances.AllAsync(cancellationToken).ConfigureAwait(false);
+        var replies = await _utterances.RepliesAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Re-reading {Count} turn(s) whose facts are owed a better extractor.", owed.Count);
+
+        var turns = 0;
+        var written = 0;
+        foreach (var utterance in utterances.Where(u => owed.ContainsKey(u.Turn)).OrderBy(u => u.Turn))
+        {
+            var previous = UtteranceContext.PreviousReply(replies, utterance);
+            var extracted = await extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false);
+
+            // An unnamed model is a failed call, not a verdict. NONE comes
+            // back as an empty list and is a verdict -- a stronger reader
+            // saying this turn stated nothing -- so the weak rows go.
+            if (extracted.Any(e => e.OriginModel is null))
+            {
+                return new Redrive(turns, written,
+                    $"the substrate stopped answering at turn {utterance.Turn}; the rest is left for the next boot");
+            }
+
+            var rows = Mint(utterance, extracted);
+            await _facts.RemoveAsync(owed[utterance.Turn], cancellationToken).ConfigureAwait(false);
+            await _facts.AppendAsync(rows, cancellationToken).ConfigureAwait(false);
+            turns++;
+            written += rows.Count;
+        }
+
+        await DeriveAsync(cancellationToken).ConfigureAwait(false);
+        return new Redrive(turns, written, null);
+    }
 
     /// <summary>Gap-filling only. Safe to run on every boot.</summary>
     public async Task<Result> RunAsync(CancellationToken cancellationToken)
@@ -105,33 +179,46 @@ public sealed class FactBackfill
         foreach (var utterance in utterances)
         {
             var previous = UtteranceContext.PreviousReply(replies, utterance);
-            foreach (var extracted in await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false))
-            {
-                var sentence = extracted.Text;
-                var keywords = KeywordExtractor.Content(sentence);
-                if (!UtteranceFilter.Keep(keywords, _options))
-                {
-                    continue;
-                }
-
-                rows.Add(new Fact(
-                    Id: Guid.NewGuid().ToString("n"),
-                    // The utterance's own turn, not today's: a recovered fact
-                    // has been recallable since it was said.
-                    Turn: utterance.Turn,
-                    Text: sentence,
-                    Timestamp: utterance.Timestamp,
-                    Speaker: utterance.Speaker,
-                    Keywords: keywords,
-                    OriginModel: extracted.OriginModel,
-                    Class: extracted.Class,
-                    Entity: extracted.Entity,
-                    Sensitivity: extracted.Sensitivity));
-            }
+            rows.AddRange(Mint(utterance, await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false)));
         }
 
         await _facts.AppendAsync(rows, cancellationToken).ConfigureAwait(false);
         return utterances.Count;
+    }
+
+    /// <summary>
+    /// Extracted sentences into rows, filtered and stamped with the turn they
+    /// were read out of. One implementation, so a re-derived row is shaped
+    /// exactly like a backfilled one and a live one.
+    /// </summary>
+    private List<Fact> Mint(Utterance utterance, IReadOnlyList<ExtractedFact> extracted)
+    {
+        var rows = new List<Fact>();
+        foreach (var fact in extracted)
+        {
+            var sentence = fact.Text;
+            var keywords = KeywordExtractor.Content(sentence);
+            if (!UtteranceFilter.Keep(keywords, _options))
+            {
+                continue;
+            }
+
+            rows.Add(new Fact(
+                Id: Guid.NewGuid().ToString("n"),
+                // The utterance's own turn, not today's: a recovered fact
+                // has been recallable since it was said.
+                Turn: utterance.Turn,
+                Text: sentence,
+                Timestamp: utterance.Timestamp,
+                Speaker: utterance.Speaker,
+                Keywords: keywords,
+                OriginModel: fact.OriginModel,
+                Class: fact.Class,
+                Entity: fact.Entity,
+                Sensitivity: fact.Sensitivity));
+        }
+
+        return rows;
     }
 
     /// <summary>

@@ -54,6 +54,7 @@ public static class TierCatalogLoader
     {
         var substrates = configuration.GetSection("Substrates").Get<SubstrateOptions>() ?? new SubstrateOptions();
         var knobs = configuration.GetSection("Knobs").Get<KnobDefaults>() ?? new KnobDefaults();
+        var maintenance = configuration.GetSection("Maintenance").Get<MaintenanceOptions>();
 
         // Validated here rather than on selection, so a broken tier file
         // stops the host at boot with every other tier's problems listed
@@ -86,6 +87,8 @@ public static class TierCatalogLoader
             .Distinct(StringComparer.Ordinal)
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();
+
+        maintenance?.Install(substrates);
 
         return new TierPreset
         {

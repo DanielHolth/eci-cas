@@ -129,6 +129,20 @@ internal static class StoreRegistration
         services.AddSingleton<ThreadWeaver>();
         services.AddSingleton<FactBackfill>();
 
+        // A second instance of the same extractor, pointed at whatever
+        // Maintenance:Rebuild names. Same class, same prompt, same rules --
+        // the only difference between the live read and the boot re-read is
+        // who is asked, which is the entire reason the agent name is a
+        // constructor argument rather than a constant.
+        services.AddSingleton(sp => new FactRebuild(
+            sp.GetRequiredService<FactBackfill>(),
+            ActivatorUtilities.CreateInstance<SubstrateFactExtractor>(sp, MaintenanceOptions.RebuildAgentName),
+            sp.GetRequiredService<IFactLog>(),
+            sp.GetRequiredService<IOptions<MaintenanceOptions>>(),
+            sp.GetRequiredService<IOptions<SubstrateOptions>>(),
+            sp.GetRequiredService<IOptions<UtteranceOptions>>(),
+            sp.GetRequiredService<ILogger<FactRebuild>>()));
+
         // Two gated model calls, both on the write path, both off by default
         // and both disposable by construction.
         //

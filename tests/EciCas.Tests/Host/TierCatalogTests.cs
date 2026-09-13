@@ -24,6 +24,16 @@ public class TierCatalogTests
         return (catalog, substrates, knobs);
     }
 
+    /// <summary>
+    /// The agents a tier actually speaks with. The rebuild entry sits in the
+    /// same table and is deliberately none of a tier's business -- it names a
+    /// vendor model on Free too, because repairing the index is not the
+    /// persona thinking. Every claim below is about the persona, so it says
+    /// so rather than quietly counting a row it does not mean.
+    /// </summary>
+    private static IEnumerable<SubstrateAgentEntry> Persona(SubstrateOptions substrates) =>
+        substrates.Agents.Where(a => a.Key != MaintenanceOptions.RebuildAgentName).Select(a => a.Value);
+
     [Fact]
     public void EveryShippedTierLoads() =>
         Assert.Contains(TierCatalogLoader.Load(TierDirectory), p => p.Name == "Free");
@@ -63,7 +73,7 @@ public class TierCatalogTests
         Assert.True(catalog.Switch("Mock"));
 
         Assert.Equal("Mock", catalog.Active);
-        Assert.All(substrates.Agents.Values, c => Assert.Equal("mock", c.Provider));
+        Assert.All(Persona(substrates), c => Assert.Equal("mock", c.Provider));
     }
 
     /// <summary>
@@ -80,7 +90,7 @@ public class TierCatalogTests
         Assert.True(catalog.Switch("Free"));
 
         Assert.Equal("Free", catalog.Active);
-        Assert.All(substrates.Agents.Values, c => Assert.Equal("local", c.Provider));
+        Assert.All(Persona(substrates), c => Assert.Equal("local", c.Provider));
         Assert.False(substrates.Agents["Reflection"].UseSubstrate);
         Assert.True(substrates.Agents["Intent"].UseSubstrate);
 
@@ -111,7 +121,7 @@ public class TierCatalogTests
         catalog.Switch("Free");
 
         Assert.NotSame(before, substrates.Agents);
-        Assert.All(before.Values, c => Assert.Equal("mock", c.Provider));
+        Assert.All(before.Where(a => a.Key != MaintenanceOptions.RebuildAgentName).Select(a => a.Value), c => Assert.Equal("mock", c.Provider));
     }
 
     [Fact]
@@ -123,7 +133,26 @@ public class TierCatalogTests
         Assert.False(catalog.Switch("Minmal"));
 
         Assert.Equal("Free", catalog.Active);
-        Assert.All(substrates.Agents.Values, c => Assert.Equal("local", c.Provider));
+        Assert.All(Persona(substrates), c => Assert.Equal("local", c.Provider));
+    }
+
+    /// <summary>
+    /// The rebuild survives a tier switch, and does not cost Free its
+    /// selectability. Both halves have a way of going wrong quietly: a switch
+    /// replaces the whole agent table by reference, so an entry installed once
+    /// into the booted table would vanish the first time anyone moved the
+    /// dropdown; and an entry installed before the missing-key check would
+    /// have Free reporting a want of OPENAI_API_KEY and greyed out for it.
+    /// </summary>
+    [Fact]
+    public void TheRebuildIsInEveryTier_AndCostsFreeNothing()
+    {
+        var (catalog, substrates, _) = Build();
+
+        Assert.True(catalog.Switch("Free"));
+
+        Assert.Equal("openai", substrates.Agents[MaintenanceOptions.RebuildAgentName].Provider);
+        Assert.Empty(catalog.Presets.Single(p => p.Name == "Free").MissingKeys);
     }
 
     /// <summary>

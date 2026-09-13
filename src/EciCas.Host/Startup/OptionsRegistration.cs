@@ -33,6 +33,13 @@ internal static class OptionsRegistration
         services.Configure<TurnLogOptions>(configuration.GetSection("TurnLog"));
         services.Configure<TelemetryLogOptions>(configuration.GetSection("TelemetryLog"));
         services.Configure<KnobDefaults>(configuration.GetSection("Knobs"));
+        services.Configure<MaintenanceOptions>(configuration.GetSection("Maintenance"));
+
+        // The rebuild is not a tier's business, but it is resolved through
+        // the same agent table every tier owns -- see MaintenanceOptions for
+        // why it is installed rather than declared.
+        services.PostConfigure<SubstrateOptions>(substrates =>
+            configuration.GetSection("Maintenance").Get<MaintenanceOptions>()?.Install(substrates));
 
         return services;
     }

@@ -29,7 +29,7 @@ internal static class BootChecks
 
         // Cheap re-read of the same cached singletons resolved above, not a re-construction.
         var substrateOptions = app.Services.GetRequiredService<IOptions<SubstrateOptions>>().Value;
-        SubstrateManifestValidator.Validate(substrateOptions, app.Services.GetServices<IAgent>(), [SubstrateConsolidator.AgentName, SubstrateFactExtractor.AgentName, FactPicker.AgentName]);
+        SubstrateManifestValidator.Validate(substrateOptions, app.Services.GetServices<IAgent>(), [SubstrateConsolidator.AgentName, SubstrateFactExtractor.AgentName, FactPicker.AgentName, MaintenanceOptions.RebuildAgentName]);
 
         // Every tier, bound but not applied — see TierCatalog for why a live switch
         // is a few reference writes rather than a rebuild. Registered against the
@@ -62,6 +62,12 @@ internal static class BootChecks
         {
             Console.WriteLine($"Fact store: read {built.Extracted} utterance(s), embedded {built.Embedded} row(s), threaded {built.Threaded}.");
         }
+
+        // And after the gaps are filled, the rows a better model owes a
+        // second read. Ordered this way so a turn taken while the host was
+        // off is indexed first and then re-read once, rather than waiting a
+        // boot for the strong pass to notice it.
+        await app.Services.GetRequiredService<FactRebuild>().RunAsync(CancellationToken.None);
 
         PassageCorpus.EnsureModelAgreement(
             await app.Services.GetRequiredService<IPassageStore>().StampedModelsAsync(CancellationToken.None),
