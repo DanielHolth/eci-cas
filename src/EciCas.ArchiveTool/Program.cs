@@ -31,7 +31,7 @@ if (!Directory.Exists(directory))
 const string Usage = """
     facts [count] | fact <id> | fact del <id...> | fact edit <id> <corrected sentence>
     threads [count] | thread merge <thread> <thread> | thread split <id> | facts clear
-    said [count] | replies [count]
+    said [count] | replies [count] | find <text> | origins
     passages [count] | passage <id> | passage del <id>
     internal | internal del <category> <topic> <index[,index...]>
     files | embed <model.onnx> <sentencepiece.bpe.model> | erase | help | exit
@@ -106,6 +106,14 @@ while (true)
 
             case "replies":
                 await ShowSaidAsync(directory, parts.ElementAtOrDefault(1), replies: true);
+                break;
+
+            case "find" when parts.Length >= 2:
+                await FindAsync(directory, string.Join(' ', parts[1..]));
+                break;
+
+            case "origins":
+                await ShowOriginsAsync(directory);
                 break;
 
             case "passages":
@@ -858,5 +866,74 @@ static async Task EraseAsync(string directory)
 /// listings scannable at all, and a value that spans lines would otherwise
 /// break the column the id sits in.
 /// </summary>
+/// <summary>
+/// The same words, looked for in ground truth and in the index at once.
+///
+/// This is the question an operator actually has when recall answers badly:
+/// whether the thing is missing because nobody ever said it, or because the
+/// extractor did not read it out of a turn that did. Those two look identical
+/// from the outside and have nothing in common as problems -- the first is
+/// unrecoverable and the second is a rebuild away.
+/// </summary>
+static async Task FindAsync(string directory, string needle)
+{
+    var said = new ParquetUtteranceLog(directory);
+    var utterances = await said.AllAsync(CancellationToken.None);
+    var replies = await said.RepliesAsync(CancellationToken.None);
+    var facts = await Facts(directory).AllAsync(CancellationToken.None);
+
+    static bool Has(string haystack, string needle) =>
+        haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+    var inSaid = utterances.Where(u => Has(u.Text, needle)).ToList();
+    var inReplies = replies.Where(u => Has(u.Text, needle)).ToList();
+    var inFacts = facts.Where(f => Has(f.Text, needle)).ToList();
+
+    Console.WriteLine($"'{needle}': {inSaid.Count} utterance(s), {inReplies.Count} repl(ies), {inFacts.Count} fact(s).");
+
+    foreach (var u in inSaid.OrderBy(u => u.Turn).Take(20))
+    {
+        var indexed = facts.Count(f => f.Turn == u.Turn && !f.IsMarker);
+        var marked = facts.Any(f => f.Turn == u.Turn && f.IsMarker);
+        var state = marked ? "read, stated nothing" : indexed == 0 ? "NOT INDEXED" : $"{indexed} fact(s)";
+        Console.WriteLine($"  said  turn {u.Turn,-5} [{state}]  {Oneline(u.Text)}");
+    }
+
+    foreach (var f in inFacts.OrderBy(f => f.Turn).Take(20))
+    {
+        Console.WriteLine($"  fact  turn {f.Turn,-5} [{f.OriginModel ?? "unsigned"}]  {Oneline(f.Text)}");
+    }
+
+    // The one case worth spelling out, because it is the one that is fixable.
+    var orphaned = inSaid.Count(u => !facts.Any(f => f.Turn == u.Turn));
+    if (orphaned > 0)
+    {
+        Console.WriteLine($"  {orphaned} turn(s) say it and have no row at all. The next boot reads them.");
+    }
+}
+
+/// <summary>
+/// Who wrote the index. The answer to "did the rebuild run", which is
+/// otherwise only visible in a log line that has already scrolled past.
+/// </summary>
+static async Task ShowOriginsAsync(string directory)
+{
+    var facts = await Facts(directory).AllAsync(CancellationToken.None);
+    if (facts.Count == 0)
+    {
+        Console.WriteLine("No facts. The next boot reads them out of the utterance log.");
+        return;
+    }
+
+    foreach (var g in facts.GroupBy(f => f.OriginModel ?? "unsigned").OrderByDescending(g => g.Count()))
+    {
+        var markers = g.Count(f => f.IsMarker);
+        Console.WriteLine($"  {g.Count(),5}  {g.Key}" +
+            $"{(markers == 0 ? "" : $"  ({markers} of them turns that stated nothing)")}");
+    }
+
+    Console.WriteLine("  A row is re-read at boot when its model is listed under Maintenance:Replaces, or unsigned.");
+}
+
 static string Oneline(string text) =>
     string.Join(" ", text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()));
