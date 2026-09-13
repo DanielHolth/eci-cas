@@ -136,7 +136,9 @@ public static class TurnProjection
     private static IReadOnlyList<string> Describe(IReadOnlyList<ArchiveRecord>? facts) =>
         facts is null ? [] : [.. facts.Select(r => string.IsNullOrWhiteSpace(r.Sentence)
             ? $"{r.Category}/{r.Topic}/{r.Subtopic}/{r.Subject}/{r.Key} = {r.Value}"
-            : r.Sentence)];
+            : string.IsNullOrWhiteSpace(r.Subject) || r.Sentence.StartsWith(r.Subject, StringComparison.OrdinalIgnoreCase)
+                ? r.Sentence
+                : $"{r.Subject}: {r.Sentence}")];
 
     private static DateTimeOffset Later(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 }

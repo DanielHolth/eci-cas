@@ -74,7 +74,17 @@ public sealed partial class FactPicker
         prompt.AppendLine("FACTS:");
         for (var i = 0; i < shortlist.Count; i++)
         {
-            prompt.Append(i + 1).Append(". ").AppendLine(shortlist[i].Row.Text);
+            var row = shortlist[i].Row;
+            prompt.Append(i + 1).Append(". ").Append(row.Text);
+
+            // What it is about, when the sentence does not say. The picker is
+            // choosing between rows that often differ only in their subject.
+            if (!string.IsNullOrWhiteSpace(row.Entity))
+            {
+                prompt.Append("  [about: ").Append(row.Entity).Append(']');
+            }
+
+            prompt.AppendLine();
         }
 
         prompt.AppendLine();

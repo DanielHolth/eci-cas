@@ -31,7 +31,7 @@ if (!Directory.Exists(directory))
 const string Usage = """
     facts [count] | fact <id> | fact del <id...> | fact edit <id> <corrected sentence>
     threads [count] | thread merge <thread> <thread> | thread split <id> | facts clear
-    said [count] | replies [count] | find <text> | origins
+    said [count] | replies [count] | find <text> | origins | entities
     passages [count] | passage <id> | passage del <id>
     internal | internal del <category> <topic> <index[,index...]>
     files | embed <model.onnx> <sentencepiece.bpe.model> | erase | help | exit
@@ -114,6 +114,10 @@ while (true)
 
             case "origins":
                 await ShowOriginsAsync(directory);
+                break;
+
+            case "entities":
+                await ShowEntitiesAsync(directory);
                 break;
 
             case "passages":
@@ -916,6 +920,29 @@ static async Task FindAsync(string directory, string needle)
 /// Who wrote the index. The answer to "did the rebuild run", which is
 /// otherwise only visible in a log line that has already scrolled past.
 /// </summary>
+/// <summary>
+/// What the index thinks each fact is <em>about</em>. Written by the extractor
+/// since facts arrived classified, and -- for now -- read by nothing:
+/// retrieval matches text and vectors, never this. Printed here because
+/// otherwise the gap only ever shows up as a bad recall slate.
+/// </summary>
+static async Task ShowEntitiesAsync(string directory)
+{
+    var facts = (await Facts(directory).AllAsync(CancellationToken.None)).Where(f => !f.IsMarker).ToList();
+    if (facts.Count == 0) { Console.WriteLine("No facts."); return; }
+
+    var unnamed = facts.Count(f => string.IsNullOrWhiteSpace(f.Entity));
+    foreach (var g in facts.Where(f => !string.IsNullOrWhiteSpace(f.Entity))
+                 .GroupBy(f => f.Entity!, StringComparer.OrdinalIgnoreCase)
+                 .OrderByDescending(g => g.Count()).Take(40))
+    {
+        var classes = string.Join(", ", g.Select(f => f.Class ?? "?").Distinct().OrderBy(c => c));
+        Console.WriteLine($"  {g.Count(),5}  {g.Key,-24}  {classes}");
+    }
+    Console.WriteLine($"  {unnamed} row(s) carry no entity at all.");
+    Console.WriteLine("  Nothing on the read path consults this column yet.");
+}
+
 static async Task ShowOriginsAsync(string directory)
 {
     var facts = await Facts(directory).AllAsync(CancellationToken.None);

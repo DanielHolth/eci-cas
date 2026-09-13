@@ -106,4 +106,50 @@ public class IntentAgentTests
         Assert.Contains("[Recall: nothing on file]", foundNothing);
         Assert.NotEqual(neverRan, foundNothing);
     }
+
+    /// <summary>
+    /// A recalled sentence arrives with what it is about in front of it.
+    ///
+    /// The bug this pins: seven rows that all mentioned kids reached Intent
+    /// as seven bare sentences, and nothing in the slate said which one was
+    /// about the speaker and which about a daughter -- the extractor had
+    /// written that on every row since facts arrived classified, and no
+    /// reader had ever asked for it. A row that already opens with its own
+    /// subject is left alone rather than stuttering it twice.
+    /// </summary>
+    [Fact]
+    public async Task ARecalledFactSaysWhatItIsAbout()
+    {
+        static async Task<string> ContextFor(params ArchiveRecord[] facts)
+        {
+            var activity = new BusActivityTracker();
+            var bus = new ChannelBus(activity);
+            var proposals = bus.Subscribe(Topics.Proposal);
+            var agent = new IntentAgent(bus, activity, NullLogger<IntentAgent>.Instance, new MockSubstrateProvider(),
+                Options.Create(new SubstrateOptions { Agents = { ["Intent"] = new SubstrateAgentEntry() } }), ShippedInstructions.Store, new RuntimeKnobs(),
+                new TurnWindowAgent(bus, activity, NullLogger<TurnWindowAgent>.Instance));
+
+            await agent.HandleAsync(Envelope.Create(Topics.Bundle, "Governance", Severity.Neutral, MetaBag.Empty
+                .With(PerceptionAgent.TextKey, "tell me about my family")
+                .With(ConsultAgent.RecalledFactsKey, (IReadOnlyList<ArchiveRecord>)facts)), CancellationToken.None);
+
+            Assert.True(proposals.TryRead(out var proposal));
+            return proposal!.Meta.Get<string>(IntentAgent.ContextKey)!;
+        }
+
+        static ArchiveRecord Recalled(string entity, string sentence) => new(
+            Category: string.Empty, Topic: string.Empty, Subtopic: string.Empty,
+            Subject: entity, Key: string.Empty, Value: string.Empty,
+            Timestamp: DateTimeOffset.UtcNow, Sentence: sentence);
+
+        var context = await ContextFor(
+            Recalled("Maria Benita", "her birthday is 2011-01-10"),
+            Recalled("Marcus", "Marcus is my oldest son"),
+            Recalled("", "I have 3 kids"));
+
+        Assert.Contains("Maria Benita: her birthday is 2011-01-10", context);
+        Assert.Contains("Marcus is my oldest son", context);
+        Assert.DoesNotContain("Marcus: Marcus", context);
+        Assert.Contains("I have 3 kids", context);
+    }
 }

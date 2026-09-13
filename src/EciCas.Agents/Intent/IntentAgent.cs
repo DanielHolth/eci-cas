@@ -195,6 +195,22 @@ public sealed class IntentAgent : CognitiveAgent<string>
     /// facts that share a Subject/Key (e.g. person/family/son vs
     /// person/work/colleague).
     /// </summary>
+    /// <summary>
+    /// The sentence with what it is about in front of it: "Marcus: birthday
+    /// is 2007-05-02". Not a second field, because a slate is read as a list
+    /// and a subject that sits in a sibling key is read as metadata about the
+    /// row rather than as part of what the row says.
+    ///
+    /// The index has known this since facts arrived classified and nothing
+    /// downstream ever asked for it, so seven rows that all mentioned kids
+    /// reached here with no way to tell the speaker from a daughter.
+    /// Prefixed only when the sentence does not already open with it.
+    /// </summary>
+    private static string Attributed(ArchiveRecord fact) =>
+        fact.Subject.Length == 0 || fact.Sentence.StartsWith(fact.Subject, StringComparison.OrdinalIgnoreCase)
+            ? fact.Sentence
+            : $"{fact.Subject}: {fact.Sentence}";
+
     private static void AppendRecalledFacts(StringBuilder prompt, IReadOnlyList<ArchiveRecord>? facts)
     {
         // Null and empty are different answers and must not read the same.
@@ -229,7 +245,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
             {
                 array.Add(new JsonObject
                 {
-                    ["Said"] = f.Sentence,
+                    ["Said"] = Attributed(f),
                     ["When"] = f.Timestamp.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 });
                 continue;

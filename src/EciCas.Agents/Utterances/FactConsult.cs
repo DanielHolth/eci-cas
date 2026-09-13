@@ -158,8 +158,17 @@ public sealed class FactConsult
             return 0;
         }
 
+        // The entity counts as a term of the row even when the sentence does
+        // not spell it out. "her birthday is 2011-01-10" has no name in it;
+        // the row knows it is about Maria Benita, and a question that names
+        // her should reach it.
         var hits = row.Keywords.Count(rare.Contains);
-        return hits / (double)rare.Count;
+        if (hits < rare.Count && !string.IsNullOrWhiteSpace(row.Entity))
+        {
+            hits += KeywordExtractor.Content(row.Entity).Count(k => rare.Contains(k) && !row.Keywords.Contains(k));
+        }
+
+        return Math.Min(hits, rare.Count) / (double)rare.Count;
     }
 
     /// <summary>

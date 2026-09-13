@@ -112,7 +112,13 @@ public sealed class ConsultAgent : AgentBase
         Category: string.Empty,
         Topic: string.Empty,
         Subtopic: string.Empty,
-        Subject: string.Empty,
+        // The one address field the inverted archive still fills. The
+        // extractor has written what every fact is *about* since facts
+        // arrived classified, and until now nothing downstream read it --
+        // so a slate of rows that all mention kids reached Intent with no
+        // way to tell "self" from "Marcus". It rides in Subject because
+        // that is what Subject meant in the pair archive too.
+        Subject: hit.Row.Entity ?? string.Empty,
         Key: string.Empty,
         Value: string.Empty,
         Timestamp: hit.Row.Timestamp,
