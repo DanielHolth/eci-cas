@@ -59,7 +59,11 @@ export default function Overlay() {
 
   // Where a gesture started, while it is still undecided between a click and
   // a drag. Undefined means no button is down.
-  const [drag, setDrag] = useState<{ x: number; y: number }>();
+  //
+  // A ref rather than state: nothing on screen depends on it, and a gesture
+  // that has to wait for a render before the next pointermove can read it is
+  // a gesture that misses the move it was waiting for.
+  const drag = useRef<{ x: number; y: number }>(undefined);
 
   useEffect(() => onShellState((next) => setState((current) => ({ ...current, ...next }))), []);
 
@@ -161,14 +165,25 @@ export default function Overlay() {
               rather than the two tenths of opacity it used to get. */}
           <button
             type="button"
-            onPointerDown={(e) => setDrag({ x: e.clientX, y: e.clientY })}
+            onPointerDown={(e) => {
+              drag.current = { x: e.clientX, y: e.clientY };
+              // Without this the pointer leaves the face on the first quick
+              // movement and the moves that would have become a drag are
+              // delivered somewhere else.
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
             onPointerMove={(e) => {
-              if (!drag) return;
-              if (Math.abs(e.clientX - drag.x) < DRAG_SLOP && Math.abs(e.clientY - drag.y) < DRAG_SLOP) return;
-              setDrag(undefined);
+              const from = drag.current;
+              if (!from) return;
+              if (Math.abs(e.clientX - from.x) < DRAG_SLOP && Math.abs(e.clientY - from.y) < DRAG_SLOP) return;
+
+              // Handed over: let go of the pointer before the shell asks the
+              // OS for it, and do not ask twice for one gesture.
+              drag.current = undefined;
+              e.currentTarget.releasePointerCapture(e.pointerId);
               postToShell({ type: "drag" });
             }}
-            onPointerUp={() => setDrag(undefined)}
+            onPointerUp={() => (drag.current = undefined)}
             onClick={() => {
               // The same gesture buys the speech permission, which a shell
               // launched with an autoplay override will already have.

@@ -1,3 +1,4 @@
+﻿using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Interop;
@@ -132,6 +133,7 @@ internal partial class OverlayWindow : Window
             return;
         }
 
+
         switch (type)
         {
             case "session":
@@ -139,20 +141,7 @@ internal partial class OverlayWindow : Window
                 break;
 
             case "drag":
-                // Mid-gesture: the page sends this once the pointer has moved
-                // with the button still down, and DragMove hands the rest of
-                // the gesture to the OS move loop, which ends on release.
-                // Throws if the button came up in between, which is a race and
-                // not a fault.
-                try
-                {
-                    DragMove();
-                    _restingTop = Top + Height - _options.Height;
-                    Placement.Save(this, _restingTop);
-                }
-                catch (InvalidOperationException)
-                {
-                }
+                Drag();
                 break;
 
             case "resize":
@@ -160,6 +149,42 @@ internal partial class OverlayWindow : Window
                 break;
         }
     }
+
+    /// <summary>
+    /// Hands the rest of a gesture already in progress to the OS move loop,
+    /// which owns it until the button comes up.
+    ///
+    /// Not DragMove. That one asks WPF whether the left button is down, and
+    /// WPF has no idea: the press landed in a WebView2 child window, a
+    /// separate HWND tree it never sees input from, so it answers Released
+    /// and DragMove throws before doing anything. Telling the window it was
+    /// grabbed by its caption asks nobody's opinion.
+    ///
+    /// ReleaseCapture first, because the browser child took the mouse on the
+    /// press and the move loop will not start while another window holds it.
+    /// SendMessage rather than Post, so the nested loop runs inside this call
+    /// and the lines after it are reached on release -- which is the moment
+    /// there is a new corner worth remembering.
+    /// </summary>
+    private void Drag()
+    {
+        if (_handle == IntPtr.Zero) return;
+
+        ReleaseCapture();
+        SendMessage(_handle, WM_NCLBUTTONDOWN, HTCAPTION, IntPtr.Zero);
+
+        _restingTop = Top + Height - _options.Height;
+        Placement.Save(this, _restingTop);
+    }
+
+    private const int WM_NCLBUTTONDOWN = 0x00A1;
+    private static readonly IntPtr HTCAPTION = 2;
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
 
     /// <summary>
     /// Takes the height the page says it needs and keeps her bottom edge
