@@ -1,4 +1,4 @@
-using EciCas.Agents.Utterances;
+﻿using EciCas.Agents.Utterances;
 using EciCas.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -153,7 +153,7 @@ public class FactPickerTests
     [Fact]
     public async Task APipeInsideTheSentence_DoesNotEatTheFact()
     {
-        var fact = Assert.Single(await Extract("I use the | key in bash | skill | self | 0"));
+        var fact = Assert.Single(await Extract("I use the | key in bash | skill | user | 0"));
 
         Assert.Equal("I use the | key in bash", fact.Text);
         Assert.Equal("skill", fact.Class);
@@ -164,7 +164,7 @@ public class FactPickerTests
     [Fact]
     public async Task AnInventedClass_BecomesOther()
     {
-        var fact = Assert.Single(await Extract("I feel good about it | vibe | self | 0"));
+        var fact = Assert.Single(await Extract("I feel good about it | vibe | user | 0"));
 
         Assert.Equal(FactClasses.Other, fact.Class);
     }
@@ -173,9 +173,9 @@ public class FactPickerTests
     [Fact]
     public async Task SensitivityIsClampedToTheOrdinal()
     {
-        Assert.Equal(2, Assert.Single(await Extract("x | state | self | 9")).Sensitivity);
-        Assert.Equal(0, Assert.Single(await Extract("x | state | self | -3")).Sensitivity);
-        Assert.Null(Assert.Single(await Extract("x | state | self | high")).Sensitivity);
+        Assert.Equal(2, Assert.Single(await Extract("x | state | user | 9")).Sensitivity);
+        Assert.Equal(0, Assert.Single(await Extract("x | state | user | -3")).Sensitivity);
+        Assert.Null(Assert.Single(await Extract("x | state | user | high")).Sensitivity);
     }
 
     /// <summary>

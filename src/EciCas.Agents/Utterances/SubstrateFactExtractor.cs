@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -152,12 +152,12 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         prompt.AppendLine("  fact | class | entity | sensitivity");
         prompt.AppendLine();
         prompt.AppendLine($"class is exactly one of: {string.Join(", ", FactClasses.All)}");
-        prompt.AppendLine("entity is what the fact is about -- a person, a place, a thing -- named the way the speaker names it. Use the speaker's own name for themselves if you know it, otherwise \"self\".");
+        prompt.AppendLine("entity is what the fact is about -- a person, a place, a thing -- named the way the speaker names it. Use the speaker's own name for themselves if you know it, otherwise \"user\".");
         prompt.AppendLine("sensitivity is 0 for something they would say to a stranger, 1 for something personal they would say to a friend, 2 for something private -- health, money, somebody else's secrets, anything that must never appear on a shared screen.");
         prompt.AppendLine();
         prompt.AppendLine("Example:");
         prompt.AppendLine("  Ingrid's birthday is 1988-03-04 | date | Ingrid | 1");
-        prompt.AppendLine("  I play bass | skill | self | 0");
+        prompt.AppendLine("  I play bass | skill | user | 0");
         prompt.AppendLine();
         prompt.AppendLine("Rules:");
         prompt.AppendLine("- One fact per line. No numbering, no bullets, no commentary.");
