@@ -21,12 +21,6 @@ internal static class ClickThrough
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x00000020;
 
-    private const uint SWP_NOSIZE = 0x0001;
-    private const uint SWP_NOMOVE = 0x0002;
-    private const uint SWP_NOZORDER = 0x0004;
-    private const uint SWP_FRAMECHANGED = 0x0020;
-    private const uint SWP_NOACTIVATE = 0x0010;
-
     /// <summary>Keeps a click from activating the window as well as from
     /// landing in it: a watermark that steals focus is worse than one that
     /// steals a click, because focus does not come back on its own.</summary>
@@ -54,15 +48,14 @@ internal static class ClickThrough
 
         if (updated == style) return;
 
+        // SetWindowLong and nothing else. SWP_FRAMECHANGED was tried here and
+        // is wrong twice over: hit testing reads WS_EX_TRANSPARENT live, so it
+        // buys nothing, and forcing a frame recalculation on a layered window
+        // -- which AllowsTransparency makes this one -- throws away the
+        // composited surface. The watermark went invisible until the next
+        // toggle repainted it. The toggle only ever looked inert because
+        // nothing on the page was drawing the difference.
         SetWindowLong(window, GWL_EXSTYLE, updated);
-
-        // The style is written but not yet believed: the window's cached frame
-        // still says what it said before, and hit testing keeps using the cache
-        // until something tells it otherwise. SWP_FRAMECHANGED is that
-        // something. Without this the toggle looks like it does nothing, which
-        // is exactly how it looked.
-        SetWindowPos(window, IntPtr.Zero, 0, 0, 0, 0,
-            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
@@ -75,7 +68,4 @@ internal static class ClickThrough
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     private static extern int SetWindowLong(IntPtr window, int index, int value);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
 }

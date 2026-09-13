@@ -39,10 +39,22 @@ const IDLE: Vitals = {
 };
 
 /**
- * Energy and level, refetched whenever a turn settles — the same
- * revision-driven shape as usePersona, and for the same reason: both change
- * only as a consequence of a turn, so polling would be asking a question
- * whose answer cannot have moved.
+ * How often vitals are re-read with no turn to prompt it. Slow, because it is
+ * a floor and not the mechanism: a settled turn still refetches immediately.
+ */
+const POLL_MS = 15000;
+
+/**
+ * Energy and level, refetched whenever a turn settles -- and, slowly, when
+ * one does not.
+ *
+ * The revision alone was enough while a turn was the only thing that could
+ * move these numbers. It is not: the tier dropdown and the fill button both
+ * change what this endpoint says without a turn happening, and there are two
+ * surfaces here. The overlay is a separate WebView with its own copy of every
+ * hook, so a tier switched in the conversation window is invisible to it --
+ * the face stayed on the local shell for as long as nobody spoke, which is
+ * precisely how it was found. Nothing pushes vitals, so the floor is a poll.
  *
  * `levelledUp` is derived here rather than announced by the host. A level-up
  * has no meaning on the bus; the ding and the floating +1 are display, and
@@ -56,24 +68,31 @@ export function useVitals(revision = 0): { vitals: Vitals; levelledUp: number } 
   useEffect(() => {
     const abort = new AbortController();
 
-    fetch(`${API_BASE}/api/vitals`, { signal: abort.signal })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((next: Vitals | null) => {
-        if (!next) return;
-        setVitals(next);
-        // The first read is a starting point, never a level-up: a person
-        // reopening the app at level 7 has not just reached it.
-        if (known.current !== null && next.level.level > known.current) {
-          setLevelledUp(next.level.level);
-        }
-        known.current = next.level.level;
-      })
-      .catch(() => {
-        // Host down. The meter keeps its last reading rather than dropping
-        // to empty, which would read as a consequence rather than an outage.
-      });
+    const read = () =>
+      fetch(`${API_BASE}/api/vitals`, { signal: abort.signal })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((next: Vitals | null) => {
+          if (!next) return;
+          setVitals(next);
+          // The first read is a starting point, never a level-up: a person
+          // reopening the app at level 7 has not just reached it.
+          if (known.current !== null && next.level.level > known.current) {
+            setLevelledUp(next.level.level);
+          }
+          known.current = next.level.level;
+        })
+        .catch(() => {
+          // Host down. The meter keeps its last reading rather than dropping
+          // to empty, which would read as a consequence rather than an outage.
+        });
 
-    return () => abort.abort();
+    read();
+    const timer = setInterval(read, POLL_MS);
+
+    return () => {
+      abort.abort();
+      clearInterval(timer);
+    };
   }, [revision]);
 
   return { vitals, levelledUp };
