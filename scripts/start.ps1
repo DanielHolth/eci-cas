@@ -39,6 +39,10 @@ em dash arrives as mojibake in the one output someone is reading for help.
 Pro tier: llama-server, then Morrow in the corner.
 
 .EXAMPLE
+./scripts/start.ps1 -NoBuild
+The same, starting the exe that is already built. The everyday relaunch.
+
+.EXAMPLE
 ./scripts/start.ps1 -Dev
 Console host, `next dev`, browser. The client development loop.
 
@@ -61,6 +65,11 @@ param(
 
     # Leave the local model out.
     [switch]$NoLlm,
+
+    # Start the exe that is already built instead of building first. The
+    # everyday relaunch: no compile, no console window hanging around, and
+    # llama-server still comes up. Release if there is one, else Debug.
+    [switch]$NoBuild,
 
     # The development shape instead of the shipped one: console host, dev
     # server, browser. -NoUi and -NoBrowser refine it and mean nothing
@@ -243,8 +252,33 @@ if (-not $Dev) {
         }
     }
 
-    Start-Window -Title "Morrow ($Tier)" -WorkingDirectory $repo `
-        -Command "dotnet run --project src/EciCas.Shell -- --Tier=$Tier"
+    # Every path Morrow reads -- the archive, the tier files, the exported
+    # client, the overlay's remembered corner -- hangs off the exe's own
+    # folder rather than the working directory, so starting the built exe
+    # straight from here is the same session `dotnet run` would have opened.
+    if ($NoBuild) {
+        $exe = @(
+            (Join-Path $repo 'src/EciCas.Shell/bin/Release/net10.0-windows/Morrow.exe'),
+            (Join-Path $repo 'src/EciCas.Shell/bin/Debug/net10.0-windows/Morrow.exe')
+        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+        if (-not $exe) {
+            Write-Host 'nothing is built yet, so -NoBuild has no Morrow.exe to start.'
+            Write-Host '  dotnet build src/EciCas.Shell'
+            exit 1
+        }
+
+        if ($WhatIfOnly) {
+            Write-Host "would start [Morrow ($Tier)]: $exe --Tier=$Tier"
+        } else {
+            # No window: it is a desktop application, and the console one
+            # would sit there empty for the life of the session.
+            Start-Process -FilePath $exe -ArgumentList "--Tier=$Tier" | Out-Null
+        }
+    } else {
+        Start-Window -Title "Morrow ($Tier)" -WorkingDirectory $repo `
+            -Command "dotnet run --project src/EciCas.Shell -- --Tier=$Tier"
+    }
 
     if ($WhatIfOnly) { return }
 
@@ -255,7 +289,7 @@ if (-not $Dev) {
     Wait-Port -Number $Port -What 'Morrow' | Out-Null
 
     Write-Host ''
-    Write-Host 'Up. Morrow is in the corner: hold - to talk, Shift+| to make her'
+    Write-Host 'Up. Morrow is in the corner: hold - to talk, press | to make her'
     Write-Host 'clickable, then click her for the full session. Quit from the tray.'
     return
 }

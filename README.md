@@ -53,9 +53,17 @@ morrow-eci/             Next.js UI
 Starts llama-server, then Morrow herself: one process (`src/EciCas.Shell`,
 built as `Morrow.exe`) that hosts the swarm on `:5179`, serves the exported
 client at its own origin, and draws a click-through watermark in the corner
-of the screen. Hold `-` to talk, `Shift+|` to make her clickable, then click
+of the screen. Hold `-` to talk, `|` to make her clickable, then click
 her for the full session in a second window; quit from the tray. The client
 export is built once if `morrow-eci/out` is missing.
+
+```powershell
+./start.cmd -NoBuild
+```
+
+The everyday relaunch: starts the `Morrow.exe` that is already built instead
+of compiling first, and still brings llama-server up. Every path Morrow reads
+hangs off the exe's own folder, so this is the same session either way.
 
 ```powershell
 ./start.cmd -Tier Pro -Dev
