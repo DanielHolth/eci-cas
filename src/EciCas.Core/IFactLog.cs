@@ -18,6 +18,14 @@ namespace EciCas.Core;
 /// backfill. That is the whole reason the model call on the write path is
 /// affordable to be wrong about.
 /// </summary>
+/// **A row with no text is a marker, not a fact.** It says "this turn was
+/// read, and it stated nothing worth keeping" -- a question, a greeting, a
+/// thanks. It exists so the boot gap-fill can tell a turn nobody has read
+/// from a turn that was read and came back empty, which are otherwise the
+/// same absence and cost a model call every boot, forever, for a result that
+/// will never change. It carries <see cref="OriginModel"/> like any other
+/// row, so a better model re-reads it exactly like a weak fact and may
+/// disagree.
 public sealed record Fact(
     string Id,
 
@@ -103,6 +111,27 @@ public sealed record Fact(
     /// </summary>
     DateTimeOffset? EvaluatedAt = null)
 {
+    /// <summary>
+    /// A read that came back empty, rather than something recallable. Nothing
+    /// that searches, embeds, threads or counts hits should see one.
+    /// </summary>
+    public bool IsMarker => Text.Length == 0;
+
+    /// <summary>
+    /// "<paramref name="model"/> read this turn and found nothing." Minted by
+    /// the same code path as a real fact, off the same empty-text extraction,
+    /// so there is one place that decides what a row read out of a turn looks
+    /// like.
+    /// </summary>
+    public static Fact NothingStated(Utterance utterance, string? model) => new(
+        Id: Guid.NewGuid().ToString("n"),
+        Turn: utterance.Turn,
+        Text: string.Empty,
+        Timestamp: utterance.Timestamp,
+        Speaker: utterance.Speaker,
+        Keywords: [],
+        OriginModel: model);
+
     public bool HasVector(string modelId) =>
         Embedding is { Length: > 0 } && string.Equals(EmbeddingModelId, modelId, StringComparison.OrdinalIgnoreCase);
 
@@ -254,6 +283,12 @@ public interface IFactExtractor
 /// model call at all.
 /// </summary>
 public sealed record ExtractedFact(
+    /// <summary>
+    /// Empty means the model read the turn and found nothing in it. That is
+    /// a verdict and is stored as a marker row -- distinct from returning no
+    /// extractions at all, which says only that nothing was produced and
+    /// leaves the turn to be read again.
+    /// </summary>
     string Text,
     string? Class = null,
     string? Entity = null,

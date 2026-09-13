@@ -121,7 +121,7 @@ public sealed class FactBackfill
                     $"the substrate stopped answering at turn {utterance.Turn}; the rest is left for the next boot");
             }
 
-            var rows = Mint(utterance, extracted);
+            var rows = FactMint.Rows(utterance, extracted, _options);
             await _facts.RemoveAsync(owed[utterance.Turn], cancellationToken).ConfigureAwait(false);
             await _facts.AppendAsync(rows, cancellationToken).ConfigureAwait(false);
             turns++;
@@ -179,47 +179,13 @@ public sealed class FactBackfill
         foreach (var utterance in utterances)
         {
             var previous = UtteranceContext.PreviousReply(replies, utterance);
-            rows.AddRange(Mint(utterance, await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false)));
+            rows.AddRange(FactMint.Rows(utterance, await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false), _options));
         }
 
         await _facts.AppendAsync(rows, cancellationToken).ConfigureAwait(false);
         return utterances.Count;
     }
 
-    /// <summary>
-    /// Extracted sentences into rows, filtered and stamped with the turn they
-    /// were read out of. One implementation, so a re-derived row is shaped
-    /// exactly like a backfilled one and a live one.
-    /// </summary>
-    private List<Fact> Mint(Utterance utterance, IReadOnlyList<ExtractedFact> extracted)
-    {
-        var rows = new List<Fact>();
-        foreach (var fact in extracted)
-        {
-            var sentence = fact.Text;
-            var keywords = KeywordExtractor.Content(sentence);
-            if (!UtteranceFilter.Keep(keywords, _options))
-            {
-                continue;
-            }
-
-            rows.Add(new Fact(
-                Id: Guid.NewGuid().ToString("n"),
-                // The utterance's own turn, not today's: a recovered fact
-                // has been recallable since it was said.
-                Turn: utterance.Turn,
-                Text: sentence,
-                Timestamp: utterance.Timestamp,
-                Speaker: utterance.Speaker,
-                Keywords: keywords,
-                OriginModel: fact.OriginModel,
-                Class: fact.Class,
-                Entity: fact.Entity,
-                Sensitivity: fact.Sensitivity));
-        }
-
-        return rows;
-    }
 
     /// <summary>
     /// Gives every fact the derived columns it is missing: a vector under the
@@ -232,7 +198,8 @@ public sealed class FactBackfill
             return (0, 0);
         }
 
-        var corpus = await _facts.AllAsync(cancellationToken).ConfigureAwait(false);
+        // Markers have no sentence to embed and nothing to thread against.
+        var corpus = (await _facts.AllAsync(cancellationToken).ConfigureAwait(false)).Where(r => !r.IsMarker).ToList();
         if (corpus.Count == 0)
         {
             return (0, 0);

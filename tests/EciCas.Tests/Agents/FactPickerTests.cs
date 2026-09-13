@@ -73,14 +73,17 @@ public class FactPickerTests
     [Fact]
     public async Task AQuestionStoresNoFact()
     {
-        var extractor = new SubstrateFactExtractor(new StubSubstrate("NONE"),
+        var extractor = new SubstrateFactExtractor(new StubSubstrate("NONE", model: "gpt-5.6-luna"),
             Options.Create(new UtteranceOptions { ExtractorEnabled = true }),
             NullLogger<SubstrateFactExtractor>.Instance);
 
         var facts = await extractor.ExtractAsync(
             new Utterance("u", "how many kids do i have?", DateTimeOffset.UnixEpoch, "user"), null, CancellationToken.None);
 
-        Assert.Empty(facts);
+        // Not "nothing came back" -- a signed verdict that there was nothing
+        // here, which is what stops the next boot buying the same answer.
+        Assert.Empty(Assert.Single(facts).Text);
+        Assert.Equal("gpt-5.6-luna", facts[0].OriginModel);
     }
 
     [Fact]

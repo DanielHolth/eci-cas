@@ -93,7 +93,8 @@ public sealed class FactConsult
 
     public async Task<IReadOnlyList<Consulted>> ShortlistAsync(string query, int limit, CancellationToken cancellationToken)
     {
-        var corpus = await _facts.AllAsync(cancellationToken).ConfigureAwait(false);
+        // Markers record that a turn stated nothing. There is nothing in one to recall.
+        var corpus = (await _facts.AllAsync(cancellationToken).ConfigureAwait(false)).Where(r => !r.IsMarker).ToList();
         if (corpus.Count == 0 || string.IsNullOrWhiteSpace(query))
         {
             return [];

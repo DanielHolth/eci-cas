@@ -94,9 +94,17 @@ public sealed class SubstrateFactExtractor : IFactExtractor
             // greeting. Stored as a fact, a question comes back later as the
             // answer to itself. An empty or garbled reply is a failure, not a
             // verdict, and keeps the utterance whole like any other failure.
+            //
+            // It comes back as one empty extraction rather than none, signed
+            // with who said it. The caller turns that into a marker row, and
+            // the marker is the whole point: without it the turn looks
+            // unread at every boot and is paid for again every boot, for a
+            // verdict that will never change. Signed, because a better model
+            // is allowed to disagree with a weak one's NONE -- which is
+            // exactly what the boot rebuild already does with weak facts.
             if (result.Text.Trim().Trim('.').Equals(NothingStated, StringComparison.OrdinalIgnoreCase))
             {
-                return [];
+                return [new ExtractedFact(string.Empty, OriginModel: result.Model)];
             }
 
             var facts = Parse(result.Text, _options.ExtractorMaxFacts, result.Model);

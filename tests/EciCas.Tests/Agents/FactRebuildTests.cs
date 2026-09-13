@@ -45,7 +45,9 @@ public class FactRebuildTests : IDisposable
         {
             Turns.Add(utterance.Turn);
             return Task.FromResult<IReadOnlyList<ExtractedFact>>(
-                statesNothing ? [] : [new ExtractedFact($"{utterance.Text} (read properly)", OriginModel: model)]);
+                [statesNothing
+                    ? new ExtractedFact(string.Empty, OriginModel: model)
+                    : new ExtractedFact($"{utterance.Text} (read properly)", OriginModel: model)]);
         }
     }
 
@@ -133,19 +135,64 @@ public class FactRebuildTests : IDisposable
     }
 
     /// <summary>
-    /// An empty reply is a verdict, not a failure: a stronger reader saying
-    /// this turn stated nothing worth keeping. The weak row it disagrees with
-    /// goes.
+    /// An empty sentence is a verdict, not a failure: a stronger reader
+    /// saying this turn stated nothing worth keeping. The weak row it
+    /// disagrees with goes, and a marker takes its place -- because a turn
+    /// with no row at all looks unread, and the gap-fill would buy the same
+    /// verdict again at every boot forever.
     /// </summary>
     [Fact]
-    public async Task NothingStatedTakesTheWeakRowOut()
+    public async Task NothingStatedLeavesAMarkerWhereTheWeakRowWas()
     {
         var (said, facts) = await Archive();
 
         await Backfill(said, facts).RedriveAsync(new Reader(Strong, statesNothing: true), Replaces, CancellationToken.None);
 
         var rows = await facts.AllAsync(CancellationToken.None);
-        Assert.Equal(2, Assert.Single(rows).Turn);
+        var marker = Assert.Single(rows, r => r.Turn == 1);
+        Assert.True(marker.IsMarker);
+        Assert.Equal(Strong, marker.OriginModel);
+        Assert.False(Assert.Single(rows, r => r.Turn == 2).IsMarker);
+    }
+
+    /// <summary>
+    /// The point of the marker: a question read once is not read again. The
+    /// gap-fill looks for turns with no row, and the marker is a row.
+    /// </summary>
+    [Fact]
+    public async Task AMarkedTurnIsNotReadAgainByTheGapFill()
+    {
+        var said = new ParquetUtteranceLog(_dir);
+        var facts = new ParquetFactLog(_dir);
+        var asked = Said("how many kids do i have?", 1);
+        await said.AppendAsync([asked], CancellationToken.None);
+        await facts.AppendAsync([Fact.NothingStated(asked, Strong)], CancellationToken.None);
+
+        var result = await Backfill(said, facts).RunAsync(CancellationToken.None);
+
+        Assert.Equal(0, result.Extracted);
+    }
+
+    /// <summary>
+    /// But a weak model's "nothing here" is still only a weak model's
+    /// opinion, and the marker carries who formed it -- so the rebuild
+    /// reaches it exactly like a weak fact, which is the reason the verdict
+    /// is signed rather than a bare flag.
+    /// </summary>
+    [Fact]
+    public async Task AWeakMarkerIsStillOwedABetterRead()
+    {
+        var said = new ParquetUtteranceLog(_dir);
+        var facts = new ParquetFactLog(_dir);
+        var asked = Said("we moved to Bodo in 2019", 1);
+        await said.AppendAsync([asked], CancellationToken.None);
+        await facts.AppendAsync([Fact.NothingStated(asked, Weak)], CancellationToken.None);
+
+        var reader = new Reader(Strong);
+        await Backfill(said, facts).RedriveAsync(reader, Replaces, CancellationToken.None);
+
+        Assert.Equal([1], reader.Turns);
+        Assert.False(Assert.Single(await facts.AllAsync(CancellationToken.None)).IsMarker);
     }
 
     /// <summary>A row nobody signed is read again whatever the list says.</summary>

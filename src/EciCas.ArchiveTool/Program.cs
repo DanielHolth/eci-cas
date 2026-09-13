@@ -166,13 +166,16 @@ static async Task SummariseAsync(string directory)
     var said = new ParquetUtteranceLog(directory);
     var utterances = await said.AllAsync(CancellationToken.None);
     var replies = await said.RepliesAsync(CancellationToken.None);
-    var facts = await Facts(directory).AllAsync(CancellationToken.None);
+    var all = await Facts(directory).AllAsync(CancellationToken.None);
+    var facts = all.Where(r => !r.IsMarker).ToList();
+    var markers = all.Count - facts.Count;
     var passages = await Passages(directory).AllAsync(CancellationToken.None);
     var internals = (await InternalRowsAsync(directory)).Count;
 
     Console.WriteLine(
         $"{utterances.Count} utterance(s) + {replies.Count} repl(ies) over {said.TurnsRecorded} turn(s); " +
-        $"{facts.Count} fact(s), {passages.Count} passage(s), {internals} internal row(s).");
+        $"{facts.Count} fact(s), {passages.Count} passage(s), {internals} internal row(s)" +
+        $"{(markers == 0 ? "" : $"; {markers} turn(s) read and found to state nothing")}.");
 }
 
 // ---------------------------------------------------------------- facts ----
@@ -185,7 +188,8 @@ static ParquetFactLog Facts(string directory) => new(directory);
 
 static async Task ShowFactsAsync(string directory, string? count)
 {
-    var rows = await Facts(directory).AllAsync(CancellationToken.None);
+    // Markers are not facts and have no sentence to print. `summary` counts them.
+    var rows = (await Facts(directory).AllAsync(CancellationToken.None)).Where(r => !r.IsMarker).ToList();
     if (rows.Count == 0)
     {
         Console.WriteLine("No facts. The next boot reads them out of the utterance log.");

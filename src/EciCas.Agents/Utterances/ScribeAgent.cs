@@ -139,35 +139,16 @@ public sealed class ScribeAgent : AgentBase
         var previous = UtteranceContext.PreviousReply(
             await _utterances.RepliesAsync(cancellationToken).ConfigureAwait(false), utterance);
         var sentences = await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false);
-        var turnsNow = utterance.Turn;
+        var facts = FactMint.Rows(utterance, sentences, _options);
 
-        var facts = new List<Fact>(sentences.Count);
-        foreach (var extracted in sentences)
+        // A marker still goes in -- it is the record that this turn was read
+        // and came back empty, and without it every boot pays for the same
+        // verdict again. It is not woven and not announced: there is nothing
+        // to thread it against and nothing to tell anybody.
+        if (facts.Count == 1 && facts[0].IsMarker)
         {
-            var sentence = extracted.Text;
-            var keywords = KeywordExtractor.Content(sentence);
-
-            // Nothing to recall from a sentence with no content word in it,
-            // and it would compete for one of five slots forever. This runs
-            // per fact rather than per utterance now: a paste that mixes
-            // "hey!" with three real claims used to be kept or dropped
-            // whole, and can now lose only the greeting.
-            if (!UtteranceFilter.Keep(keywords, _options))
-            {
-                continue;
-            }
-
-            facts.Add(new Fact(
-                Id: Guid.NewGuid().ToString("n"),
-                Turn: turnsNow,
-                Text: sentence,
-                Timestamp: utterance.Timestamp,
-                Speaker: utterance.Speaker,
-                Keywords: keywords,
-                OriginModel: extracted.OriginModel,
-                Class: extracted.Class,
-                Entity: extracted.Entity,
-                Sensitivity: extracted.Sensitivity));
+            await _facts.AppendAsync(facts, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
         if (facts.Count == 0)
