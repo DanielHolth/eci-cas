@@ -763,13 +763,109 @@ phone is worst at.
 - Corner-sitting is the work: transparent always-on-top window,
   click-through outside the character, per-monitor DPI, remembered corner,
   tray icon, summon hotkey. Finite, fiddly, not architectural.
+- **The window that hosts it is not the window the person reads.** See *Two
+  surfaces, one session* — the watermark is the shell's own drawing surface,
+  and the exported client opens in a second WebView2 window on demand.
+
+### Two surfaces, one session
+
+The desktop app is not a port of the client. Morrow is a **watermark** —
+semi-transparent, animated, sitting wherever the person put her — and the
+existing browser interface opens beside her on demand, unchanged. Nothing is
+reimplemented for the desktop, which is the point: one client, shown two
+ways.
+
+- **Most of the time she is only the watermark.** No chrome, no transcript,
+  click-through everywhere except the character itself.
+- **`-` is push-to-talk. `|` toggles interactable.** Both through
+  `RegisterHotKey`, per *Voice while gaming* below.
+- **Interactable is what makes her clickable.** Clicking her opens the
+  browser interface in a new window: the same `page.tsx`, the same
+  collapsible debug drawer and thoughts panel. While she is a watermark the
+  clicks belong to whatever is underneath her.
+- **The window is a view, not a second client.** Closing it ends nothing —
+  the session belongs to the host, and the host is the same process either
+  way.
+- **Two subscribers means two voices.** `Conversation.tsx` speaks every
+  reply aloud, so a watermark that talks plus an open window that also talks
+  says everything twice. Audio belongs to exactly one surface: the overlay
+  owns it, and the window is mute whenever the overlay is running.
+
+### What a window opened mid-session knows
+
+The worry was the debug log. That is the half that already works; the
+conversation is the half that does not.
+
+- **The turn log replays, then follows.** `useTurnLog` calls `GET /api/log`
+  for what happened before the window opened and then `/api/log/stream` for
+  what comes next. The debug drawer and the thoughts panel both derive from
+  those records, so both arrive populated. `TurnLogSubscriber` does the
+  reduction once, server-side — which is exactly why a second surface needs
+  no reduction logic of its own.
+- **The envelope feed only follows.** `useEciStream` subscribes to
+  `/api/stream`, and there is no backlog endpoint behind it:
+  `SseBroadcaster` fans out live envelopes and keeps none. So a window
+  opened after five turns shows five turns of *debug* and an *empty*
+  conversation. **This is the work**, and it is the opposite of what was
+  feared.
+- **Length is already bounded, by `TurnLog:Retain` (100 events).** A long
+  session replays its last hundred rather than all of it, and anything older
+  is on disk in the JSONL sink. "The debug log may be long" is therefore a
+  retention question with a dial that exists, not a transport problem.
+- **The cheap fix removes a projection instead of adding one.** Rather than
+  give `SseBroadcaster` a `Recent()` of its own, build the transcript from
+  the `TurnRecord`s the window already replays: `Perception` is the
+  utterance, `Intent` the reply, and `Verdict`, `Hindsight`, `Reads`,
+  `Pairs`, `Writes`, `Passages` and `Idea` are the bundle the bubbles draw.
+  `useEciStream`'s own accumulation then goes away.
+  - **What that loses is the face.** `TurnRecord` carries `Impulse` but no
+    expression word, so a replayed turn has no per-turn expression. For
+    history that is close to free — the face shows how she is now, not how
+    she was on turn three — but it has to be a decision, not a discovery.
+  - **Open:** whether `MAX_TURNS` (20) survives as a client cap once records
+    are the source, given `Retain` already caps the server side.
+
+### Keys on someone else's machine
+
+A desktop app ships its configuration to the person's disk, so "never
+visible to the end user" is a delivery constraint rather than a UI one.
+
+- **The shape is already right.** `SubstrateRegistration` reads
+  `ApiKeyEnvironmentVariable` — the *name* of a variable, resolved at
+  runtime — so no tier file has ever carried a secret, and shipping the
+  config ships nothing.
+- **What must not ship is a provider `BaseUrl` with any key path at all.**
+  On Steam every paid stage points at the relay and carries a per-account
+  token: revocable, metered, and worth nothing to anyone else. See *The
+  relay* — it proxies and never dispenses provider credentials, and this is
+  the platform that makes that non-negotiable.
+- **`Sse:ExcludedMetaKeys` is the scrubber and it is config.** Envelope meta
+  a stream must not carry outward is already a list rather than a code path,
+  so keeping a secret out of the debug drawer is an entry, not a patch.
+- **DevTools off in Release.** The window is WebView2 and the drawer is
+  built to be read; the console next to it does not need to be.
+
+### Steam Cloud
+
+- **Parquet and JSONL under `archive/` are the save.** The format is the
+  product — readable without our code — so the cloud story is a path
+  configuration and an upload, not a serializer.
+- **Settle before uploading.** `TurnLogSubscriber` holds an event for
+  `SettleMs` (3s) because Archivist's write and Reflection's batch land
+  behind the reply. Uploading mid-turn captures a shelf that disagrees with
+  its own ground truth.
+- **Boot recovery is the other half.** A cloud conflict or a half-synced
+  shard is the same failure the recovery pass above already checks for, and
+  quarantine plus an empty boot is the same answer.
 
 ### Voice while gaming
 
 The feature that sells it, and the one with a real hazard.
 
 - **`RegisterHotKey`, never a `WH_KEYBOARD_LL` hook.** Low-level hooks are
-  what kernel anti-cheat dislikes.
+  what kernel anti-cheat dislikes. `-` holds to talk and `|` toggles
+  interactable; both register the same way, and both have to be rebindable
+  because a bare punctuation key is a plausible game binding.
 - **Never inject into the game process.** Audio in, audio out; no
   injection is needed and it is the whole anti-cheat surface.
 - **Exclusive fullscreen cannot be drawn over.** So gaming is voice-only
