@@ -6,6 +6,7 @@ import { useTurnLog } from "@/lib/useTurnLog";
 import { turnsFromRecords } from "@/lib/turns";
 import { useSpeech } from "@/lib/useSpeech";
 import { useVitals } from "@/lib/useVitals";
+import { useMood } from "@/lib/useMood";
 import { onShellState, postToShell } from "@/lib/shell";
 
 /** How long the last thing said stays on screen after the mouth stops. Long
@@ -41,6 +42,11 @@ export default function Overlay() {
   const { records, replayed } = useTurnLog();
   const turns = useMemo(() => turnsFromRecords(records), [records]);
   const { vitals, levelledUp } = useVitals(records.length);
+
+  // The same dial the conversation window reads. Without it this face sat on
+  // Impulse's expression while the other one wore the pinned mood, and the
+  // two surfaces looked like two personas.
+  const face = useMood();
 
   // Unmuted, unlike the window: this surface is the one with the mouth.
   const { speaking, unlock } = useSpeech(turns, { ready: replayed });
@@ -144,7 +150,7 @@ export default function Overlay() {
           }`}
         >
           <Avatar
-            expression={turn?.impulse?.expression ?? "neutral"}
+            expression={face || (turn?.impulse?.expression ?? "neutral")}
             speaking={speaking}
             level={vitals.level.level}
             vigor={0.5 + vitals.energy.fraction}

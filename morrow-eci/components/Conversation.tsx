@@ -16,19 +16,9 @@ import { turnsFromRecords } from "@/lib/turns";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { useVitals } from "@/lib/useVitals";
 import { EnergyMeter, LOCAL_LINE, TIRED_LINE } from "@/components/EnergyMeter";
-import { fetchKnobs, latestKnobs, sendNudge, sendPerceive, subscribeKnobs } from "@/lib/api";
+import { fetchKnobs, latestKnobs, sendNudge, sendPerceive } from "@/lib/api";
+import { useMood } from "@/lib/useMood";
 import type { Account } from "@/lib/account";
-import type { Expression } from "@/types/events";
-
-// The Mood knob pins the face. Neutral is absent on purpose: an untouched
-// dial leaves the face to Impulse, the same way it leaves the prompt alone.
-const MOOD_FACE: Record<string, Expression> = {
-  Maleficent: "scared",
-  Sarcastic: "angry",
-  Sad: "sad",
-  Helpful: "warm",
-  Ecstatic: "alert",
-};
 
 /** The live view of the persona.
  *
@@ -61,13 +51,7 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
   const [logOpen, setLogOpen] = useState(false);
   const [thoughtsOpen, setThoughtsOpen] = useState(false);
 
-  const [mood, setMood] = useState(() => latestKnobs()?.mood ?? "");
-  useEffect(() => {
-    const off = subscribeKnobs((k) => setMood(k.mood));
-    if (!latestKnobs()) fetchKnobs().catch(() => {});
-    return off;
-  }, []);
-  const face = MOOD_FACE[mood];
+  const face = useMood();
 
   // Ideas seen the last time the Thoughts panel was open — the badge counts
   // only what arrived since, and opening it again clears the count back to
