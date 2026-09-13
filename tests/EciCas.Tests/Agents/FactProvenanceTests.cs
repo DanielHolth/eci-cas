@@ -10,7 +10,7 @@ namespace EciCas.Tests.Agents;
 public sealed class FactProvenanceTests
 {
     private static Fact Row(string? origin) =>
-        new("id", "src", "text", DateTimeOffset.UnixEpoch, "Daniel", [], OriginModel: origin);
+        new("id", 1, "text", DateTimeOffset.UnixEpoch, "Daniel", [], OriginModel: origin);
 
     /// <summary>
     /// The whole reason the first rebuild needs no migration and no flag: a

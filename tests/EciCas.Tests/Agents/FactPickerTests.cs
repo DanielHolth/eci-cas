@@ -40,7 +40,7 @@ public class FactPickerTests
     ];
 
     private static Consulted Hit(string text) =>
-        new(new Fact(Guid.NewGuid().ToString("n"), "u", text, DateTimeOffset.UnixEpoch, "user", []), 0.8, true);
+        new(new Fact(Guid.NewGuid().ToString("n"), 1, text, DateTimeOffset.UnixEpoch, "user", []), 0.8, true);
 
     private static Task<IReadOnlyList<Consulted>?> Pick(string reply, int max = 8) =>
         new FactPicker(new StubSubstrate(reply), NullLogger<FactPicker>.Instance)
@@ -187,6 +187,28 @@ public class FactPickerTests
             "Marcus had his birthday yesterday", null, new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero));
 
         Assert.Contains("2026-09-13", prompt);
+    }
+
+    /// <summary>
+    /// And the day it carries is the utterance's, not the clock's. This is
+    /// what makes the extractor reusable by the boot rebuild: a rebuild
+    /// running a year after a turn still resolves "yesterday" against the
+    /// day that turn happened.
+    /// </summary>
+    [Fact]
+    public async Task TheDayIsTheUtterancesOwn_NotTheDayOfTheRun()
+    {
+        var substrate = new StubSubstrate("NONE");
+        var extractor = new SubstrateFactExtractor(substrate,
+            Options.Create(new UtteranceOptions { ExtractorEnabled = true }),
+            NullLogger<SubstrateFactExtractor>.Instance);
+
+        await extractor.ExtractAsync(
+            new Utterance("u", "Marcus had his birthday yesterday",
+                new DateTimeOffset(2019, 4, 2, 0, 0, 0, TimeSpan.Zero), "user"),
+            null, CancellationToken.None);
+
+        Assert.Contains("2019-04-02", substrate.Prompt);
     }
 
     [Fact]

@@ -231,10 +231,10 @@ static async Task ShowFactAsync(string directory, string prefix)
     Console.WriteLine(row.Text);
 
     var source = (await new ParquetUtteranceLog(directory).AllAsync(CancellationToken.None))
-        .FirstOrDefault(u => u.Id == row.SourceId);
+        .FirstOrDefault(u => u.Turn == row.Turn);
     Console.WriteLine();
     Console.WriteLine(source is null
-        ? $"out of utterance {row.SourceId}, which is not in the log — so this row cannot be rebuilt."
+        ? $"out of turn {row.Turn}, which is not in the log — so this row cannot be rebuilt."
         : $"out of: {Oneline(source.Text)}");
 }
 

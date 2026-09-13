@@ -57,15 +57,16 @@ public class FactLogTests : IDisposable
         new(log, Embeddings(), new NullFactConsolidator(),
             Options.Create(options ?? new UtteranceOptions()), NullLogger<ThreadWeaver>.Instance);
 
-    private static Utterance Said(string text, DateTimeOffset when) => new(
+    private static Utterance Said(string text, DateTimeOffset when, long turn = 1) => new(
         Id: Guid.NewGuid().ToString("n"),
         Text: text,
         Timestamp: when,
-        Speaker: "user");
+        Speaker: "user",
+        Turn: turn);
 
     private static Fact Read(string text, DateTimeOffset when) => new(
         Id: Guid.NewGuid().ToString("n"),
-        SourceId: Guid.NewGuid().ToString("n"),
+        Turn: 1,
         Text: text,
         Timestamp: when,
         Speaker: "user",
@@ -155,7 +156,7 @@ public class FactLogTests : IDisposable
         // disposable half to the half that is not.
         var rows = await facts.AllAsync(CancellationToken.None);
         Assert.Equal(3, rows.Count);
-        Assert.All(rows, r => Assert.Equal(utterance.Id, r.SourceId));
+        Assert.All(rows, r => Assert.Equal(utterance.Turn, r.Turn));
         Assert.Single(await said.AllAsync(CancellationToken.None));
     }
 
@@ -282,8 +283,8 @@ public class FactLogTests : IDisposable
         // What a turn taken while the embedder was down leaves behind: good
         // ground truth, invisible to a sweep.
         await said.AppendAsync([
-            Said("the boat is called Vega", when.AddDays(-1)),
-            Said("the boat is called Vega", when),
+            Said("the boat is called Vega", when.AddDays(-1), turn: 1),
+            Said("the boat is called Vega", when, turn: 2),
         ], CancellationToken.None);
 
         var result = await Backfill(said, facts).RunAsync(CancellationToken.None);
@@ -319,8 +320,8 @@ public class FactLogTests : IDisposable
         var said = new ParquetUtteranceLog(_dir);
         var facts = new ParquetFactLog(_dir);
         await said.AppendAsync([
-            Said("the boat is called Vega. Rex is 4", DateTimeOffset.UtcNow.AddDays(-1)),
-            Said("my sister moved to Tromso", DateTimeOffset.UtcNow),
+            Said("the boat is called Vega. Rex is 4", DateTimeOffset.UtcNow.AddDays(-1), turn: 1),
+            Said("my sister moved to Tromso", DateTimeOffset.UtcNow, turn: 2),
         ], CancellationToken.None);
 
         var backfill = Backfill(said, facts, new SentenceExtractor());

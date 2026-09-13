@@ -40,7 +40,8 @@ public sealed class ParquetFactLog : IFactLog
     private sealed class Row
     {
         public string? Id { get; set; }
-        public string? SourceId { get; set; }
+        /// <summary>The turn, named the same in all three logs.</summary>
+        public long? Turn { get; set; }
         public string? Text { get; set; }
         public string? Timestamp { get; set; }
         public string? Speaker { get; set; }
@@ -50,7 +51,6 @@ public sealed class ParquetFactLog : IFactLog
         public string? ThreadId { get; set; }
         public string? SupersededBy { get; set; }
         public int? HitCount { get; set; }
-        public long? FirstSeenTurn { get; set; }
 
         // Nullable all the way down, and null means "nobody has said" for
         // every one of them -- which is also exactly what a file written
@@ -362,7 +362,7 @@ public sealed class ParquetFactLog : IFactLog
     private static Row ToRow(Fact f) => new()
     {
         Id = f.Id,
-        SourceId = f.SourceId,
+        Turn = f.Turn,
         Text = f.Text,
         Timestamp = f.Timestamp.ToString("O", CultureInfo.InvariantCulture),
         Speaker = f.Speaker,
@@ -372,7 +372,6 @@ public sealed class ParquetFactLog : IFactLog
         ThreadId = f.ThreadId,
         SupersededBy = f.SupersededBy,
         HitCount = f.HitCount,
-        FirstSeenTurn = f.FirstSeenTurn,
         OriginModel = f.OriginModel,
         Class = f.Class,
         Entity = f.Entity,
@@ -384,7 +383,9 @@ public sealed class ParquetFactLog : IFactLog
 
     private static Fact FromRow(Row r) => new(
         ParquetColumn.Required(r.Id, nameof(r.Id)),
-        ParquetColumn.Required(r.SourceId, nameof(r.SourceId)),
+        // A fact with no turn on it cannot be traced back to what was said,
+        // which is the one thing this row is not allowed to be missing.
+        r.Turn ?? throw new InvalidDataException($"A fact row has no {nameof(r.Turn)}."),
         ParquetColumn.Required(r.Text, nameof(r.Text)),
         ParquetColumn.RequiredTime(r.Timestamp, nameof(r.Timestamp)),
         ParquetColumn.Required(r.Speaker, nameof(r.Speaker)),
@@ -394,7 +395,6 @@ public sealed class ParquetFactLog : IFactLog
         r.ThreadId,
         r.SupersededBy,
         r.HitCount ?? 0,
-        r.FirstSeenTurn ?? 0,
         r.OriginModel,
         r.Class,
         r.Entity,

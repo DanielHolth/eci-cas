@@ -13,15 +13,26 @@ namespace EciCas.Core;
 ///
 /// **Everything here is derived and therefore disposable.** The sentence, the
 /// vector, the keywords, the thread, the supersession, the hit count -- all of
-/// it is recomputable from <see cref="Utterance"/> via <see cref="SourceId"/>.
+/// it is recomputable from <see cref="Utterance"/> via <see cref="Turn"/>.
 /// A bad extraction is a recomputation, not a legacy; delete the store and
 /// backfill. That is the whole reason the model call on the write path is
 /// affordable to be wrong about.
 /// </summary>
 public sealed record Fact(
     string Id,
-    // The utterance this was read out of: the only link back to ground truth.
-    string SourceId,
+
+    /// <summary>
+    /// The turn this was read out of: the only link back to ground truth,
+    /// and the same number the input and its reply carry in the other two
+    /// logs. One input per turn, so it identifies the utterance exactly.
+    ///
+    /// It used to be a guid pointing at <c>Utterance.Id</c>, with the turn
+    /// stored a second time as a first-seen ordinal. That was one fact about
+    /// the row written in two columns that could disagree. Three files keyed
+    /// the same way need no index and no join table: the fact, the thing
+    /// said, and the answer given are the rows with the same turn on them.
+    /// </summary>
+    long Turn,
     string Text,
     DateTimeOffset Timestamp,
     string Speaker,
@@ -31,7 +42,6 @@ public sealed record Fact(
     string? ThreadId = null,
     string? SupersededBy = null,
     int HitCount = 0,
-    long FirstSeenTurn = 0,
 
     // ---- Provenance and judgement -------------------------------------
     // All nullable, and null is never "zero" -- it is "nobody has said".
@@ -101,7 +111,7 @@ public sealed record Fact(
     /// row minted this morning from reading as the most useful thing in the
     /// archive because it was used once out of one.
     /// </summary>
-    public double HitRate(long turnsNow) => HitCount / (double)Math.Max(turnsNow - FirstSeenTurn, 10);
+    public double HitRate(long turnsNow) => HitCount / (double)Math.Max(turnsNow - Turn, 10);
 
     /// <summary>
     /// Whether this row is owed a re-derivation by a better extractor. Null

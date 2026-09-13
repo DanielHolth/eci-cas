@@ -40,7 +40,7 @@ using EciCas.Core;
 /// </summary>
 public sealed class SubstrateFactExtractor : IFactExtractor
 {
-    /// <summary>The name its Substrates:Agents entry goes under.</summary>
+    /// <summary>The name the live path's Substrates:Agents entry goes under.</summary>
     public const string AgentName = "extractor";
 
     /// <summary>The reply that means "said nothing to keep".</summary>
@@ -50,12 +50,26 @@ public sealed class SubstrateFactExtractor : IFactExtractor
     private readonly UtteranceOptions _options;
     private readonly ILogger<SubstrateFactExtractor> _logger;
 
+    /// <summary>
+    /// Which substrate entry this instance calls. An instance field rather
+    /// than the constant, so the boot rebuild is a second instance of this
+    /// class pointed at a stronger model -- not a second implementation.
+    ///
+    /// The rules are the same rules. What a fact is, how a pronoun resolves,
+    /// what the four fields mean, which words are classes: all of that is
+    /// one prompt in one place, and a rebuild that reasoned differently from
+    /// the live write would be rebuilding into a schema nobody else holds.
+    /// The only thing that differs between the two is who is asked.
+    /// </summary>
+    private readonly string _agent;
+
     public SubstrateFactExtractor(ISubstrateProvider substrate, IOptions<UtteranceOptions> options,
-        ILogger<SubstrateFactExtractor> logger)
+        ILogger<SubstrateFactExtractor> logger, string agent = AgentName)
     {
         _substrate = substrate;
         _options = options.Value;
         _logger = logger;
+        _agent = agent;
     }
 
     public async Task<IReadOnlyList<ExtractedFact>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken)
@@ -68,7 +82,12 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 
         try
         {
-            var result = await _substrate.CompleteAsync(AgentName, BuildPrompt(text, _options.ExtractorSeesPreviousReply ? previousReply : null), cancellationToken).ConfigureAwait(false);
+            // The day the utterance was said, never today: "yesterday"
+            // points at the day before it was spoken, and a rebuild running
+            // a year later against its own clock would resolve every
+            // relative date in the archive to the day of the rebuild.
+            var prompt = BuildPrompt(text, _options.ExtractorSeesPreviousReply ? previousReply : null, utterance.Timestamp);
+            var result = await _substrate.CompleteAsync(_agent, prompt, cancellationToken).ConfigureAwait(false);
             _logger.LogDebug("Extractor <<< {Response}", result.Text);
 
             // NONE is the model saying "nothing was claimed": a question, a

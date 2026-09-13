@@ -62,10 +62,10 @@ public sealed class FactBackfill
     public async Task<Result> RunAsync(CancellationToken cancellationToken)
     {
         var facts = await _facts.AllAsync(cancellationToken).ConfigureAwait(false);
-        var indexed = facts.Select(f => f.SourceId).ToHashSet(StringComparer.Ordinal);
+        var indexed = facts.Select(f => f.Turn).ToHashSet();
         var utterances = await _utterances.AllAsync(cancellationToken).ConfigureAwait(false);
 
-        var extracted = await ExtractAsync([.. utterances.Where(u => !indexed.Contains(u.Id))], cancellationToken)
+        var extracted = await ExtractAsync([.. utterances.Where(u => !indexed.Contains(u.Turn))], cancellationToken)
             .ConfigureAwait(false);
         var (embedded, threaded) = await DeriveAsync(cancellationToken).ConfigureAwait(false);
         return new Result(extracted, embedded, threaded);
@@ -116,15 +116,13 @@ public sealed class FactBackfill
 
                 rows.Add(new Fact(
                     Id: Guid.NewGuid().ToString("n"),
-                    SourceId: utterance.Id,
+                    // The utterance's own turn, not today's: a recovered fact
+                    // has been recallable since it was said.
+                    Turn: utterance.Turn,
                     Text: sentence,
                     Timestamp: utterance.Timestamp,
                     Speaker: utterance.Speaker,
                     Keywords: keywords,
-
-                    // The utterance's own turn, not today's: a recovered fact
-                    // has been recallable since it was said.
-                    FirstSeenTurn: utterance.Turn,
                     OriginModel: extracted.OriginModel,
                     Class: extracted.Class,
                     Entity: extracted.Entity,

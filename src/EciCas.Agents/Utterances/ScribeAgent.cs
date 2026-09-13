@@ -159,12 +159,11 @@ public sealed class ScribeAgent : AgentBase
 
             facts.Add(new Fact(
                 Id: Guid.NewGuid().ToString("n"),
-                SourceId: utterance.Id,
+                Turn: turnsNow,
                 Text: sentence,
                 Timestamp: utterance.Timestamp,
                 Speaker: utterance.Speaker,
                 Keywords: keywords,
-                FirstSeenTurn: turnsNow,
                 OriginModel: extracted.OriginModel,
                 Class: extracted.Class,
                 Entity: extracted.Entity,
