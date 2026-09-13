@@ -98,7 +98,13 @@ export default function Overlay() {
             because both are things a person expects the left button to do.
             Once the drag is handed over, the OS move loop owns the rest of the
             gesture and no click event follows it, which is exactly the
-            either/or that is wanted. */}
+            either/or that is wanted.
+
+            Interactable is drawn loudly. It is a mode with no other feedback,
+            toggled by a key pressed somewhere else entirely, and a watermark
+            that starts eating clicks without saying so is indistinguishable
+            from a broken one -- so it gets a ring, a glow and a line of text
+            rather than the two tenths of opacity it used to get. */}
         <button
           type="button"
           onPointerDown={(e) => setDrag({ x: e.clientX, y: e.clientY })}
@@ -116,7 +122,11 @@ export default function Overlay() {
             postToShell({ type: "session" });
           }}
           aria-label="Open the conversation"
-          className={`rounded-full transition-opacity ${state.interactable ? "cursor-grab opacity-100" : "opacity-80"}`}
+          className={`rounded-full transition-all ${
+            state.interactable
+              ? "cursor-grab opacity-100 ring-2 ring-sky-400/80 shadow-[0_0_24px_rgba(56,189,248,0.45)]"
+              : "opacity-80"
+          }`}
         >
           <Avatar
             expression={turn?.impulse?.expression ?? "neutral"}
@@ -128,11 +138,15 @@ export default function Overlay() {
           />
         </button>
 
-        {state.listening && (
+        {state.listening ? (
           <p className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
             Listening…
           </p>
-        )}
+        ) : state.interactable ? (
+          <p className="rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
+            Click to open · drag to move
+          </p>
+        ) : null}
       </div>
     </>
   );

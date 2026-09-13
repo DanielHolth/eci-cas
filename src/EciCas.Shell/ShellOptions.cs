@@ -1,15 +1,12 @@
-using System.Windows.Input;
-
 namespace EciCas.Shell;
 
 /// <summary>
 /// The desktop shell's own knobs, from the "Shell" section of appsettings.json.
 ///
-/// Keys are named with WPF's <see cref="Key"/> and <see cref="ModifierKeys"/>
-/// spellings ("OemMinus", "Oem5", "Shift, Control") rather than raw virtual-key
-/// numbers: a person editing this file should be able to change the hotkey
-/// without looking up 0xBD, and a bad name is a boot-time complaint instead of
-/// a hotkey that silently never fires.
+/// Keys are named by the character they type -- "-", "|" -- with optional
+/// "Ctrl+" / "Shift+" / "Alt+" / "Win+" prefixes, and are resolved through
+/// whatever keyboard layout is in front at the time. See <see cref="KeySpec"/>
+/// for why that indirection is worth having.
 /// </summary>
 internal sealed class ShellOptions
 {
@@ -17,20 +14,17 @@ internal sealed class ShellOptions
     /// Push-to-talk. Held, not pressed: the overlay says "Listening" for as
     /// long as it is down.
     ///
-    /// A bare key -- no modifier -- is what was asked for, and it is worth
-    /// being explicit about the cost: RegisterHotKey takes the key away from
-    /// every other application on the desktop, so while Morrow runs, this key
-    /// cannot be typed anywhere. That is the deal a push-to-talk key makes;
-    /// it is a config value precisely so someone who types a lot of hyphens
-    /// can pay for it with a modifier instead.
+    /// Nothing is taken from anyone -- the key is watched, not claimed, so it
+    /// still types a hyphen in a game, a chat box or a terminal. The other side
+    /// of that same coin: typing a hyphen opens the microphone. Someone who
+    /// writes a lot of hyphens should put a modifier in front of it here.
     /// </summary>
-    public string VoiceKey { get; set; } = "OemMinus";
-    public string VoiceModifiers { get; set; } = "None";
+    public string VoiceKey { get; set; } = "-";
 
     /// <summary>Toggles whether clicks land on Morrow or pass through her to
-    /// the desktop. Shift+Oem5 is the pipe key on a US layout.</summary>
-    public string InteractKey { get; set; } = "Oem5";
-    public string InteractModifiers { get; set; } = "Shift";
+    /// the desktop. Shift comes from the character on nearly every layout, so
+    /// it is not written here.</summary>
+    public string InteractKey { get; set; } = "|";
 
     /// <summary>The watermark's size in device-independent pixels. The face
     /// draws to fit, so this is the whole of the overlay's geometry aside from
@@ -44,22 +38,6 @@ internal sealed class ShellOptions
     public string SessionPath { get; set; } = "/?mute=1";
     public string OverlayPath { get; set; } = "/overlay/";
 
-    public (ModifierKeys Modifiers, Key Key) Voice => Parse(VoiceModifiers, VoiceKey);
-    public (ModifierKeys Modifiers, Key Key) Interact => Parse(InteractModifiers, InteractKey);
-
-    private static (ModifierKeys, Key) Parse(string modifiers, string key)
-    {
-        if (!Enum.TryParse<Key>(key, ignoreCase: true, out var parsedKey))
-        {
-            throw new InvalidOperationException($"Shell: '{key}' is not a key name. See System.Windows.Input.Key.");
-        }
-
-        var parsedModifiers = ModifierKeys.None;
-        if (!string.IsNullOrWhiteSpace(modifiers) && !Enum.TryParse(modifiers, ignoreCase: true, out parsedModifiers))
-        {
-            throw new InvalidOperationException($"Shell: '{modifiers}' is not a modifier list. Try \"Shift\" or \"Shift, Control\".");
-        }
-
-        return (parsedModifiers, parsedKey);
-    }
+    public KeySpec Voice => KeySpec.Parse(VoiceKey, "voice");
+    public KeySpec Interact => KeySpec.Parse(InteractKey, "interact");
 }

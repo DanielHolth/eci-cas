@@ -71,9 +71,13 @@ tiers live and an empty energy meter swaps itself to Free unasked, so the boot
 tier does not decide what the session will need. It is skipped silently if
 `models/local/` is empty — a launch never downloads weights.
 
-The hotkeys are `RegisterHotKey` combinations, not a keyboard hook, so they
-are invisible to anti-cheat — but they are also desktop-wide: while Morrow
-runs, nothing else can type a bare `-`. Change or qualify them in the `Shell`
+The hotkeys are watched, not claimed: a timer asks the OS whether those two
+keys are down, so they are neither a keyboard hook (invisible to anti-cheat)
+nor a registered hotkey (nothing is taken from other applications -- `-` still
+types a hyphen in a game, a chat box or a terminal). The cost of that is the
+other half: typing a hyphen also opens the microphone. Keys are named by the
+character they type, resolved through whatever keyboard layout is in front, and
+take optional `Ctrl+` / `Shift+` / `Alt+` / `Win+` prefixes -- see the `Shell`
 section of `appsettings.json`.
 
 By hand:

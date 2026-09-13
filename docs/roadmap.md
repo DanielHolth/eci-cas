@@ -797,11 +797,12 @@ ways. Built as `/overlay/` plus `lib/shell.ts`.
 
 - **Most of the time she is only the watermark.** No chrome, no transcript,
   click-through everywhere except the character itself.
-- **`-` is push-to-talk. `|` toggles interactable.** Both through
-  `RegisterHotKey`, per *Voice while gaming* below. Config, in the `Shell`
-  section: a bare key is registered desktop-wide, so while Morrow runs
-  nothing else can type it, and whoever disagrees with that trade should be
-  able to change it without a build.
+- **`-` is push-to-talk. `|` toggles interactable.** Polled with
+  `GetAsyncKeyState`, per *Voice while gaming* below, so neither key is taken
+  from anything else -- the hyphen still reaches the game. Config, in the
+  `Shell` section, names the character rather than the virtual key and
+  resolves it through the foreground layout, because `|` is a different
+  physical key on a Norwegian keyboard than on a US one.
 - **Interactable is what makes her clickable.** Clicking her opens the
   browser interface in a new window: the same `page.tsx`, the same
   collapsible debug drawer and thoughts panel. While she is a watermark the
@@ -881,10 +882,13 @@ visible to the end user" is a delivery constraint rather than a UI one.
 
 The feature that sells it, and the one with a real hazard.
 
-- **`RegisterHotKey`, never a `WH_KEYBOARD_LL` hook.** Low-level hooks are
-  what kernel anti-cheat dislikes. `-` holds to talk and `|` toggles
-  interactable; both register the same way, and both have to be rebindable
-  because a bare punctuation key is a plausible game binding.
+- **`GetAsyncKeyState` polling, never a `WH_KEYBOARD_LL` hook.** Low-level
+  hooks are what kernel anti-cheat dislikes, and `RegisterHotKey`, which this
+  used first, swallows the key desktop-wide -- unacceptable for a key that is
+  also a plausible game binding. Polling two keys at 40ms takes nothing from
+  anyone and learns nothing about any other key. It cannot suppress the
+  keystroke either, which is the point and also the trade: typing `-` opens
+  the microphone, so both keys stay rebindable.
 - **Never inject into the game process.** Audio in, audio out; no
   injection is needed and it is the whole anti-cheat surface.
 - **Exclusive fullscreen cannot be drawn over.** So gaming is voice-only

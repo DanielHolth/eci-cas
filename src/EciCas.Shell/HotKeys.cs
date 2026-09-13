@@ -1,35 +1,40 @@
 using System.Runtime.InteropServices;
-using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Threading;
 
 namespace EciCas.Shell;
 
 /// <summary>
-/// The two global keys, on a message-only window of their own.
+/// The two global keys, watched rather than claimed.
 ///
-/// RegisterHotKey, never a WH_KEYBOARD_LL hook. A low-level keyboard hook sees
-/// every keystroke on the desktop, which is both more than this needs and the
-/// exact signature anti-cheat drivers are built to refuse -- and Steam is
-/// where this is going. RegisterHotKey asks the OS for two keys and gets told
-/// about those two.
+/// Nothing here registers, hooks or filters anything: one timer asks the OS,
+/// forty times a second, whether the two keys happen to be down. That is the
+/// whole design, and it is chosen for two reasons.
 ///
-/// Push-to-talk needs a release edge and RegisterHotKey only reports presses,
-/// so the down stroke starts a short poll of the key's own state. Polling one
-/// key at 40ms is cheap and, unlike a hook, tells nobody anything about any
-/// other key.
+/// The first is that the keys must still work as keys. A push-to-talk key that
+/// is also a hyphen is only worth having if the hyphen still arrives in the
+/// game, the chat box and the terminal -- and RegisterHotKey, which is what
+/// this used to use, takes the key away from every other application on the
+/// desktop for as long as Morrow is running. Watching takes nothing away.
+///
+/// The second is Steam. A WH_KEYBOARD_LL hook would also see both edges
+/// without swallowing anything, but a low-level keyboard hook sees every
+/// keystroke on the desktop, which is both far more than this needs and the
+/// exact signature anti-cheat drivers are built to refuse. GetAsyncKeyState
+/// asks about the keys it is given and learns nothing about any other.
+///
+/// The cost, stated plainly because it is the trade the user chose: a bare key
+/// that is not swallowed is a key that fires when it is typed. Typing a hyphen
+/// in chat opens the microphone for as long as the hyphen is held. The way out
+/// is a modifier in the config, not a change here.
 /// </summary>
 internal sealed class HotKeys : IDisposable
 {
-    private const int WM_HOTKEY = 0x0312;
-    private const uint MOD_NOREPEAT = 0x4000;
+    private readonly DispatcherTimer _poll;
+    private readonly KeySpec _voice;
+    private readonly KeySpec _interact;
 
-    private const int VoiceId = 1;
-    private const int InteractId = 2;
-
-    private readonly HwndSource _sink;
-    private readonly DispatcherTimer _release;
-    private readonly int _voiceVirtualKey;
+    private bool _voiceDown;
+    private bool _interactDown;
 
     /// <summary>The voice key went down, and then came up. Held in between.</summary>
     public event Action? VoiceDown;
@@ -40,90 +45,84 @@ internal sealed class HotKeys : IDisposable
 
     public HotKeys(ShellOptions options)
     {
-        // HWND_MESSAGE: a window that exists only to receive messages. It has
-        // no size, no place on screen and nothing to paint.
-        _sink = new HwndSource(new HwndSourceParameters("Morrow.HotKeys") { ParentWindow = new IntPtr(-3) });
-        _sink.AddHook(OnMessage);
+        _voice = options.Voice;
+        _interact = options.Interact;
 
-        var (voiceModifiers, voiceKey) = options.Voice;
-        var (interactModifiers, interactKey) = options.Interact;
-        _voiceVirtualKey = KeyInterop.VirtualKeyFromKey(voiceKey);
-
-        // MOD_NOREPEAT: one press is one press. Without it a held key fires
-        // WM_HOTKEY at the keyboard repeat rate, and the poll below would be
-        // restarted thirty times a second by its own key.
-        Register(VoiceId, Native(voiceModifiers) | MOD_NOREPEAT, _voiceVirtualKey, options.VoiceKey);
-        Register(InteractId, Native(interactModifiers) | MOD_NOREPEAT, KeyInterop.VirtualKeyFromKey(interactKey), options.InteractKey);
-
-        _release = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(40) };
-        _release.Tick += (_, _) =>
-        {
-            if ((GetAsyncKeyState(_voiceVirtualKey) & 0x8000) != 0) return;
-            _release.Stop();
-            VoiceUp?.Invoke();
-        };
+        // 40ms: below the ~50ms at which a deliberate tap starts to feel
+        // dropped, and far above the cost of four GetAsyncKeyState calls.
+        _poll = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(40) };
+        _poll.Tick += (_, _) => Tick();
+        _poll.Start();
     }
 
-    private void Register(int id, uint modifiers, int virtualKey, string name)
+    private void Tick()
     {
-        // A refusal is almost always another application holding the same
-        // combination, and it is worth saying so rather than leaving a key
-        // that quietly does nothing for the rest of the session.
-        if (!RegisterHotKey(_sink.Handle, id, modifiers, (uint)virtualKey))
+        var layout = ForegroundLayout();
+
+        var voice = Held(_voice, layout);
+        if (voice != _voiceDown)
         {
-            throw new InvalidOperationException(
-                $"Shell: could not register the {name} hotkey (error {Marshal.GetLastWin32Error()}). Something else already holds it.");
+            _voiceDown = voice;
+            (voice ? VoiceDown : VoiceUp)?.Invoke();
+        }
+
+        var interact = Held(_interact, layout);
+        if (interact != _interactDown)
+        {
+            _interactDown = interact;
+            if (interact) Interact?.Invoke();
         }
     }
 
-    private IntPtr OnMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    /// <summary>
+    /// Down, and down with exactly the modifiers the binding asks for. Exact,
+    /// not "at least": '-' must not fire while Shift is held, because that is
+    /// an underscore and somebody is typing.
+    /// </summary>
+    private static bool Held(KeySpec spec, IntPtr layout)
     {
-        if (message != WM_HOTKEY) return IntPtr.Zero;
+        var (virtualKey, modifiers) = spec.Resolve(layout);
+        if (!Down(virtualKey)) return false;
 
-        switch (wParam.ToInt32())
-        {
-            case VoiceId:
-                handled = true;
-                VoiceDown?.Invoke();
-                _release.Start();
-                break;
-            case InteractId:
-                handled = true;
-                Interact?.Invoke();
-                break;
-        }
-
-        return IntPtr.Zero;
+        return Down(VK_SHIFT) == modifiers.HasFlag(KeyModifiers.Shift)
+            && Down(VK_CONTROL) == modifiers.HasFlag(KeyModifiers.Control)
+            && Down(VK_MENU) == modifiers.HasFlag(KeyModifiers.Alt)
+            && (Down(VK_LWIN) || Down(VK_RWIN)) == modifiers.HasFlag(KeyModifiers.Windows);
     }
 
-    /// <summary>WPF's ModifierKeys and the Win32 MOD_* flags agree on every bit
-    /// except Windows, which is 8 in one and 0x08 in the other -- so they agree
-    /// on all of them. Mapped by hand anyway, because that is a coincidence and
-    /// not a contract.</summary>
-    private static uint Native(ModifierKeys modifiers)
+    private static bool Down(int virtualKey) => (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+
+    /// <summary>
+    /// The keyboard layout of whatever has focus, which is not necessarily
+    /// this application's: layouts are per-thread, and the point of asking is
+    /// that '|' is a different physical key on a Norwegian layout than on a US
+    /// one. Falls back to this thread's layout when the foreground window
+    /// belongs to something we may not query.
+    /// </summary>
+    private static IntPtr ForegroundLayout()
     {
-        uint native = 0;
-        if (modifiers.HasFlag(ModifierKeys.Alt)) native |= 0x0001;
-        if (modifiers.HasFlag(ModifierKeys.Control)) native |= 0x0002;
-        if (modifiers.HasFlag(ModifierKeys.Shift)) native |= 0x0004;
-        if (modifiers.HasFlag(ModifierKeys.Windows)) native |= 0x0008;
-        return native;
+        var window = GetForegroundWindow();
+        var thread = window == IntPtr.Zero ? 0 : GetWindowThreadProcessId(window, IntPtr.Zero);
+        return GetKeyboardLayout(thread);
     }
 
-    public void Dispose()
-    {
-        _release.Stop();
-        UnregisterHotKey(_sink.Handle, VoiceId);
-        UnregisterHotKey(_sink.Handle, InteractId);
-        _sink.Dispose();
-    }
+    public void Dispose() => _poll.Stop();
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint virtualKey);
-
-    [DllImport("user32.dll")]
-    private static extern bool UnregisterHotKey(IntPtr window, int id);
+    private const int VK_SHIFT = 0x10;
+    private const int VK_CONTROL = 0x11;
+    private const int VK_MENU = 0x12;
+    private const int VK_LWIN = 0x5B;
+    private const int VK_RWIN = 0x5C;
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, IntPtr processId);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetKeyboardLayout(uint thread);
 }
