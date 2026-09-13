@@ -21,11 +21,21 @@ export interface Vitals {
     /** 0..1 through the current level. */
     fraction: number;
   };
+  tier: {
+    name: string;
+    /**
+     * The local model is answering. True whether the meter ran dry or the
+     * person chose the free tier themselves — the surface reads the tier,
+     * never the reason, because the replies are the same either way.
+     */
+    isLocal: boolean;
+  };
 }
 
 const IDLE: Vitals = {
   energy: { balanceUsd: 0, maxUsd: 0, fraction: 1, fullAt: null, isEmpty: false },
   level: { level: 1, xp: 0, intoLevel: 0, levelCost: 2, fraction: 0 },
+  tier: { name: "", isLocal: false },
 };
 
 /**

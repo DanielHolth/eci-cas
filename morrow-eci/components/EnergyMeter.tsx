@@ -16,6 +16,16 @@ import type { Vitals } from "@/lib/useVitals";
 export const TIRED_LINE =
   "I'm spent. You're talking to the free, dumber version of me now — let Morrow rest to regain itself.";
 
+/**
+ * The same state arrived at deliberately. Shown when the local model is
+ * answering but the meter is not dry, which means somebody picked the free
+ * tier from the dropdown. No reproach and nothing to wait for — the fact
+ * being reported is only that the replies changed, which is worth saying
+ * however the person got here.
+ */
+export const LOCAL_LINE =
+  "You're on the free tier. This is the smaller, local version of me — shorter answers, and a worse memory.";
+
 function whenFull(fullAt: string | null): string {
   if (!fullAt) return "full";
   const hours = (new Date(fullAt).getTime() - Date.now()) / 3_600_000;

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ding } from "@/lib/ding";
 import { mountApertureFace, type Backend } from "@/lib/apertureFace";
+import { ShellFace } from "@/components/ShellFace";
 import type { Expression } from "@/types/events";
 
 /**
@@ -139,7 +140,7 @@ export function Avatar({
   level = 1,
   vigor = 1,
   levelledUp = 0,
-  spent = false,
+  shell = false,
 }: {
   expression: Expression;
   /** Drives the standing ripples across the iris while a reply is voiced. */
@@ -155,17 +156,17 @@ export function Avatar({
   /** The level just reached, or 0. A change here rings the ding once. */
   levelledUp?: number;
   /**
-   * Empty meter: drain the face to a shell. Colour is Impulse's only
-   * channel on this component, so removing it is the honest way to show
-   * that the faculty behind it is not running — what is left is the
-   * aperture and the pupil still tracking, which is exactly what is left
-   * of Morrow at the free tier.
+   * The local model is answering — because the meter ran dry or because
+   * the person picked the free tier from the dropdown; the face does not
+   * distinguish, because the replies do not either.
    *
-   * Done in CSS over the live canvas rather than as a mode inside the
-   * shader: the face keeps rendering and keeps moving, and nothing about
-   * the animation has to know this state exists.
+   * Replaces the face with <ShellFace/> rather than draining it: the
+   * aperture, the blades and the telemetry ring stand for faculties that
+   * are not running, and a greyed-out version of them would still be
+   * claiming they are there. It also hands the GPU back to the model now
+   * doing the thinking, and looks identical with or without WebGPU.
    */
-  spent?: boolean;
+  shell?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const handle = useRef<ReturnType<typeof mountApertureFace>>(null);
@@ -175,15 +176,19 @@ export function Avatar({
   // rather than listed as dependencies, because a dependency on them is
   // exactly the remount this component exists to avoid.
   const start = useRef({ expression, speaking });
+  start.current = { expression, speaking };
   useEffect(() => {
-    if (!canvas.current) return;
+    // `shell` is a dependency because the canvas is not in the tree while
+    // the shell is showing. Rebuilding the pipeline on the way back is a
+    // cost paid once per tier switch, which is not a per-turn event.
+    if (shell || !canvas.current) return;
     const face = mountApertureFace(canvas.current, start.current, setBackend);
     handle.current = face;
     return () => {
       face.destroy();
       handle.current = null;
     };
-  }, []);
+  }, [shell]);
 
   useEffect(() => { handle.current?.setMood(expression); }, [expression]);
   useEffect(() => { handle.current?.setSpeaking(speaking); }, [speaking]);
@@ -205,25 +210,24 @@ export function Avatar({
   const drawn = backend === "none";
 
   return (
-    // On the wrapper rather than the canvas so the no-WebGPU drawn face
-    // drains with it — the two are the same six colours and must not
-    // disagree about whether the soul is home.
-    <div
-      className={`relative shrink-0 transition-[filter,opacity] duration-1000 ${
-        spent ? "opacity-60 grayscale" : ""
-      }`}
-    >
-      {/* Kept mounted even when the drawn face is showing: unmounting the
-          canvas would take the context with it, and "none" is decided by
-          the canvas itself. Hidden rather than removed. */}
-      <canvas
-        ref={canvas}
-        hidden={drawn}
-        role="img"
-        aria-label={spent ? "Avatar: spent, running on local hardware" : `Avatar expression: ${FACE[expression].label}`}
-        className="h-56 w-56 rounded-full bg-[#060810] shadow-inner"
-      />
-      {drawn && <DrawnFace expression={expression} speaking={speaking} />}
+    <div className="relative shrink-0">
+      {shell ? (
+        <ShellFace label="Avatar: running on local hardware" />
+      ) : (
+        <>
+          {/* Kept mounted even when the drawn face is showing: unmounting the
+              canvas would take the context with it, and "none" is decided by
+              the canvas itself. Hidden rather than removed. */}
+          <canvas
+            ref={canvas}
+            hidden={drawn}
+            role="img"
+            aria-label={`Avatar expression: ${FACE[expression].label}`}
+            className="h-56 w-56 rounded-full bg-[#060810] shadow-inner"
+          />
+          {drawn && <DrawnFace expression={expression} speaking={speaking} />}
+        </>
+      )}
 
       {flash > 0 && (
         <span

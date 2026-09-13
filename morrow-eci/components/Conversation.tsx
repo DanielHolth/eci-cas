@@ -15,7 +15,7 @@ import { greeting } from "@/lib/greeting";
 import { useTurnLog } from "@/lib/useTurnLog";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { useVitals } from "@/lib/useVitals";
-import { EnergyMeter, TIRED_LINE } from "@/components/EnergyMeter";
+import { EnergyMeter, LOCAL_LINE, TIRED_LINE } from "@/components/EnergyMeter";
 import { fetchKnobs, latestKnobs, sendNudge, sendPerceive, subscribeKnobs } from "@/lib/api";
 import type { Account } from "@/lib/account";
 import type { Expression } from "@/types/events";
@@ -266,7 +266,7 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
                literally how fast Morrow is moving. */
             vigor={0.5 + vitals.energy.fraction}
             levelledUp={levelledUp}
-            spent={vitals.energy.isEmpty}
+            shell={vitals.tier.isLocal}
           />
 
           <EnergyMeter vitals={vitals} />
@@ -279,13 +279,18 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
               what it reports is the same kind of fact a verdict reports: the
               thing answering you is not the thing you were talking to, and
               every reply after this line is shorter, flatter and worse. A
-              person who misses this misreads Morrow, not the meter. */}
-          {vitals.energy.isEmpty && (
+              person who misses this misreads Morrow, not the meter.
+
+              Fires on the tier, not on the meter: a person who chose the
+              free tier is owed the same warning as one who ran out, because
+              the replies are equally shorter and duller either way. Only the
+              wording branches on which of the two it was. */}
+          {vitals.tier.isLocal && (
             <p
               role="alert"
               className="mx-4 max-w-prose rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-center text-sm font-medium text-red-700 dark:text-red-400"
             >
-              {TIRED_LINE}
+              {vitals.energy.isEmpty ? TIRED_LINE : LOCAL_LINE}
             </p>
           )}
 
