@@ -58,12 +58,12 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ExtractedFact>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken)
     {
         var text = utterance.Text.Trim();
         if (!_options.ExtractorEnabled)
         {
-            return [text];
+            return [new ExtractedFact(text)];
         }
 
         try
@@ -80,8 +80,8 @@ public sealed class SubstrateFactExtractor : IFactExtractor
                 return [];
             }
 
-            var facts = Parse(result.Text, _options.ExtractorMaxFacts);
-            return facts.Count > 0 ? facts : [text];
+            var facts = Parse(result.Text, _options.ExtractorMaxFacts, result.Model);
+            return facts.Count > 0 ? facts : [new ExtractedFact(text, OriginModel: result.Model)];
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -89,7 +89,7 @@ public sealed class SubstrateFactExtractor : IFactExtractor
             // holds paragraphs where it should hold facts. Recoverable, but
             // only by somebody who knows to run the backfill.
             _logger.LogWarning(ex, "Extractor failed; keeping the utterance whole.");
-            return [text];
+            return [new ExtractedFact(text)];
         }
     }
 
@@ -100,10 +100,15 @@ public sealed class SubstrateFactExtractor : IFactExtractor
     /// fact the person never stated is the archive lying to itself, and the
     /// consolidator downstream will happily thread it.
     /// </summary>
-    internal static string BuildPrompt(string text, string? previousReply)
+    internal static string BuildPrompt(string text, string? previousReply) =>
+        BuildPrompt(text, previousReply, DateTimeOffset.UtcNow);
+
+    internal static string BuildPrompt(string text, string? previousReply, DateTimeOffset saidAt)
     {
         var prompt = new StringBuilder();
         prompt.AppendLine("Rewrite what somebody said as a list of standalone facts.");
+        prompt.AppendLine();
+        prompt.AppendLine($"TODAY IS: {saidAt:yyyy-MM-dd} ({saidAt:dddd}).");
         prompt.AppendLine();
         if (!string.IsNullOrWhiteSpace(previousReply))
         {
@@ -115,9 +120,22 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         prompt.AppendLine("WHAT THEY SAID:");
         prompt.AppendLine(text);
         prompt.AppendLine();
+        prompt.AppendLine("Write one fact per line, in four fields separated by \" | \":");
+        prompt.AppendLine();
+        prompt.AppendLine("  fact | class | entity | sensitivity");
+        prompt.AppendLine();
+        prompt.AppendLine($"class is exactly one of: {string.Join(", ", FactClasses.All)}");
+        prompt.AppendLine("entity is what the fact is about -- a person, a place, a thing -- named the way the speaker names it. Use the speaker's own name for themselves if you know it, otherwise \"self\".");
+        prompt.AppendLine("sensitivity is 0 for something they would say to a stranger, 1 for something personal they would say to a friend, 2 for something private -- health, money, somebody else's secrets, anything that must never appear on a shared screen.");
+        prompt.AppendLine();
+        prompt.AppendLine("Example:");
+        prompt.AppendLine("  Ingrid's birthday is 1988-03-04 | date | Ingrid | 1");
+        prompt.AppendLine("  I play bass | skill | self | 0");
+        prompt.AppendLine();
         prompt.AppendLine("Rules:");
         prompt.AppendLine("- One fact per line. No numbering, no bullets, no commentary.");
         prompt.AppendLine("- Each line must make sense alone, read years later, by someone who cannot see the other lines. Replace every pronoun and every \"there\", \"then\", \"that one\" with the thing it refers to.");
+        prompt.AppendLine("- Resolve time the same way you resolve pronouns. \"yesterday\", \"last night\", \"in two weeks\" are references, and TODAY IS above is what they point at. Write the date: \"Marcus had his birthday yesterday\" becomes \"Marcus had his birthday on 2026-09-12\". A fact that keeps a relative date is only true on the day it was said.");
         prompt.AppendLine("- Keep the speaker's own words and their names for things wherever you can. You are putting the missing pieces back, not rephrasing.");
         prompt.AppendLine("- Keep first person as first person: \"I moved to Bodo in 2019\", not \"the speaker moved to Bodo in 2019\".");
         prompt.AppendLine("- Add nothing that was not said. If you are unsure whether something was claimed, leave it out.");
@@ -136,9 +154,9 @@ public sealed class SubstrateFactExtractor : IFactExtractor
     /// to use. Asking twice is cheaper than a corpus where a tenth of the
     /// rows begin "1. ".
     /// </summary>
-    private static IReadOnlyList<string> Parse(string text, int max)
+    private static IReadOnlyList<ExtractedFact> Parse(string text, int max, string? model)
     {
-        var facts = new List<string>();
+        var facts = new List<ExtractedFact>();
         foreach (var raw in text.Split('\n'))
         {
             var line = raw.Trim().TrimStart('-', '*', '•', ' ');
@@ -152,7 +170,7 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 
             if (line.Length > 1 && !line.EndsWith(':'))
             {
-                facts.Add(line);
+                facts.Add(Split(line, model));
             }
 
             if (facts.Count == max)
@@ -163,6 +181,42 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 
         return facts;
     }
+
+    /// <summary>
+    /// One line into its four fields.
+    ///
+    /// The text is the part that must survive, so every other field is
+    /// optional and a malformed line degrades to "a fact nobody classified"
+    /// rather than to nothing. A model that forgets the pipes still gets its
+    /// sentence stored; the columns are derived and the next rebuild fills
+    /// them in.
+    ///
+    /// A pipe inside the sentence would otherwise eat the fact, so the split
+    /// counts from the right: the last three fields are the metadata and
+    /// everything before them is what was said.
+    /// </summary>
+    private static ExtractedFact Split(string line, string? model)
+    {
+        var parts = line.Split('|');
+        if (parts.Length < 4)
+        {
+            return new ExtractedFact(line.Trim(), OriginModel: model);
+        }
+
+        var sensitivity = int.TryParse(parts[^1].Trim(), out var level) ? Math.Clamp(level, 0, 2) : (int?)null;
+        var entity = parts[^2].Trim();
+        var written = parts[^3].Trim();
+        var fact = string.Join('|', parts[..^3]).Trim();
+
+        return fact.Length == 0
+            ? new ExtractedFact(line.Trim(), OriginModel: model)
+            : new ExtractedFact(
+                fact,
+                FactClasses.Normalise(written),
+                entity.Length == 0 ? null : entity,
+                sensitivity,
+                model);
+    }
 }
 
 /// <summary>
@@ -172,6 +226,9 @@ public sealed class SubstrateFactExtractor : IFactExtractor
 /// </summary>
 public sealed class VerbatimFactExtractor : IFactExtractor
 {
-    public Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<string>>([utterance.Text.Trim()]);
+    // Every column null, and that is the honest record: no model looked at
+    // this, so nobody has an opinion about what kind of thing it is. A null
+    // origin also puts the row first in line for the next rebuild.
+    public Task<IReadOnlyList<ExtractedFact>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ExtractedFact>>([new ExtractedFact(utterance.Text.Trim())]);
 }

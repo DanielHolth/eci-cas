@@ -142,8 +142,9 @@ public sealed class ScribeAgent : AgentBase
         var turnsNow = utterance.Turn;
 
         var facts = new List<Fact>(sentences.Count);
-        foreach (var sentence in sentences)
+        foreach (var extracted in sentences)
         {
+            var sentence = extracted.Text;
             var keywords = KeywordExtractor.Content(sentence);
 
             // Nothing to recall from a sentence with no content word in it,
@@ -163,7 +164,11 @@ public sealed class ScribeAgent : AgentBase
                 Timestamp: utterance.Timestamp,
                 Speaker: utterance.Speaker,
                 Keywords: keywords,
-                FirstSeenTurn: turnsNow));
+                FirstSeenTurn: turnsNow,
+                OriginModel: extracted.OriginModel,
+                Class: extracted.Class,
+                Entity: extracted.Entity,
+                Sensitivity: extracted.Sensitivity));
         }
 
         if (facts.Count == 0)

@@ -228,8 +228,34 @@ public interface IFactExtractor
 {
     /// <param name="previousReply">What the persona said just before, as
     /// context for references only; null when there is none.</param>
-    Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ExtractedFact>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// One fact as the extractor read it, before anything is derived from it.
+///
+/// Deliberately not a <see cref="Fact"/>: an extractor has no business
+/// minting an id, stamping a turn, or knowing what a vector is. It read a
+/// sentence out of an utterance and formed an opinion about what kind of
+/// thing it is. The caller owns everything else.
+///
+/// Every field but the text is nullable, and null means the extractor had
+/// no opinion -- which is the honest answer from a tier that never made a
+/// model call at all.
+/// </summary>
+public sealed record ExtractedFact(
+    string Text,
+    string? Class = null,
+    string? Entity = null,
+    int? Sensitivity = null,
+
+    /// <summary>
+    /// Which model actually answered, reported by the substrate rather than
+    /// read back out of config: what a tier file asks for and what a
+    /// provider routed to are not reliably the same string, and the rebuild
+    /// selects on this one. Null when no model was called.
+    /// </summary>
+    string? OriginModel = null);
 
 /// <summary>
 /// What the consolidator decided about a newly minted fact: which thread it

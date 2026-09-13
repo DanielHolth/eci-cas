@@ -105,8 +105,9 @@ public sealed class FactBackfill
         foreach (var utterance in utterances)
         {
             var previous = UtteranceContext.PreviousReply(replies, utterance);
-            foreach (var sentence in await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false))
+            foreach (var extracted in await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false))
             {
+                var sentence = extracted.Text;
                 var keywords = KeywordExtractor.Content(sentence);
                 if (!UtteranceFilter.Keep(keywords, _options))
                 {
@@ -123,7 +124,11 @@ public sealed class FactBackfill
 
                     // The utterance's own turn, not today's: a recovered fact
                     // has been recallable since it was said.
-                    FirstSeenTurn: utterance.Turn));
+                    FirstSeenTurn: utterance.Turn,
+                    OriginModel: extracted.OriginModel,
+                    Class: extracted.Class,
+                    Entity: extracted.Entity,
+                    Sensitivity: extracted.Sensitivity));
             }
         }
 

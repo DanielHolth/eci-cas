@@ -80,9 +80,11 @@ public class FactLogTests : IDisposable
     /// </summary>
     private sealed class SentenceExtractor : IFactExtractor
     {
-        public Task<IReadOnlyList<string>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>(
-                [.. utterance.Text.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]);
+        public Task<IReadOnlyList<ExtractedFact>> ExtractAsync(Utterance utterance, string? previousReply, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ExtractedFact>>(
+                [.. utterance.Text
+                    .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(s => new ExtractedFact(s))]);
     }
 
     private FactBackfill Backfill(IUtteranceLog said, IFactLog facts, IFactExtractor? extractor = null) =>
