@@ -4,10 +4,16 @@ Starts everything the swarm needs, in windows of their own, and opens the UI.
 
 .DESCRIPTION
 Four moving parts and none of them depends on the others being up first:
-llama-server (only for tiers that route a class at "local"), the host on
-:5179, the Next.js surface on :3000, and a browser pointed at it. The host
-and the surface each retry the other, so the order here is convenience, not
-a protocol.
+llama-server, the host on :5179, the Next.js surface on :3000, and a browser
+pointed at it. The host and the surface each retry the other, so the order
+here is convenience, not a protocol.
+
+llama-server starts on every tier, including the paid ones that will never
+call it. The tier a session boots on is not the tier it will be running on:
+the dropdown swaps tiers live, and an empty energy meter swaps itself to the
+all-local tier without asking anyone. A resident model costs idle VRAM; a
+model that is not there costs the turn that goes looking for it, which is
+the turn where the meter just ran out. -NoLlm gets the VRAM back.
 
 Each server gets its own window on purpose. They run until you close them,
 they print the output worth reading, and Ctrl-C in one does not take the
@@ -23,11 +29,12 @@ em dash arrives as mojibake in the one output someone is reading for help.
 
 .EXAMPLE
 ./scripts/start.ps1
-Pro tier: host, surface, browser.
+Pro tier: llama-server, host, surface, browser.
 
 .EXAMPLE
-./scripts/start.ps1 -Tier Free
-Adds llama-server, because Free routes every class at localhost.
+./scripts/start.ps1 -Tier Pro -NoLlm
+The same without the local model. Saves the VRAM and gives up the landing
+place: an empty meter drops to Free, and Free has nowhere to go.
 
 .EXAMPLE
 ./scripts/start.ps1 -Tier Mock -NoBrowser
@@ -103,14 +110,14 @@ function Start-Window {
 
 Write-Host "eci-cas: tier $Tier, repo $repo"
 
-# ---- what this tier actually needs -------------------------------------
+# ---- keys this tier will want -------------------------------------------
 #
-# The tier file is the authority, not a list kept here: a class routed at
-# "local" is a class that will hang on a dead :8080, and that is the only
-# thing that decides whether llama-server is part of this.
+# The tier file is the authority on which keys to warn about, and nothing
+# else. It used to decide whether llama-server started too; it cannot, for
+# the reason in .DESCRIPTION -- the file read here describes the first turn,
+# not the tenth.
 $tierFile = Join-Path $repo "src/EciCas.Host/appsettings.$Tier.json"
 $tierText = if (Test-Path $tierFile) { Get-Content $tierFile -Raw } else { '' }
-$needsLlm = $tierText -match '"Provider"\s*:\s*"local"'
 $needsMistral = $tierText -match '"Provider"\s*:\s*"mistral"'
 $needsOpenAi = $tierText -match '"Provider"\s*:\s*"openai"'
 
@@ -148,18 +155,38 @@ if ($missing.Count -gt 0) {
 }
 
 # ---- llama-server ------------------------------------------------------
-if ($needsLlm -and -not $NoLlm) {
-    if (Test-Port $LlmPort) {
-        Write-Host "llama-server already answering on :$LlmPort; leaving it alone"
-    } elseif ($WhatIfOnly) {
-        Write-Host "would start llama-server on :$LlmPort"
-    } else {
-        # That script owns the launch line: -ngl 99 and the slot count are
-        # not details this launcher should be holding a second copy of.
+#
+# Gated on the weights already being here, which keeps the promise above: a
+# tier that was never going to call the local model must not turn a launch
+# into a 1.25GB download. Present means start it; absent means say so, the
+# same as the embedding weights.
+$local = @(Get-ChildItem -Path (Join-Path $repo 'models/local') -Filter '*.gguf' -ErrorAction SilentlyContinue)
+
+if ($NoLlm) {
+    Write-Host "skipping llama-server (-NoLlm); local classes will fail until :$LlmPort answers,"
+    Write-Host '      and an empty energy meter has nothing to fall back to.'
+} elseif (Test-Port $LlmPort) {
+    Write-Host "llama-server already answering on :$LlmPort; leaving it alone"
+} elseif ($local.Count -eq 0) {
+    Write-Host 'note: no local model in models/local.'
+    Write-Host '      A tier switch to Free or Budget will fail, and so will the'
+    Write-Host '      fallback an empty energy meter performs on its own.'
+    Write-Host '      ./scripts/get-local-model.ps1'
+} elseif ($WhatIfOnly) {
+    Write-Host "would start llama-server on :$LlmPort"
+} else {
+    # That script owns the launch line: -ngl 99 and the slot count are
+    # not details this launcher should be holding a second copy of.
+    #
+    # Caught, not fatal: the local model is now started for tiers that do not
+    # need it, so a llama-server that will not come up must never be what
+    # stops a Pro session from booting.
+    try {
         & (Join-Path $PSScriptRoot 'get-local-model.ps1') -Start -Port $LlmPort
+    } catch {
+        Write-Host "note: llama-server did not start ($($_.Exception.Message))."
+        Write-Host '      Paid tiers are unaffected; local ones will fail per call.'
     }
-} elseif ($needsLlm) {
-    Write-Host "skipping llama-server (-NoLlm); local classes will fail until :$LlmPort answers"
 }
 
 # ---- host --------------------------------------------------------------

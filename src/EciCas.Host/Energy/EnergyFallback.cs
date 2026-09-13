@@ -19,7 +19,19 @@ namespace EciCas.Host.Energy;
 /// itself back to Pro the moment a trickle of regen landed would spend that
 /// trickle on one call and drop again, several times an hour.
 /// </summary>
-public sealed class EnergyFallback(TierCatalog tiers, ILogger<EnergyFallback> logger, string localTier = "Free")
+/// <param name="onSwitched">
+/// Run once, after a fallback has taken effect. The tier dropdown warms the
+/// models it just pointed the agents at (see KnobsEndpoints) and this needs
+/// the same thing for the same reason, except more: nobody asked for this
+/// switch, so the turn that pays the cold local handshake is a turn the
+/// person is already watching go wrong. Injected rather than resolved here
+/// because deciding to fall back and warming a substrate are different jobs.
+/// </param>
+public sealed class EnergyFallback(
+    TierCatalog tiers,
+    ILogger<EnergyFallback> logger,
+    string localTier = "Free",
+    Action? onSwitched = null)
 {
     private readonly Lock _gate = new();
 
@@ -37,6 +49,7 @@ public sealed class EnergyFallback(TierCatalog tiers, ILogger<EnergyFallback> lo
             return;
         }
 
+        bool switched;
         lock (_gate)
         {
             if (string.Equals(tiers.Active, LocalTier, StringComparison.OrdinalIgnoreCase))
@@ -44,10 +57,19 @@ public sealed class EnergyFallback(TierCatalog tiers, ILogger<EnergyFallback> lo
                 return;
             }
 
-            if (tiers.Switch(LocalTier))
+            switched = tiers.Switch(LocalTier);
+            if (switched)
             {
                 logger.LogWarning("Energy empty — falling back from the paid tier to {Tier}.", LocalTier);
             }
+        }
+
+        // Outside the lock: the switch is already visible to every agent, and
+        // a warm-up held under the gate would block the next debit for as long
+        // as a 2B takes to answer.
+        if (switched)
+        {
+            onSwitched?.Invoke();
         }
     }
 

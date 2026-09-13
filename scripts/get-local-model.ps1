@@ -69,42 +69,54 @@ if (-not (Test-Path $Destination)) { New-Item -ItemType Directory -Path $Destina
 
 # ---------------------------------------------------------------- weights --
 
-# Ask the Hub what it actually holds rather than assuming a filename. Quant
-# naming drifts between repos and a 404 halfway through the download is a poor way
-# to find that out. A large quant may also be split across several parts.
-Write-Host "looking up $Quant in $Repo"
-$manifest = Invoke-RestMethod -Uri "https://huggingface.co/api/models/$Repo"
-$files = @($manifest.siblings.rfilename | Where-Object { $_ -like "*$Quant*.gguf" })
+# Disk first, and the Hub only when the disk has nothing. The lookup used to
+# run every time, which cost a round-trip to be told "already present" and
+# made -Start fail outright on a machine with no network -- with the weights
+# sitting right there. ./scripts/start.ps1 calls this on every boot now, so
+# that round-trip was on the path of every launch.
+#
+# Sorted by name because a large quant arrives split, and llama-server wants
+# the part numbered 1.
+$present = @(Get-ChildItem -Path $Destination -Filter "*$Quant*.gguf" -ErrorAction SilentlyContinue | Sort-Object Name)
 
-if ($files.Count -eq 0) {
-    $available = ($manifest.siblings.rfilename |
-        Where-Object { $_ -like '*.gguf' } |
-        ForEach-Object { [regex]::Match($_, '(?<=-)((UD-)?[IQ]Q?\d.*?|BF16|Q\d[^.]*)(?=\.gguf$)').Value } |
-        Where-Object { $_ } |
-        Sort-Object -Unique) -join ', '
-    throw "No file matching '$Quant' in $Repo. Available: $available"
+if ($present.Count -gt 0) {
+    Write-Host "already present, no lookup needed: $($present[0].FullName)"
+    $gguf = $present[0].FullName
 }
+else {
+    # Ask the Hub what it actually holds rather than assuming a filename. Quant
+    # naming drifts between repos and a 404 halfway through the download is a poor way
+    # to find that out. A large quant may also be split across several parts.
+    Write-Host "looking up $Quant in $Repo"
+    $manifest = Invoke-RestMethod -Uri "https://huggingface.co/api/models/$Repo"
+    $files = @($manifest.siblings.rfilename | Where-Object { $_ -like "*$Quant*.gguf" })
 
-foreach ($remote in $files) {
-    $target = Join-Path $Destination (Split-Path -Leaf $remote)
-    if (Test-Path $target) {
-        Write-Host "already present, skipping: $target"
-        continue
+    if ($files.Count -eq 0) {
+        $available = ($manifest.siblings.rfilename |
+            Where-Object { $_ -like '*.gguf' } |
+            ForEach-Object { [regex]::Match($_, '(?<=-)((UD-)?[IQ]Q?\d.*?|BF16|Q\d[^.]*)(?=\.gguf$)').Value } |
+            Where-Object { $_ } |
+            Sort-Object -Unique) -join ', '
+        throw "No file matching '$Quant' in $Repo. Available: $available"
     }
 
-    Write-Host "downloading $remote (this is the slow part)"
-    # BITS beats Invoke-WebRequest by a wide margin on a file this size: it
-    # streams to disk and shows progress, where Invoke-WebRequest buffers.
-    try {
-        Start-BitsTransfer -Source "https://huggingface.co/$Repo/resolve/main/$remote" -Destination $target -Description $remote
+    foreach ($remote in $files) {
+        $target = Join-Path $Destination (Split-Path -Leaf $remote)
+
+        Write-Host "downloading $remote (this is the slow part)"
+        # BITS beats Invoke-WebRequest by a wide margin on a file this size: it
+        # streams to disk and shows progress, where Invoke-WebRequest buffers.
+        try {
+            Start-BitsTransfer -Source "https://huggingface.co/$Repo/resolve/main/$remote" -Destination $target -Description $remote
+        }
+        catch {
+            Write-Host 'BITS unavailable, falling back to Invoke-WebRequest'
+            Invoke-WebRequest -Uri "https://huggingface.co/$Repo/resolve/main/$remote" -OutFile $target
+        }
     }
-    catch {
-        Write-Host 'BITS unavailable, falling back to Invoke-WebRequest'
-        Invoke-WebRequest -Uri "https://huggingface.co/$Repo/resolve/main/$remote" -OutFile $target
-    }
+
+    $gguf = (Resolve-Path (Join-Path $Destination (Split-Path -Leaf $files[0]))).Path
 }
-
-$gguf = (Resolve-Path (Join-Path $Destination (Split-Path -Leaf $files[0]))).Path
 
 # -------------------------------------------------------------- llama.cpp --
 

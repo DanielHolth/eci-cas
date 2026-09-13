@@ -49,9 +49,14 @@ morrow-eci/             Next.js UI
 ./start.cmd -Tier Pro
 ```
 
-Starts llama-server (if the tier needs it), the host on `:5179` and the UI on
-`:3000`, then opens the browser. `-WhatIfOnly`, `-NoUi`, `-NoLlm`,
-`-NoBrowser`, `-Port`/`-UiPort`/`-LlmPort`.
+Starts llama-server, the host on `:5179` and the UI on `:3000`, then opens the
+browser. `-WhatIfOnly`, `-NoUi`, `-NoLlm`, `-NoBrowser`,
+`-Port`/`-UiPort`/`-LlmPort`.
+
+llama-server starts on every tier, not only the local ones: the dropdown swaps
+tiers live and an empty energy meter swaps itself to Free unasked, so the boot
+tier does not decide what the session will need. It is skipped silently if
+`models/local/` is empty — a launch never downloads weights.
 
 By hand:
 

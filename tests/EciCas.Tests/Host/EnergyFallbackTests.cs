@@ -1,3 +1,5 @@
+using EciCas.Core;
+using EciCas.Host;
 using EciCas.Host.Energy;
 
 namespace EciCas.Tests.Host;
@@ -60,5 +62,40 @@ public sealed class EnergyFallbackTests
         var fallback = Fallback();
 
         Assert.True(fallback.MaySwitchTo("Pro", At(1.0)));
+    }
+
+    /// <summary>
+    /// Nobody asked for this switch, so nobody is going to warm the tier it
+    /// landed on. The dropdown warms what it points the agents at; without the
+    /// callback the automatic path did not, and the first turn on an empty
+    /// meter paid the cold local handshake on top of already being worse.
+    ///
+    /// Once, on the edge, is the whole contract: a meter that stays empty goes
+    /// on reading empty for every debit after, and a warm-up per debit would
+    /// queue throwaway completions in front of the person's actual turn.
+    /// </summary>
+    [Fact]
+    public void TheAutomaticFallback_WarmsTheTierItLandedOn_Once()
+    {
+        var substrates = new SubstrateOptions();
+        var catalog = new TierCatalog(
+            TierCatalogLoader.Load(AppContext.BaseDirectory), substrates, new RuntimeKnobs(), new KnobDefaults(), "Pro");
+
+        var warmed = 0;
+        var fallback = new EnergyFallback(
+            catalog,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<EnergyFallback>.Instance,
+            localTier: "Free",
+            onSwitched: () => warmed++);
+
+        fallback.Apply(At(0.5));
+        Assert.Equal(0, warmed);
+
+        fallback.Apply(At(0));
+        Assert.Equal("Free", catalog.Active);
+        Assert.Equal(1, warmed);
+
+        fallback.Apply(At(0));
+        Assert.Equal(1, warmed);
     }
 }

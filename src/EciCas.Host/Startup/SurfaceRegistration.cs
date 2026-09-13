@@ -1,10 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using EciCas.Core;
 using EciCas.Host.Energy;
 using EciCas.Host.TurnLog;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Host.Startup;
 
@@ -82,17 +84,33 @@ internal static class SurfaceRegistration
         services.AddSingleton(new LevelMeter(
             string.IsNullOrWhiteSpace(levelPath) ? null : Path.Combine(AppContext.BaseDirectory, levelPath)));
 
+        var warmupBudgetMs = int.TryParse(configuration["Substrates:WarmupMs"], out var warmup) ? warmup : 60_000;
+
         // The consequence of an empty meter. Configurable because which tier
         // is "all local" is a tier-file fact, not a code one.
         var localTier = configuration["Energy:LocalTier"] ?? "Free";
         services.AddSingleton(sp => new EnergyFallback(
             sp.GetRequiredService<TierCatalog>(),
             sp.GetRequiredService<ILogger<EnergyFallback>>(),
-            localTier));
+            localTier,
+            // Same warm-up the dropdown runs, for the same reason, and
+            // likewise not awaited: the fallback has already happened, and the
+            // debit that triggered it is on a turn's critical path.
+            onSwitched: warmupBudgetMs <= 0
+                ? null
+                : new Action(() => _ = SubstrateWarmup.RunAsync(
+                    sp.GetRequiredService<ISubstrateProvider>(),
+                    // IOptions, not IOptionsMonitor: TierCatalog.Switch mutates
+                    // this one bound instance in place, and a monitor would hand
+                    // back its own copy, still carrying the tier just left.
+                    sp.GetRequiredService<IOptions<SubstrateOptions>>().Value,
+                    TimeSpan.FromMilliseconds(warmupBudgetMs),
+                    Console.WriteLine,
+                    CancellationToken.None))));
 
         return new HostSurface(
             CorsPolicyName,
-            int.TryParse(configuration["Substrates:WarmupMs"], out var warmup) ? warmup : 60_000,
+            warmupBudgetMs,
             (configuration.GetSection("Sse:ExcludedMetaKeys").Get<string[]>() ?? []).ToHashSet(StringComparer.Ordinal));
     }
 }

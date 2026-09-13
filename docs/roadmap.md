@@ -520,6 +520,11 @@ file — and only the display names change.
   *degraded but working*, R can be tuned down in a patch to chase inference
   costs without shipping a worse product — the floor stops being nothing
   and starts being Local. That is the real reason to build this.
+- **The server has to already be up, and the weights already warm.** Both
+  are now boot's job: `scripts/start.ps1` starts llama-server on every tier,
+  not only the local ones, and `EnergyFallback` runs the same warm-up the
+  tier dropdown runs. Before that, falling back landed on a dead `:8080` on
+  any paid boot — the promise inverted into exactly the brick it denies.
 - **It does not rescue a person who has no pack.** Fallback needs the
   weights on disk, so this argues for shipping the pack by default rather
   than on demand — 1.25GB against never being stranded. **Open:** default
