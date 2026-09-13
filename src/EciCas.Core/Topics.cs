@@ -12,7 +12,6 @@ public static class Topics
     public const string Perception = "events.perception";
     public const string Advisories = "events.advisories";
     public const string Proposal = "events.proposal";
-    public const string SelectedPairs = "events.selected-pairs";
     public const string Bundle = "events.bundle";
 
     /// <summary>

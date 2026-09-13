@@ -12,11 +12,20 @@ namespace EciCas.Host.Startup;
 
 /// <summary>The few surface decisions the pipeline itself has to hold: which
 /// CORS policy to apply, how long boot and a live tier swap may spend warming
-/// a substrate, and which meta keys never reach a client.</summary>
+/// a substrate, and where the built client sits if this process is also
+/// serving it.</summary>
 /// <param name="CorsPolicy">Named policy registered below, applied by the caller.</param>
 /// <param name="WarmupBudgetMs">One budget, read once, spent both at boot and on every live tier swap.</param>
-/// <param name="ExcludedMetaKeys">Envelope meta a stream must not carry outward.</param>
-internal sealed record HostSurface(string CorsPolicy, int WarmupBudgetMs, IReadOnlySet<string> ExcludedMetaKeys);
+/// <param name="ClientPath">
+/// The exported client to serve at the site root, or null for none.
+///
+/// Null is the development case: `next dev` serves the client on its own port
+/// and this host is a cross-origin API, which is what the CORS policy above
+/// is for. Set, it is the shipped case — one process serves both, the client
+/// and the API share an origin, and there is no CORS to get wrong on someone
+/// else's machine.
+/// </param>
+internal sealed record HostSurface(string CorsPolicy, int WarmupBudgetMs, string? ClientPath);
 
 /// <summary>
 /// Where the host meets the outside: the listening address, the origins
@@ -108,9 +117,18 @@ internal static class SurfaceRegistration
                     Console.WriteLine,
                     CancellationToken.None))));
 
+        // Resolved against the binary like everything else here, and absent
+        // rather than empty when the directory is not there: a shell build
+        // copies the export in beside the exe, a `dotnet run` during
+        // development does not, and neither should have to say which it is.
+        var client = configuration["Surface:ClientPath"];
+        var clientPath = string.IsNullOrWhiteSpace(client)
+            ? null
+            : Path.Combine(AppContext.BaseDirectory, client);
+
         return new HostSurface(
             CorsPolicyName,
             warmupBudgetMs,
-            (configuration.GetSection("Sse:ExcludedMetaKeys").Get<string[]>() ?? []).ToHashSet(StringComparer.Ordinal));
+            Directory.Exists(clientPath) ? clientPath : null);
     }
 }

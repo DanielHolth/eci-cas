@@ -1,4 +1,5 @@
 using EciCas.Agents.Archivist;
+using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
@@ -65,7 +66,11 @@ public static class TurnProjection
 
     private static TurnRecord ApplyAdvisory(TurnRecord record, Envelope envelope) => envelope.PublishedBy switch
     {
-        "Impulse" => record with { Impulse = envelope.Meta.Get<string>(ImpulseAgent.AdviceKey) ?? record.Impulse },
+        "Impulse" => record with
+        {
+            Impulse = envelope.Meta.Get<string>(ImpulseAgent.AdviceKey) ?? record.Impulse,
+            Expression = envelope.Meta.Get<string>(ImpulseAgent.ExpressionKey) ?? record.Expression,
+        },
         "Recall" => record with { Reads = Describe(envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey)) },
         "Hindsight" => record with { Hindsight = envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey) ?? record.Hindsight },
         _ => record,
@@ -93,6 +98,11 @@ public static class TurnProjection
         {
             Intent = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? record.Intent,
             Verdict = verdict == Verdict.Green ? record.Verdict : verdict.ToString().ToLowerInvariant(),
+
+            // A block nudges Impulse and Governance re-reads the face
+            // afterwards, so the action's word is fresher than the advisory's.
+            Expression = envelope.Meta.Get<string>(GovernanceAgent.ExpressionKey) ?? record.Expression,
+            Degraded = envelope.Meta.Get<bool>(GovernanceAgent.DegradedKey) || record.Degraded,
             Concluded = true,
         };
     }

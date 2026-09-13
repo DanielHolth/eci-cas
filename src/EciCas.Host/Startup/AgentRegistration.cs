@@ -53,7 +53,6 @@ internal static class AgentRegistration
         RegisterAgent<ReflectionAgent>(services);
         RegisterAgent<ArchiveLogger>(services);
         RegisterAgent<ConsoleSubscriber>(services);
-        RegisterAgent<SseBroadcaster>(services);
         RegisterAgent<TurnLogSubscriber>(services);
         RegisterAgent<TelemetryLogAgent>(services);
 

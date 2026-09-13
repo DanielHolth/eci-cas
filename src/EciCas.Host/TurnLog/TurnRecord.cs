@@ -42,11 +42,23 @@ public sealed record TurnRecord
 
     public string? Impulse { get; init; }
 
-    /// <summary>Rows read out of the archive, at their full path — Recall's work, after Librarian chose which pairs were worth opening.</summary>
-    public IReadOnlyList<string> Reads { get; init; } = [];
+    /// <summary>
+    /// Impulse's expression word for this turn, re-read from Governance's
+    /// action when a block moved it. Lower-case, from Impulse's own closed
+    /// vocabulary; null on a turn where nothing appraised a face.
+    ///
+    /// Here because the face is the one thing a surface cannot re-derive. The
+    /// rest of a turn is text a reader can see; which of six words Impulse
+    /// chose is a fact only the bus carried, and a window that opened after
+    /// five turns has no other way to wear the mood it walked in on.
+    /// </summary>
+    public string? Expression { get; init; }
 
-    /// <summary>Archive pairs Librarian selected this turn. What was considered, where <see cref="Reads"/> is what was found in it.</summary>
-    public IReadOnlyList<string> Pairs { get; init; } = [];
+    /// <summary>Governance answered with a substrate missing. The reply already says so in words; this is the slot the visual half reads.</summary>
+    public bool Degraded { get; init; }
+
+    /// <summary>Rows read out of the archive — Recall's work.</summary>
+    public IReadOnlyList<string> Reads { get; init; } = [];
 
     public IReadOnlyList<string> Hindsight { get; init; } = [];
     public string? Intent { get; init; }

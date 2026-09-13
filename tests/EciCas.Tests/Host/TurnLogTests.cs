@@ -1,4 +1,5 @@
 using EciCas.Agents.Archivist;
+using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
@@ -214,6 +215,60 @@ public class TurnLogTests
 
         Assert.Equal("asked this before", Assert.Single(record.Hindsight));
         Assert.Equal("curious", record.Impulse);
+    }
+
+    /// <summary>
+    /// The face is the one thing a surface cannot re-derive from the text, and
+    /// a window opened mid-session has only the replayed records to wear. So
+    /// the word has to be in the record — and it has to be the last word, not
+    /// the first: a block nudges Impulse and Governance re-reads the face
+    /// afterwards.
+    /// </summary>
+    [Fact]
+    public void Apply_WhenGovernanceRereadsTheFace_KeepsTheFresherWord()
+    {
+        var perception = Perception("do something reckless");
+        var record = Project(perception,
+            perception.Derive(Topics.Advisories, "Impulse", Severity.Neutral,
+                MetaBag.Empty.With(ImpulseAgent.AdviceKey, "curious")
+                    .With(ImpulseAgent.ExpressionKey, "alert")),
+            perception.Derive(Topics.Action, "Governance", Severity.Neutral,
+                MetaBag.Empty.With(IntentAgent.ReplyKey, "No.")
+                    .With(GovernanceAgent.ExpressionKey, "scared")));
+
+        Assert.Equal("scared", record.Expression);
+    }
+
+    /// <summary>Where nothing re-read it, Impulse's own word stands.</summary>
+    [Fact]
+    public void Apply_WhenNothingRereadsTheFace_KeepsImpulses()
+    {
+        var perception = Perception("hello");
+        var record = Project(perception,
+            perception.Derive(Topics.Advisories, "Impulse", Severity.Neutral,
+                MetaBag.Empty.With(ImpulseAgent.ExpressionKey, "warm")),
+            perception.Derive(Topics.Action, "Governance", Severity.Neutral,
+                MetaBag.Empty.With(IntentAgent.ReplyKey, "Hello.")));
+
+        Assert.Equal("warm", record.Expression);
+        Assert.False(record.Degraded);
+    }
+
+    /// <summary>
+    /// The reply already says a substrate was missing; this is the slot the
+    /// visual half reads, so it survives into the record rather than only
+    /// into prose.
+    /// </summary>
+    [Fact]
+    public void Apply_WithADegradedAnswer_SaysSoInASlot()
+    {
+        var perception = Perception("who is vera?");
+        var record = Project(perception,
+            perception.Derive(Topics.Action, "Governance", Severity.Elevated,
+                MetaBag.Empty.With(IntentAgent.ReplyKey, "I cannot reach my words right now.")
+                    .With(GovernanceAgent.DegradedKey, true)));
+
+        Assert.True(record.Degraded);
     }
 
     [Fact]
