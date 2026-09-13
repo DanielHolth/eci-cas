@@ -19,6 +19,15 @@ internal partial class OverlayWindow : Window
     private IntPtr _handle;
     private bool _interactable;
 
+    /// <summary>
+    /// Where the top edge sits when she is her resting height, which is the
+    /// one number Placement stores and the one the person chose by dragging
+    /// her there. Growing to fit a long reply moves Top and leaves this alone,
+    /// so a tall bubble on screen when she is dragged does not teach the file
+    /// a position she never rests at.
+    /// </summary>
+    private double _restingTop;
+
     /// <summary>The face was clicked while it was interactable.</summary>
     public event Action? SessionRequested;
 
@@ -50,6 +59,7 @@ internal partial class OverlayWindow : Window
         {
             _handle = new WindowInteropHelper(this).Handle;
             Placement.Restore(this);
+            _restingTop = Top;
             ClickThrough.Set(_handle, _interactable);
         };
     }
@@ -137,13 +147,54 @@ internal partial class OverlayWindow : Window
                 try
                 {
                     DragMove();
-                    Placement.Save(this);
+                    _restingTop = Top + Height - _options.Height;
+                    Placement.Save(this, _restingTop);
                 }
                 catch (InvalidOperationException)
                 {
                 }
                 break;
+
+            case "resize":
+                Grow(json);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Takes the height the page says it needs and keeps her bottom edge
+    /// where it is, so the face stays put and the bubble opens upward into
+    /// empty desktop.
+    ///
+    /// Clamped at both ends. Never shorter than the configured height, which
+    /// is what the face alone occupies, and never taller than MaxHeight or
+    /// than the room actually above her -- a window that grew off the top of
+    /// the screen would put the newest words where nobody can read them.
+    /// </summary>
+    private void Grow(string json)
+    {
+        double requested;
+        try
+        {
+            if (!JsonDocument.Parse(json).RootElement.TryGetProperty("height", out var property)) return;
+            if (!property.TryGetDouble(out requested)) return;
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        var bottom = _restingTop + _options.Height;
+        var ceiling = Math.Min(_options.MaxHeight, bottom - SystemParameters.VirtualScreenTop);
+        var height = Math.Clamp(requested, _options.Height, Math.Max(_options.Height, ceiling));
+
+        if (Math.Abs(height - Height) < 1) return;
+
+        // Top first. Setting Height alone would push the bottom edge down over
+        // whatever she is resting above before the next line pulls it back,
+        // which reads as a twitch on every reply.
+        Top = bottom - height;
+        Height = height;
     }
 
     private void Publish()

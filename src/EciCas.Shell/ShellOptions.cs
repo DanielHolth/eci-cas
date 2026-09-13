@@ -30,7 +30,16 @@ internal sealed class ShellOptions
     /// draws to fit, so this is the whole of the overlay's geometry aside from
     /// where it was last dragged.</summary>
     public double Width { get; set; } = 260;
+
+    /// <summary>Her resting height -- the face, and nothing above it. The
+    /// window grows past this to fit a long reply and comes back down when the
+    /// reply goes away.</summary>
     public double Height { get; set; } = 340;
+
+    /// <summary>How far that growing may go. A watermark is not a transcript:
+    /// past this the reply is simply longer than the corner can hold, and the
+    /// conversation window is a click away.</summary>
+    public double MaxHeight { get; set; } = 720;
 
     /// <summary>Where the window that opens on a click asks for the session,
     /// and where the watermark asks for itself. Relative to the host's own

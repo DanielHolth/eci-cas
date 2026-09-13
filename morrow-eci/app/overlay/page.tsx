@@ -19,6 +19,10 @@ const LINGER_MS = 6000;
  * the window. */
 const DRAG_SLOP = 4;
 
+/** The p-2 on the outer box, both edges, in CSS pixels. Part of the height the
+ * window needs and not part of what a ResizeObserver measures. */
+const PADDING_PX = 16;
+
 /** How long a transcript stays up. Shorter than a reply lingers: it is a
  * receipt, and the reply arriving behind it is the real answer. */
 const HEARD_MS = 4000;
@@ -94,6 +98,32 @@ export default function Overlay() {
     return () => clearTimeout(timer);
   }, [said]);
 
+  // How tall she needs to be, reported to the shell so the window can grow to
+  // fit. The window is a fixed rectangle otherwise, and a long reply was being
+  // cut off by its bottom edge with no way to read the rest.
+  //
+  // Measured off an inner box rather than the page: the outer one is h-screen
+  // and would only ever report the height it already has. A ResizeObserver
+  // rather than an effect on the text, because wrapping happens after layout
+  // and the height is not knowable from the string.
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+
+    // The last height sent, so a reflow that changes nothing stays silent.
+    let sent = 0;
+    const observer = new ResizeObserver(() => {
+      const height = Math.ceil(element.getBoundingClientRect().height) + PADDING_PX;
+      if (Math.abs(height - sent) < 2) return;
+      sent = height;
+      postToShell({ type: "resize", height });
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <>
       {/* In the markup rather than in an effect, so it is in the prerendered
@@ -102,82 +132,86 @@ export default function Overlay() {
           whatever is behind it, which is nothing. */}
       <style>{`html, body { background: transparent !important; }`}</style>
 
-      <div className="flex h-screen w-screen select-none flex-col items-center justify-end gap-2 overflow-hidden p-2">
-        {(fresh || speaking) && said && (
-          <p className="max-h-40 max-w-xs overflow-hidden rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
-            {said}
-          </p>
-        )}
+      <div className="flex h-screen w-screen select-none flex-col items-center justify-end overflow-hidden p-2">
+        <div ref={box} className="flex flex-col items-center gap-2">
+          {(fresh || speaking) && said && (
+            /* No max height and nothing hidden: the window is what grows now,
+               and a bubble that clipped itself first would make that pointless. */
+            <p className="max-w-xs rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
+              {said}
+            </p>
+          )}
 
-        {/* The whole face is the handle: click to open the conversation, drag
-            to move her. Pointer events only arrive when the shell has made the
-            window interactable -- otherwise they pass through to whatever is
-            behind her -- so there is no state to check here and no disabled
-            styling to get wrong.
+          {/* The whole face is the handle: click to open the conversation, drag
+              to move her. Pointer events only arrive when the shell has made the
+              window interactable -- otherwise they pass through to whatever is
+              behind her -- so there is no state to check here and no disabled
+              styling to get wrong.
 
-            The two gestures are told apart by distance rather than by button,
-            because both are things a person expects the left button to do.
-            Once the drag is handed over, the OS move loop owns the rest of the
-            gesture and no click event follows it, which is exactly the
-            either/or that is wanted.
+              The two gestures are told apart by distance rather than by button,
+              because both are things a person expects the left button to do.
+              Once the drag is handed over, the OS move loop owns the rest of the
+              gesture and no click event follows it, which is exactly the
+              either/or that is wanted.
 
-            Interactable is drawn loudly. It is a mode with no other feedback,
-            toggled by a key pressed somewhere else entirely, and a watermark
-            that starts eating clicks without saying so is indistinguishable
-            from a broken one -- so it gets a ring, a glow and a line of text
-            rather than the two tenths of opacity it used to get. */}
-        <button
-          type="button"
-          onPointerDown={(e) => setDrag({ x: e.clientX, y: e.clientY })}
-          onPointerMove={(e) => {
-            if (!drag) return;
-            if (Math.abs(e.clientX - drag.x) < DRAG_SLOP && Math.abs(e.clientY - drag.y) < DRAG_SLOP) return;
-            setDrag(undefined);
-            postToShell({ type: "drag" });
-          }}
-          onPointerUp={() => setDrag(undefined)}
-          onClick={() => {
-            // The same gesture buys the speech permission, which a shell
-            // launched with an autoplay override will already have.
-            unlock();
-            postToShell({ type: "session" });
-          }}
-          aria-label="Open the conversation"
-          className={`rounded-full transition-all ${
-            state.interactable
-              ? "cursor-grab opacity-100 ring-2 ring-sky-400/80 shadow-[0_0_24px_rgba(56,189,248,0.45)]"
-              : "opacity-80"
-          }`}
-        >
-          <Avatar
-            expression={face || (turn?.impulse?.expression ?? "neutral")}
-            speaking={speaking}
-            level={vitals.level.level}
-            vigor={0.5 + vitals.energy.fraction}
-            levelledUp={levelledUp}
-            shell={vitals.tier.isLocal}
-          />
-        </button>
-
-        {state.listening ? (
-          <p className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
-            Listening…
-          </p>
-        ) : heard ? (
-          /* Quieter than the reply bubble and in the place the status pill
-             uses, because it is the same kind of thing: a note about the
-             machinery, not something Morrow said. */
-          <p
-            className="max-w-xs truncate rounded-full bg-neutral-800/85 px-3 py-1 text-xs italic text-neutral-200 shadow"
-            role="status"
+              Interactable is drawn loudly. It is a mode with no other feedback,
+              toggled by a key pressed somewhere else entirely, and a watermark
+              that starts eating clicks without saying so is indistinguishable
+              from a broken one -- so it gets a ring, a glow and a line of text
+              rather than the two tenths of opacity it used to get. */}
+          <button
+            type="button"
+            onPointerDown={(e) => setDrag({ x: e.clientX, y: e.clientY })}
+            onPointerMove={(e) => {
+              if (!drag) return;
+              if (Math.abs(e.clientX - drag.x) < DRAG_SLOP && Math.abs(e.clientY - drag.y) < DRAG_SLOP) return;
+              setDrag(undefined);
+              postToShell({ type: "drag" });
+            }}
+            onPointerUp={() => setDrag(undefined)}
+            onClick={() => {
+              // The same gesture buys the speech permission, which a shell
+              // launched with an autoplay override will already have.
+              unlock();
+              postToShell({ type: "session" });
+            }}
+            aria-label="Open the conversation"
+            className={`rounded-full transition-all ${
+              state.interactable
+                ? "cursor-grab opacity-100 ring-2 ring-sky-400/80 shadow-[0_0_24px_rgba(56,189,248,0.45)]"
+                : "opacity-80"
+            }`}
           >
-            {heard}
-          </p>
-        ) : state.interactable ? (
-          <p className="rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
-            Click to open · drag to move
-          </p>
-        ) : null}
+            <Avatar
+              expression={face || (turn?.impulse?.expression ?? "neutral")}
+              speaking={speaking}
+              level={vitals.level.level}
+              vigor={0.5 + vitals.energy.fraction}
+              levelledUp={levelledUp}
+              shell={vitals.tier.isLocal}
+            />
+          </button>
+
+          {state.listening ? (
+            <p className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
+              Listening…
+            </p>
+          ) : heard ? (
+            /* Quieter than the reply bubble and in the place the status pill
+               uses, because it is the same kind of thing: a note about the
+               machinery, not something Morrow said. */
+            <p
+              className="max-w-xs truncate rounded-full bg-neutral-800/85 px-3 py-1 text-xs italic text-neutral-200 shadow"
+              role="status"
+            >
+              {heard}
+            </p>
+          ) : state.interactable ? (
+            <p className="rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
+              Click to open · drag to move
+            </p>
+          ) : null}
+        </div>
       </div>
     </>
   );

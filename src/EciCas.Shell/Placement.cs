@@ -17,11 +17,17 @@ internal sealed record Placement(double Left, double Top)
 {
     private static string Path => System.IO.Path.Combine(AppContext.BaseDirectory, "overlay.json");
 
-    public static void Save(Window window)
+    /// <summary>
+    /// Remembers where she rests. The top edge is passed in rather than read
+    /// off the window because the window may be taller than its resting height
+    /// at the moment it is dragged -- it grows upward to fit a long reply --
+    /// and the corner worth remembering is the one she returns to.
+    /// </summary>
+    public static void Save(Window window, double top)
     {
         try
         {
-            File.WriteAllText(Path, JsonSerializer.Serialize(new Placement(window.Left, window.Top)));
+            File.WriteAllText(Path, JsonSerializer.Serialize(new Placement(window.Left, top)));
         }
         catch (Exception)
         {

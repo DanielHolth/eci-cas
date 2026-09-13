@@ -37,8 +37,16 @@ export interface ShellState {
  * hands the rest of a gesture already in progress to the OS move loop, which
  * is the only way a window whose whole surface is a browser control can be
  * dragged by its content.
+ *
+ * `resize` is the page telling the shell how tall it has become. Only the page
+ * can know: the reply is however long the reply is, and CSS is what wraps it.
+ * The shell keeps her bottom edge where it is and grows upward, because she
+ * rests in a corner and the face is the part that should not move.
  */
-export type PageMessage = { type: "session" } | { type: "drag" };
+export type PageMessage =
+  | { type: "session" }
+  | { type: "drag" }
+  | { type: "resize"; height: number };
 
 interface WebView {
   postMessage(message: unknown): void;
