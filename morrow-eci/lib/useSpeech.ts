@@ -29,7 +29,7 @@ const VOICE_STORAGE_KEY = "morrow.voiceURI";
  * Says every reply aloud, in the order the replies arrived.
  *
  * **Why a queue and not a call per turn.** Reflection pushes its own ideas
- * back onto perception (lib/useEciStream.ts), so the persona can conclude two
+ * back onto perception (lib/turns.ts), so the persona can conclude two
  * turns without a person typing between them. Speaking each one as it lands
  * would have the second cut the first off mid-sentence -- browsers cancel the
  * current utterance when a new one is spoken with `cancel`, and queue it only
@@ -42,11 +42,20 @@ const VOICE_STORAGE_KEY = "morrow.voiceURI";
  * the same string, and the same reply is re-delivered on every later envelope
  * of the same turn.
  *
- * **The backlog is never spoken.** Whatever is already on screen when this
- * mounts is marked as said. A remount of Conversation means a
- * remount that read twenty turns aloud would be a worse bug than silence.
+ * **The backlog is never spoken.** Whatever is on screen the moment the feed
+ * has caught up is marked as said. That moment is `ready`, not mount: the
+ * turn log replays the session so far a tick after this mounts, and a window
+ * opened five turns in that read those five replies aloud would be a worse
+ * bug than silence.
+ *
+ * **`enabled` is how two surfaces share one voice.** The overlay owns the
+ * audio; the session window it opens is mute. Both still track what has been
+ * said, so unmuting mid-session does not flush a backlog.
  */
-export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
+export function useSpeech(
+  turns: TurnEvent[],
+  { enabled = true, ready = true }: { enabled?: boolean; ready?: boolean } = {},
+): SpeechState {
   const [speaking, setSpeaking] = useState(false);
 
   const said = useRef<Set<string>>(new Set());
@@ -123,7 +132,7 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
   // Marking the backlog has to happen before the first drain, and it has to
   // happen once -- doing it in the queueing effect would also swallow the
   // first real reply when it arrives in the same commit.
-  if (!primed.current) {
+  if (!primed.current && ready) {
     primed.current = true;
     for (const turn of turns) {
       if (turn.output?.text) {
@@ -190,6 +199,10 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
   );
 
   useEffect(() => {
+    // Before the replay lands there is no way to tell the session so far from
+    // a session where nothing has happened, and the two want opposite things.
+    if (!ready) return;
+
     for (const turn of turns) {
       const text = turn.output?.text;
       if (!text || said.current.has(turn.turnId)) {
@@ -204,7 +217,7 @@ export function useSpeech(turns: TurnEvent[], enabled = true): SpeechState {
     if (enabled && !busy.current && queue.current.length > 0) {
       drain();
     }
-  }, [turns, enabled, drain]);
+  }, [turns, enabled, ready, drain]);
 
   // Leaving an utterance in flight would go on talking over the next view,
   // since speechSynthesis is a window-wide singleton and outlives this mount.

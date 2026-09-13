@@ -1,0 +1,19 @@
+<Window x:Class="EciCas.Shell.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        x:ClassModifier="internal"
+        Title="Morrow"
+        AllowsTransparency="True"
+        WindowStyle="None"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Focusable="False"
+        UseLayoutRounding="True">
+    <!-- DefaultBackgroundColor, not a CSS trick: the page paints transparent
+         (see app/overlay/page.tsx) and this is what lets the composited result
+         through to the desktop instead of onto white. -->
+    <wv2:WebView2 x:Name="View" DefaultBackgroundColor="Transparent" />
+</Window>

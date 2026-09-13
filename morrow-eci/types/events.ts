@@ -8,18 +8,8 @@
 /** Impulse's fixed, closed expression vocabulary. */
 export type Expression = "angry" | "scared" | "sad" | "warm" | "alert" | "neutral";
 
-/** The three advisory agents whose findings feed Governance's bundle
- * (Impulse's own advisory isn't shown here — it drives Avatar directly). */
-export type BundleAgent = "librarian" | "recall" | "identity" | "hindsight";
-
 /** Security's verdict vocabulary (src/EciCas.Agents/Security). */
 export type Verdict = "green" | "yellow" | "red";
-
-/** A single terse keyword-style finding from one of the bundle agents. */
-export interface BundleFinding {
-  agent: BundleAgent;
-  text: string;
-}
 
 /** Impulse's live reflex line + the expression it maps to. */
 export interface ImpulseState {
@@ -43,51 +33,20 @@ export interface IntentOutput {
   degraded?: boolean;
 }
 
-/** A consolidation epoch surfaced as the clickable "+" doodle. `acknowledged`
- * tracks the dedup rule client-side for this mock — the real dedup lives in
- * Archivist (M4, not built yet). */
-export interface ConsolidationEpoch {
-  epochId: string;
-  summary: string;
-  acknowledged: boolean;
-}
-
 /** One full conversational turn, staged the way the UI sequences it on
- * screen: thinking -> (optional security loop) -> speaking -> done, the last
- * set when Governance concludes the event.
- * `impulse`/`output` start undefined and fill in as envelopes arrive live —
- * see lib/useEciStream.ts, which is what actually produces these now. */
+ * screen: thinking -> (optional security flag) -> done, the last set when the
+ * reply lands. Everything here is read off one TurnRecord -- see
+ * lib/turns.ts, which is the only thing that produces these. */
 export interface TurnEvent {
   turnId: string;
-  stage: "thinking" | "verdict" | "speaking" | "done";
-  /** What the person actually said — echoed back so a turn on screen is a
-   * exchange, not a reply with no question. */
+  stage: "thinking" | "verdict" | "done";
+  /** What the person actually said — echoed back so a turn on screen is an
+   * exchange, not a reply with no question. Absent on a turn the persona
+   * started itself, which is a thought and not something anyone said. */
   input?: string;
   impulse?: ImpulseState;
-  bundle: BundleFinding[];
   security: SecurityOutcome[];
   output?: IntentOutput;
-  epoch?: ConsolidationEpoch;
-  /** The persona pushed one of its own ideas back onto perception. The text
-   * is its thought, not something a person said, and must never be drawn as
-   * an utterance. */
-  selfTriggered?: boolean;
-  idea?: string;
-}
-
-/**
- * Wire shape from GET /api/stream (src/EciCas.Host/EnvelopeDto.cs) — one SSE
- * `data:` line per bus envelope, every topic, unfiltered (Topics.All).
- */
-export interface RawEnvelope {
-  eventId: string;
-  correlationId: string;
-  topic: string;
-  publishedBy: string;
-  timestamp: string;
-  severity: "restful" | "neutral" | "elevated" | "critical";
-  generation: number;
-  meta: Record<string, unknown>;
 }
 
 /** One substrate call as the host reports it. `tokens`/`cost` are null when
@@ -125,12 +84,18 @@ export interface TurnRecord {
   perception: string | null;
   selfTriggered: boolean;
   impulse: string | null;
+  /** Which of Impulse's six words this turn wore, re-read from Governance's
+   * action when a block moved it. The one thing a surface cannot re-derive
+   * from the text, which is why the host carries it. */
+  expression: string | null;
   reads: string[];
-  pairs: string[];
   hindsight: string[];
   intent: string | null;
   verdict: string | null;
   concern: string | null;
+  /** Governance answered with a substrate missing. The reply already says so
+   * in words; this is the slot the visual half reads. */
+  degraded: boolean;
   writes: string[];
   /** Archive id per entry in `writes`, same order. Empty on a turn logged
    * before ids were carried — that row can be read but not corrected. */

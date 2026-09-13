@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...and this one is opted in: a port, not a secret, and `next dev` is broken
+# without it now that the production default is same-origin.
+!.env.development
 
 # vercel
 .vercel

@@ -1,10 +1,15 @@
 /**
- * Talks to the real EciCas.Host surface (M5) — see src/EciCas.Host/Program.cs
- * for /api/perceive and /api/stream. Base URL is overridable via
- * NEXT_PUBLIC_ECI_API_BASE for anyone not running the host on its
- * appsettings.json default (http://localhost:5179).
+ * Talks to the real EciCas.Host surface -- see src/EciCas.Host/Endpoints for
+ * /api/perceive, /api/log and the rest.
+ *
+ * Empty by default, which means same origin. That is the shipped shape: the
+ * host process serves the exported client at its own root, so every call
+ * below is a relative one and there is no port, no CORS and no origin to get
+ * wrong on someone else's machine. `next dev` is the case that needs an
+ * absolute base, because there the client is on :3000 and the host is not --
+ * see .env.development.
  */
-export const API_BASE = process.env.NEXT_PUBLIC_ECI_API_BASE ?? "http://localhost:5179";
+export const API_BASE = process.env.NEXT_PUBLIC_ECI_API_BASE ?? "";
 
 export async function sendPerceive(text: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/perceive`, {

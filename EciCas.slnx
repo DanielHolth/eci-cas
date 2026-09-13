@@ -4,6 +4,7 @@
     <Project Path="src/EciCas.Bus/EciCas.Bus.csproj" />
     <Project Path="src/EciCas.Core/EciCas.Core.csproj" />
     <Project Path="src/EciCas.Host/EciCas.Host.csproj" />
+    <Project Path="src/EciCas.Shell/EciCas.Shell.csproj" />
     <Project Path="src/EciCas.Substrates/EciCas.Substrates.csproj" />
   </Folder>
   <Folder Name="/tools/">

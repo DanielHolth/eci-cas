@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { SecurityIcon } from "@/components/SecurityIcon";
 import { Transcript } from "@/components/Transcript";
@@ -8,11 +8,11 @@ import { EventLog } from "@/components/EventLog";
 import { ThoughtsPanel, reflectionCount } from "@/components/ThoughtsPanel";
 import { AccountChip } from "@/components/AccountChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useEciStream } from "@/lib/useEciStream";
 import { usePersona } from "@/lib/usePersona";
 import { useSpeech } from "@/lib/useSpeech";
 import { greeting } from "@/lib/greeting";
 import { useTurnLog } from "@/lib/useTurnLog";
+import { turnsFromRecords } from "@/lib/turns";
 import { usePerceptionLimit } from "@/lib/usePerceptionLimit";
 import { useVitals } from "@/lib/useVitals";
 import { EnergyMeter, LOCAL_LINE, TIRED_LINE } from "@/components/EnergyMeter";
@@ -30,23 +30,31 @@ const MOOD_FACE: Record<string, Expression> = {
   Ecstatic: "alert",
 };
 
-/** The live view of the persona. */
-export function Conversation({ account, onEdit }: { account: Account; onEdit: () => void }) {
-  const { turns, connected } = useEciStream();
-  const log = useTurnLog();
+/** The live view of the persona.
+ *
+ * `mute` is how two surfaces share one voice: the desktop overlay owns the
+ * audio and opens this window muted, while a plain browser tab -- the only
+ * surface there is -- speaks. See lib/useSpeech.ts.
+ */
+export function Conversation({ account, onEdit, mute = false }: { account: Account; onEdit: () => void; mute?: boolean }) {
+  // One feed. The records replay, so everything below -- the drawer, the
+  // thoughts, and the conversation itself -- is the session so far and not
+  // just the part of it this window happened to be open for.
+  const { records, connected, replayed } = useTurnLog();
+  const turns = useMemo(() => turnsFromRecords(records), [records]);
 
   // A rename is an ordinary archive write, so nothing pushes it. Re-reading
   // once a turn has settled is the cheapest correct trigger: settling is
   // exactly the point at which Archivist has finished writing.
-  const persona = usePersona(log.length);
+  const persona = usePersona(records.length);
 
   // What the host will actually accept. Null until the first fetch answers,
   // which leaves the field unbounded for that instant rather than guessing a
   // number and contradicting the host.
-  const limit = usePerceptionLimit(log.length);
+  const limit = usePerceptionLimit(records.length);
   // Same revision as the persona card: energy is spent and XP earned by a
   // turn, so a settled turn is the only moment either can have moved.
-  const { vitals, levelledUp } = useVitals(log.length);
+  const { vitals, levelledUp } = useVitals(records.length);
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -67,12 +75,12 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
   // panel is open the badge stays at zero outright: the user is already
   // looking at the content, so there is nothing "unseen" to flag.
   const [seenReflections, setSeenReflections] = useState(0);
-  const unseenReflections = thoughtsOpen ? 0 : Math.max(0, reflectionCount(log) - seenReflections);
+  const unseenReflections = thoughtsOpen ? 0 : Math.max(0, reflectionCount(records) - seenReflections);
 
   function toggleThoughts() {
     // Both writes happen on the click, not inside an updater: a state updater
     // has to stay pure, and StrictMode runs it twice to prove it.
-    setSeenReflections(reflectionCount(log));
+    setSeenReflections(reflectionCount(records));
     setThoughtsOpen((v) => !v);
   }
 
@@ -86,7 +94,7 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
   // self-triggered turn can conclude while the previous reply is still being
   // spoken, and the mouth has to run on the utterance that is actually in
   // flight rather than on whichever turn happens to be last in the array.
-  const { speaking, say, unlock, voices, voiceURI, setVoiceURI } = useSpeech(turns);
+  const { speaking, say, unlock, voices, voiceURI, setVoiceURI } = useSpeech(turns, { enabled: !mute, ready: replayed });
 
   // Composed on the client, never during render: the greeting reads the
   // clock, and a server render three hours off would hydrate into a
@@ -173,7 +181,7 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
   return (
     <div className="flex h-screen">
       {thoughtsOpen && (
-        <ThoughtsPanel records={log} onClose={() => setThoughtsOpen(false)} onOpen={openInLog} />
+        <ThoughtsPanel records={records} onClose={() => setThoughtsOpen(false)} onOpen={openInLog} />
       )}
 
       <main className="flex flex-1 min-w-0 flex-col items-center overflow-hidden bg-neutral-50 p-4 dark:bg-neutral-950">
@@ -209,7 +217,11 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
               </h1>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 ECI · {connected ? "Live" : "Disconnected"} ·{" "}
-                {turn ? <span className="font-mono">{turn.stage}</span> : "waiting for a first thought"}
+                {turn ? (
+                  <span className="font-mono">{speaking ? "speaking" : turn.stage}</span>
+                ) : (
+                  "waiting for a first thought"
+                )}
                 {" · "}
                 {turn?.impulse?.reflex ?? "At rest."}
               </p>
@@ -294,9 +306,10 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
             </p>
           )}
 
-          {turn && (turn.stage === "verdict" || turn.stage === "speaking") && turn.security.length > 0 && (
-            <SecurityIcon outcomes={turn.security} />
-          )}
+          {/* No stage gate: the record carries only a flagged verdict, and
+              SecurityIcon draws nothing for a green one, so the presence of
+              an outcome is the whole condition. */}
+          {turn && turn.security.length > 0 && <SecurityIcon outcomes={turn.security} />}
 
           {turns.length === 0 && hello && (
             <p className="max-w-prose px-4 py-6 text-center text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
@@ -350,7 +363,7 @@ export function Conversation({ account, onEdit }: { account: Account; onEdit: ()
 
       {logOpen && (
         <EventLog
-          records={log}
+          records={records}
           openCorrelationId={opened?.correlationId}
           openSignal={opened?.signal}
           onClose={() => setLogOpen(false)}

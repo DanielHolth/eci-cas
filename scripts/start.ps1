@@ -1,19 +1,24 @@
 <#
 .SYNOPSIS
-Starts everything the swarm needs, in windows of their own, and opens the UI.
+Starts everything Morrow needs and leaves her in the corner of the screen.
 
 .DESCRIPTION
-Four moving parts and none of them depends on the others being up first:
-llama-server, the host on :5179, the Next.js surface on :3000, and a browser
-pointed at it. The host and the surface each retry the other, so the order
-here is convenience, not a protocol.
+The shipped shape is one window that is not a window: the desktop shell hosts
+the swarm in-process, serves the exported client at its own origin, and draws
+Morrow as a click-through watermark. Clicking her when she is interactable
+opens the full session in a second window. There is no browser and no second
+server in this shape, which is the point -- it is what a person installs.
 
-llama-server starts on every tier, including the paid ones that will never
-call it. The tier a session boots on is not the tier it will be running on:
-the dropdown swaps tiers live, and an empty energy meter swaps itself to the
-all-local tier without asking anyone. A resident model costs idle VRAM; a
-model that is not there costs the turn that goes looking for it, which is
-the turn where the meter just ran out. -NoLlm gets the VRAM back.
+-Dev is the other shape, and the one to develop the client in: the console
+host in one window, `next dev` in another, and a browser tab. Hot reload,
+cross-origin, a REPL to type at.
+
+llama-server starts in both, on every tier, including the paid ones that will
+never call it. The tier a session boots on is not the tier it will be running
+on: the dropdown swaps tiers live, and an empty energy meter swaps itself to
+the all-local tier without asking anyone. A resident model costs idle VRAM; a
+model that is not there costs the turn that goes looking for it, which is the
+turn where the meter just ran out. -NoLlm gets the VRAM back.
 
 Each server gets its own window on purpose. They run until you close them,
 they print the output worth reading, and Ctrl-C in one does not take the
@@ -22,38 +27,45 @@ others down with it.
 What this does NOT do is install anything heavy. Missing weights, a missing
 llama-server and a missing API key are reported with the one command that
 fixes each -- a launcher that silently downloads 2.7GB is a launcher nobody
-trusts.
+trusts. The client export is the one thing it will build for you, because
+that is this repo's own source compiled with tools already on the machine,
+and the shell without it is a blank rectangle.
 
 Deliberately ASCII-only: powershell.exe reads a UTF-8 script as ANSI, and an
 em dash arrives as mojibake in the one output someone is reading for help.
 
 .EXAMPLE
 ./scripts/start.ps1
-Pro tier: llama-server, host, surface, browser.
+Pro tier: llama-server, then Morrow in the corner.
+
+.EXAMPLE
+./scripts/start.ps1 -Dev
+Console host, `next dev`, browser. The client development loop.
 
 .EXAMPLE
 ./scripts/start.ps1 -Tier Pro -NoLlm
 The same without the local model. Saves the VRAM and gives up the landing
 place: an empty meter drops to Free, and Free has nowhere to go.
-
-.EXAMPLE
-./scripts/start.ps1 -Tier Mock -NoBrowser
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Free', 'Budget', 'Pro', 'Premium', 'Mock')]
     [string]$Tier = 'Pro',
 
-    # Where the host listens, and where the surface does. Changing these
+    # Where the host listens, and where the dev surface does. Changing these
     # means changing appsettings too; they are parameters so a second
     # instance can be brought up beside a running one.
     [int]$Port = 5179,
     [int]$UiPort = 3000,
     [int]$LlmPort = 8080,
 
-    # Leave a part out. -NoUi implies no browser: there would be nothing to
-    # open.
+    # Leave the local model out.
     [switch]$NoLlm,
+
+    # The development shape instead of the shipped one: console host, dev
+    # server, browser. -NoUi and -NoBrowser refine it and mean nothing
+    # without it -- the shell has no separate UI process to leave out.
+    [switch]$Dev,
     [switch]$NoUi,
     [switch]$NoBrowser,
 
@@ -64,6 +76,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
+$ui = Join-Path $repo 'morrow-eci'
 
 # A port test that answers in milliseconds. Test-NetConnection takes seconds
 # to decide a closed port is closed, and this runs up to five times.
@@ -189,21 +202,69 @@ if ($NoLlm) {
     }
 }
 
-# ---- host --------------------------------------------------------------
+# ---- the one port both shapes want --------------------------------------
+#
+# Only one process may hold the archive directory, so this is a stop, not a
+# warning: a second host would fail on the parquet files anyway. The shell
+# counts here too -- it is the same host with a window around it, listening
+# on the same port.
 if (Test-Port $Port) {
-    # Only one process may hold the archive directory, so this is a stop,
-    # not a warning: a second host would fail on the parquet files anyway.
     Write-Host "something is already listening on :$Port. Close that host first."
     exit 1
 }
 
+if (-not $Dev) {
+    # ---- shipped shape: the shell ---------------------------------------
+    #
+    # The exported client is the shell's whole surface: it serves out/ at its
+    # own origin, so a missing export is a transparent window with nothing in
+    # it. Built here rather than reported, because unlike the weights and the
+    # keys this is our own source built with tools already on the machine --
+    # but not rebuilt every launch, which would put a minute in front of
+    # every start for a directory that is usually current. After a client
+    # change, `npm run build` in morrow-eci.
+    if (-not (Test-Path (Join-Path $ui 'out/index.html'))) {
+        if (-not (Test-Path (Join-Path $ui 'node_modules'))) {
+            Write-Host 'morrow-eci has no node_modules, so there is no client to serve.'
+            Write-Host '  cd morrow-eci; npm install; npm run build'
+            exit 1
+        }
+        if ($WhatIfOnly) {
+            Write-Host 'would export the client (morrow-eci: npm run build)'
+        } else {
+            Write-Host 'exporting the client once; this takes a minute'
+            # build.cmd rather than npm directly, for the same reason dev.cmd
+            # exists: it puts nodejs on PATH first.
+            & (Join-Path $ui 'build.cmd')
+            if (-not (Test-Path (Join-Path $ui 'out/index.html'))) {
+                Write-Host 'the export did not produce morrow-eci/out. Fix that, then start again.'
+                exit 1
+            }
+        }
+    }
+
+    Start-Window -Title "Morrow ($Tier)" -WorkingDirectory $repo `
+        -Command "dotnet run --project src/EciCas.Shell -- --Tier=$Tier"
+
+    if ($WhatIfOnly) { return }
+
+    # The shell draws nothing until the host inside it is up and warm, which
+    # on a cold build is a long quiet minute. Waiting here means this window
+    # is what says she has arrived, rather than leaving someone watching an
+    # empty desktop.
+    Wait-Port -Number $Port -What 'Morrow' | Out-Null
+
+    Write-Host ''
+    Write-Host 'Up. Morrow is in the corner: hold - to talk, Shift+| to make her'
+    Write-Host 'clickable, then click her for the full session. Quit from the tray.'
+    return
+}
+
+# ---- development shape: host, dev server, browser -----------------------
 Start-Window -Title "eci-cas host ($Tier)" -WorkingDirectory $repo `
     -Command "dotnet run --project src/EciCas.Host -- --Tier=$Tier"
 
-# ---- surface -----------------------------------------------------------
 if (-not $NoUi) {
-    $ui = Join-Path $repo 'morrow-eci'
-
     if (Test-Port $UiPort) {
         # Still opened below: a surface left running is the one to point at.
         Write-Host "surface already answering on :$UiPort; leaving it alone"
@@ -221,8 +282,6 @@ if (-not $NoUi) {
 
 if ($WhatIfOnly) { return }
 
-# ---- wait, then open ---------------------------------------------------
-#
 # The host first: it is the slow one on a cold build, and a browser opened
 # before it answers shows an empty transcript that only a reload fixes.
 Wait-Port -Number $Port -What 'host' | Out-Null

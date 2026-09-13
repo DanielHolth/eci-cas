@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <UseWPF>true</UseWPF>
+
+    <!-- For NotifyIcon and nothing else. WPF has no tray icon of its own and
+         a third-party package for one line of API is a worse trade than the
+         WinForms reference, which is already in the shared runtime. -->
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <ApplicationIcon></ApplicationIcon>
+    <AssemblyName>Morrow</AssemblyName>
+    <RootNamespace>EciCas.Shell</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The whole substrate, by reference. The shell adds a window; it does
+         not add a second copy of anything the console host does. -->
+    <ProjectReference Include="..\EciCas.Host\EciCas.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <!-- The exported client, copied in beside the exe so one process serves both
+       halves of the product. A target rather than a glob because `out/` is a
+       build artifact of another toolchain: it may not exist when this project
+       is evaluated, and a glob read at evaluation time would then be empty
+       until someone reloaded the solution.
+
+       Absent is a supported state, not a failure: `dotnet run` during
+       development uses `next dev` on its own port, and HostSurface treats a
+       missing client directory as "not serving one". -->
+  <Target Name="CopyExportedClient" AfterTargets="Build">
+    <ItemGroup>
+      <ExportedClient Include="$(MSBuildThisFileDirectory)..\..\morrow-eci\out\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ExportedClient)"
+          DestinationFolder="$(OutDir)client\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+    <Message Importance="high" Condition="'@(ExportedClient)' == ''"
+             Text="EciCas.Shell: no exported client in morrow-eci/out. Run `npm run build` there, or use `next dev` and open the browser." />
+  </Target>
+
+</Project>

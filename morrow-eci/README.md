@@ -11,15 +11,48 @@ npm run dev
 ```
 
 Needs `EciCas.Host` on `http://localhost:5179` (`dotnet run --project
-../src/EciCas.Host`); override with `NEXT_PUBLIC_ECI_API_BASE`. Bare like
-that the host runs the free mock tier and every reply is an echo of its
-prompt — add `-- --Tier=Pro` plus vendor keys for real ones.
+../src/EciCas.Host`). Bare like that the host runs the free mock tier and
+every reply is an echo of its prompt — add `-- --Tier=Pro` plus vendor keys
+for real ones.
+
+`API_BASE` defaults to **same-origin**, because that is the shipped case: one
+process serves this app and the API, and there is no CORS to get wrong on
+someone else's machine. `.env.development` points `next dev` back at `:5179`
+and is the only reason that file is checked in — a port, not a secret.
+Override with `NEXT_PUBLIC_ECI_API_BASE`.
+
+```bash
+npm run build
+```
+
+Writes the static export to `out/` (`output: "export"`, `trailingSlash: true`
+so `/overlay/` is a directory ASP.NET can serve a default document from). The
+shell copies `out/` beside its exe at build time; nothing else consumes it.
 
 ## What it may do
 
 A **void observer**: it reads `events.*` over SSE and never publishes to the
 bus. The one sanctioned way in is `POST /api/perceive`, which is exactly
 what typing at the console REPL does. Keep future features inside that.
+
+## Two surfaces
+
+`/` is the conversation: three columns, everything below. `/overlay/` is the
+same session as a **watermark** — the avatar alone on a transparent page, for
+the desktop shell to host in a click-through window. It reuses `Avatar`,
+`useTurnLog`, `useVitals` and `useSpeech` and adds no state of its own beyond
+a linger timer for the last reply.
+
+The overlay is the surface that **speaks**; the window the shell opens for
+`/` is loaded as `?mute=1` so one voice does not become two. A plain browser
+tab has no query string and speaks, as before.
+
+`lib/shell.ts` is the entire channel between page and shell, feature-detected
+on `window.chrome.webview` so `/overlay/` still opens in an ordinary browser:
+the shell posts `{listening, interactable}` in, the page posts `{type:
+"session"}` (open the conversation) and `{type: "drag"}` (past 4px of pointer
+travel — the OS move loop takes the rest of the gesture, so no click follows)
+out.
 
 ## Layout
 
@@ -76,4 +109,7 @@ and Governance forwards it on the action, which is fresher on a block.
 - **Thought colours** — Recall orange, Archivist emerald, Reflection indigo
   are inherited placeholders. The drawer prints the same agent lines the
   console does, so there is a palette to pin them to.
-- **Web vs. desktop shell** — still open; this is a plain web app.
+- **Dictation.** The shell's voice hotkey drives the overlay's listening
+  state and nothing transcribes yet: there is no speech-to-text in the repo.
+  The seam is named in `App.xaml.cs` — on key release, POST the transcript to
+  `/api/perceive`, the same call this composer makes.

@@ -15,11 +15,20 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [editing, setEditing] = useState(false);
 
+  // Whether something else is already doing the talking. The desktop shell
+  // opens this window as ?mute=1 because the overlay owns the voice; a plain
+  // browser tab has no query string and speaks. Read here rather than in
+  // Conversation so there is one place that knows the URL is a surface
+  // decision -- see lib/useSpeech.ts.
+  const [mute, setMute] = useState(false);
+
   useEffect(() => {
     // localStorage is not there during the server render, so the first paint
-    // has to happen before the answer is known.
+    // has to happen before the answer is known. Same for the query string:
+    // the export is prerendered once, at build time, without one.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccount(readAccount());
+    setMute(new URLSearchParams(window.location.search).has("mute"));
     setReady(true);
   }, []);
 
@@ -43,5 +52,5 @@ export default function Home() {
     );
   }
 
-  return <Conversation account={account} onEdit={() => setEditing(true)} />;
+  return <Conversation account={account} onEdit={() => setEditing(true)} mute={mute} />;
 }

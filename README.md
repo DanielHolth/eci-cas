@@ -38,6 +38,7 @@ src/EciCas.Bus/         ChannelBus, AgentBase
 src/EciCas.Agents/      faculties; Utterances/ is the fact store
 src/EciCas.Substrates/  model providers (mock + OpenAI-compatible)
 src/EciCas.Host/        wiring, HTTP/SSE, tier configs, instructions/
+src/EciCas.Shell/       the desktop app: overlay watermark + session window
 src/EciCas.ArchiveTool/ REPL over the archive
 tests/EciCas.Tests/     xUnit
 morrow-eci/             Next.js UI
@@ -49,22 +50,41 @@ morrow-eci/             Next.js UI
 ./start.cmd -Tier Pro
 ```
 
-Starts llama-server, the host on `:5179` and the UI on `:3000`, then opens the
-browser. `-WhatIfOnly`, `-NoUi`, `-NoLlm`, `-NoBrowser`,
-`-Port`/`-UiPort`/`-LlmPort`.
+Starts llama-server, then Morrow herself: one process (`src/EciCas.Shell`,
+built as `Morrow.exe`) that hosts the swarm on `:5179`, serves the exported
+client at its own origin, and draws a click-through watermark in the corner
+of the screen. Hold `-` to talk, `Shift+|` to make her clickable, then click
+her for the full session in a second window; quit from the tray. The client
+export is built once if `morrow-eci/out` is missing.
+
+```powershell
+./start.cmd -Tier Pro -Dev
+```
+
+The development shape instead: console host in one window, `next dev` in
+another, browser tab on `:3000`. Hot reload and a REPL to type at.
+`-WhatIfOnly`, `-NoLlm`, `-Port`/`-UiPort`/`-LlmPort` apply to both;
+`-NoUi`/`-NoBrowser` only to `-Dev`.
 
 llama-server starts on every tier, not only the local ones: the dropdown swaps
 tiers live and an empty energy meter swaps itself to Free unasked, so the boot
 tier does not decide what the session will need. It is skipped silently if
 `models/local/` is empty — a launch never downloads weights.
 
+The hotkeys are `RegisterHotKey` combinations, not a keyboard hook, so they
+are invisible to anti-cheat — but they are also desktop-wide: while Morrow
+runs, nothing else can type a bare `-`. Change or qualify them in the `Shell`
+section of `appsettings.json`.
+
 By hand:
 
 ```powershell
 $env:OPENAI_API_KEY  = "..."   # Default: Intent, extractor, picker, consolidator
 $env:MISTRAL_API_KEY = "..."   # Default: Reflection
-dotnet run --project src/EciCas.Host -- --Tier=Pro
-cd morrow-eci; npm install; npm run dev
+dotnet run --project src/EciCas.Host -- --Tier=Pro   # API only, on :5179
+cd morrow-eci; npm install; npm run dev              # dev surface on :3000
+cd morrow-eci; npm run build                         # the export the shell serves
+dotnet run --project src/EciCas.Shell -- --Tier=Pro  # the desktop app
 ```
 
 No keys: `--Tier=Mock` echoes prompts (machinery only); `--Tier=Free` runs

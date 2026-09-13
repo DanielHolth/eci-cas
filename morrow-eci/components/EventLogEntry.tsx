@@ -128,11 +128,6 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
             <Line agent={record.selfTriggered ? "Idea" : "Perception"}>{record.perception}</Line>
           )}
           {record.impulse && <Line agent="Impulse">{record.impulse}</Line>}
-          {record.pairs.map((pair, i) => (
-            <Line key={`pair-${i}`} agent={`Librarian-${i + 1}`}>
-              {pair}
-            </Line>
-          ))}
           {record.reads.map((read, i) => (
             <Line key={`read-${i}`} agent={`Recall-${i + 1}`}>
               {read}

@@ -760,17 +760,32 @@ phone is worst at.
 
 ### The shell
 
-- A thin WPF/WinForms window hosting **WebView2**, running the existing
-  ASP.NET Core host **in the same process**: one exe, one language, no
-  sidecar to supervise and no orphaned processes.
-- The client is already a single-page app — `app/` has one `page.tsx` and
-  no route handlers — so `output: 'export'` is the whole port.
-- Corner-sitting is the work: transparent always-on-top window,
-  click-through outside the character, per-monitor DPI, remembered corner,
-  tray icon, summon hotkey. Finite, fiddly, not architectural.
-- **The window that hosts it is not the window the person reads.** See *Two
-  surfaces, one session* — the watermark is the shell's own drawing surface,
-  and the exported client opens in a second WebView2 window on demand.
+Built: `src/EciCas.Shell`, shipped as `Morrow.exe`. `./start.cmd` launches it;
+`-Dev` gets the old console-host-plus-browser loop back.
+
+- A WPF window hosting **WebView2**, running the existing ASP.NET Core host
+  **in the same process** via `HostBoot.StartAsync` — one exe, one language,
+  no sidecar to supervise and no orphaned processes. `HostBoot` is the seam
+  the console REPL and the shell share; neither is the real front end.
+- The client is a single-page app, so `output: 'export'` was the whole port.
+  The shell passes `--Surface:ClientPath=client` and the host serves `out/`
+  at its own root — static files mapped before endpoints, so a file cannot
+  shadow a route, and the API is same-origin with no CORS in the shipped
+  path.
+- Corner-sitting was the work and is done: transparent always-on-top window,
+  click-through, remembered corner (`overlay.json` beside the exe, clamped
+  against the virtual screen), tray icon, hotkeys.
+- **Click-through needed every child HWND.** `WS_EX_TRANSPARENT` on the
+  top-level alone does nothing, because hit testing finds the deepest window
+  first and WebView2 nests two or three of its own. `ClickThrough` walks
+  `EnumChildWindows` and the overlay re-applies on `NavigationCompleted`,
+  once those children exist. Colour-keying was rejected: an anti-aliased
+  face would fringe.
+- **Drag and click are told apart by distance, not by button.** The page
+  posts `{type: "drag"}` once the pointer travels 4px with the button down
+  and `DragMove()` hands the rest of the gesture to the OS move loop, so no
+  click follows. Under 4px it is a click and opens the session.
+- **Open:** per-monitor DPI is untested on a mixed-DPI desktop.
 
 ### Two surfaces, one session
 
@@ -778,28 +793,35 @@ The desktop app is not a port of the client. Morrow is a **watermark** —
 semi-transparent, animated, sitting wherever the person put her — and the
 existing browser interface opens beside her on demand, unchanged. Nothing is
 reimplemented for the desktop, which is the point: one client, shown two
-ways.
+ways. Built as `/overlay/` plus `lib/shell.ts`.
 
 - **Most of the time she is only the watermark.** No chrome, no transcript,
   click-through everywhere except the character itself.
 - **`-` is push-to-talk. `|` toggles interactable.** Both through
-  `RegisterHotKey`, per *Voice while gaming* below.
+  `RegisterHotKey`, per *Voice while gaming* below. Config, in the `Shell`
+  section: a bare key is registered desktop-wide, so while Morrow runs
+  nothing else can type it, and whoever disagrees with that trade should be
+  able to change it without a build.
 - **Interactable is what makes her clickable.** Clicking her opens the
   browser interface in a new window: the same `page.tsx`, the same
   collapsible debug drawer and thoughts panel. While she is a watermark the
   clicks belong to whatever is underneath her.
-- **The window is a view, not a second client.** Closing it ends nothing —
-  the session belongs to the host, and the host is the same process either
-  way.
-- **Two subscribers means two voices.** `Conversation.tsx` speaks every
-  reply aloud, so a watermark that talks plus an open window that also talks
-  says everything twice. Audio belongs to exactly one surface: the overlay
-  owns it, and the window is mute whenever the overlay is running.
+- **The window is a view, not a second client.** Closing it hides it; the
+  session belongs to the host, and the host is the same process either way.
+- **Two subscribers means two voices.** Settled by query string: the shell
+  opens the session window as `?mute=1`, the overlay owns the mouth. A plain
+  browser tab has no query string and speaks, as before. The overlay also
+  needs `--autoplay-policy=no-user-gesture-required`, because a
+  click-through window can never receive the gesture the policy wants.
+- **Still no dictation.** The voice hotkey drives the listening state and
+  nothing transcribes — there is no speech-to-text in the repo. The seam is
+  named in `App.xaml.cs`: on key release, POST the transcript to
+  `/api/perceive`, the same call the composer makes.
 
 ### What a window opened mid-session knows
 
-The worry was the debug log. That is the half that already works; the
-conversation is the half that does not.
+The worry was the debug log. That was the half that already worked; the
+conversation was the half that did not. Fixed by subtraction.
 
 - **The turn log replays, then follows.** `useTurnLog` calls `GET /api/log`
   for what happened before the window opened and then `/api/log/stream` for
@@ -807,28 +829,20 @@ conversation is the half that does not.
   those records, so both arrive populated. `TurnLogSubscriber` does the
   reduction once, server-side — which is exactly why a second surface needs
   no reduction logic of its own.
-- **The envelope feed only follows.** `useEciStream` subscribes to
-  `/api/stream`, and there is no backlog endpoint behind it:
-  `SseBroadcaster` fans out live envelopes and keeps none. So a window
-  opened after five turns shows five turns of *debug* and an *empty*
-  conversation. **This is the work**, and it is the opposite of what was
-  feared.
-- **Length is already bounded, by `TurnLog:Retain` (100 events).** A long
-  session replays its last hundred rather than all of it, and anything older
-  is on disk in the JSONL sink. "The debug log may be long" is therefore a
-  retention question with a dial that exists, not a transport problem.
-- **The cheap fix removes a projection instead of adding one.** Rather than
-  give `SseBroadcaster` a `Recent()` of its own, build the transcript from
-  the `TurnRecord`s the window already replays: `Perception` is the
-  utterance, `Intent` the reply, and `Verdict`, `Hindsight`, `Reads`,
-  `Pairs`, `Writes`, `Passages` and `Idea` are the bundle the bubbles draw.
-  `useEciStream`'s own accumulation then goes away.
-  - **What that loses is the face.** `TurnRecord` carries `Impulse` but no
-    expression word, so a replayed turn has no per-turn expression. For
-    history that is close to free — the face shows how she is now, not how
-    she was on turn three — but it has to be a decision, not a discovery.
-  - **Open:** whether `MAX_TURNS` (20) survives as a client cap once records
-    are the source, given `Retain` already caps the server side.
+- **The raw envelope feed is gone.** `/api/stream`, `SseBroadcaster` and
+  `useEciStream` fanned out live envelopes and kept no backlog, so a window
+  opened after five turns showed five turns of *debug* and an *empty*
+  conversation. Deleting the feed fixed that: everything a surface draws now
+  comes from a projection that replays, and no envelope meta leaves the
+  process at all. The transcript is built from `TurnRecord`s — `Perception`
+  the utterance, `Intent` the reply, the rest the bundle the bubbles draw.
+  - **What that lost is the per-turn face.** `TurnRecord` carries `Impulse`
+    but no expression word, so a replayed turn has no expression of its own.
+    Accepted: the face shows how she is now, not how she was on turn three.
+  - **`MAX_TURNS` went with it.** `TurnLog:Retain` (100 events) is now the
+    only cap, server-side, where the retention dial already was. A long
+    session replays its last hundred; anything older is on disk in the JSONL
+    sink.
 
 ### Keys on someone else's machine
 
