@@ -1,3 +1,20 @@
+<!-- Background is alpha 1, not 0, and that one step is the whole reason a
+     click can land on her.
+
+     A layered window, which AllowsTransparency makes this one, passes the
+     mouse straight through every pixel whose alpha is zero, before any
+     WS_EX_TRANSPARENT is consulted. WPF fills that alpha channel from its own
+     visual tree, and its own tree here is one empty Window: WebView2 draws
+     through DirectComposition, so the face is on screen but contributes
+     nothing to hit testing. With Transparent as the background there was never
+     a pixel to hit, in either state.
+
+     One 255th of black is below the threshold of anything. It does make the
+     whole rectangle live while she is interactable, corners included, and not
+     just the face. That is the trade, and the alternative is a face that
+     cannot be clicked at all. Keeping the window tight around its content is
+     what keeps that dead zone small, which is why it grows to fit the bubble
+     rather than being sized for the longest reply. -->
 <Window x:Class="EciCas.Shell.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -6,7 +23,7 @@
         Title="Morrow"
         AllowsTransparency="True"
         WindowStyle="None"
-        Background="Transparent"
+        Background="#01000000"
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
