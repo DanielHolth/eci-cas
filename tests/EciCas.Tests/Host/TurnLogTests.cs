@@ -258,14 +258,55 @@ public class TurnLogTests
         Assert.Equal(["two", "three"], log.Recent().Select(r => r.Perception));
     }
 
+    /// <summary>
+    /// The number on a debug row is the turn the facts written during it
+    /// carry, so it has to survive a restart. A counter that began at one
+    /// every boot produced several rows called "Turn 001", none of which
+    /// were the first.
+    /// </summary>
+    [Fact]
+    public async Task TheTurnNumber_ContinuesFromTheArchive()
+    {
+        var sink = new CapturingSink();
+        var log = Subscriber(sink, settleMs: 10_000, turnsRecorded: 41);
+
+        await log.HandleAsync(Perception("first thing said after a reboot"), CancellationToken.None);
+
+        Assert.Equal(42, log.Recent().Single().Seq);
+    }
+
+    /// <summary>An archive that has never taken a turn still starts at one.</summary>
+    [Fact]
+    public async Task WithNoArchive_TheCountStillStartsAtOne()
+    {
+        var log = Subscriber(new CapturingSink(), settleMs: 10_000);
+
+        await log.HandleAsync(Perception("the very first thing"), CancellationToken.None);
+
+        Assert.Equal(1, log.Recent().Single().Seq);
+    }
+
     private static TurnLogSubscriber Subscriber(ITurnLogSink sink, int settleMs, int retain = 100,
-        CostLedger? ledger = null)
+        CostLedger? ledger = null, long? turnsRecorded = null)
     {
         var activity = new BusActivityTracker();
         return new TurnLogSubscriber(new ChannelBus(activity), activity, NullLogger<TurnLogSubscriber>.Instance,
             Options.Create(new TurnLogOptions { SettleMs = settleMs, Retain = retain }), [sink],
             ledger ?? new CostLedger(path: null),
-            new EnergyMeter(new EnergyOptions(), path: null));
+            new EnergyMeter(new EnergyOptions(), path: null),
+            utterances: turnsRecorded is null ? null : new CountingLog(turnsRecorded.Value));
+    }
+
+    /// <summary>An archive that only knows how many turns it has taken.</summary>
+    private sealed class CountingLog(long turns) : IUtteranceLog
+    {
+        public long TurnsRecorded => turns;
+
+        public Task AppendAsync(IReadOnlyList<Utterance> utterances, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<Utterance>> AllAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Utterance>>([]);
+        public Task AppendReplyAsync(Utterance reply, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<Utterance>> RepliesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Utterance>>([]);
+        public Task<long> RecordTurnAsync(CancellationToken cancellationToken) => Task.FromResult(turns);
     }
 
     private sealed class RecordingBus : IMessageBus

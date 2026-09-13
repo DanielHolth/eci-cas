@@ -50,9 +50,21 @@ public sealed class TurnLogSubscriber : AgentBase
 
     public TurnLogSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<TurnLogSubscriber> logger,
         IOptions<TurnLogOptions> options, IEnumerable<ITurnLogSink> sinks, CostLedger ledger,
-        EnergyMeter energy, LevelMeter? levels = null, EnergyFallback? fallback = null)
+        EnergyMeter energy, LevelMeter? levels = null, EnergyFallback? fallback = null,
+        IUtteranceLog? utterances = null)
         : base(bus, activity, logger)
     {
+        // Picks up where the archive left off rather than from one. The
+        // number on a debug row is the turn the facts written during it
+        // carry, and a counter that restarted every boot made that
+        // unreadable -- three different rows called "Turn 001", none of
+        // them the first.
+        //
+        // Seeded, not joined. Both counters advance exactly once per
+        // correlation id, so they agree; reading the persisted one on every
+        // envelope would put a disk-backed archive counter on the display
+        // path for a number that is only ever shown.
+        _seq = utterances?.TurnsRecorded ?? 0;
         _options = options.Value;
         _sinks = [.. sinks];
         _ledger = ledger;
