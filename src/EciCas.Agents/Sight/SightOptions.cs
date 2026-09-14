@@ -72,8 +72,11 @@ public sealed class SightOptions
 
     /// <summary>Ceiling on the description handed to Intent. A paragraph about
     /// the screen crowding out six turns of what the person actually said is
-    /// the failure mode this prevents.</summary>
-    public int AdviceChars { get; set; } = 600;
+    /// the failure mode this prevents. Wide enough for a busy screen: a
+    /// storefront full of tiles and a game mid-fight both take more than three
+    /// sentences to describe, and a description cut off mid-clause is worse
+    /// than the short one it was meant to replace.</summary>
+    public int AdviceChars { get; set; } = 1000;
 
     /// <summary>Ceiling on the OCR transcript. A busy IDE reads out at several
     /// thousand characters; the full text stays on disk beside the

@@ -11,8 +11,10 @@
 You are looking at a screenshot of someone's computer screen.
 
 ## glance
-Describe this screen in two or three sentences, for a companion who cannot see
-it and is about to be asked something by the person sitting in front of it.
+Describe this screen for a companion who cannot see it and is about to be asked
+something by the person sitting in front of it. Three or four sentences for an
+ordinary screen; go longer when there is genuinely more on it than that, and
+shorter when there is less. Length follows the screen, not a budget.
 
 Say what kind of thing is on screen and what state it appears to be in: which
 application or game, what the person seems to be in the middle of, anything

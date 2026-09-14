@@ -95,6 +95,15 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
     private Seen _previous = Seen.Nothing;
     private string _previousAsked = string.Empty;
 
+    /// <summary>
+    /// What the persona said last, which is half of what makes the next
+    /// sentence mean anything. "Tell me more about the festival" names nothing
+    /// on the screen and everything in the reply that preceded it, and a look
+    /// told only the person's half is looking for a word it has never seen.
+    /// Arrives on the conclusion, one topic later than the rest of this state.
+    /// </summary>
+    private string _previousReply = string.Empty;
+
     public SightAgent(
         IMessageBus bus,
         BusActivityTracker activity,
@@ -115,7 +124,7 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
 
     public override string Name => "Sight";
 
-    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception];
+    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.Conclusion];
 
     /// <summary>
     /// No eyes this tier. Free configures no Sight substrate at all, and a
@@ -164,6 +173,18 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
     /// </summary>
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        // The conclusion is not a turn to look at; it is the other half of the
+        // last one. Kept for the next look, and nothing else happens here.
+        if (envelope.Topic == Topics.Conclusion)
+        {
+            if (envelope.Meta.Get<string>(IntentAgent.ReplyKey) is { Length: > 0 } reply)
+            {
+                _previousReply = reply;
+            }
+
+            return;
+        }
+
         var asked = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
 
         // A reading is a close look already, so the escalation below stands
