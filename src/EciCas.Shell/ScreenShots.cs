@@ -38,10 +38,11 @@ internal sealed class ScreenShots
     private int _sequence;
 
     /// <summary>
-    /// The file for the take now being spoken, or null if the last capture
-    /// failed. Read by whoever comes to ask what the screen looked like.
+    /// The screen as it was when the take now being spoken began, or null if
+    /// the last capture failed. Read by whoever comes to ask what the screen
+    /// looked like.
     /// </summary>
-    public string? Latest { get; private set; }
+    public Glance? Latest { get; private set; }
 
     /// <summary>Why the last capture produced nothing, for a person rather
     /// than a log. Null when the last one worked.</summary>
@@ -57,14 +58,16 @@ internal sealed class ScreenShots
     public bool Enabled => _options.Enabled;
 
     /// <summary>
-    /// Grabs the primary screen and writes it, off the UI thread. Fire and
-    /// forget from the caller's side: a failed capture must not cost the
-    /// person the sentence they are in the middle of saying, so it sets
-    /// <see cref="Trouble"/> and returns rather than throwing.
+    /// Grabs the primary screen, writes it, and reads whatever words are on
+    /// it -- all off the UI thread, while the person is still talking. A
+    /// failed capture must not cost them the sentence they are in the middle
+    /// of, so this sets <see cref="Trouble"/> and returns null rather than
+    /// throwing.
     /// </summary>
-    public Task CaptureAsync() => _options.Enabled ? Task.Run(Capture) : Task.CompletedTask;
+    public Task<Glance?> CaptureAsync() =>
+        _options.Enabled ? Task.Run(TakeAsync) : Task.FromResult<Glance?>(null);
 
-    private void Capture()
+    private async Task<Glance?> TakeAsync()
     {
         try
         {
@@ -82,17 +85,37 @@ internal sealed class ScreenShots
                 canvas.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
             }
 
-            var path = Path.Combine(_directory, Name());
-            using var sized = Fit(shot, _options.MaxEdge);
-            sized.Save(path, Jpeg, Quality(_options.Quality));
+            var stem = Path.Combine(_directory, Name());
+            var image = stem + ".jpg";
 
-            Latest = path;
+            using var sized = Fit(shot, _options.MaxEdge);
+            sized.Save(image, Jpeg, Quality(_options.Quality));
+
+            // Read from the resized image rather than the capture, so the
+            // transcript on disk is a transcript of the file beside it. OCR
+            // at 2048 loses nothing a screen puts on itself; matching the two
+            // matters more, because a disagreement between them is otherwise
+            // undebuggable.
+            var words = _options.ReadText ? await ScreenText.ReadAsync(sized).ConfigureAwait(false) : string.Empty;
+            if (words.Length > 0)
+            {
+                // Beside the picture, same stem. The pictures are the corpus;
+                // the transcripts are what any later pass at learning from
+                // on-screen text would train or measure against, and
+                // re-running OCR over a year of screenshots to get them back
+                // is an afternoon nobody should have to spend.
+                await File.WriteAllTextAsync(stem + ".txt", words).ConfigureAwait(false);
+            }
+
+            Latest = new Glance(image, await File.ReadAllBytesAsync(image).ConfigureAwait(false), words);
             Trouble = null;
+            return Latest;
         }
         catch (Exception failure)
         {
             Latest = null;
             Trouble = $"I could not see the screen: {failure.Message}";
+            return null;
         }
     }
 
@@ -129,7 +152,7 @@ internal sealed class ScreenShots
     private string Name()
     {
         var n = Interlocked.Increment(ref _sequence);
-        return string.Create(CultureInfo.InvariantCulture, $"{n:D7}-turn-{DateTime.Now:yyyyMMddHHmmss}.jpg");
+        return string.Create(CultureInfo.InvariantCulture, $"{n:D7}-turn-{DateTime.Now:yyyyMMddHHmmss}");
     }
 
     /// <summary>
@@ -172,3 +195,16 @@ internal sealed class ScreenShots
     private static EncoderParameters Quality(int quality) =>
         new(1) { Param = { [0] = new EncoderParameter(Encoder.Quality, (long)Math.Clamp(quality, 1, 100)) } };
 }
+
+/// <summary>
+/// One look at the screen: where it is kept, what it was, and whatever words
+/// were on it.
+/// </summary>
+/// <param name="Path">The JPEG on disk, which stays whether or not anything
+/// ever reads it.</param>
+/// <param name="Jpeg">The same bytes, already in hand — the vision call wants
+/// them immediately and re-reading the file it just wrote is a round trip for
+/// nothing.</param>
+/// <param name="Words">What the local OCR read, newline-separated. Empty is a
+/// real answer and not a failure: a fullscreen game with no HUD text has none.</param>
+internal sealed record Glance(string Path, byte[] Jpeg, string Words);

@@ -1,5 +1,6 @@
-using System.Windows;
+﻿using System.Windows;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Sight;
 using EciCas.Host.Startup;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -98,9 +99,12 @@ public partial class App : System.Windows.Application
         var perception = _host.Services.GetRequiredService<PerceptionAgent>();
 
         // The screen as it was when the person started talking, not as it is
-        // when they stop. Nothing reads the file yet; it is captured because
-        // a shot not taken cannot be reconsidered.
-        _dictation.Opened += () => _ = _shots.CaptureAsync();
+        // when they stop -- and handed straight to Sight, which starts looking
+        // at it while the sentence is still being said. A look takes about as
+        // long as a spoken question, so this is the whole of what keeps seeing
+        // the screen from costing the turn anything.
+        var sight = _host.Services.GetRequiredService<SightAgent>();
+        _dictation.Opened += () => _ = CaptureAsync(sight);
 
         _dictation.Listening += listening => _overlay.Listening = listening;
         _dictation.Trouble += note => _overlay.Heard = note;
@@ -127,6 +131,27 @@ public partial class App : System.Windows.Application
         _tray.Text = _dictation.Ready ? "Morrow" : "Morrow — no speech model";
         _tray.DoubleClick += (_, _) => _ = _session.RevealAsync();
         _tray.ContextMenuStrip = TrayMenu();
+    }
+
+    /// <summary>
+    /// One shot, kept on disk whether or not anything is made of it, and
+    /// offered to Sight. A capture that fails says so on the face and takes
+    /// the turn no further: a blind turn is an ordinary turn.
+    /// </summary>
+    private async Task CaptureAsync(SightAgent sight)
+    {
+        var glance = await _shots!.CaptureAsync();
+        if (glance is null)
+        {
+            if (_shots.Trouble is { } trouble)
+            {
+                _overlay!.Heard = trouble;
+            }
+
+            return;
+        }
+
+        sight.Glimpse(glance.Path, glance.Jpeg, glance.Words);
     }
 
     /// <summary>

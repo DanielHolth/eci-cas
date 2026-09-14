@@ -31,6 +31,15 @@ internal sealed class ScreenShotOptions
     /// </summary>
     public int MaxEdge { get; set; } = 2048;
 
+    /// <summary>
+    /// Run the local OCR over each capture and keep its transcript beside the
+    /// picture. Free in money and nearly free in time -- it is the in-box
+    /// Windows engine, not a model -- and it is what makes a 512-pixel look
+    /// at the screen sufficient, since the letters it cannot resolve are read
+    /// here instead.
+    /// </summary>
+    public bool ReadText { get; set; } = true;
+
     /// <summary>JPEG quality. 70 is the floor before small on-screen text
     /// starts picking up ringing, which is the only content that matters
     /// here.</summary>

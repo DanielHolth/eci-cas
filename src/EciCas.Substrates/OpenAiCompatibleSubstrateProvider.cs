@@ -36,14 +36,17 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         _slots = maxConcurrent > 0 ? new SemaphoreSlim(maxConcurrent, maxConcurrent) : null;
     }
 
-    public async Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken)
+    public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) =>
+        CompleteAsync(agent, prompt, image: null, cancellationToken);
+
+    public async Task<SubstrateResult> CompleteAsync(string agent, string prompt, SubstrateImage? image, CancellationToken cancellationToken)
     {
         var options = _options.Value;
         var entry = options.Agents.GetValueOrDefault(agent);
         var model = entry?.Model ?? agent;
         var request = new ChatCompletionRequest(
             model,
-            [new ChatMessage("user", prompt)],
+            [Message(prompt, image)],
             entry?.Effort,
             entry?.MaxTokens,
             entry?.Thinking is bool thinking ? new ChatTemplateKwargs(thinking) : null);
@@ -149,9 +152,41 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
 
     private sealed record ChatTemplateKwargs(
         [property: JsonPropertyName("enable_thinking")] bool EnableThinking);
-    private sealed record ChatMessage(string Role, string Content);
+
+    /// <summary>
+    /// A text-only turn stays a bare string rather than becoming a
+    /// one-element parts array. The two are equivalent to OpenAI itself, but
+    /// "content": "..." is what every other OpenAI-compatible server in this
+    /// project's reach accepts without argument — llama-server among them —
+    /// and there is no reason for every blind agent's call to change shape
+    /// because one agent grew eyes.
+    /// </summary>
+    private static ChatMessage Message(string prompt, SubstrateImage? image) =>
+        image is null
+            ? new ChatMessage("user", prompt)
+            : new ChatMessage("user", new object[]
+            {
+                new ContentPart("text", prompt),
+                new ImagePart("image_url", new ImageUrl(image.DataUrl(), image.Detail.ToString().ToLowerInvariant())),
+            });
+
+    private sealed record ContentPart(string Type, string Text);
+    private sealed record ImagePart(string Type, [property: JsonPropertyName("image_url")] ImageUrl ImageUrl);
+
+    /// <param name="Detail">"low" or "high" — the vendor's own name for how
+    /// large it resizes the image before counting patches, and therefore for
+    /// what the look costs.</param>
+    private sealed record ImageUrl(string Url, string Detail);
+
+    /// <summary>Content is a string or an array of parts, so it is typed as
+    /// object and serialized as whichever it holds.</summary>
+    private sealed record ChatMessage(string Role, object Content);
     private sealed record ChatCompletionResponse(List<ChatChoice> Choices, ChatUsage? Usage);
-    private sealed record ChatChoice(ChatMessage Message);
+    private sealed record ChatChoice(ReplyMessage Message);
+
+    /// <summary>A reply's content is always a string, whatever the request's
+    /// was — its own type so the request's can be either.</summary>
+    private sealed record ReplyMessage(string Content);
 
     private sealed record ChatUsage(
         [property: JsonPropertyName("total_tokens")] int TotalTokens,

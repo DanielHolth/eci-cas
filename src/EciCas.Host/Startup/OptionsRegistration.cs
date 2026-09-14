@@ -1,5 +1,6 @@
-using EciCas.Agents.Governance;
+﻿using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
+using EciCas.Agents.Sight;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Utterances;
@@ -25,6 +26,7 @@ internal static class OptionsRegistration
         services.Configure<RoutingManifest>(configuration.GetSection("RoutingManifest"));
         services.Configure<SubstrateOptions>(configuration.GetSection("Substrates"));
         services.Configure<ImpulseOptions>(configuration.GetSection("Impulse"));
+        services.Configure<SightOptions>(configuration.GetSection("Sight"));
         services.Configure<ReflectionOptions>(configuration.GetSection("Reflection"));
         services.Configure<PassageOptions>(configuration.GetSection("Passages"));
         services.Configure<UtteranceOptions>(configuration.GetSection("Utterances"));

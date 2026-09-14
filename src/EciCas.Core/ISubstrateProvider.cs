@@ -9,6 +9,16 @@
 public interface ISubstrateProvider
 {
     Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The same call with something to look at. Defaulted rather than
+    /// abstract because most providers have no eyes and should not have to
+    /// say so: a mock, a local text model, anything that predates this sees
+    /// the prompt and ignores the picture, which is the correct degradation —
+    /// the agent that sent an image still gets an answer, just a blind one.
+    /// </summary>
+    Task<SubstrateResult> CompleteAsync(string agent, string prompt, SubstrateImage? image, CancellationToken cancellationToken)
+        => CompleteAsync(agent, prompt, cancellationToken);
 }
 
 /// <param name="Provider">Which endpoint served it — "local", "openai", "mistral", "mock".

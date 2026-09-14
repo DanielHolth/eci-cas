@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Sight;
 using EciCas.Agents.TurnWindow;
 using EciCas.Agents.Utterances;
 using EciCas.Agents.Hindsight;
@@ -91,6 +92,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Identity", envelope.Meta.Get<string>(IdentityAgent.AdviceKey));
+        AppendSight(prompt, envelope);
         AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey));
         AppendNotes(prompt, envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey));
         AppendLengthLimit(prompt, maxSentences);
@@ -103,6 +105,34 @@ public sealed class IntentAgent : CognitiveAgent<string>
         }
 
         return prompt.ToString();
+    }
+
+    /// <summary>
+    /// What was on the screen when they started talking, and what the
+    /// machine's own reader made of the text on it.
+    ///
+    /// Framed as something noticed rather than something asked about, because
+    /// it is: the screen is looked at every turn whether or not the turn is
+    /// about the screen, so an aside written as "here is what they are asking
+    /// about" would have her answering a question about a code editor when
+    /// they asked what is for dinner. The words come in separately from the
+    /// description because they are evidence -- a line quoted out of them is
+    /// the screen's own wording, not a model's memory of it.
+    /// </summary>
+    private static void AppendSight(StringBuilder prompt, Envelope envelope)
+    {
+        var advice = envelope.Meta.Get<string>(SightAgent.AdviceKey);
+        if (!string.IsNullOrEmpty(advice))
+        {
+            prompt.Append(" [On their screen just now: ").Append(PromptCap.Apply(advice))
+                .Append(". Mention it only if it bears on what they said.]");
+        }
+
+        var words = envelope.Meta.Get<string>(SightAgent.WordsKey);
+        if (!string.IsNullOrEmpty(words))
+        {
+            prompt.Append(" [Text read off their screen: ").Append(PromptCap.Apply(words)).Append(']');
+        }
     }
 
     /// <summary>

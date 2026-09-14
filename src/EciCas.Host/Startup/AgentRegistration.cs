@@ -3,6 +3,7 @@ using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Identity;
 using EciCas.Agents.Impulse;
+using EciCas.Agents.Sight;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reflection;
@@ -38,6 +39,11 @@ internal static class AgentRegistration
         // Recall's picking. Holds Recall's name and slot -- see
         // ConsultAgent.Name.
         RegisterAgent<ConsultAgent>(services);
+
+        // Sight is on the roster like any other advisor, but the surface also
+        // holds a direct reference to it: the screenshot is handed over when
+        // the microphone opens, a second before the turn it belongs to exists.
+        RegisterAgent<SightAgent>(services);
 
         RegisterAgent<IdentityAgent>(services);
         RegisterAgent<HindsightAgent>(services);

@@ -27,12 +27,23 @@ public sealed class SubstrateRegistry : ISubstrateProvider
         _services = services;
     }
 
-    public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken)
+    public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) =>
+        For(agent).CompleteAsync(agent, prompt, cancellationToken);
+
+    /// <summary>
+    /// Routed identically. A provider with no eyes falls back to the
+    /// text-only call through the interface's own default, so pointing Sight
+    /// at a text model is a blind answer rather than a crash — which is what
+    /// the Free tier does on purpose.
+    /// </summary>
+    public Task<SubstrateResult> CompleteAsync(string agent, string prompt, SubstrateImage? image, CancellationToken cancellationToken) =>
+        For(agent).CompleteAsync(agent, prompt, image, cancellationToken);
+
+    private ISubstrateProvider For(string agent)
     {
         var providerName = _options.Agents.GetValueOrDefault(agent)?.Provider ?? "mock";
-        ISubstrateProvider provider = providerName == "mock"
+        return providerName == "mock"
             ? _mock
             : _services.GetRequiredKeyedService<ISubstrateProvider>(providerName);
-        return provider.CompleteAsync(agent, prompt, cancellationToken);
     }
 }
