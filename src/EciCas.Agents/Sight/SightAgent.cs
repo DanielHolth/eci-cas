@@ -407,7 +407,11 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
         }
         catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
         {
-            _logger.LogWarning(
+            // With the exception, unlike everywhere else: a classified cause
+            // says a look failed and nothing about why, and the why here is
+            // the vendor's own body -- an unsupported image, a model that
+            // cannot see, a rejected detail level all classify identically.
+            _logger.LogWarning(ex,
                 "{Agent} could not look ({Detail}, {ElapsedMs}ms): {Cause}",
                 Name, image.Detail, Stopwatch.GetElapsedTime(started).TotalMilliseconds, SubstrateHealth.Classify(ex));
 

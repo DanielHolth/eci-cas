@@ -230,9 +230,19 @@ if (-not $Dev) {
     # it. Built here rather than reported, because unlike the weights and the
     # keys this is our own source built with tools already on the machine --
     # but not rebuilt every launch, which would put a minute in front of
-    # every start for a directory that is usually current. After a client
-    # change, `npm run build` in morrow-eci.
-    if (-not (Test-Path (Join-Path $ui 'out/index.html'))) {
+    # every start for a directory that is usually current. Stale counts as
+    # missing: an edited component that never reached out/ is a panel that
+    # silently keeps showing last week's lines, and nothing on screen says so.
+    $export = Join-Path $ui 'out/index.html'
+    $stale = $false
+    if (Test-Path $export) {
+        $built = (Get-Item $export).LastWriteTimeUtc
+        $stale = [bool](Get-ChildItem $ui -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '\\(node_modules|out|\.next)\\' -and $_.LastWriteTimeUtc -gt $built } |
+            Select-Object -First 1)
+    }
+
+    if ($stale -or -not (Test-Path $export)) {
         if (-not (Test-Path (Join-Path $ui 'node_modules'))) {
             Write-Host 'morrow-eci has no node_modules, so there is no client to serve.'
             Write-Host '  cd morrow-eci; npm install; npm run build'
@@ -241,7 +251,7 @@ if (-not $Dev) {
         if ($WhatIfOnly) {
             Write-Host 'would export the client (morrow-eci: npm run build)'
         } else {
-            Write-Host 'exporting the client once; this takes a minute'
+            Write-Host $(if ($stale) { 'the client changed since it was exported; rebuilding it' } else { 'exporting the client once; this takes a minute' })
             # build.cmd rather than npm directly, for the same reason dev.cmd
             # exists: it puts nodejs on PATH first.
             & (Join-Path $ui 'build.cmd')
