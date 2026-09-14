@@ -29,6 +29,7 @@ public partial class App : System.Windows.Application
     private SessionWindow? _session;
     private HotKeys? _hotKeys;
     private Dictation? _dictation;
+    private ScreenShots? _shots;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -86,11 +87,20 @@ public partial class App : System.Windows.Application
 
         _dictation = new Dictation(options.Dictation);
 
+        // Beside the archive, in this process's own build output, for the
+        // reason AGENTS.md gives about the archive itself.
+        _shots = new ScreenShots(options.Screen, AppContext.BaseDirectory);
+
         // The microphone and the text box arrive at the same place. Not over
         // HTTP: /api/perceive exists for surfaces that are not in this process,
         // and this one is -- the agent it would reach is a field away, and the
         // cap on an utterance is applied inside Perceive either way.
         var perception = _host.Services.GetRequiredService<PerceptionAgent>();
+
+        // The screen as it was when the person started talking, not as it is
+        // when they stop. Nothing reads the file yet; it is captured because
+        // a shot not taken cannot be reconsidered.
+        _dictation.Opened += () => _ = _shots.CaptureAsync();
 
         _dictation.Listening += listening => _overlay.Listening = listening;
         _dictation.Trouble += note => _overlay.Heard = note;

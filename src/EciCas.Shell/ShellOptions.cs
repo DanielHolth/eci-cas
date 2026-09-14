@@ -51,6 +51,11 @@ internal sealed class ShellOptions
     /// section because it is the only part of the shell with weights.</summary>
     public DictationOptions Dictation { get; set; } = new();
 
+    /// <summary>What the screen looked like when the key armed. Its own
+    /// section because it is the only part of the shell that watches
+    /// something the person did not address to Morrow.</summary>
+    public ScreenShotOptions Screen { get; set; } = new();
+
     public KeySpec Voice => KeySpec.Parse(VoiceKey, "voice");
     public KeySpec Interact => KeySpec.Parse(InteractKey, "interact");
 }

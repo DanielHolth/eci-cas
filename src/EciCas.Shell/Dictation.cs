@@ -47,6 +47,13 @@ internal sealed class Dictation : IDisposable
     /// <summary>The microphone is open, or it is not. The face draws it.</summary>
     public event Action<bool>? Listening;
 
+    /// <summary>The microphone actually opened -- the hold threshold passed,
+    /// a device was there, and a take is now being recorded. Distinct from
+    /// <see cref="Listening"/>, which the face also uses to draw its own
+    /// closing: this fires once, at the start, for anyone who needs to do
+    /// something at the moment the person began speaking.</summary>
+    public event Action? Opened;
+
     /// <summary>Something was said. Sent as-is, the way the text box sends what
     /// was typed into it.</summary>
     public event Action<string>? Transcribed;
@@ -129,6 +136,7 @@ internal sealed class Dictation : IDisposable
 
         _limit.Start();
         Listening?.Invoke(true);
+        Opened?.Invoke();
     }
 
     private void OnAudio(object? sender, WaveInEventArgs e)
