@@ -2,7 +2,7 @@
 
 **Emergent Cognitive Identity** on a **Continuous Agent System**: a persistent
 AI persona built as narrow faculties on a message bus — Perception,
-TurnWindow, Impulse, Recall, Identity, Hindsight, Governance, Intent,
+TurnWindow, Impulse, Recall, Identity, Hindsight, Sight, Governance, Intent,
 Security, Action, Scribe, Reflection. One queue per agent, fire-and-forget
 publish, no agent names another. Every hop streams to the `morrow-eci/` UI
 over SSE. Design: [`docs/architecture.md`](docs/architecture.md).
@@ -29,6 +29,21 @@ thread's newest member, diversified by MMR. With `Utterances:PickerEnabled`
 the sweep casts `FanoutWidth` (40) and a model keeps up to `PickMax` (8) by
 number, or `NONE`; if it can't answer, cosine top-k stands. Reflection's own
 thinking lives in `passages.parquet`.
+
+## Sight
+
+She sees the screen. The moment the voice key arms, the shell takes a
+screenshot, reads the text off it locally, and starts a cheap low-detail
+glance that runs while the person is still speaking — so the description is
+usually waiting by the time the turn needs it. A close look at full detail
+costs sixteen times as much and is only taken when the turn says so, either
+because the person asked or because the glance itself asked. "Read my screen
+to me" is a third path that goes to the person unshortened.
+
+The local text always rides along, so a tier with no vision model still knows
+what the screen says — nothing about the picture leaves the machine on Free.
+See the `Sight` block in `appsettings.json` for the trigger phrases, the
+ceilings, and how long a turn waits for a glance.
 
 ## Layout
 
@@ -110,8 +125,8 @@ of being transcribed into words nobody said.
 By hand:
 
 ```powershell
-$env:OPENAI_API_KEY  = "..."   # Default: Intent, extractor, picker, consolidator
-$env:MISTRAL_API_KEY = "..."   # Default: Reflection
+$env:OPENAI_API_KEY  = "..."   # Pro: Intent, Sight, extractor, picker, consolidator
+$env:MISTRAL_API_KEY = "..."   # Pro: Reflection
 dotnet run --project src/EciCas.Host -- --Tier=Pro   # API only, on :5179
 cd morrow-eci; npm install; npm run dev              # dev surface on :3000
 cd morrow-eci; npm run build                         # the export the shell serves
@@ -136,14 +151,14 @@ archive directory.
 
 ## Configure
 
-`--Tier=X` layers `appsettings.<X>.json`: Mock, Free, Budget, Default,
-Premium. The Debug panel switches tiers live. Any key overrides from the
-command line.
+`--Tier=X` layers `appsettings.<X>.json`: Mock, Free, Budget, Pro, Premium.
+The Debug panel switches tiers live. Any key overrides from the command line.
 
 `Substrates:Agents` maps each model consumer — `Intent`, `Reflection`,
-`extractor`, `picker`, `consolidator` — to a provider; unset means `mock`. Providers
-name an env var for the key, never the key itself. The table is validated at
-boot; `Agent substrate manifest drift` usually means a stale build
+`Sight`, `extractor`, `picker`, `consolidator` — to a provider; unset means
+`mock`. Providers name an env var for the key, never the key itself, and
+`MaxTokensField` names whatever that endpoint calls the output ceiling. The
+table is validated at boot; `Agent substrate manifest drift` usually means a stale build
 (`dotnet clean`).
 
 `src/EciCas.Host/instructions/` holds every sentence the persona speaks, one
