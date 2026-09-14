@@ -18,10 +18,18 @@ internal sealed class ScreenShotOptions
     /// started from the wrong folder has its own -- see AGENTS.md.</summary>
     public string Directory { get; set; } = "screenshots";
 
-    /// <summary>The long edge in pixels, which is what a look at the screen
-    /// costs: tokens fall with the square of this. 1920 is about 2,400 input
-    /// tokens on a patch-priced model.</summary>
-    public int MaxEdge { get; set; } = 1920;
+    /// <summary>
+    /// The long edge in pixels. 2048 because that is where the vendor's own
+    /// "high" detail resizes to anyway -- sending more is bytes the API
+    /// throws away, and resampling here rather than there is the one place
+    /// the filter is ours to choose. A 4K screen lands at 2048x1152, about
+    /// 2,800 input tokens.
+    ///
+    /// Lower is the knob that saves money, and it saves it with the square:
+    /// 512 is 173 tokens. It is also the knob that decides whether on-screen
+    /// text survives at all, and below about 1024 it does not.
+    /// </summary>
+    public int MaxEdge { get; set; } = 2048;
 
     /// <summary>JPEG quality. 70 is the floor before small on-screen text
     /// starts picking up ringing, which is the only content that matters
