@@ -55,6 +55,11 @@ public sealed class FileInstructionStore : IInstructionStore
             ["Identity"] = ["name"],
             ["Impulse"] = [],
             ["Governance"] = ["cause", "impaired", "concern"],
+
+            // Sight splices nothing in: the picture is the input and the OCR
+            // transcript rides alongside it as its own message part, not as
+            // text poured into a placeholder.
+            ["Sight"] = [],
         };
 
     /// <summary>
@@ -92,6 +97,10 @@ public sealed class FileInstructionStore : IInstructionStore
                 (InstructionFile.MainSection, []),
                 ("alarm", []),
                 ("contrast", [])),
+            ["Sight"] = Sections(
+                ("glance", []),
+                ("look", []),
+                ("read", [])),
         };
 
     private static IReadOnlyDictionary<string, string[]> Sections(params (string Section, string[] Names)[] entries) =>
