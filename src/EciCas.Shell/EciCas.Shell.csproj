@@ -61,9 +61,13 @@
     <ItemGroup>
       <ExportedClient Include="$(MSBuildThisFileDirectory)..\..\morrow-eci\out\**\*" />
     </ItemGroup>
+    <!-- Wiped before copying. Next names its chunks by content hash, so an
+         export that drops a chunk leaves the old one behind forever and the
+         directory only ever grows; nothing else deletes them. The copy itself
+         is a couple of hundred small files and does not need skipping. -->
+    <RemoveDir Directories="$(OutDir)client" Condition="'@(ExportedClient)' != ''" />
     <Copy SourceFiles="@(ExportedClient)"
-          DestinationFolder="$(OutDir)client\%(RecursiveDir)"
-          SkipUnchangedFiles="true" />
+          DestinationFolder="$(OutDir)client\%(RecursiveDir)" />
     <Message Importance="high" Condition="'@(ExportedClient)' == ''"
              Text="EciCas.Shell: no exported client in morrow-eci/out. Run `npm run build` there, or use `next dev` and open the browser." />
   </Target>

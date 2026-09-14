@@ -267,10 +267,17 @@ if (-not $Dev) {
     # folder rather than the working directory, so starting the built exe
     # straight from here is the same session `dotnet run` would have opened.
     if ($NoBuild) {
-        $exe = @(
-            (Join-Path $repo 'src/EciCas.Shell/bin/Release/net10.0-windows/Morrow.exe'),
-            (Join-Path $repo 'src/EciCas.Shell/bin/Debug/net10.0-windows/Morrow.exe')
-        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        # Globbed, and newest wins. The target framework carries a Windows SDK
+        # version, so the real folder is net10.0-windows10.0.19041.0 and the
+        # bare net10.0-windows beside it is a leftover from before that was
+        # pinned -- which nothing cleans up and which this script happily
+        # started for a week, exe and client both frozen at whatever day it
+        # was abandoned. A stale build is the one failure -NoBuild must not
+        # have: its whole purpose is to run exactly what was last built.
+        $exe = @('Release', 'Debug') | ForEach-Object {
+            Get-ChildItem (Join-Path $repo "src/EciCas.Shell/bin/$_") -Filter Morrow.exe `
+                -Recurse -Depth 1 -ErrorAction SilentlyContinue
+        } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 -ExpandProperty FullName
 
         if (-not $exe) {
             Write-Host 'nothing is built yet, so -NoBuild has no Morrow.exe to start.'

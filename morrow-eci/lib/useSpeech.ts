@@ -60,10 +60,6 @@ export function useSpeech(
 
   const said = useRef<Set<string>>(new Set());
   const queue = useRef<string[]>([]);
-  /** Turns whose input has already been counted as an interruption. Keyed the
-   * same way `said` is, and for the same reason: the stream re-delivers every
-   * turn on every envelope. */
-  const interrupted = useRef<Set<string>>(new Set());
   const busy = useRef(false);
   const primed = useRef(false);
   // Whether a single syllable has ever left the speakers. Distinct from
@@ -142,9 +138,6 @@ export function useSpeech(
       if (turn.output?.text) {
         said.current.add(turn.turnId);
       }
-      if (turn.input) {
-        interrupted.current.add(turn.turnId);
-      }
     }
   }
 
@@ -210,33 +203,31 @@ export function useSpeech(
     // a session where nothing has happened, and the two want opposite things.
     if (!ready) return;
 
-    // Barge-in. A reading runs for minutes, and "stop" is answered by the
-    // persona agreeing to stop while the browser goes on reading the queue it
-    // was handed -- the reply is the wrong lever, because by then the words
-    // are inside speechSynthesis and only cancel() reaches them. So the
-    // person speaking at all is the lever: a turn with input that has not
-    // been seen before silences whatever is in flight. Says nothing about
-    // what they said, which is the point -- interrupting is a gesture, not a
-    // phrase, and a list of stop-words would work in one language.
-    for (const turn of turns) {
-      if (turn.input && !interrupted.current.has(turn.turnId)) {
-        interrupted.current.add(turn.turnId);
-        if (busy.current) {
-          queue.current.length = 0;
-          window.speechSynthesis?.cancel();
-        }
-      }
-    }
-
     for (const turn of turns) {
       const text = turn.output?.text;
       if (!text || said.current.has(turn.turnId)) {
         continue;
       }
       said.current.add(turn.turnId);
-      if (enabled) {
-        queue.current.push(text);
+      if (!enabled) continue;
+
+      // A new reply replaces whatever is still being read rather than
+      // queueing behind it. A reading of a screen runs for minutes, and the
+      // only way to stop one was to close the window: the person says "stop",
+      // the persona agrees, and the browser goes on reading, because by then
+      // the text is inside speechSynthesis and only cancel() reaches it. The
+      // reply is the right lever and speaking is not -- asking to see the log
+      // should not cut her off mid-sentence, and it did when the microphone
+      // was the trigger.
+      //
+      // The queue stays for the case it was built for: Reflection's own
+      // ideas, which land as separate turns with no reply of their own.
+      if (busy.current) {
+        queue.current.length = 0;
+        window.speechSynthesis?.cancel();
       }
+
+      queue.current.push(text);
     }
 
     if (enabled && !busy.current && queue.current.length > 0) {
