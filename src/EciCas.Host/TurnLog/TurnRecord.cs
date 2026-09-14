@@ -42,6 +42,9 @@ public sealed record TurnRecord
 
     public string? Impulse { get; init; }
 
+    /// <summary>What Sight made of the screenshot, as Intent was given it.</summary>
+    public string? Sight { get; init; }
+
     /// <summary>
     /// Impulse's expression word for this turn, re-read from Governance's
     /// action when a block moved it. Lower-case, from Impulse's own closed

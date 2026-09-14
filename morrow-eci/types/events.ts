@@ -84,6 +84,8 @@ export interface TurnRecord {
   perception: string | null;
   selfTriggered: boolean;
   impulse: string | null;
+  /** What Sight made of the screenshot, as Intent was handed it. */
+  sight: string | null;
   /** Which of Impulse's six words this turn wore, re-read from Governance's
    * action when a block moved it. The one thing a surface cannot re-derive
    * from the text, which is why the host carries it. */

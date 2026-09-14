@@ -6,6 +6,7 @@ using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Security;
+using EciCas.Agents.Sight;
 using EciCas.Agents.Utterances;
 using EciCas.Bus;
 using EciCas.Core;
@@ -71,6 +72,11 @@ public static class TurnProjection
             Impulse = envelope.Meta.Get<string>(ImpulseAgent.AdviceKey) ?? record.Impulse,
             Expression = envelope.Meta.Get<string>(ImpulseAgent.ExpressionKey) ?? record.Expression,
         },
+        // What she was told about the screen, which is the half of Sight's
+        // work a reader cannot otherwise see: the OCR transcript is on disk
+        // beside the screenshot, but the model's reading of the picture only
+        // ever existed inside Intent's prompt.
+        "Sight" => record with { Sight = envelope.Meta.Get<string>(SightAgent.AdviceKey) ?? record.Sight },
         "Recall" => record with { Reads = Describe(envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey)) },
         "Hindsight" => record with { Hindsight = envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey) ?? record.Hindsight },
         _ => record,

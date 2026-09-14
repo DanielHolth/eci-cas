@@ -127,7 +127,10 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
           {record.perception && (
             <Line agent={record.selfTriggered ? "Idea" : "Perception"}>{record.perception}</Line>
           )}
-          {record.impulse && <Line agent="Impulse">{record.impulse}</Line>}
+          {/* Impulse: its word is worn on the face, and the sentence behind
+              it says little the reply does not — the room here is better
+              spent on what she was actually looking at. */}
+          {record.sight && <Line agent="Sight">{record.sight}</Line>}
           {record.reads.map((read, i) => (
             <Line key={`read-${i}`} agent={`Recall-${i + 1}`}>
               {read}
@@ -187,10 +190,12 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
                 <span className="flex flex-col gap-0.5">
                   {byModel(record.calls).map((r) => (
                     <span key={`${r.provider}/${r.model}`} className="flex flex-wrap gap-x-2 font-mono text-[11px]">
-                      <span className={LOCAL.has(r.provider) ? "text-emerald-600 dark:text-emerald-400" : "text-sky-600 dark:text-sky-400"}>
-                        {LOCAL.has(r.provider) ? "local" : "remote"}
+                      {/* The provider name carries local-or-remote on its own
+                          — "local/qwen3" and "openai/gpt-5.6-luna" read the
+                          same way the chip did, in a line's less width. */}
+                      <span className={LOCAL.has(r.provider) ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-800 dark:text-neutral-200"}>
+                        {r.provider}/{r.model}
                       </span>
-                      <span className="text-neutral-800 dark:text-neutral-200">{r.provider}/{r.model}</span>
                       <span className="text-neutral-400 dark:text-neutral-500">
                         ×{r.calls}
                         {" · "}

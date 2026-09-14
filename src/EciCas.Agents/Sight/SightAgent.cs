@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
@@ -57,6 +58,15 @@ public sealed class SightAgent : AgentBase
     /// the way Impulse marks its reflex. Tells the turn log which of the two
     /// proposals on a reading turn was the one that spoke.</summary>
     public const string ReadingKey = "sight.reading";
+
+    /// <summary>
+    /// Calls waiting for an envelope to be billed against. The glance is made
+    /// before the turn exists -- that is the whole point of it -- so there is
+    /// no correlation id to publish its cost under until perception lands.
+    /// Queued here and drained once the turn arrives, which is late but
+    /// correct, where publishing at call time would be neither.
+    /// </summary>
+    private readonly ConcurrentQueue<Trace> _traces = new();
 
     private readonly IMessageBus _bus;
     private readonly ISubstrateProvider _substrate;
@@ -207,6 +217,8 @@ public sealed class SightAgent : AgentBase
 
         _bus.Publish(Topics.Advisories, envelope.Derive(
             Topics.Advisories, Name, envelope.Severity, SubstrateHealth.Mark(meta, degraded)));
+
+        Bill(envelope);
     }
 
     /// <summary>
@@ -261,7 +273,7 @@ public sealed class SightAgent : AgentBase
         }
 
         var image = new SubstrateImage(seen.Image, "image/jpeg", ImageDetail.High);
-        var result = await CallAsync(prompt.ToString(), image, cancellationToken).ConfigureAwait(false);
+        var result = await CallAsync("read", prompt.ToString(), image, cancellationToken).ConfigureAwait(false);
 
         return result is null ? seen.Words : result.Text.Trim();
     }
@@ -307,7 +319,7 @@ public sealed class SightAgent : AgentBase
                 .Append(PromptCap.Apply(words, _options.WordsChars));
         }
 
-        var result = await CallAsync(prompt.ToString(), image, CancellationToken.None).ConfigureAwait(false);
+        var result = await CallAsync("glance", prompt.ToString(), image, CancellationToken.None).ConfigureAwait(false);
 
         return result is null
             ? new Seen(path, string.Empty, words, SubstrateHealth.Unreachable, false)
@@ -343,14 +355,14 @@ public sealed class SightAgent : AgentBase
         }
 
         var image = new SubstrateImage(glance.Image, "image/jpeg", ImageDetail.High);
-        var result = await CallAsync(prompt.ToString(), image, cancellationToken).ConfigureAwait(false);
+        var result = await CallAsync("look", prompt.ToString(), image, cancellationToken).ConfigureAwait(false);
 
         // A failed second look keeps the first. The cheap description is a
         // worse answer than the close one and a far better answer than none.
         return result is null ? glance : Parse(glance.Path, result.Text, glance.Words);
     }
 
-    private async Task<SubstrateResult?> CallAsync(string prompt, SubstrateImage image, CancellationToken cancellationToken)
+    private async Task<SubstrateResult?> CallAsync(string label, string prompt, SubstrateImage image, CancellationToken cancellationToken)
     {
         _logger.LogDebug("{Agent} {Detail} prompt >>>\n{Prompt}", Name, image.Detail, prompt);
 
@@ -371,6 +383,8 @@ public sealed class SightAgent : AgentBase
             _logger.LogWarning(
                 "{Agent} could not look ({Detail}, {ElapsedMs}ms): {Cause}",
                 Name, image.Detail, Stopwatch.GetElapsedTime(started).TotalMilliseconds, SubstrateHealth.Classify(ex));
+
+            _traces.Enqueue(new Trace(label, null, Stopwatch.GetElapsedTime(started).TotalMilliseconds, SubstrateHealth.Classify(ex)));
             return null;
         }
     }
@@ -418,6 +432,30 @@ public sealed class SightAgent : AgentBase
 
         return new Seen(path, trimmed, words, null, closer);
     }
+
+    /// <summary>
+    /// Every call made for this turn, onto the telemetry topic under the
+    /// turn's own correlation id. Labelled, because a turn can hold three of
+    /// them at two prices and "Sight spent that" is not the same answer as
+    /// "the closer look spent that".
+    /// </summary>
+    private void Bill(Envelope envelope)
+    {
+        while (_traces.TryDequeue(out var trace))
+        {
+            if (trace.Result is { } result)
+            {
+                SubstrateTrace.Publish(_bus, envelope, Name, result, trace.Label);
+            }
+            else
+            {
+                SubstrateTrace.PublishFailure(_bus, envelope, Name, trace.LatencyMs, trace.Cause ?? SubstrateHealth.Unreachable, trace.Label);
+            }
+        }
+    }
+
+    /// <summary>One substrate call this agent made, and what it cost.</summary>
+    private sealed record Trace(string Label, SubstrateResult? Result, double LatencyMs, string? Cause);
 
     /// <param name="Path">The screenshot on disk this was read from.</param>
     /// <param name="Description">What the model made of it, or empty.</param>
