@@ -106,6 +106,11 @@ public partial class App : System.Windows.Application
         var sight = _host.Services.GetRequiredService<SightAgent>();
         _dictation.Opened += () => _ = CaptureAsync(sight);
 
+        // And the typed turn, which opens no microphone and so has no moment
+        // to capture at. Sight calls this itself when it finds nothing waiting
+        // for it, inside the turn rather than ahead of it.
+        sight.Capture = () => CaptureAsync(sight);
+
         _dictation.Listening += listening => _overlay.Listening = listening;
         _dictation.Trouble += note => _overlay.Heard = note;
         _dictation.Transcribed += text =>

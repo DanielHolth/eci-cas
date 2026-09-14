@@ -127,6 +127,15 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
     private bool Blind => !_options.Enabled || _substrates.Agents.GetValueOrDefault(Name)?.UseSubstrate is not true;
 
     /// <summary>
+    /// How to take a screenshot, when no one has taken one already. Set by the
+    /// shell, which owns the screen; null in the host, which does not have one.
+    /// The voice path never needs it -- it has already called
+    /// <see cref="Glimpse"/> before the turn exists, which is the cheap path
+    /// and the normal one.
+    /// </summary>
+    public Func<Task>? Capture { get; set; }
+
+    /// <summary>
     /// The screen, the moment it was captured, while the person is still
     /// talking. Fire and forget: the turn that follows collects it, and a look
     /// that fails leaves that turn simply blind.
@@ -164,6 +173,24 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
 
         var seen = Seen.Nothing;
         string? degraded = null;
+
+        // Nothing was captured on the way in. That is the typed turn: a person
+        // at the keyboard opened no microphone, so there was no moment to take
+        // the shot at and no sentence being spoken to take it during. Take it
+        // now, in the turn, and pay the latency -- a typed "what is on my
+        // screen" that answers blind is the one failure this agent exists to
+        // prevent.
+        if (Volatile.Read(ref _pending) is null && Capture is { } capture)
+        {
+            try
+            {
+                await capture().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))
+            {
+                _logger.LogWarning("Sight could not take a shot of its own: {Cause}", SubstrateHealth.Classify(ex));
+            }
+        }
 
         var pending = Interlocked.Exchange(ref _pending, null);
         if (pending is not null)
