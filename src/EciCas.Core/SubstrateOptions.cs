@@ -51,6 +51,19 @@ public sealed class ProviderEndpoint
     /// outside the HttpClient timeout — queue time is not the model hanging.
     /// </summary>
     public int MaxConcurrent { get; set; }
+
+    /// <summary>
+    /// What this endpoint calls the output ceiling. OpenAI retired
+    /// <c>max_tokens</c> on its reasoning models and refuses it outright --
+    /// a 400 with no hint that the picture, the model or the key were ever
+    /// the problem, which cost two live test rounds to find. llama-server
+    /// and Mistral still take the old name.
+    ///
+    /// A knob rather than a version check: this is one string per endpoint,
+    /// the vendors disagree about it on their own schedule, and a diagnostic
+    /// agent can move it without a rebuild.
+    /// </summary>
+    public string MaxTokensField { get; set; } = "max_tokens";
 }
 
 public sealed class SubstrateAgentEntry

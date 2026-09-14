@@ -48,8 +48,10 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
             model,
             [Message(prompt, image)],
             entry?.Effort,
-            entry?.MaxTokens,
-            entry?.Thinking is bool thinking ? new ChatTemplateKwargs(thinking) : null);
+            entry?.Thinking is bool thinking ? new ChatTemplateKwargs(thinking) : null)
+        {
+            Extra = Ceiling(options, entry),
+        };
 
         // Fail fast while the circuit is open. One dead endpoint would
         // otherwise cost every agent in the fan-out a full timeout each,
@@ -117,6 +119,22 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
     }
 
     /// <summary>
+    /// The output ceiling, under whatever name this endpoint answers to --
+    /// see <see cref="ProviderEndpoint.MaxTokensField"/>. Written as an extra
+    /// member rather than a property because the name is configuration and a
+    /// property name is not.
+    /// </summary>
+    private static Dictionary<string, object>? Ceiling(SubstrateOptions options, SubstrateAgentEntry? entry) =>
+        entry?.MaxTokens is { } ceiling
+            ? new Dictionary<string, object>
+            {
+                [options.Providers.GetValueOrDefault(entry.Provider)?.MaxTokensField is { Length: > 0 } field
+                    ? field
+                    : "max_tokens"] = ceiling,
+            }
+            : null;
+
+    /// <summary>
     /// Drops a leading reasoning block. A model told not to think can still
     /// emit one, and every parser downstream expects the answer to start at
     /// the first character — Recall's whole reply is meant to be a number.
@@ -147,8 +165,14 @@ public sealed class OpenAiCompatibleSubstrateProvider : ISubstrateProvider
         string Model,
         ChatMessage[] Messages,
         [property: JsonPropertyName("reasoning_effort"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReasoningEffort = null,
-        [property: JsonPropertyName("max_tokens"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? MaxTokens = null,
-        [property: JsonPropertyName("chat_template_kwargs"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatTemplateKwargs? ChatTemplateKwargs = null);
+        [property: JsonPropertyName("chat_template_kwargs"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatTemplateKwargs? ChatTemplateKwargs = null)
+    {
+        /// <summary>The output ceiling, under whatever name this endpoint
+        /// answers to. Not a constructor parameter: extension data cannot
+        /// bind to one.</summary>
+        [JsonExtensionData]
+        public Dictionary<string, object>? Extra { get; init; }
+    }
 
     private sealed record ChatTemplateKwargs(
         [property: JsonPropertyName("enable_thinking")] bool EnableThinking);
