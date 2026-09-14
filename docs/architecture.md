@@ -37,11 +37,14 @@ finished answer.
   what kind of thing is on screen.
 - **look** — only when the turn needs it, high detail, sixteen times the
   price. Asked for by the person (`CloserPhrases`) or by the glance itself
-  (`NEED-A-CLOSER-LOOK`). `CloserEnabled` off (Budget) keeps the glance and
-  never buys this.
+  (`NEED-A-CLOSER-LOOK`).
 - **read** — "read my screen to me" (`ReadPhrases`). Goes straight to
   Security past Intent, because a reading is owed the screen and not a
   summary of it.
+
+`CloserEnabled` is the cost switch: off, nothing is ever sent at high detail
+— the escalation is not bought and a reading drops to the cheap detail rather
+than being refused. That is Budget. Free has no eyes at all.
 
 The OCR transcript rides alongside the picture on every call and reaches
 Intent as its own key, separate from the model's description: one is

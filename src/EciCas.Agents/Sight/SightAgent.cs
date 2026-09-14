@@ -320,7 +320,14 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
                 .Append(PromptCap.Apply(seen.Words, _options.WordsChars));
         }
 
-        var image = new SubstrateImage(seen.Image, "image/jpeg", ImageDetail.High);
+        // High where the tier can afford it, and the configured detail where
+        // it cannot. A reading is never refused -- someone who cannot see
+        // their screen is owed it on any tier -- but it is the largest single
+        // call this agent makes, and the switch that says "no sixteen-times
+        // calls" has to mean it here too. The words come off the local OCR
+        // regardless; the picture is only telling it what belongs to what.
+        var detail = _options.CloserEnabled ? ImageDetail.High : _options.Detail;
+        var image = new SubstrateImage(seen.Image, "image/jpeg", detail);
         var result = await CallAsync("read", prompt.ToString(), image, cancellationToken).ConfigureAwait(false);
 
         return result is null ? seen.Words : result.Text.Trim();

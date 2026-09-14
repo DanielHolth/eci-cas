@@ -18,10 +18,12 @@ public sealed class SightOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Whether the close look may ever be bought. Off leaves the cheap glance
-    /// running and nothing else: the tier that can afford eyes every turn but
-    /// not sixteen of them on the turn that asks. Both switches off is Free --
-    /// OCR and no picture on the wire at all.
+    /// Whether anything is ever looked at in high detail. This is a cost
+    /// switch and nothing else: off, the escalation is never bought and a
+    /// reading falls back to <see cref="Detail"/> rather than being refused.
+    /// The tier that can afford eyes every turn but not sixteen of them on
+    /// the turn that says "screen". Off together with the Sight substrate
+    /// entry is Free -- OCR and no picture on the wire at all.
     /// </summary>
     public bool CloserEnabled { get; set; } = true;
 
