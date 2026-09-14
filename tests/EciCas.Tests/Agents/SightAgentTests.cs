@@ -68,6 +68,33 @@ public class SightAgentTests
     }
 
     /// <summary>
+    /// Budget's shape: the glance every turn, and never the close look, even
+    /// when the person says the word that would buy it. A tier that cannot
+    /// afford the escalation must not be talked into it by a phrase. A reading
+    /// asked for outright is a different path and stays on: that one is
+    /// someone saying they cannot see their screen.
+    /// </summary>
+    [Fact]
+    public async Task TheCloseLookCanBeTurnedOff()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var agent = new SightAgent(bus, activity, NullLogger<SightAgent>.Instance, new MockSubstrateProvider(),
+            ShippedInstructions.Store,
+            Options.Create(new SightOptions { CloserEnabled = false }),
+            Options.Create(new SubstrateOptions { Agents = { ["Sight"] = new SubstrateAgentEntry() } }));
+        var telemetry = bus.Subscribe(Topics.Telemetry);
+
+        agent.Glimpse("shot.jpg", [1, 2, 3], "SPACE HAVEN");
+        await agent.HandleAsync(Perceived("what am I looking at"), CancellationToken.None);
+
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var trace = await telemetry.ReadAsync(stop.Token);
+        Assert.Equal("glance", trace.Meta.Get<string>(SubstrateTrace.LabelKey));
+        Assert.False(telemetry.TryRead(out _));
+    }
+
+    /// <summary>
     /// A look that worked is billed, not only one that failed. The meter that
     /// gates a reply cannot be short by the price of every glance.
     /// </summary>

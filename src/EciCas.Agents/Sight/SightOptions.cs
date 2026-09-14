@@ -18,6 +18,14 @@ public sealed class SightOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Whether the close look may ever be bought. Off leaves the cheap glance
+    /// running and nothing else: the tier that can afford eyes every turn but
+    /// not sixteen of them on the turn that asks. Both switches off is Free --
+    /// OCR and no picture on the wire at all.
+    /// </summary>
+    public bool CloserEnabled { get; set; } = true;
+
+    /// <summary>
     /// What a look costs by default. Low fits the screen into 512 pixels for
     /// 173 tokens, which is enough to say what kind of thing is on screen and
     /// nowhere near enough to read a label -- the local OCR covers that half

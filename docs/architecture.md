@@ -37,14 +37,15 @@ finished answer.
   what kind of thing is on screen.
 - **look** — only when the turn needs it, high detail, sixteen times the
   price. Asked for by the person (`CloserPhrases`) or by the glance itself
-  (`NEED-A-CLOSER-LOOK`).
+  (`NEED-A-CLOSER-LOOK`). `CloserEnabled` off (Budget) keeps the glance and
+  never buys this.
 - **read** — "read my screen to me" (`ReadPhrases`). Goes straight to
   Security past Intent, because a reading is owed the screen and not a
   summary of it.
 
 The OCR transcript rides alongside the picture on every call and reaches
 Intent as its own key, separate from the model's description: one is
-evidence, the other judgement. A tier with no vision configured still takes
+evidence, the other judgement. A tier with no vision configured (Free) still takes
 the shot, still reads it locally, and nothing leaves the machine — she knows
 what the screen says and not what it looks like. Sight also keeps one turn of
 context: the last screen, what was asked about it, and what Morrow answered,
@@ -73,9 +74,9 @@ a model picks up to 8 — one call on the turn's critical path.
 | Tier | extractor, picker | Intent | Reflection | Sight |
 |---|---|---|---|---|
 | Free | local qwen3.5-2b | local | local | OCR only |
-| Budget | local qwen3.5-2b | Mistral | OpenAI | OpenAI |
-| Pro | OpenAI | OpenAI | Mistral | OpenAI |
-| Premium | OpenAI | Mistral | OpenAI | OpenAI |
+| Budget | local qwen3.5-2b | Mistral | OpenAI | glance only |
+| Pro | OpenAI | OpenAI | Mistral | glance + look |
+| Premium | OpenAI | Mistral | OpenAI | glance + look |
 
 ## Governance
 

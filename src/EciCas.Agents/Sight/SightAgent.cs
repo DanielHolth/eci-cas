@@ -463,7 +463,7 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private bool Escalating(string asked, Seen seen)
     {
-        if (_options.Detail == ImageDetail.High || seen.Image is null)
+        if (!_options.CloserEnabled || _options.Detail == ImageDetail.High || seen.Image is null)
         {
             return false;
         }

@@ -36,8 +36,9 @@ She sees the screen. The moment the voice key arms, the shell takes a
 screenshot, reads the text off it locally, and starts a cheap low-detail
 glance that runs while the person is still speaking — so the description is
 usually waiting by the time the turn needs it. A close look at full detail
-costs sixteen times as much and is only taken when the turn says so, either
-because the person asked or because the glance itself asked. "Read my screen
+costs sixteen times as much and is only taken when the turn says so — either
+because the person asked or because the glance itself asked — and only on Pro
+and Premium; Budget pays for the glance and stops there. "Read my screen
 to me" is a third path that goes to the person unshortened.
 
 The local text always rides along, so a tier with no vision model still knows
