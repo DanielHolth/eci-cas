@@ -424,6 +424,14 @@ public sealed class SightAgent : AgentBase, ICognitiveAgent
                 Name, image.Detail, result.Latency.TotalMilliseconds, result.TokenCount);
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, result.Text);
 
+            // Queued on the way out, the same as a failure. Only the failures
+            // were, which left every look this agent actually completed off
+            // the meter: the turn log showed one call where two had been made,
+            // and the running total was short by the price of every glance
+            // since the agent shipped. A faculty that spends money silently is
+            // the one thing an energy meter cannot have.
+            _traces.Enqueue(new Trace(label, result, result.Latency.TotalMilliseconds, null));
+
             return result;
         }
         catch (Exception ex) when (!SubstrateHealth.IsShutdown(ex, cancellationToken))

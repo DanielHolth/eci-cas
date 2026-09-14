@@ -68,6 +68,27 @@ public class SightAgentTests
     }
 
     /// <summary>
+    /// A look that worked is billed, not only one that failed. The meter that
+    /// gates a reply cannot be short by the price of every glance.
+    /// </summary>
+    [Fact]
+    public async Task ALookThatWorkedIsBilled()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var agent = CreateAgent(bus, activity);
+        var telemetry = bus.Subscribe(Topics.Telemetry);
+
+        agent.Glimpse("shot.jpg", [1, 2, 3], "SPACE HAVEN");
+        await agent.HandleAsync(Perceived("what am I looking at"), CancellationToken.None);
+
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var trace = await telemetry.ReadAsync(stop.Token);
+        Assert.Equal("Sight", trace.PublishedBy);
+        Assert.Equal("glance", trace.Meta.Get<string>(SubstrateTrace.LabelKey));
+    }
+
+    /// <summary>
     /// The conclusion is the other half of the last turn, not a turn of its
     /// own. Sight subscribes to it only to remember what the persona said --
     /// treating it as one would publish a second advisory per turn and have
