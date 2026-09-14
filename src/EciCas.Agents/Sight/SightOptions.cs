@@ -1,4 +1,4 @@
-using EciCas.Core;
+﻿using EciCas.Core;
 
 namespace EciCas.Agents.Sight;
 
@@ -48,6 +48,19 @@ public sealed class SightOptions
     [
         "screen", "skjerm", "read this", "les dette", "what does it say", "hva står det",
         "this text", "denne teksten", "look at", "se på", "what am i looking at",
+    ];
+
+    /// <summary>
+    /// Phrases that mean "read it to me" rather than "have a look". The
+    /// difference matters enough to be its own list: a reading is spoken past
+    /// the persona's sentence budget, because a person who cannot see their
+    /// screen is owed the screen and not a summary of it.
+    /// </summary>
+    public string[] ReadPhrases { get; set; } =
+    [
+        "read the screen", "read my screen", "read this to me", "read it to me",
+        "read it out", "read out loud", "what does it say", "read everything",
+        "les skjermen", "les dette for meg", "les opp", "hva står det",
     ];
 
     /// <summary>

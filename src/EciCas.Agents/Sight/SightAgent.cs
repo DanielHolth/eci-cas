@@ -1,5 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
+using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Bus;
 using EciCas.Core;
@@ -51,6 +52,11 @@ public sealed class SightAgent : AgentBase
 
     /// <summary>The screenshot this turn was seen through, for the turn log.</summary>
     public const string ImageKey = "sight.image";
+
+    /// <summary>Set on the reading Sight publishes straight to Security,
+    /// the way Impulse marks its reflex. Tells the turn log which of the two
+    /// proposals on a reading turn was the one that spoke.</summary>
+    public const string ReadingKey = "sight.reading";
 
     private readonly IMessageBus _bus;
     private readonly ISubstrateProvider _substrate;
@@ -140,6 +146,12 @@ public sealed class SightAgent : AgentBase
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         var asked = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
+
+        // A reading is a close look already, so the escalation below stands
+        // down for one: paying for high detail twice on the same picture buys
+        // the same pixels twice.
+        var reading = Reading(asked);
+
         var seen = Seen.Nothing;
         string? degraded = null;
 
@@ -159,7 +171,7 @@ public sealed class SightAgent : AgentBase
                 _logger.LogWarning("Sight could not collect its glance: {Cause}", degraded);
             }
 
-            if (degraded is null && Escalating(asked, seen))
+            if (degraded is null && !reading && Escalating(asked, seen))
             {
                 seen = await LookAgainAsync(seen, asked, cancellationToken).ConfigureAwait(false);
                 degraded = seen.Degraded;
@@ -183,6 +195,11 @@ public sealed class SightAgent : AgentBase
             meta = meta.With(ImageKey, seen.Path);
         }
 
+        if (reading)
+        {
+            await SpeakReadingAsync(envelope, seen, asked, cancellationToken).ConfigureAwait(false);
+        }
+
         // Held for one turn only, and without its bytes: a screenshot kept past
         // the turn that wanted it is a megabyte of nothing.
         _previous = seen with { Image = null };
@@ -191,6 +208,74 @@ public sealed class SightAgent : AgentBase
         _bus.Publish(Topics.Advisories, envelope.Derive(
             Topics.Advisories, Name, envelope.Severity, SubstrateHealth.Mark(meta, degraded)));
     }
+
+    /// <summary>
+    /// "Read the screen to me" -- the one thing Sight says in its own voice.
+    ///
+    /// It goes straight onto the proposal topic, past Intent, and that is the
+    /// whole point of it: Intent is held to two to four sentences, and a
+    /// person who cannot see their screen asking what is on it is owed the
+    /// screen rather than a summary of it. Security still gates it, because
+    /// everything published here is read by the same gate.
+    ///
+    /// Governance's own rule does the rest. A proposal that is not marked as a
+    /// reflex claims the turn, and the first claim wins: this one is published
+    /// while Intent is still waiting on the bundle, so the reading speaks and
+    /// Intent's reply is dropped. If the close reading turns out slow enough
+    /// that Intent got there first, the claim fails and the person simply gets
+    /// the shorter answer -- late is the failure mode, never doubled.
+    /// </summary>
+    private async Task SpeakReadingAsync(Envelope envelope, Seen seen, string asked, CancellationToken cancellationToken)
+    {
+        var reading = await ReadAsync(seen, asked, cancellationToken).ConfigureAwait(false);
+        if (reading.Length == 0)
+        {
+            return;
+        }
+
+        _bus.Publish(Topics.Proposal, envelope.Derive(
+            Topics.Proposal, Name, envelope.Severity,
+            MetaBag.Empty.With(IntentAgent.ReplyKey, reading).With(ReadingKey, true)));
+    }
+
+    /// <summary>
+    /// The screen laid out as something to listen to. At full detail, since a
+    /// reading is exactly the case the cheap pass cannot serve -- and falling
+    /// back to the local OCR transcript when there are no eyes at all, which
+    /// is a plainer reading than the model's but a true one, and free.
+    /// </summary>
+    private async Task<string> ReadAsync(Seen seen, string asked, CancellationToken cancellationToken)
+    {
+        if (seen.Image is null)
+        {
+            return seen.Words;
+        }
+
+        var prompt = new StringBuilder(_instructions.For(Name, "read"))
+            .Append("\n\nThey said: ").Append(PromptCap.Apply(asked));
+
+        if (seen.Words.Length > 0)
+        {
+            prompt.Append("\n\nText read off this screen by the machine's own reader:\n")
+                .Append(PromptCap.Apply(seen.Words, _options.WordsChars));
+        }
+
+        var image = new SubstrateImage(seen.Image, "image/jpeg", ImageDetail.High);
+        var result = await CallAsync(prompt.ToString(), image, cancellationToken).ConfigureAwait(false);
+
+        return result is null ? seen.Words : result.Text.Trim();
+    }
+
+    /// <summary>
+    /// A reading asked for, as against a look. Substring matching over a
+    /// configured list, the same shape as <see cref="Escalating"/> and for the
+    /// same reason -- and deliberately narrow: mistaking an ordinary question
+    /// for a reading spends the persona's whole turn reciting a screen nobody
+    /// asked about.
+    /// </summary>
+    private bool Reading(string asked) =>
+        _options.ReadPhrases.Any(phrase =>
+            phrase.Length > 0 && asked.Contains(phrase, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// The cheap pass: no question, low detail, last turn's screen for
