@@ -39,7 +39,7 @@ namespace EciCas.Agents.Sight;
 /// picture shows, and an agent that saw the screen but not the archive would
 /// answer worse than the one that sees both. Sight describes; Intent speaks.
 /// </summary>
-public sealed class SightAgent : AgentBase
+public sealed class SightAgent : AgentBase, ICognitiveAgent
 {
     /// <summary>What was seen, in the persona's own reading of it.</summary>
     public const string AdviceKey = "sight.advice";
