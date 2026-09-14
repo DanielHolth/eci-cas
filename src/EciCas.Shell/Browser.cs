@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -14,6 +14,12 @@ namespace EciCas.Shell;
 internal static class Browser
 {
     private static Task<CoreWebView2Environment>? _environment;
+
+    /// <summary>
+    /// Whether the disk cache has been emptied yet this run. One flush, on
+    /// whichever of the two windows comes up first.
+    /// </summary>
+    private static bool _flushed;
 
     /// <summary>
     /// Under LocalAppData rather than beside the exe. WebView2 writes a cache
@@ -48,6 +54,24 @@ internal static class Browser
     public static async Task LoadAsync(WebView2 view, Uri uri, bool chromeless)
     {
         await view.EnsureCoreWebView2Async(await EnvironmentAsync());
+
+        // Everything this browser loads is a file on this disk, served by a
+        // host in this same process, so the cache buys nothing and has cost
+        // real days: the surface is a static export whose chunks are named by
+        // content hash, but index.html is not, and a cached copy of that one
+        // document pins the whole window to whatever build wrote it. A fix
+        // shipped, built and copied still came up wearing last week's panel.
+        //
+        // Emptied on the way up rather than left to revalidate, because "the
+        // client you are looking at is the client on disk" is worth more here
+        // than a few milliseconds of localhost.
+        if (!_flushed)
+        {
+            _flushed = true;
+            await view.CoreWebView2.Profile
+                .ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache)
+                .ConfigureAwait(true);
+        }
 
         var settings = view.CoreWebView2.Settings;
 
