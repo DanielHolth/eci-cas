@@ -90,7 +90,14 @@ public sealed class TurnLogSubscriber : AgentBase
         {
             var cost = envelope.Meta.Get<decimal>(SubstrateTrace.CostKey);
             _ledger.Add(cost);
-            _fallback?.Apply(_energy.Spend(cost));
+
+            // Two statements, because one was a bug: `_fallback?.Apply(Spend(...))`
+            // short-circuits the whole expression when there is no fallback,
+            // and the meter is never debited at all. Spending is not the
+            // fallback's business -- it happens whether or not anything is
+            // listening for an empty meter.
+            var level = _energy.Spend(cost);
+            _fallback?.Apply(level);
         }
 
         TurnRecord record;

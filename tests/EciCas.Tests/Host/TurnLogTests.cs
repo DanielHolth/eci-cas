@@ -341,14 +341,35 @@ public class TurnLogTests
         Assert.Equal(1, log.Recent().Single().Seq);
     }
 
+    /// <summary>
+    /// Every priced call debits the meter, whichever faculty made it. Sight
+    /// is the one worth naming: it spends on a turn nobody asked it to spend
+    /// on -- the glance runs whether or not the screen ends up mattering --
+    /// and a faculty that costs money without moving the meter would let a
+    /// person run a bill against a battery that reads full.
+    /// </summary>
+    [Fact]
+    public async Task ASightCall_SpendsEnergy()
+    {
+        var meter = new EnergyMeter(new EnergyOptions(), path: null);
+        var log = Subscriber(new CapturingSink(), settleMs: 10_000, energy: meter);
+        var before = meter.Read().BalanceUsd;
+
+        var perception = Perception("what am I looking at");
+        await log.HandleAsync(perception, CancellationToken.None);
+        await log.HandleAsync(Telemetry(perception, "Sight", 0.01m), CancellationToken.None);
+
+        Assert.Equal(before - 0.01m, meter.Read().BalanceUsd, precision: 6);
+    }
+
     private static TurnLogSubscriber Subscriber(ITurnLogSink sink, int settleMs, int retain = 100,
-        CostLedger? ledger = null, long? turnsRecorded = null)
+        CostLedger? ledger = null, long? turnsRecorded = null, EnergyMeter? energy = null)
     {
         var activity = new BusActivityTracker();
         return new TurnLogSubscriber(new ChannelBus(activity), activity, NullLogger<TurnLogSubscriber>.Instance,
             Options.Create(new TurnLogOptions { SettleMs = settleMs, Retain = retain }), [sink],
             ledger ?? new CostLedger(path: null),
-            new EnergyMeter(new EnergyOptions(), path: null),
+            energy ?? new EnergyMeter(new EnergyOptions(), path: null),
             utterances: turnsRecorded is null ? null : new CountingLog(turnsRecorded.Value));
     }
 
