@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Host.Endpoints;
@@ -83,7 +83,23 @@ public static class HostBoot
         {
             var files = new PhysicalFileProvider(clientPath);
             app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
-            app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = files,
+
+                // The HTML is never cached; everything beside it is cached
+                // forever. Next names its chunks by content hash, so the only
+                // file whose contents change under a fixed name is the entry
+                // document -- and a WebView2 holding yesterday's copy of that
+                // one file serves yesterday's whole surface from a build that
+                // is on disk and correct, which is an afternoon lost to
+                // looking for a bug in the wrong half of the program.
+                OnPrepareResponse = context =>
+                    context.Context.Response.Headers.CacheControl =
+                        context.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                            ? "no-cache"
+                            : "public, max-age=31536000, immutable",
+            });
         }
 
         var jsonOptions = app.Services.GetRequiredService<JsonSerializerOptions>();
