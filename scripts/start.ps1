@@ -134,7 +134,7 @@ Write-Host "eci-cas: tier $Tier, repo $repo"
 
 function Ensure-UiDependencies {
     $uiNodeModules = Join-Path $ui 'node_modules'
-    $webgpuTypes = Join-Path $uiNodeModules '@webgpu' 'types'
+    $webgpuTypes = Join-Path (Join-Path $uiNodeModules '@webgpu') 'types'
 
     if ((Test-Path $uiNodeModules) -and (Test-Path $webgpuTypes)) {
         return
