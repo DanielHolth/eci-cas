@@ -132,6 +132,32 @@ function Start-Window {
 
 Write-Host "eci-cas: tier $Tier, repo $repo"
 
+function Ensure-UiDependencies {
+    $uiNodeModules = Join-Path $ui 'node_modules'
+    $webgpuTypes = Join-Path $uiNodeModules '@webgpu' 'types'
+
+    if ((Test-Path $uiNodeModules) -and (Test-Path $webgpuTypes)) {
+        return
+    }
+
+    if ($WhatIfOnly) {
+        Write-Host 'note: morrow-eci dependencies are missing; would run npm install in the UI project.'
+        return
+    }
+
+    Write-Host 'note: morrow-eci dependencies are missing; running npm install in the UI project.'
+    Push-Location $ui
+    try {
+        & npm install --no-fund --no-audit
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm install failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 # ---- keys this tier will want -------------------------------------------
 #
 # The tier file is the authority on which keys to warn about, and nothing
@@ -171,9 +197,18 @@ if ($needsOpenAi -and -not $env:OPENAI_API_KEY) {
 $weights = @('models/embedding/multilingual-e5-small/model.onnx', 'models/embedding/multilingual-e5-small/sentencepiece.bpe.model')
 $missing = @($weights | Where-Object { -not (Test-Path (Join-Path $repo $_)) })
 if ($missing.Count -gt 0) {
-    Write-Host "note: no local embedding weights ($($missing -join ', '))."
-    Write-Host '      Vectors are off: no pair sweep, no row narrowing, no woken notes.'
-    Write-Host '      ./scripts/get-embedding-model.ps1'
+    if ($WhatIfOnly) {
+        Write-Host "note: no local embedding weights ($($missing -join ', '))."
+        Write-Host '      would run ./scripts/get-embedding-model.ps1'
+    } else {
+        Write-Host "note: no local embedding weights ($($missing -join ', ')); downloading them now."
+        try {
+            & (Join-Path $PSScriptRoot 'get-embedding-model.ps1')
+        } catch {
+            Write-Host "note: embedding weights could not be downloaded ($($_.Exception.Message))."
+            Write-Host '      Vectors are off: no pair sweep, no row narrowing, no woken notes.'
+        }
+    }
 }
 
 # ---- llama-server ------------------------------------------------------
@@ -190,10 +225,20 @@ if ($NoLlm) {
 } elseif (Test-Port $LlmPort) {
     Write-Host "llama-server already answering on :$LlmPort; leaving it alone"
 } elseif ($local.Count -eq 0) {
-    Write-Host 'note: no local model in models/local.'
-    Write-Host '      A tier switch to Free or Budget will fail, and so will the'
-    Write-Host '      fallback an empty energy meter performs on its own.'
-    Write-Host '      ./scripts/get-local-model.ps1'
+    if ($WhatIfOnly) {
+        Write-Host 'note: no local model in models/local.'
+        Write-Host "      would download Qwen3.5-2B and start llama-server on :$LlmPort"
+    } else {
+        Write-Host 'note: no local model in models/local; downloading Qwen3.5-2B now.'
+        # This is the path that makes the local tier actually usable instead of
+        # failing with a silent no-model condition on the first turn.
+        try {
+            & (Join-Path $PSScriptRoot 'get-local-model.ps1') -Start -Port $LlmPort
+        } catch {
+            Write-Host "note: local model setup failed ($($_.Exception.Message))."
+            Write-Host '      Paid tiers are unaffected; local ones will fail per call.'
+        }
+    }
 } elseif ($WhatIfOnly) {
     Write-Host "would start llama-server on :$LlmPort"
 } else {
@@ -243,11 +288,10 @@ if (-not $Dev) {
     }
 
     if ($stale -or -not (Test-Path $export)) {
-        if (-not (Test-Path (Join-Path $ui 'node_modules'))) {
-            Write-Host 'morrow-eci has no node_modules, so there is no client to serve.'
-            Write-Host '  cd morrow-eci; npm install; npm run build'
-            exit 1
-        }
+        # The UI is part of the shipped app: missing deps or missing WebGPU types
+        # are treated as install-time faults that the bootstrap should repair.
+        Ensure-UiDependencies
+
         if ($WhatIfOnly) {
             Write-Host 'would export the client (morrow-eci: npm run build)'
         } else {
