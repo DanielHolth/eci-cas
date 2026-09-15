@@ -10,9 +10,12 @@ public static class Topics
     public const string All = "*";
 
     public const string Perception = "events.perception";
+    public const string PerceptionToolkit = "events.perception.toolkit";
     public const string Advisories = "events.advisories";
     public const string Proposal = "events.proposal";
     public const string Bundle = "events.bundle";
+    public const string ToolkitRequest = "events.toolkit.request";
+    public const string ToolkitResult = "events.toolkit.result";
 
     /// <summary>
     /// Facts the Archivist pulled out of a turn, before they have an address.

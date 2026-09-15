@@ -14,11 +14,15 @@ export function EventLog({
   records,
   openCorrelationId,
   openSignal,
+  enablePowerShell,
+  onTogglePowerShell,
   onClose,
 }: {
   records: TurnRecord[];
   openCorrelationId?: string;
   openSignal?: number;
+  enablePowerShell: boolean;
+  onTogglePowerShell: (enabled: boolean) => void;
   onClose: () => void;
 }) {
   return (
@@ -26,7 +30,11 @@ export function EventLog({
       {/* Re-reads the live knobs as turns land: the host moves the tier by
           itself when energy runs out, and the panel is the only thing that
           could say so. */}
-      <KnobsPanel revision={records.length} />
+      <KnobsPanel
+        revision={records.length}
+        enablePowerShell={enablePowerShell}
+        onTogglePowerShell={onTogglePowerShell}
+      />
       <ol className="text-xs">
         {records.length === 0 && (
           <li className="px-3 py-4 text-neutral-400 dark:text-neutral-500">Nothing has happened yet.</li>

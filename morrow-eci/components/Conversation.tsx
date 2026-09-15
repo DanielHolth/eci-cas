@@ -6,6 +6,8 @@ import { SecurityIcon } from "@/components/SecurityIcon";
 import { Transcript } from "@/components/Transcript";
 import { EventLog } from "@/components/EventLog";
 import { ThoughtsPanel, reflectionCount } from "@/components/ThoughtsPanel";
+import { PowerShellPanel } from "@/components/PowerShellPanel";
+import { ToolkitPanel } from "@/components/ToolkitPanel";
 import { AccountChip } from "@/components/AccountChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { usePersona } from "@/lib/usePersona";
@@ -49,7 +51,12 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  const [thoughtsOpen, setThoughtsOpen] = useState(false);
+  const [leftTab, setLeftTab] = useState<"thoughts" | "powershell" | "toolkit" | null>(null);
+  const [enablePowerShell, setEnablePowerShell] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const saved = window.localStorage.getItem("eci.enablePowerShell");
+    return saved === null ? false : saved === "true";
+  });
 
   const face = useMood();
 
@@ -59,13 +66,24 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
   // panel is open the badge stays at zero outright: the user is already
   // looking at the content, so there is nothing "unseen" to flag.
   const [seenReflections, setSeenReflections] = useState(0);
-  const unseenReflections = thoughtsOpen ? 0 : Math.max(0, reflectionCount(records) - seenReflections);
+  const unseenReflections = leftTab === "thoughts" ? 0 : Math.max(0, reflectionCount(records) - seenReflections);
 
-  function toggleThoughts() {
-    // Both writes happen on the click, not inside an updater: a state updater
-    // has to stay pure, and StrictMode runs it twice to prove it.
-    setSeenReflections(reflectionCount(records));
-    setThoughtsOpen((v) => !v);
+  useEffect(() => {
+    window.localStorage.setItem("eci.enablePowerShell", String(enablePowerShell));
+  }, [enablePowerShell]);
+
+  function toggleLeftTab(tab: "thoughts" | "powershell" | "toolkit") {
+    setLeftTab((current) => (current === tab ? null : tab));
+    if (tab === "thoughts") {
+      setSeenReflections(reflectionCount(records));
+    }
+  }
+
+  function handlePowerShellToggle(next: boolean) {
+    setEnablePowerShell(next);
+    if (!next && leftTab === "powershell") {
+      setLeftTab(null);
+    }
   }
 
   // Opening the drawer at a specific event is a signal, not a selection: a
@@ -164,9 +182,11 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
 
   return (
     <div className="flex h-screen">
-      {thoughtsOpen && (
-        <ThoughtsPanel records={records} onClose={() => setThoughtsOpen(false)} onOpen={openInLog} />
+      {leftTab === "thoughts" && (
+        <ThoughtsPanel records={records} onClose={() => setLeftTab(null)} onOpen={openInLog} />
       )}
+      {enablePowerShell && leftTab === "powershell" && <PowerShellPanel onClose={() => setLeftTab(null)} />}
+      {leftTab === "toolkit" && <ToolkitPanel enablePowerShell={enablePowerShell} onClose={() => setLeftTab(null)} />}
 
       <main className="flex flex-1 min-w-0 flex-col items-center overflow-hidden bg-neutral-50 p-4 dark:bg-neutral-950">
         {/* Full width of main, not of the reading column: "far left" means
@@ -179,11 +199,11 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
             the title cannot overlap a cluster however wide the name
             grows, because a grid track will not let it. */}
         <div className="grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-4 pb-2">
-          <div className="flex items-center justify-self-start">
+          <div className="flex items-center justify-self-start gap-2">
             <button
               type="button"
-              onClick={toggleThoughts}
-              aria-pressed={thoughtsOpen}
+              onClick={() => toggleLeftTab("thoughts")}
+              aria-pressed={leftTab === "thoughts"}
               className="relative rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
             >
               Thoughts
@@ -192,6 +212,24 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
                   {unseenReflections}
                 </span>
               )}
+            </button>
+            {enablePowerShell && (
+              <button
+                type="button"
+                onClick={() => toggleLeftTab("powershell")}
+                aria-pressed={leftTab === "powershell"}
+                className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              >
+                PowerShell
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => toggleLeftTab("toolkit")}
+              aria-pressed={leftTab === "toolkit"}
+              className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              Toolkit
             </button>
           </div>
 
@@ -350,6 +388,8 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
           records={records}
           openCorrelationId={opened?.correlationId}
           openSignal={opened?.signal}
+          enablePowerShell={enablePowerShell}
+          onTogglePowerShell={handlePowerShellToggle}
           onClose={() => setLogOpen(false)}
         />
       )}

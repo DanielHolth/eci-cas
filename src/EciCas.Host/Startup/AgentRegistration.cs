@@ -8,6 +8,7 @@ using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Security;
+using EciCas.Agents.Toolkit;
 using EciCas.Agents.TurnWindow;
 using EciCas.Agents.Utterances;
 using EciCas.Bus;
@@ -57,6 +58,8 @@ internal static class AgentRegistration
         RegisterAgent<ScribeAgent>(services);
 
         RegisterAgent<ReflectionAgent>(services);
+        RegisterAgent<ToolkitHandlerAgent>(services);
+        RegisterAgent<ToolkitManagerAgent>(services);
         RegisterAgent<ArchiveLogger>(services);
         RegisterAgent<ConsoleSubscriber>(services);
         RegisterAgent<TurnLogSubscriber>(services);

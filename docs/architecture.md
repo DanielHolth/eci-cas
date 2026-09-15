@@ -87,6 +87,38 @@ Governance only makes decisions. It bundles advisories, gates on the
 verdict, and counts revision passes. It also writes the honesty notice: a
 fixed, non-model message that says which advisor was degraded or missing.
 
+## Toolkits
+
+The companion UI can expose one or more toolkits as first-class, async
+operations. A toolkit is not a normal agent call stack: it is a dedicated
+request/result pipeline that reports back into perception so the persona can
+speak the outcome without making the tool execution itself part of the
+turn-loop call chain.
+
+- `events.toolkit.request` — request sent by the UI or a prompt-driven
+  action to run a toolkit capability.
+- `events.toolkit.result` — the execution result from the toolkit handler.
+- `events.perception.toolkit` — a perception event created by the toolkit
+  manager for logging and display, in parallel with the normal
+  `events.perception` path.
+
+The flow is:
+
+1. The UI opens a left-side Toolkit panel listing available toolkits and
+   their current status.
+2. The preview toggle enables the PowerShell toolkit; the toolkit guide is
+   always listed as a built-in explanation surface.
+3. `ToolkitHandlerAgent` executes the requested command in-process and
+   publishes the structured result back to the bus.
+4. `ToolkitManagerAgent` converts that result into a perception-ready text
+   payload, which can then be vocalized by Morrow as ordinary perception.
+5. Status ordering is stable: running toolkits first, then completed ones by
+   finish time descending, then ready/unassigned entries by updated time.
+
+This keeps toolkit execution explicit and observable: the system can explain
+what it is doing, report a result, and keep the UI agent-local rather than
+mixing tool execution into the core bus semantics.
+
 ## Config over code
 
 - **Tiers:** `appsettings.<Tier>.json` files, layered on top of the base

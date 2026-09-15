@@ -20,7 +20,15 @@ import {
  * tier's file on the next restart unless Save writes it there first (see
  * EciCas.Core.RuntimeKnobs / KnobDefaults).
  */
-export function KnobsPanel({ revision = 0 }: { revision?: number }) {
+export function KnobsPanel({
+  revision = 0,
+  enablePowerShell,
+  onTogglePowerShell,
+}: {
+  revision?: number;
+  enablePowerShell: boolean;
+  onTogglePowerShell: (enabled: boolean) => void;
+}) {
   const [knobs, setKnobs] = useState<Knobs | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -125,6 +133,16 @@ export function KnobsPanel({ revision = 0 }: { revision?: number }) {
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
+
+      <label className="mb-3 flex items-center justify-between gap-2 rounded border border-neutral-200 px-2 py-1.5 text-xs text-neutral-700 dark:border-neutral-800 dark:text-neutral-200">
+        <span className="font-medium">Enable PowerShell [Preview]</span>
+        <input
+          type="checkbox"
+          checked={enablePowerShell}
+          onChange={(e) => onTogglePowerShell(e.target.checked)}
+          className="h-4 w-4 accent-neutral-700 dark:accent-neutral-300"
+        />
+      </label>
 
       {/* A tier is a preset over everything below it -- which models back
           which class, how wide Recall fans out, whether Reflection runs at
