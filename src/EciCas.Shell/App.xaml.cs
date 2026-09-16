@@ -185,10 +185,60 @@ public partial class App : System.Windows.Application
         // changed since it was last looked at.
         menu.Opening += (_, _) => interact.Checked = _overlay!.Interactable;
 
+        menu.Items.Add(LanguageMenu());
+
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => Shutdown());
 
         return menu;
+    }
+
+    /// <summary>
+    /// Which language whisper is told to expect, pinned rather than "auto" --
+    /// see DictationOptions.Language for why. Four for now, the languages this
+    /// household actually speaks to it; a fifth is a line here, not a redesign.
+    /// </summary>
+    private static readonly (string Code, string Label)[] DictationLanguages =
+    [
+        ("en", "English"),
+        ("fr", "French"),
+        ("es", "Spanish"),
+        ("de", "German"),
+    ];
+
+    private WinForms.ToolStripMenuItem LanguageMenu()
+    {
+        var root = new WinForms.ToolStripMenuItem("Language");
+        var items = new List<(string Code, WinForms.ToolStripMenuItem Item)>();
+
+        foreach (var (code, label) in DictationLanguages)
+        {
+            var item = new WinForms.ToolStripMenuItem(label);
+            item.Click += (_, _) =>
+            {
+                _dictation!.Language = code;
+                foreach (var (_, other) in items)
+                {
+                    other.Checked = false;
+                }
+
+                item.Checked = true;
+            };
+            items.Add((code, item));
+            root.DropDownItems.Add(item);
+        }
+
+        // The menu is opened from the tray, which a click on it can have
+        // changed since it was last looked at.
+        root.DropDownOpening += (_, _) =>
+        {
+            foreach (var (code, item) in items)
+            {
+                item.Checked = code == _dictation!.Language;
+            }
+        };
+
+        return root;
     }
 
     private void Fail(string message, Exception failure)

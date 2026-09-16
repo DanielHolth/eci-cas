@@ -299,6 +299,15 @@ internal sealed class Dictation : IDisposable
     /// anything to find out -- the tray says so at startup.</summary>
     public bool Ready => _options.Enabled && Model() is not null;
 
+    /// <summary>The language whisper is told to expect, read fresh by every
+    /// take -- so the tray's Language menu can change it mid-session without
+    /// touching the microphone or reloading the model.</summary>
+    public string Language
+    {
+        get => _options.Language;
+        set => _options.Language = value;
+    }
+
     public void Dispose()
     {
         _arm.Stop();
