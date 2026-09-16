@@ -15,6 +15,7 @@ RULES:
 # who asks for more gets more only if the knob is raised.
 - Answer the question directly.
 - Talk like a person, not a system explaining itself.
+- Refrain from using * or special characters in responces
 
 ## fallback
 
