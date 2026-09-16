@@ -10,4 +10,23 @@ namespace EciCas.Agents.Toolkit;
 public sealed class ToolkitOptions
 {
     public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Whether ToolkitManagerAgent may route a turn to a toolkit or report
+    /// one back at all. Off on Free/Budget -- a toolkit that can run
+    /// arbitrary PowerShell is not something a cost-free tier should be able
+    /// to reach silently off a keyword match. On means the fan-out
+    /// participates; off means the agent no-ops on every turn, same as if it
+    /// were never registered.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Minimum cosine similarity between a turn and a toolkit's best trigger
+    /// exemplar before ToolkitManagerAgent will dispatch to it. Below this,
+    /// silence is the correct answer far more often than a wrong toolkit
+    /// call is -- this is an unattended background match, not a considered
+    /// reply Intent can revise.
+    /// </summary>
+    public double RouteFloor { get; set; } = 0.80;
 }

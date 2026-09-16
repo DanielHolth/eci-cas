@@ -11,6 +11,7 @@ using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
 using EciCas.Agents.Security;
+using EciCas.Agents.Toolkit;
 using EciCas.Agents.Utterances;
 using EciCas.Bus;
 using EciCas.Core;
@@ -281,6 +282,7 @@ public class SmokeTests
             services.AddSingleton<FactConsult>();
             services.AddSingleton<FactPicker>();
             services.AddSingleton<ThreadWeaver>();
+            services.AddSingleton<IToolkitCatalog>(new ToolkitCatalog([]));
 
             foreach (var type in typeof(GovernanceAgent).Assembly.GetTypes()
                 .Where(t => t is { IsAbstract: false, IsClass: true } && t.IsSubclassOf(typeof(AgentBase))))
