@@ -12,10 +12,6 @@ const IDEA_SETTLE_MS = 900;
 export interface SpeechState {
   /** True while an utterance is actually in flight — what drives the mouth. */
   speaking: boolean;
-  /** A self-triggered idea is queued and waiting its turn (still speaking
-   * something else, or sitting in the settle delay) but has not started yet.
-   * Drives the "more on her mind" indicator — see overlay/page.tsx. */
-  ideaWaiting: boolean;
   /** Queue a line the stream did not produce, such as the opening greeting. */
   say: (text: string) => void;
   /**
@@ -67,7 +63,6 @@ export function useSpeech(
   { enabled = true, ready = true }: { enabled?: boolean; ready?: boolean } = {},
 ): SpeechState {
   const [speaking, setSpeaking] = useState(false);
-  const [ideaWaiting, setIdeaWaiting] = useState(false);
 
   const said = useRef<Set<string>>(new Set());
   const queue = useRef<{ text: string; self: boolean }[]>([]);
@@ -158,7 +153,6 @@ export function useSpeech(
     if (!synth) {
       busy.current = false;
       setSpeaking(false);
-      setIdeaWaiting(false);
       return;
     }
 
@@ -168,7 +162,6 @@ export function useSpeech(
     utterance.onstart = () => {
       heard.current = true;
       setSpeaking(true);
-      setIdeaWaiting(false);
     };
     // Both hands go to the same place: an utterance that errors (no voice
     // installed, autoplay refused) must not wedge the queue shut.
@@ -185,17 +178,18 @@ export function useSpeech(
     if (next === undefined) {
       busy.current = false;
       setSpeaking(false);
-      setIdeaWaiting(false);
       return;
     }
 
     // A self-triggered idea gets a beat of silence after the floor is hers
     // rather than starting the instant the previous utterance's onend fires,
-    // so it reads as a separate thought and not as talking over herself.
-    // A person-triggered reply never waits: replying to what was just said is
-    // never too soon.
+    // so it reads as a separate thought and not as talking over herself. This
+    // only runs once whatever she was already saying has actually finished --
+    // drain is reached from onend, never while busy -- so the wait is purely
+    // this settle beat, never a replacement for the rest of a sentence still
+    // in flight. A person-triggered reply never waits: replying to what was
+    // just said is never too soon.
     if (next.self) {
-      setIdeaWaiting(true);
       settling.current = setTimeout(() => {
         settling.current = null;
         speakNow(next);
@@ -290,5 +284,5 @@ export function useSpeech(
     };
   }, []);
 
-  return { speaking, ideaWaiting, say, unlock, voices, voiceURI, setVoiceURI };
+  return { speaking, say, unlock, voices, voiceURI, setVoiceURI };
 }

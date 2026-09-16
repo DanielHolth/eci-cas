@@ -44,9 +44,15 @@ export interface TurnEvent {
    * exchange, not a reply with no question. Absent on a turn the persona
    * started itself, which is a thought and not something anyone said. */
   input?: string;
-  /** The turn was Reflection's own idea, not a person's prompt. Drives the
-   * "idea" bubble and queueing (rather than interrupting) in useSpeech. */
+  /** The turn was Reflection's own idea, not a person's prompt. Drives
+   * queueing (rather than interrupting) in useSpeech. */
   selfTriggered?: boolean;
+  /** The raw idea Reflection handed back to perception, present only on a
+   * self-triggered turn and as soon as that turn exists -- long before the
+   * pipeline concludes it into a reply. Drives the idea bubble: the whole
+   * point is that it appears the instant the idea lands, not once it has
+   * been thought all the way through. */
+  ideaText?: string;
   impulse?: ImpulseState;
   security: SecurityOutcome[];
   output?: IntentOutput;

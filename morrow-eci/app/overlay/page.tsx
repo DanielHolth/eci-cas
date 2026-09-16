@@ -53,7 +53,7 @@ export default function Overlay() {
   const face = useMood();
 
   // Unmuted, unlike the window: this surface is the one with the mouth.
-  const { speaking, ideaWaiting, unlock } = useSpeech(turns, { ready: replayed });
+  const { speaking, unlock } = useSpeech(turns, { ready: replayed });
 
   const [state, setState] = useState({ listening: false, interactable: false, heard: "", heardAt: 0 });
 
@@ -86,6 +86,41 @@ export default function Overlay() {
   // countdown should start when there is finally something to read.
   const [fresh, setFresh] = useState(false);
   const first = useRef(true);
+
+  // The idea bubble: shown the instant Reflection's own idea lands on
+  // perception, long before it has been thought through into a reply, so the
+  // person sees her have the thought while she is still finishing the last
+  // one aloud. Keyed to a turnId rather than just "on/off" so it can be
+  // cleared at the right moment -- see below -- instead of on a timer of its
+  // own, since there is no fixed number of seconds a reply takes to land.
+  const [ideaTurnId, setIdeaTurnId] = useState<string | null>(null);
+  const [ideaText, setIdeaText] = useState("");
+  const seenIdeas = useRef<Set<string>>(new Set());
+  const primedIdeas = useRef(false);
+
+  useEffect(() => {
+    if (!replayed) return;
+
+    // The replay's backlog of ideas is history, same reasoning as `first`
+    // above for replies -- a window opened mid-session should not announce
+    // every idea Reflection has ever had.
+    if (!primedIdeas.current) {
+      primedIdeas.current = true;
+      for (const t of turns) {
+        if (t.selfTriggered) seenIdeas.current.add(t.turnId);
+      }
+      return;
+    }
+
+    for (const t of turns) {
+      if (t.selfTriggered && t.ideaText && !seenIdeas.current.has(t.turnId)) {
+        seenIdeas.current.add(t.turnId);
+        setIdeaTurnId(t.turnId);
+        setIdeaText(t.ideaText);
+      }
+    }
+  }, [turns, replayed]);
+
   useEffect(() => {
     if (!said) return;
 
@@ -98,9 +133,17 @@ export default function Overlay() {
     }
 
     setFresh(true);
-    const timer = setTimeout(() => setFresh(false), LINGER_MS);
+    const timer = setTimeout(() => {
+      setFresh(false);
+      // The idea bubble outlives its own settle wait and the vocal that
+      // follows it, and only clears here, in step with the reply it was
+      // about fading -- not the moment speech for it starts, and not on a
+      // timer counted from when the idea itself arrived. All three bubbles
+      // (heard, idea, reply) go together.
+      setIdeaTurnId((id) => (id === turn?.turnId ? null : id));
+    }, LINGER_MS);
     return () => clearTimeout(timer);
-  }, [said]);
+  }, [said, turn?.turnId]);
 
   // How tall and wide she needs to be, reported to the shell so the window can
   // grow to fit. The window is a fixed rectangle otherwise: a long reply was
@@ -147,17 +190,16 @@ export default function Overlay() {
         <div ref={box} className="flex flex-col items-center gap-2">
           {/* A third bubble, distinct from the other two: not something said
               to the person (the reply bubble) and not something heard from
-              them (the transcript pill), but a notice that Reflection has
-              landed on an idea and is waiting its turn to speak it. Minimal
-              first pass -- placement/styling to be revisited against the
-              layout illustration. */}
-          {ideaWaiting && (
+              them (the transcript pill), but a thought of her own, showing
+              the instant it lands rather than once it has been spoken.
+              Minimal first pass -- placement/styling to be revisited against
+              the layout illustration. */}
+          {ideaTurnId && (
             <p
-              className="flex items-center gap-1.5 rounded-full bg-indigo-500/80 px-3 py-1 text-xs italic text-indigo-50 shadow"
               role="status"
+              className="max-w-xs rounded-2xl border border-indigo-300/40 bg-indigo-950/80 px-3 py-2 text-center text-sm italic leading-snug text-indigo-100 shadow-lg backdrop-blur-sm"
             >
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-100" />
-              Something on her mind…
+              {ideaText}
             </p>
           )}
 
