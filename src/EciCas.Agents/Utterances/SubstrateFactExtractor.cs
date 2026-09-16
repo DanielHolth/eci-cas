@@ -160,7 +160,7 @@ public sealed class SubstrateFactExtractor : IFactExtractor
         prompt.AppendLine("  I play bass | skill | user | 0");
         prompt.AppendLine();
         prompt.AppendLine("Rules:");
-        prompt.AppendLine("- Write every fact in English, whatever language they said it in. Translate names and places as written, not as sound-alikes.");
+        prompt.AppendLine("- Write every fact in English, whatever language they said it in. Leave proper nouns -- people's names, place names -- as spoken; translating a name would corrupt the record itself.");
         prompt.AppendLine("- One fact per line. No numbering, no bullets, no commentary.");
         prompt.AppendLine("- Each line must make sense alone, read years later, by someone who cannot see the other lines. Replace every pronoun and every \"there\", \"then\", \"that one\" with the thing it refers to.");
         prompt.AppendLine("- Resolve time the same way you resolve pronouns. \"yesterday\", \"last night\", \"in two weeks\" are references, and TODAY IS above is what they point at. Write the date: \"Marcus had his birthday yesterday\" becomes \"Marcus had his birthday on 2026-09-12\". A fact that keeps a relative date is only true on the day it was said.");
