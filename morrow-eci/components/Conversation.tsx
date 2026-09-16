@@ -20,6 +20,7 @@ import { useVitals } from "@/lib/useVitals";
 import { EnergyMeter, LOCAL_LINE, TIRED_LINE } from "@/components/EnergyMeter";
 import { fetchKnobs, latestKnobs, sendNudge, sendPerceive } from "@/lib/api";
 import { useMood } from "@/lib/useMood";
+import { useFadeMs, FADE_MS_MIN, FADE_MS_MAX } from "@/lib/useFadeMs";
 import type { Account } from "@/lib/account";
 
 /** The live view of the persona.
@@ -97,6 +98,11 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
   // spoken, and the mouth has to run on the utterance that is actually in
   // flight rather than on whichever turn happens to be last in the array.
   const { speaking, say, unlock, voices, voiceURI, setVoiceURI } = useSpeech(turns, { enabled: !mute, ready: replayed });
+
+  // Shared with the overlay via localStorage — see lib/useFadeMs.ts. This
+  // window is the one with room for a slider; the overlay is the one that
+  // actually fades on it.
+  const [fadeMs, setFadeMs] = useFadeMs();
 
   // Composed on the client, never during render: the greeting reads the
   // clock, and a server render three hours off would hydrate into a
@@ -265,6 +271,20 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
                 ))}
               </select>
             )}
+            <label className="flex items-center gap-1.5 rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-600 dark:border-neutral-700 dark:text-neutral-300">
+              Bubble fade
+              <input
+                type="range"
+                min={FADE_MS_MIN}
+                max={FADE_MS_MAX}
+                step={500}
+                value={fadeMs}
+                onChange={(e) => setFadeMs(Number(e.target.value))}
+                aria-label="How long the heard/idea/reply bubbles stay up"
+                className="accent-neutral-600 dark:accent-neutral-300"
+              />
+              <span className="tabular-nums">{(fadeMs / 1000).toFixed(1)}s</span>
+            </label>
             <AccountChip account={account} onEdit={onEdit} />
             <ThemeToggle />
             {/* Rightmost of the cluster, deliberately: Debug opens EventLog,

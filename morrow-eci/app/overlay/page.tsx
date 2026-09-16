@@ -8,11 +8,7 @@ import { useSpeech } from "@/lib/useSpeech";
 import { useVitals } from "@/lib/useVitals";
 import { useMood } from "@/lib/useMood";
 import { onShellState, postToShell } from "@/lib/shell";
-
-/** How long the last thing said stays on screen after the mouth stops. Long
- * enough to finish reading, short enough that the watermark goes back to
- * being a watermark. */
-const LINGER_MS = 6000;
+import { useFadeMs } from "@/lib/useFadeMs";
 
 /** Pointer travel, in CSS pixels, that turns a click into a drag. Small enough
  * that dragging feels immediate, large enough that a shaky click still opens
@@ -22,10 +18,6 @@ const DRAG_SLOP = 4;
 /** The p-2 on the outer box, both edges, in CSS pixels. Part of the height the
  * window needs and not part of what a ResizeObserver measures. */
 const PADDING_PX = 16;
-
-/** How long a transcript stays up. Shorter than a reply lingers: it is a
- * receipt, and the reply arriving behind it is the real answer. */
-const HEARD_MS = 4000;
 
 /**
  * Morrow as a desktop watermark: a face in a corner, the last thing she said,
@@ -55,6 +47,10 @@ export default function Overlay() {
   // Unmuted, unlike the window: this surface is the one with the mouth.
   const { speaking, unlock } = useSpeech(turns, { ready: replayed });
 
+  // How long the three bubbles (heard, idea, reply) stay up. Shared with the
+  // slider in Conversation.tsx via localStorage -- see lib/useFadeMs.
+  const [fadeMs] = useFadeMs();
+
   const [state, setState] = useState({ listening: false, interactable: false, heard: "", heardAt: 0 });
 
   // Where a gesture started, while it is still undecided between a click and
@@ -74,9 +70,9 @@ export default function Overlay() {
   useEffect(() => {
     if (!state.heardAt) return;
     setHeard(state.heard);
-    const timer = setTimeout(() => setHeard(""), HEARD_MS);
+    const timer = setTimeout(() => setHeard(""), fadeMs);
     return () => clearTimeout(timer);
-  }, [state.heardAt, state.heard]);
+  }, [state.heardAt, state.heard, fadeMs]);
 
   const turn = turns[turns.length - 1];
   const said = turn?.output?.text;
@@ -141,37 +137,53 @@ export default function Overlay() {
       // timer counted from when the idea itself arrived. All three bubbles
       // (heard, idea, reply) go together.
       setIdeaTurnId((id) => (id === turn?.turnId ? null : id));
-    }, LINGER_MS);
+    }, fadeMs);
     return () => clearTimeout(timer);
-  }, [said, turn?.turnId]);
+  }, [said, turn?.turnId, fadeMs]);
 
-  // How tall and wide she needs to be, reported to the shell so the window can
-  // grow to fit. The window is a fixed rectangle otherwise: a long reply was
-  // being cut off by its bottom edge, and a long "heard" pill -- centered in a
-  // window sized for the face alone -- was getting clipped equally on both its
-  // left and right by the window's own edge, since a centered flex child with
-  // no explicit width sizes to its content rather than the container.
+  // How far the content reaches beyond the avatar on each side, reported to
+  // the shell so the window can grow to fit -- and grow around a fixed point
+  // rather than a fixed edge. The old contract sent one height/width pair and
+  // the shell grew off a fixed bottom edge, which was correct back when every
+  // bubble sat below the face in a single column. Now bubbles sit above,
+  // below and to the left of her, so a flat height/width can no longer say
+  // which side grew -- and the shell, forced to guess, kept the wrong edge
+  // still and let the avatar itself drift, the "bouncing" the face does while
+  // she is mid-reply. Reporting the four extents relative to her own rect
+  // lets the shell hold her screen position fixed and grow each side
+  // independently instead.
   //
   // Measured off an inner box rather than the page: the outer one is h-screen
   // and would only ever report the size it already has. A ResizeObserver
   // rather than an effect on the text, because wrapping happens after layout
   // and the size is not knowable from the string.
   const box = useRef<HTMLDivElement>(null);
+  const avatarRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const element = box.current;
-    if (!element) return;
+    const avatar = avatarRef.current;
+    if (!element || !avatar) return;
 
-    // The last size sent, so a reflow that changes nothing stays silent.
-    let sentHeight = 0;
-    let sentWidth = 0;
+    // The last extents sent, so a reflow that changes nothing stays silent.
+    let sent = { above: 0, below: 0, left: 0, right: 0 };
     const observer = new ResizeObserver(() => {
-      const rect = element.getBoundingClientRect();
-      const height = Math.ceil(rect.height) + PADDING_PX;
-      const width = Math.ceil(rect.width) + PADDING_PX;
-      if (Math.abs(height - sentHeight) < 2 && Math.abs(width - sentWidth) < 2) return;
-      sentHeight = height;
-      sentWidth = width;
-      postToShell({ type: "resize", height, width });
+      const box = element.getBoundingClientRect();
+      const face = avatar.getBoundingClientRect();
+
+      const above = Math.ceil(face.top - box.top) + PADDING_PX;
+      const below = Math.ceil(box.bottom - face.bottom) + PADDING_PX;
+      const left = Math.ceil(face.left - box.left) + PADDING_PX;
+      const right = Math.ceil(box.right - face.right) + PADDING_PX;
+
+      const changed =
+        Math.abs(above - sent.above) >= 2 ||
+        Math.abs(below - sent.below) >= 2 ||
+        Math.abs(left - sent.left) >= 2 ||
+        Math.abs(right - sent.right) >= 2;
+      if (!changed) return;
+
+      sent = { above, below, left, right };
+      postToShell({ type: "resize", above, below, left, right });
     });
 
     observer.observe(element);
@@ -293,6 +305,7 @@ export default function Overlay() {
               from a broken one -- so it gets a ring, a glow and a line of text
               rather than the two tenths of opacity it used to get. */}
           <button
+            ref={avatarRef}
             type="button"
             style={{ gridArea: "avatar" }}
             onPointerDown={(e) => {

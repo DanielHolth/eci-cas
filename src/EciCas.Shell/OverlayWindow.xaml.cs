@@ -195,54 +195,71 @@ internal partial class OverlayWindow : Window
     private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
 
     /// <summary>
-    /// Takes the size the page says it needs and keeps her bottom edge and her
-    /// horizontal center where they are, so the face stays put and a bubble
-    /// opens upward and outward into empty desktop rather than off either edge
-    /// of a window sized for the face alone.
+    /// Takes how far the page says its content reaches beyond the avatar on
+    /// each side and keeps her own screen-space center fixed on both axes,
+    /// growing each side independently into empty desktop.
     ///
-    /// Clamped at both ends on both axes. Never smaller than the configured
-    /// size, which is what the face alone occupies, and never past MaxHeight /
-    /// MaxWidth or the room actually available -- a window that grew off the
-    /// screen would put the newest words where nobody can read them.
+    /// Replaces an older model that anchored to a fixed bottom edge and grew
+    /// upward only, correct back when every bubble sat below the face in one
+    /// column. Once bubbles started appearing above her too (a heard prompt)
+    /// and to her side (an idea), that model kept the wrong edge still and
+    /// let the face itself drift on screen -- the "bouncing" a reply caused
+    /// while she was still speaking it. Anchoring to her center instead means
+    /// no side's growth moves her.
+    ///
+    /// Each extent is clamped at zero -- a page never asks to shrink past her
+    /// alone -- and against MaxHeight / MaxWidth and the room actually
+    /// available, so a long reply cannot grow the window off screen where
+    /// nobody can read it.
     /// </summary>
     private void Grow(string json)
     {
-        double requestedHeight;
-        double requestedWidth;
+        double above;
+        double below;
+        double left;
+        double right;
         try
         {
             var root = JsonDocument.Parse(json).RootElement;
-            if (!root.TryGetProperty("height", out var heightProperty)) return;
-            if (!heightProperty.TryGetDouble(out requestedHeight)) return;
-
-            // Width is the newer half of this message; a page built against
-            // the old contract that only ever sends height still resizes fine.
-            requestedWidth = root.TryGetProperty("width", out var widthProperty)
-                && widthProperty.TryGetDouble(out var parsedWidth)
-                ? parsedWidth
-                : _options.Width;
+            if (!root.TryGetProperty("above", out var aboveProperty) || !aboveProperty.TryGetDouble(out above)) return;
+            if (!root.TryGetProperty("below", out var belowProperty) || !belowProperty.TryGetDouble(out below)) return;
+            if (!root.TryGetProperty("left", out var leftProperty) || !leftProperty.TryGetDouble(out left)) return;
+            if (!root.TryGetProperty("right", out var rightProperty) || !rightProperty.TryGetDouble(out right)) return;
         }
         catch (JsonException)
         {
             return;
         }
 
-        var bottom = _restingTop + _options.Height;
-        var heightCeiling = Math.Min(_options.MaxHeight, bottom - SystemParameters.VirtualScreenTop);
-        var height = Math.Clamp(requestedHeight, _options.Height, Math.Max(_options.Height, heightCeiling));
-
+        var centerY = _restingTop + _options.Height / 2;
         var centerX = _restingLeft + _options.Width / 2;
-        var widthCeiling = Math.Min(_options.MaxWidth, SystemParameters.VirtualScreenWidth);
-        var width = Math.Clamp(requestedWidth, _options.Width, Math.Max(_options.Width, widthCeiling));
+
+        // Each side's own budget: the room the window is allowed to grow by
+        // in total (MaxHeight/MaxWidth over the resting size), further capped
+        // for "above" and "left" by how much actual screen sits on that side
+        // of her fixed center.
+        var extraHeight = Math.Max(0, _options.MaxHeight - _options.Height);
+        var extraWidth = Math.Max(0, Math.Min(_options.MaxWidth, SystemParameters.VirtualScreenWidth) - _options.Width);
+
+        var maxAbove = Math.Min(extraHeight, Math.Max(0, centerY - SystemParameters.VirtualScreenTop - _options.Height / 2));
+        var maxLeft = Math.Min(extraWidth, Math.Max(0, centerX - SystemParameters.VirtualScreenLeft - _options.Width / 2));
+
+        above = Math.Clamp(above, 0, maxAbove);
+        below = Math.Clamp(below, 0, extraHeight);
+        left = Math.Clamp(left, 0, maxLeft);
+        right = Math.Clamp(right, 0, extraWidth);
+
+        var height = _options.Height + above + below;
+        var width = _options.Width + left + right;
+
+        var top = centerY - _options.Height / 2 - above;
+        var newLeft = centerX - _options.Width / 2 - left;
 
         if (Math.Abs(height - Height) < 1 && Math.Abs(width - Width) < 1) return;
 
-        // Top and Left first. Setting Height/Width alone would push the bottom
-        // edge or a side past where she rests before the next line pulls it
-        // back, which reads as a twitch on every reply.
-        Top = bottom - height;
+        Top = top;
         Height = height;
-        Left = centerX - width / 2;
+        Left = newLeft;
         Width = width;
     }
 
