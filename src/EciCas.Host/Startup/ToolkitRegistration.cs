@@ -25,6 +25,30 @@ internal static class ToolkitRegistration
         services.AddSingleton<IToolkit, AccessibilityToolkit>();
         services.AddSingleton<IToolkit, DiscordToolkit>();
 
+        // JSON toolkits -- see ManifestToolkit and ManifestToolkitLoader. A
+        // manifest only ever reaches "approved" by a human hand-editing the
+        // file; a dropped-in file that isn't yet flagged Approved is reported
+        // below and skipped, never silently activated.
+        var toolkitsDirectory = configuration["Toolkits:Directory"] is { Length: > 0 } configured
+            ? configured
+            : Path.Combine(AppContext.BaseDirectory, "Toolkits");
+        var manifestScan = ManifestToolkitLoader.Scan(toolkitsDirectory);
+
+        foreach (var fileName in manifestScan.Pending)
+        {
+            Console.WriteLine($"[toolkits] '{fileName}' is a valid manifest but is not Approved yet -- not loaded.");
+        }
+
+        foreach (var (fileName, reason) in manifestScan.Invalid)
+        {
+            Console.WriteLine($"[toolkits] '{fileName}' failed to load: {reason}.");
+        }
+
+        foreach (var manifest in manifestScan.Approved)
+        {
+            services.AddSingleton<IToolkit>(sp => new ManifestToolkit(manifest, sp.GetRequiredService<IHttpClientFactory>()));
+        }
+
         // Bot token read once at startup, same ApiKeyEnvironmentVariable
         // convention as Substrates:Providers -- see SubstrateRegistration.
         // Bearer scheme "Bot" is Discord's own, not OAuth's.
@@ -42,6 +66,7 @@ internal static class ToolkitRegistration
 
         services.AddSingleton<IToolkitCatalog>(_ => new ToolkitCatalog(
         [
+            .. manifestScan.Approved.Select(m => new ToolkitDescriptor(m.Name, m.Description, m.Triggers)),
             new ToolkitDescriptor(
                 "powershell",
                 "Runs PowerShell on this machine -- file and folder cleanup, disk space, process and service checks, quick system queries.",

@@ -27,6 +27,6 @@ internal static class MorrowGuide
         - Profile & display: my name, a light/dark theme, which voice I speak with, how long a reply stays on screen before it fades, and which language I listen for when you talk (English, French, Spanish, or German -- pin one so I stop guessing mid-sentence).
         - Knobs: your tier (Mock/Free/Budget/Pro/Premium), how long my replies are, how much of what you say I take in, how much conversation history I keep in context, my mood, how often I reflect on things, and how far back I search when recalling something. There's also a checkbox there to turn the PowerShell toolkit on, since running commands on your machine is opt-in.
 
-        Toolkits are the things I can actually *do*, beyond talking -- ask "what can you do" any time and I'll list whichever ones are turned on for your tier.
+        Toolkits are the things I can actually *do*, beyond talking -- ask "what can you do" any time and I'll list whichever ones are turned on for your tier. Some toolkits are plain JSON files (see the Toolkits folder) instead of code -- they still need a human to approve one before it runs, so dropping a file in never turns it on by itself.
         """;
 }
