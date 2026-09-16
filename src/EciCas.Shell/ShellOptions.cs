@@ -41,6 +41,11 @@ internal sealed class ShellOptions
     /// conversation window is a click away.</summary>
     public double MaxHeight { get; set; } = 720;
 
+    /// <summary>How far she may widen to fit a reply or a heard transcript,
+    /// growing outward from her horizontal center. The same ceiling in spirit
+    /// as <see cref="MaxHeight"/>, on the other axis.</summary>
+    public double MaxWidth { get; set; } = 480;
+
     /// <summary>Where the window that opens on a click asks for the session,
     /// and where the watermark asks for itself. Relative to the host's own
     /// listening address.</summary>

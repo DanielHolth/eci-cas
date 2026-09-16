@@ -38,15 +38,17 @@ export interface ShellState {
  * is the only way a window whose whole surface is a browser control can be
  * dragged by its content.
  *
- * `resize` is the page telling the shell how tall it has become. Only the page
- * can know: the reply is however long the reply is, and CSS is what wraps it.
- * The shell keeps her bottom edge where it is and grows upward, because she
- * rests in a corner and the face is the part that should not move.
+ * `resize` is the page telling the shell how tall and wide it has become. Only
+ * the page can know: the reply is however long the reply is, and CSS is what
+ * wraps it. The shell keeps her bottom edge where it is and grows upward, and
+ * keeps her horizontal center where it is and grows outward -- a bubble
+ * centered in a window narrower than it is otherwise gets clipped by the
+ * window's own edges on both sides, not just the far one.
  */
 export type PageMessage =
   | { type: "session" }
   | { type: "drag" }
-  | { type: "resize"; height: number };
+  | { type: "resize"; height: number; width: number };
 
 interface WebView {
   postMessage(message: unknown): void;

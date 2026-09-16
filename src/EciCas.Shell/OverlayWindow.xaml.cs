@@ -29,6 +29,12 @@ internal partial class OverlayWindow : Window
     /// </summary>
     private double _restingTop;
 
+    /// <summary>The horizontal counterpart to <see cref="_restingTop"/>: where
+    /// the left edge sits when she is her resting width. Growing to fit a wide
+    /// bubble moves Left and leaves this alone, keeping her center fixed.
+    /// </summary>
+    private double _restingLeft;
+
     /// <summary>The face was clicked while it was interactable.</summary>
     public event Action? SessionRequested;
 
@@ -61,6 +67,7 @@ internal partial class OverlayWindow : Window
             _handle = new WindowInteropHelper(this).Handle;
             Placement.Restore(this);
             _restingTop = Top;
+            _restingLeft = Left;
             ClickThrough.Set(_handle, _interactable);
         };
     }
@@ -174,7 +181,8 @@ internal partial class OverlayWindow : Window
         SendMessage(_handle, WM_NCLBUTTONDOWN, HTCAPTION, IntPtr.Zero);
 
         _restingTop = Top + Height - _options.Height;
-        Placement.Save(this, _restingTop);
+        _restingLeft = Left + (Width - _options.Width) / 2;
+        Placement.Save(this, _restingLeft, _restingTop);
     }
 
     private const int WM_NCLBUTTONDOWN = 0x00A1;
@@ -187,22 +195,32 @@ internal partial class OverlayWindow : Window
     private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
 
     /// <summary>
-    /// Takes the height the page says it needs and keeps her bottom edge
-    /// where it is, so the face stays put and the bubble opens upward into
-    /// empty desktop.
+    /// Takes the size the page says it needs and keeps her bottom edge and her
+    /// horizontal center where they are, so the face stays put and a bubble
+    /// opens upward and outward into empty desktop rather than off either edge
+    /// of a window sized for the face alone.
     ///
-    /// Clamped at both ends. Never shorter than the configured height, which
-    /// is what the face alone occupies, and never taller than MaxHeight or
-    /// than the room actually above her -- a window that grew off the top of
-    /// the screen would put the newest words where nobody can read them.
+    /// Clamped at both ends on both axes. Never smaller than the configured
+    /// size, which is what the face alone occupies, and never past MaxHeight /
+    /// MaxWidth or the room actually available -- a window that grew off the
+    /// screen would put the newest words where nobody can read them.
     /// </summary>
     private void Grow(string json)
     {
-        double requested;
+        double requestedHeight;
+        double requestedWidth;
         try
         {
-            if (!JsonDocument.Parse(json).RootElement.TryGetProperty("height", out var property)) return;
-            if (!property.TryGetDouble(out requested)) return;
+            var root = JsonDocument.Parse(json).RootElement;
+            if (!root.TryGetProperty("height", out var heightProperty)) return;
+            if (!heightProperty.TryGetDouble(out requestedHeight)) return;
+
+            // Width is the newer half of this message; a page built against
+            // the old contract that only ever sends height still resizes fine.
+            requestedWidth = root.TryGetProperty("width", out var widthProperty)
+                && widthProperty.TryGetDouble(out var parsedWidth)
+                ? parsedWidth
+                : _options.Width;
         }
         catch (JsonException)
         {
@@ -210,16 +228,22 @@ internal partial class OverlayWindow : Window
         }
 
         var bottom = _restingTop + _options.Height;
-        var ceiling = Math.Min(_options.MaxHeight, bottom - SystemParameters.VirtualScreenTop);
-        var height = Math.Clamp(requested, _options.Height, Math.Max(_options.Height, ceiling));
+        var heightCeiling = Math.Min(_options.MaxHeight, bottom - SystemParameters.VirtualScreenTop);
+        var height = Math.Clamp(requestedHeight, _options.Height, Math.Max(_options.Height, heightCeiling));
 
-        if (Math.Abs(height - Height) < 1) return;
+        var centerX = _restingLeft + _options.Width / 2;
+        var widthCeiling = Math.Min(_options.MaxWidth, SystemParameters.VirtualScreenWidth);
+        var width = Math.Clamp(requestedWidth, _options.Width, Math.Max(_options.Width, widthCeiling));
 
-        // Top first. Setting Height alone would push the bottom edge down over
-        // whatever she is resting above before the next line pulls it back,
-        // which reads as a twitch on every reply.
+        if (Math.Abs(height - Height) < 1 && Math.Abs(width - Width) < 1) return;
+
+        // Top and Left first. Setting Height/Width alone would push the bottom
+        // edge or a side past where she rests before the next line pulls it
+        // back, which reads as a twitch on every reply.
         Top = bottom - height;
         Height = height;
+        Left = centerX - width / 2;
+        Width = width;
     }
 
     private void Publish()

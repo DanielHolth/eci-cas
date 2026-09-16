@@ -102,26 +102,33 @@ export default function Overlay() {
     return () => clearTimeout(timer);
   }, [said]);
 
-  // How tall she needs to be, reported to the shell so the window can grow to
-  // fit. The window is a fixed rectangle otherwise, and a long reply was being
-  // cut off by its bottom edge with no way to read the rest.
+  // How tall and wide she needs to be, reported to the shell so the window can
+  // grow to fit. The window is a fixed rectangle otherwise: a long reply was
+  // being cut off by its bottom edge, and a long "heard" pill -- centered in a
+  // window sized for the face alone -- was getting clipped equally on both its
+  // left and right by the window's own edge, since a centered flex child with
+  // no explicit width sizes to its content rather than the container.
   //
   // Measured off an inner box rather than the page: the outer one is h-screen
-  // and would only ever report the height it already has. A ResizeObserver
+  // and would only ever report the size it already has. A ResizeObserver
   // rather than an effect on the text, because wrapping happens after layout
-  // and the height is not knowable from the string.
+  // and the size is not knowable from the string.
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const element = box.current;
     if (!element) return;
 
-    // The last height sent, so a reflow that changes nothing stays silent.
-    let sent = 0;
+    // The last size sent, so a reflow that changes nothing stays silent.
+    let sentHeight = 0;
+    let sentWidth = 0;
     const observer = new ResizeObserver(() => {
-      const height = Math.ceil(element.getBoundingClientRect().height) + PADDING_PX;
-      if (Math.abs(height - sent) < 2) return;
-      sent = height;
-      postToShell({ type: "resize", height });
+      const rect = element.getBoundingClientRect();
+      const height = Math.ceil(rect.height) + PADDING_PX;
+      const width = Math.ceil(rect.width) + PADDING_PX;
+      if (Math.abs(height - sentHeight) < 2 && Math.abs(width - sentWidth) < 2) return;
+      sentHeight = height;
+      sentWidth = width;
+      postToShell({ type: "resize", height, width });
     });
 
     observer.observe(element);
