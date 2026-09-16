@@ -3,9 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TurnEvent } from "@/types/events";
 
+/** How long a self-triggered idea waits after the floor is hers before it
+ * starts, once whatever she was already saying has ended. A hard cut from one
+ * sentence to the next reads as the same interruption a mid-sentence cancel
+ * did — this is the gap that makes it read as a new thought starting instead. */
+const IDEA_SETTLE_MS = 900;
+
 export interface SpeechState {
   /** True while an utterance is actually in flight — what drives the mouth. */
   speaking: boolean;
+  /** A self-triggered idea is queued and waiting its turn (still speaking
+   * something else, or sitting in the settle delay) but has not started yet.
+   * Drives the "more on her mind" indicator — see overlay/page.tsx. */
+  ideaWaiting: boolean;
   /** Queue a line the stream did not produce, such as the opening greeting. */
   say: (text: string) => void;
   /**
@@ -57,10 +67,12 @@ export function useSpeech(
   { enabled = true, ready = true }: { enabled?: boolean; ready?: boolean } = {},
 ): SpeechState {
   const [speaking, setSpeaking] = useState(false);
+  const [ideaWaiting, setIdeaWaiting] = useState(false);
 
   const said = useRef<Set<string>>(new Set());
-  const queue = useRef<string[]>([]);
+  const queue = useRef<{ text: string; self: boolean }[]>([]);
   const busy = useRef(false);
+  const settling = useRef<ReturnType<typeof setTimeout> | null>(null);
   const primed = useRef(false);
   // Whether a single syllable has ever left the speakers. Distinct from
   // `busy`: an utterance refused for want of a gesture still runs the whole
@@ -141,36 +153,63 @@ export function useSpeech(
     }
   }
 
-  const drain = useCallback(() => {
+  const speakNow = useCallback((next: { text: string; self: boolean }) => {
     const synth = typeof window === "undefined" ? undefined : window.speechSynthesis;
-    const next = queue.current.shift();
-    if (!synth || next === undefined) {
+    if (!synth) {
       busy.current = false;
       setSpeaking(false);
+      setIdeaWaiting(false);
       return;
     }
 
     busy.current = true;
-    const utterance = new SpeechSynthesisUtterance(next);
+    const utterance = new SpeechSynthesisUtterance(next.text);
     if (voiceRef.current) utterance.voice = voiceRef.current;
     utterance.onstart = () => {
       heard.current = true;
       setSpeaking(true);
+      setIdeaWaiting(false);
     };
     // Both hands go to the same place: an utterance that errors (no voice
     // installed, autoplay refused) must not wedge the queue shut.
     utterance.onend = drain;
     utterance.onerror = (event) => {
-      if (event.error === "not-allowed") refused.current = next;
+      if (event.error === "not-allowed") refused.current = next.text;
       drain();
     };
     synth.speak(utterance);
   }, []);
 
+  const drain = useCallback(() => {
+    const next = queue.current.shift();
+    if (next === undefined) {
+      busy.current = false;
+      setSpeaking(false);
+      setIdeaWaiting(false);
+      return;
+    }
+
+    // A self-triggered idea gets a beat of silence after the floor is hers
+    // rather than starting the instant the previous utterance's onend fires,
+    // so it reads as a separate thought and not as talking over herself.
+    // A person-triggered reply never waits: replying to what was just said is
+    // never too soon.
+    if (next.self) {
+      setIdeaWaiting(true);
+      settling.current = setTimeout(() => {
+        settling.current = null;
+        speakNow(next);
+      }, IDEA_SETTLE_MS);
+      return;
+    }
+
+    speakNow(next);
+  }, [speakNow]);
+
   const say = useCallback(
     (text: string) => {
       if (!enabled || !text) return;
-      queue.current.push(text);
+      queue.current.push({ text, self: false });
       if (!busy.current) {
         drain();
       }
@@ -211,23 +250,30 @@ export function useSpeech(
       said.current.add(turn.turnId);
       if (!enabled) continue;
 
-      // A new reply replaces whatever is still being read rather than
-      // queueing behind it. A reading of a screen runs for minutes, and the
-      // only way to stop one was to close the window: the person says "stop",
-      // the persona agrees, and the browser goes on reading, because by then
-      // the text is inside speechSynthesis and only cancel() reaches it. The
-      // reply is the right lever and speaking is not -- asking to see the log
-      // should not cut her off mid-sentence, and it did when the microphone
-      // was the trigger.
+      // A new person-prompted reply replaces whatever is still being read
+      // rather than queueing behind it. A reading of a screen runs for
+      // minutes, and the only way to stop one was to close the window: the
+      // person says "stop", the persona agrees, and the browser goes on
+      // reading, because by then the text is inside speechSynthesis and only
+      // cancel() reaches it. The reply is the right lever and speaking is not
+      // -- asking to see the log should not cut her off mid-sentence, and it
+      // did when the microphone was the trigger.
       //
-      // The queue stays for the case it was built for: Reflection's own
-      // ideas, which land as separate turns with no reply of their own.
-      if (busy.current) {
-        queue.current.length = 0;
-        window.speechSynthesis?.cancel();
+      // A self-triggered idea never does this -- it queues behind whatever is
+      // in flight instead, which is the case the queue was built for.
+      if (!turn.selfTriggered) {
+        if (busy.current) {
+          if (settling.current) {
+            clearTimeout(settling.current);
+            settling.current = null;
+          }
+          queue.current.length = 0;
+          window.speechSynthesis?.cancel();
+        }
+        queue.current.push({ text, self: false });
+      } else {
+        queue.current.push({ text, self: true });
       }
-
-      queue.current.push(text);
     }
 
     if (enabled && !busy.current && queue.current.length > 0) {
@@ -239,9 +285,10 @@ export function useSpeech(
   // since speechSynthesis is a window-wide singleton and outlives this mount.
   useEffect(() => {
     return () => {
+      if (settling.current) clearTimeout(settling.current);
       window.speechSynthesis?.cancel();
     };
   }, []);
 
-  return { speaking, say, unlock, voices, voiceURI, setVoiceURI };
+  return { speaking, ideaWaiting, say, unlock, voices, voiceURI, setVoiceURI };
 }

@@ -53,7 +53,7 @@ export default function Overlay() {
   const face = useMood();
 
   // Unmuted, unlike the window: this surface is the one with the mouth.
-  const { speaking, unlock } = useSpeech(turns, { ready: replayed });
+  const { speaking, ideaWaiting, unlock } = useSpeech(turns, { ready: replayed });
 
   const [state, setState] = useState({ listening: false, interactable: false, heard: "", heardAt: 0 });
 
@@ -145,6 +145,22 @@ export default function Overlay() {
 
       <div className="flex h-screen w-screen select-none flex-col items-center justify-end overflow-hidden p-2">
         <div ref={box} className="flex flex-col items-center gap-2">
+          {/* A third bubble, distinct from the other two: not something said
+              to the person (the reply bubble) and not something heard from
+              them (the transcript pill), but a notice that Reflection has
+              landed on an idea and is waiting its turn to speak it. Minimal
+              first pass -- placement/styling to be revisited against the
+              layout illustration. */}
+          {ideaWaiting && (
+            <p
+              className="flex items-center gap-1.5 rounded-full bg-indigo-500/80 px-3 py-1 text-xs italic text-indigo-50 shadow"
+              role="status"
+            >
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-100" />
+              Something on her mind…
+            </p>
+          )}
+
           {(fresh || speaking) && said && (
             /* No max height and nothing hidden: the window is what grows now,
                and a bubble that clipped itself first would make that pointless. */

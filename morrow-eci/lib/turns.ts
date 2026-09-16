@@ -33,6 +33,7 @@ export function turnsFromRecords(records: TurnRecord[]): TurnEvent[] {
     // persona thinking, not the person speaking, so it is not an utterance
     // and gets no bubble on the person's side of the transcript.
     input: r.selfTriggered ? undefined : (r.perception ?? undefined),
+    selfTriggered: r.selfTriggered,
 
     impulse: r.impulse || r.expression ? { reflex: r.impulse ?? "", expression: face(r.expression) } : undefined,
 
