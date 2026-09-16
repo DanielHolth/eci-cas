@@ -33,7 +33,7 @@ public sealed class ReflectionOptions
     public double RevisitMinScore { get; set; } = 0.35;
 
     /// <summary>Minimum persona eagerness (see DriveVectors) for the batch's best-ranked idea to be pushed to events.perception instead of just archived internally.</summary>
-    public double EagernessThreshold { get; set; } = 0.6;
+    public double EagernessThreshold { get; set; } = 0.35;
 
     /// <summary>
     /// How many past drive states Reflection reads to describe how the
