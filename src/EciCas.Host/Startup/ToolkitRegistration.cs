@@ -61,13 +61,20 @@ internal static class ToolkitRegistration
                 ]),
             new ToolkitDescriptor(
                 "guide",
-                "Lists what Morrow can currently do through its toolkits.",
+                "Introduces Morrow -- keybindings, the settings panel, and what her toolkits can do.",
                 [
                     "What can you do?",
                     "What toolkits do you have?",
                     "What are you capable of?",
                     "Show me your features.",
                     "What tools can you use?",
+                    "Tell me about yourself.",
+                    "How do I use you?",
+                    "How do you work?",
+                    "What are your keybindings?",
+                    "How do I talk to you?",
+                    "I'm new here, how does this work?",
+                    "What can I do in the settings?",
                 ]),
             new ToolkitDescriptor(
                 "accessibility",

@@ -18,9 +18,17 @@ public sealed class GuideToolkit(IToolkitCatalog catalog) : IToolkit
             .Where(d => !d.Name.Equals(Name, StringComparison.OrdinalIgnoreCase))
             .Select(d => $"- {d.Name}: {d.Description}");
 
-        var text = entries.Any()
+        var capabilities = entries.Any()
             ? "Here's what I can reach right now:" + Environment.NewLine + string.Join(Environment.NewLine, entries)
             : "I don't have any toolkits available right now.";
+
+        // Always both, not one or the other -- this is a background-routed
+        // advisory Intent then composes a reply from (see
+        // ToolkitManagerAgent.AdviceKey), not text shown verbatim, so the
+        // fuller answer costs nothing when someone only asked "what can you
+        // do" and matters a great deal when they asked "tell me about
+        // yourself" and never see the keybindings otherwise.
+        var text = MorrowGuide.AboutMorrow + Environment.NewLine + Environment.NewLine + capabilities;
 
         return Task.FromResult(new ToolkitOutcome(text, true, null));
     }
