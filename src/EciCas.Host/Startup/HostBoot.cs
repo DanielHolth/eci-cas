@@ -69,7 +69,7 @@ public static class HostBoot
         await builder.AddStoresAsync();
 
         builder.AddKnobs(tier);
-        builder.Services.AddToolkits();
+        builder.Services.AddToolkits(builder.Configuration);
         builder.Services.AddAgents();
 
         var app = builder.Build();

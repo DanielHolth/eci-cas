@@ -30,6 +30,7 @@ internal static class OptionsRegistration
         services.Configure<SightOptions>(configuration.GetSection("Sight"));
         services.Configure<ReflectionOptions>(configuration.GetSection("Reflection"));
         services.Configure<ToolkitOptions>(configuration.GetSection("Toolkit"));
+        services.Configure<DiscordOptions>(configuration.GetSection("Discord"));
         services.Configure<PassageOptions>(configuration.GetSection("Passages"));
         services.Configure<UtteranceOptions>(configuration.GetSection("Utterances"));
         services.Configure<EmbeddingOptions>(configuration.GetSection("Embedding"));

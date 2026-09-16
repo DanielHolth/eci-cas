@@ -1,4 +1,6 @@
+using System.Net.Http.Headers;
 using EciCas.Agents.Toolkit;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EciCas.Host.Startup;
@@ -16,10 +18,27 @@ namespace EciCas.Host.Startup;
 /// </summary>
 internal static class ToolkitRegistration
 {
-    public static IServiceCollection AddToolkits(this IServiceCollection services)
+    public static IServiceCollection AddToolkits(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IToolkit, PowerShellToolkit>();
         services.AddSingleton<IToolkit, GuideToolkit>();
+        services.AddSingleton<IToolkit, AccessibilityToolkit>();
+        services.AddSingleton<IToolkit, DiscordToolkit>();
+
+        // Bot token read once at startup, same ApiKeyEnvironmentVariable
+        // convention as Substrates:Providers -- see SubstrateRegistration.
+        // Bearer scheme "Bot" is Discord's own, not OAuth's.
+        var tokenEnvironmentVariable = configuration["Discord:TokenEnvironmentVariable"];
+        services.AddHttpClient("discord", http =>
+        {
+            http.BaseAddress = new Uri("https://discord.com/api/v10/");
+
+            var token = tokenEnvironmentVariable is null ? null : Environment.GetEnvironmentVariable(tokenEnvironmentVariable);
+            if (!string.IsNullOrEmpty(token))
+            {
+                http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bot", token);
+            }
+        });
 
         services.AddSingleton<IToolkitCatalog>(_ => new ToolkitCatalog(
         [
@@ -49,6 +68,27 @@ internal static class ToolkitRegistration
                     "What are you capable of?",
                     "Show me your features.",
                     "What tools can you use?",
+                ]),
+            new ToolkitDescriptor(
+                "accessibility",
+                "Speaks text aloud through the Windows speech engine -- reads a reply, a screen description, or any given text out loud.",
+                [
+                    "Read that to me out loud.",
+                    "Can you say that aloud instead of just showing it?",
+                    "Speak the screen description to me.",
+                    "I can't read that right now, can you read it to me?",
+                    "Use your voice to tell me what that says.",
+                    "Say this out loud for me.",
+                ]),
+            new ToolkitDescriptor(
+                "discord",
+                "Posts a message to Morrow's Discord channel through the bot Morrow is installed as.",
+                [
+                    "Post that to Discord.",
+                    "Send this message to my Discord server.",
+                    "Let the Discord channel know.",
+                    "Message the team on Discord.",
+                    "Put that in our Discord chat.",
                 ]),
         ]));
 

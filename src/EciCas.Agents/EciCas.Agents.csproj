@@ -14,7 +14,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <PackageReference Include="Parquet.Net" Version="6.1.0" />
+    <!-- Windows-only at runtime (AccessibilityToolkit checks OperatingSystem.IsWindows
+         before touching it); the package itself targets any OS so this project doesn't
+         need a -windows TFM just to reference it. -->
+    <PackageReference Include="System.Speech" Version="10.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
