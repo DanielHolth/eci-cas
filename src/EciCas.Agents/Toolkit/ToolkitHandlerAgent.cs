@@ -1,86 +1,88 @@
-using System.Diagnostics;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Agents.Toolkit;
 
 /// <summary>
-/// Receives toolkit requests and executes a tool in-process. For now this is a
-/// PowerShell command runner used by the preview UI, and it reports its result on
-/// the toolkit result topic so a manager can surface it back as perception.
+/// Receives toolkit requests and executes a tool in-process, dispatching by
+/// name onto whichever <see cref="IToolkit"/> is registered for it -- see
+/// <see cref="Startup.ToolkitRegistration"/> for the roster. Reports its
+/// result on the toolkit result topic so a manager can surface it back as
+/// perception.
+///
+/// Fully async end to end: the toolkit itself is what may run for seconds
+/// (a PowerShell script), and nothing here blocks the dispatch thread while
+/// it does. One worker, so requests to the same toolkit still queue behind
+/// each other -- fine today at one request at a time, and the seam to raise
+/// <see cref="AgentBase.WorkerCount"/> if that ever needs to change.
 /// </summary>
 public sealed class ToolkitHandlerAgent : AgentBase
 {
     private readonly IMessageBus _bus;
+    private readonly IReadOnlyDictionary<string, IToolkit> _toolkits;
+    private readonly ToolkitOptions _options;
 
-    public ToolkitHandlerAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ToolkitHandlerAgent> logger)
+    public ToolkitHandlerAgent(
+        IMessageBus bus,
+        IEnumerable<IToolkit> toolkits,
+        IOptions<ToolkitOptions> options,
+        BusActivityTracker activity,
+        ILogger<ToolkitHandlerAgent> logger)
         : base(bus, activity, logger)
     {
         _bus = bus;
+        _toolkits = toolkits.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        _options = options.Value;
     }
 
     public override string Name => "ToolkitHandler";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.ToolkitRequest];
 
-    public override Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
+    public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         var command = envelope.Meta.Get<string>("toolkit.command") ?? "echo hello world";
         var toolName = envelope.Meta.Get<string>("toolkit.name") ?? "powershell";
 
-        var result = RunTool(toolName, command);
+        var (output, success, error) = await RunToolAsync(toolName, command, cancellationToken).ConfigureAwait(false);
+
         var response = Envelope.Create(
             Topics.ToolkitResult,
             Name,
             envelope.Severity,
-            ToolkitResult.Build(toolName, command, result.output, result.success, result.error));
+            ToolkitResult.Build(toolName, command, output, success, error));
 
         response = response with { CorrelationId = envelope.CorrelationId };
         _bus.Publish(Topics.ToolkitResult, response);
-        return Task.CompletedTask;
     }
 
-    private static (string output, bool success, string? error) RunTool(string name, string command)
+    private async Task<(string output, bool success, string? error)> RunToolAsync(
+        string name, string command, CancellationToken cancellationToken)
     {
-        if (!string.Equals(name, "powershell", StringComparison.OrdinalIgnoreCase))
+        if (!_toolkits.TryGetValue(name, out var toolkit))
         {
             return (string.Empty, false, $"Unsupported toolkit '{name}'.");
         }
 
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+
         try
         {
-            var start = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = $"-NoProfile -NonInteractive -Command \"{Escape(command)}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-
-            using var process = Process.Start(start);
-            if (process is null)
-            {
-                return (string.Empty, false, "Failed to start PowerShell.");
-            }
-
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-
-            var finalOutput = output.Trim();
-            if (!string.IsNullOrWhiteSpace(error) && process.ExitCode != 0)
-            {
-                return (finalOutput, false, error.Trim());
-            }
-
-            return (finalOutput, process.ExitCode == 0, string.IsNullOrWhiteSpace(error) ? null : error.Trim());
+            var outcome = await toolkit.ExecuteAsync(command, timeout.Token).ConfigureAwait(false);
+            return (outcome.Output, outcome.Success, outcome.Error);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The timeout fired, not the host shutting down -- a real,
+            // reportable outcome, not an exception for ConsumeAsync's catch
+            // block to log and move past.
+            return (string.Empty, false, $"Timed out after {_options.TimeoutSeconds}s.");
         }
         catch (Exception ex)
         {
             return (string.Empty, false, ex.Message);
         }
     }
-
-    private static string Escape(string command) => command.Replace("\"", "`\"");
 }

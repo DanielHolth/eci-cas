@@ -3,6 +3,7 @@ using EciCas.Agents.Impulse;
 using EciCas.Agents.Sight;
 using EciCas.Agents.Passages;
 using EciCas.Agents.Reflection;
+using EciCas.Agents.Toolkit;
 using EciCas.Agents.Utterances;
 using EciCas.Core;
 using EciCas.Host.Telemetry;
@@ -28,6 +29,7 @@ internal static class OptionsRegistration
         services.Configure<ImpulseOptions>(configuration.GetSection("Impulse"));
         services.Configure<SightOptions>(configuration.GetSection("Sight"));
         services.Configure<ReflectionOptions>(configuration.GetSection("Reflection"));
+        services.Configure<ToolkitOptions>(configuration.GetSection("Toolkit"));
         services.Configure<PassageOptions>(configuration.GetSection("Passages"));
         services.Configure<UtteranceOptions>(configuration.GetSection("Utterances"));
         services.Configure<EmbeddingOptions>(configuration.GetSection("Embedding"));
