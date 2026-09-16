@@ -43,6 +43,7 @@ internal static class KnobRegistration
             PerceptionChars = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.PerceptionChars,
             ContextTurns = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ContextTurns,
             Mood = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Mood,
+            Language = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Language,
         });
 
         return services;

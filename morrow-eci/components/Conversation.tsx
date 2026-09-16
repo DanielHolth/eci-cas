@@ -8,8 +8,7 @@ import { EventLog } from "@/components/EventLog";
 import { ThoughtsPanel, reflectionCount } from "@/components/ThoughtsPanel";
 import { PowerShellPanel } from "@/components/PowerShellPanel";
 import { ToolkitPanel } from "@/components/ToolkitPanel";
-import { AccountChip } from "@/components/AccountChip";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import { usePersona } from "@/lib/usePersona";
 import { useSpeech } from "@/lib/useSpeech";
 import { greeting } from "@/lib/greeting";
@@ -20,7 +19,7 @@ import { useVitals } from "@/lib/useVitals";
 import { EnergyMeter, LOCAL_LINE, TIRED_LINE } from "@/components/EnergyMeter";
 import { fetchKnobs, latestKnobs, sendNudge, sendPerceive } from "@/lib/api";
 import { useMood } from "@/lib/useMood";
-import { useFadeMs, FADE_MS_MIN, FADE_MS_MAX } from "@/lib/useFadeMs";
+import { useFadeMs } from "@/lib/useFadeMs";
 import type { Account } from "@/lib/account";
 
 /** The live view of the persona.
@@ -52,7 +51,7 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  const [leftTab, setLeftTab] = useState<"thoughts" | "powershell" | "toolkit" | null>(null);
+  const [leftTab, setLeftTab] = useState<"thoughts" | "powershell" | "toolkit" | "settings" | null>(null);
   const [enablePowerShell, setEnablePowerShell] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     const saved = window.localStorage.getItem("eci.enablePowerShell");
@@ -72,13 +71,6 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
   useEffect(() => {
     window.localStorage.setItem("eci.enablePowerShell", String(enablePowerShell));
   }, [enablePowerShell]);
-
-  function toggleLeftTab(tab: "thoughts" | "powershell" | "toolkit") {
-    setLeftTab((current) => (current === tab ? null : tab));
-    if (tab === "thoughts") {
-      setSeenReflections(reflectionCount(records));
-    }
-  }
 
   function handlePowerShellToggle(next: boolean) {
     setEnablePowerShell(next);
@@ -193,6 +185,21 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
       )}
       {enablePowerShell && leftTab === "powershell" && <PowerShellPanel onClose={() => setLeftTab(null)} />}
       {leftTab === "toolkit" && <ToolkitPanel enablePowerShell={enablePowerShell} onClose={() => setLeftTab(null)} />}
+      {leftTab === "settings" && (
+        <SettingsPanel
+          revision={records.length}
+          enablePowerShell={enablePowerShell}
+          onTogglePowerShell={handlePowerShellToggle}
+          onClose={() => setLeftTab(null)}
+          account={account}
+          onEditAccount={onEdit}
+          voices={voices}
+          voiceURI={voiceURI}
+          setVoiceURI={setVoiceURI}
+          fadeMs={fadeMs}
+          setFadeMs={setFadeMs}
+        />
+      )}
 
       <main className="flex flex-1 min-w-0 flex-col items-center overflow-hidden bg-neutral-50 p-4 dark:bg-neutral-950">
         {/* Full width of main, not of the reading column: "far left" means
@@ -206,37 +213,35 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
             grows, because a grid track will not let it. */}
         <div className="grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-4 pb-2">
           <div className="flex items-center justify-self-start gap-2">
-            <button
-              type="button"
-              onClick={() => toggleLeftTab("thoughts")}
-              aria-pressed={leftTab === "thoughts"}
-              className="relative rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            >
-              Thoughts
-              {unseenReflections > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+            {/* One control instead of a row of always-on buttons: the panel
+                picked is the only one shown, and picking it again (the empty
+                option) closes it -- "none" is a first-class choice here, not
+                an absence of one. */}
+            <div className="relative">
+              <select
+                value={leftTab ?? ""}
+                onChange={(e) => {
+                  const tab = e.target.value as "thoughts" | "powershell" | "toolkit" | "settings" | "";
+                  setLeftTab(tab === "" ? null : tab);
+                  if (tab === "thoughts") {
+                    setSeenReflections(reflectionCount(records));
+                  }
+                }}
+                aria-label="Panel"
+                className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:[color-scheme:dark]"
+              >
+                <option value="">Panels</option>
+                <option value="thoughts">Thoughts{unseenReflections > 0 ? ` (${unseenReflections})` : ""}</option>
+                {enablePowerShell && <option value="powershell">PowerShell</option>}
+                <option value="toolkit">Toolkit</option>
+                <option value="settings">Settings</option>
+              </select>
+              {leftTab === "thoughts" && unseenReflections > 0 && (
+                <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
                   {unseenReflections}
                 </span>
               )}
-            </button>
-            {enablePowerShell && (
-              <button
-                type="button"
-                onClick={() => toggleLeftTab("powershell")}
-                aria-pressed={leftTab === "powershell"}
-                className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              >
-                PowerShell
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => toggleLeftTab("toolkit")}
-              aria-pressed={leftTab === "toolkit"}
-              className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            >
-              Toolkit
-            </button>
+            </div>
           </div>
 
             <div className="text-center">
@@ -256,37 +261,6 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
             </div>
 
           <div className="flex items-center gap-2 justify-self-end">
-            {voices.length > 0 && (
-              <select
-                value={voiceURI}
-                onChange={(e) => setVoiceURI(e.target.value)}
-                aria-label="Voice"
-                className="rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              >
-                <option value="">Default voice</option>
-                {voices.map((v) => (
-                  <option key={v.voiceURI} value={v.voiceURI}>
-                    {v.name} ({v.lang})
-                  </option>
-                ))}
-              </select>
-            )}
-            <label className="flex items-center gap-1.5 rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-600 dark:border-neutral-700 dark:text-neutral-300">
-              Bubble fade
-              <input
-                type="range"
-                min={FADE_MS_MIN}
-                max={FADE_MS_MAX}
-                step={500}
-                value={fadeMs}
-                onChange={(e) => setFadeMs(Number(e.target.value))}
-                aria-label="How long the heard/idea/reply bubbles stay up"
-                className="accent-neutral-600 dark:accent-neutral-300"
-              />
-              <span className="tabular-nums">{(fadeMs / 1000).toFixed(1)}s</span>
-            </label>
-            <AccountChip account={account} onEdit={onEdit} />
-            <ThemeToggle />
             {/* Rightmost of the cluster, deliberately: Debug opens EventLog,
                 which docks at the true right edge of the screen, so the
                 button that opens it should sit closest to that edge rather
@@ -408,8 +382,6 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
           records={records}
           openCorrelationId={opened?.correlationId}
           openSignal={opened?.signal}
-          enablePowerShell={enablePowerShell}
-          onTogglePowerShell={handlePowerShellToggle}
           onClose={() => setLogOpen(false)}
         />
       )}

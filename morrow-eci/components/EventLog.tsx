@@ -2,39 +2,30 @@
 
 import { ResizableAside } from "@/components/ResizableAside";
 import { EventLogEntry } from "@/components/EventLogEntry";
-import { KnobsPanel } from "@/components/KnobsPanel";
 import type { TurnRecord } from "@/types/events";
 
 /**
  * Everything the console prints about a turn, on the surface. Newest first,
  * scrolling independently of the avatar column — a person watching the face
  * should not have to lose it to read what the faculties did.
+ *
+ * Event log only — the knobs that used to live here moved to the Settings
+ * tab on the left, see SettingsPanel.tsx, which leaves this drawer the one
+ * thing its title says it is.
  */
 export function EventLog({
   records,
   openCorrelationId,
   openSignal,
-  enablePowerShell,
-  onTogglePowerShell,
   onClose,
 }: {
   records: TurnRecord[];
   openCorrelationId?: string;
   openSignal?: number;
-  enablePowerShell: boolean;
-  onTogglePowerShell: (enabled: boolean) => void;
   onClose: () => void;
 }) {
   return (
     <ResizableAside side="right" title="Debug" onClose={onClose}>
-      {/* Re-reads the live knobs as turns land: the host moves the tier by
-          itself when energy runs out, and the panel is the only thing that
-          could say so. */}
-      <KnobsPanel
-        revision={records.length}
-        enablePowerShell={enablePowerShell}
-        onTogglePowerShell={onTogglePowerShell}
-      />
       <ol className="text-xs">
         {records.length === 0 && (
           <li className="px-3 py-4 text-neutral-400 dark:text-neutral-500">Nothing has happened yet.</li>

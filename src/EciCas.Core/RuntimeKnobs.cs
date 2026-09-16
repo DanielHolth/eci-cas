@@ -18,6 +18,13 @@ public sealed class RuntimeKnobs
     private int _perceptionChars = 512;
     private int _contextTurns = 5;
     private Mood _mood = Mood.Neutral;
+    private string _language = "en";
+
+    /// <summary>The four languages this household actually speaks to it --
+    /// see DictationOptions.Language. Shared by the tray's Language menu and
+    /// the web Settings panel's dropdown, which is the point of this living
+    /// here instead of on DictationOptions.</summary>
+    public static readonly string[] Languages = ["en", "fr", "es", "de"];
 
     /// <summary>Upper bound Intent is told to keep replies within, clamped
     /// to the slider's own range so a bad request can't ask for zero or a
@@ -135,6 +142,21 @@ public sealed class RuntimeKnobs
         get => _mood;
         set => _mood = value;
     }
+
+    /// <summary>Which language whisper is told to expect -- invalid or
+    /// unrecognised values are ignored rather than thrown, the same way a
+    /// bad request cannot force MaxSentences out of range.</summary>
+    public string Language
+    {
+        get => _language;
+        set
+        {
+            if (Array.IndexOf(Languages, value) >= 0)
+            {
+                _language = value;
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -169,5 +191,10 @@ public sealed class KnobDefaults
     public int ContextTurns { get; set; } = 5;
     public int RecallDepth { get; set; } = 5;
     public Mood Mood { get; set; } = Mood.Neutral;
+
+    /// <summary>Not bound from "Knobs" like the rest -- it has no per-tier
+    /// opinion and lives at Shell:Dictation:Language instead. See
+    /// OptionsRegistration's PostConfigure for how it gets here.</summary>
+    public string Language { get; set; } = "en";
 }
 

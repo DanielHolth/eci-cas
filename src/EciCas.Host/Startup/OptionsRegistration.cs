@@ -45,6 +45,18 @@ internal static class OptionsRegistration
         services.PostConfigure<SubstrateOptions>(substrates =>
             configuration.GetSection("Maintenance").Get<MaintenanceOptions>()?.Install(substrates));
 
+        // Language has no per-tier opinion, so it is not in any "Knobs"
+        // section -- it lives at Shell:Dictation:Language, the base file
+        // only. Read directly rather than a second Configure<> binding,
+        // since the target field is on KnobDefaults, not a type of its own.
+        services.PostConfigure<KnobDefaults>(knobDefaults =>
+        {
+            if (configuration["Shell:Dictation:Language"] is { } language)
+            {
+                knobDefaults.Language = language;
+            }
+        });
+
         return services;
     }
 }

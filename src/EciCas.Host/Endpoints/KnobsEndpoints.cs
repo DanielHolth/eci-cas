@@ -92,6 +92,11 @@ internal static class KnobsEndpoints
                 knobs.Mood = mood;
             }
 
+            if (request.Language is { } language)
+            {
+                knobs.Language = language;
+            }
+
             return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
         });
 
@@ -160,6 +165,36 @@ internal static class KnobsEndpoints
             knobDefaults.Value.ContextTurns = knobs.ContextTurns;
             knobDefaults.Value.Mood = knobs.Mood;
 
+            // Language has no per-tier opinion -- it lives in the base
+            // appsettings.json under Shell:Dictation, not any tier file --
+            // so its save is separate and best-effort: a tier without a base
+            // file reachable (there always is one) simply keeps whatever the
+            // process booted with, rather than failing the whole save the
+            // way a missing tier key does above.
+            const string baseFile = "appsettings.json";
+            foreach (var path in new[]
+                     {
+                         Path.Combine(AppContext.BaseDirectory, baseFile),
+                         Path.Combine(SourceTierDirectory(), baseFile),
+                     }.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var text = File.ReadAllText(path);
+                if (!TryWriteString(ref text, "Language", knobs.Language))
+                {
+                    continue;
+                }
+
+                JsonNode.Parse(text);
+                File.WriteAllText(path, text);
+            }
+
+            knobDefaults.Value.Language = knobs.Language;
+
             return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
         });
 
@@ -193,6 +228,9 @@ internal static class KnobsEndpoints
             savedMood = knobDefaults.Mood.ToString(),
             mood = knobs.Mood.ToString(),
             moods = Enum.GetNames<Mood>(),
+            savedLanguage = knobDefaults.Language,
+            language = knobs.Language,
+            languages = RuntimeKnobs.Languages,
         };
     }
 
@@ -254,4 +292,4 @@ internal static class KnobsEndpoints
     }
 }
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? ContextTurns = null, int? RecallDepth = null, string? Mood = null, string? Tier = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? ContextTurns = null, int? RecallDepth = null, string? Mood = null, string? Tier = null, string? Language = null);

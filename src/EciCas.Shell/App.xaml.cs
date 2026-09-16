@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Sight;
+using EciCas.Core;
 using EciCas.Host.Startup;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -86,7 +87,7 @@ public partial class App : System.Windows.Application
         _overlay.SessionRequested += () => _ = _session.RevealAsync();
         _overlay.Show();
 
-        _dictation = new Dictation(options.Dictation);
+        _dictation = new Dictation(options.Dictation, _host.Services.GetRequiredService<RuntimeKnobs>());
 
         // Beside the archive, in this process's own build output, for the
         // reason AGENTS.md gives about the archive itself.

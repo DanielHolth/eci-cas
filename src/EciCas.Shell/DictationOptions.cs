@@ -41,13 +41,11 @@ internal sealed class DictationOptions
     public string Vocabulary { get; set; } = "Morrow";
 
     /// <summary>
-    /// An ISO code to pin the language. Defaults to English rather than
-    /// "auto": per-take language detection sounded like the right call for a
-    /// bilingual household, but in practice a take now and then gets
-    /// misheard as a language nobody was speaking, and there is no way back
-    /// from that mid-conversation short of the tray menu. The tray's
-    /// Language submenu offers en/fr/es/de and writes here; "auto" still
-    /// works if set directly in config, just not from the menu.
+    /// An ISO code to pin the language, read once at startup to seed
+    /// <see cref="RuntimeKnobs.Language"/> -- see that property for why the
+    /// live value lives there instead of here. "auto" works if set directly
+    /// in config; the tray menu and the web Settings panel only ever offer
+    /// en/fr/es/de.
     /// </summary>
     public string Language { get; set; } = "en";
 

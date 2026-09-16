@@ -32,6 +32,7 @@ internal sealed class Dictation : IDisposable
     private const int SampleRate = 16000;
 
     private readonly DictationOptions _options;
+    private readonly RuntimeKnobs _knobs;
     private readonly Lazy<Task<WhisperFactory>> _factory;
 
     /// <summary>The hold threshold, and the ceiling on one take. Dispatcher
@@ -64,9 +65,11 @@ internal sealed class Dictation : IDisposable
     /// tells you why.</summary>
     public event Action<string>? Trouble;
 
-    public Dictation(DictationOptions options)
+    public Dictation(DictationOptions options, RuntimeKnobs knobs)
     {
         _options = options;
+        _knobs = knobs;
+        _knobs.Language = options.Language;
 
         // Loaded once, off the UI thread, on first use rather than at boot:
         // 150MB of weights is a second or two that the watermark should not
@@ -219,7 +222,7 @@ internal sealed class Dictation : IDisposable
         // A processor per take, deliberately: it carries the decoder's state,
         // and one take should not be understood in the light of the last one.
         var builder = factory.CreateBuilder()
-            .WithLanguage(_options.Language)
+            .WithLanguage(_knobs.Language)
 
             // Half the machine at most. The other half is running whatever the
             // person was doing when they held the key down.
@@ -304,8 +307,8 @@ internal sealed class Dictation : IDisposable
     /// touching the microphone or reloading the model.</summary>
     public string Language
     {
-        get => _options.Language;
-        set => _options.Language = value;
+        get => _knobs.Language;
+        set => _knobs.Language = value;
     }
 
     public void Dispose()

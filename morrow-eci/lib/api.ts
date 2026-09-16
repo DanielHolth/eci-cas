@@ -68,6 +68,9 @@ export interface Knobs {
   savedMood: string;
   mood: string;
   moods: string[];
+  savedLanguage: string;
+  language: string;
+  languages: string[];
 }
 
 /**
@@ -109,7 +112,7 @@ export async function fetchKnobs(): Promise<Knobs> {
   return publish(await response.json());
 }
 
-async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "contextTurns" | "recallDepth" | "mood" | "tier", number | string>>): Promise<Knobs> {
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "contextTurns" | "recallDepth" | "mood" | "tier" | "language", number | string>>): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -130,6 +133,7 @@ export const setContextTurns = (contextTurns: number) => postKnobs({ contextTurn
 export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth });
 export const setMood = (mood: string) => postKnobs({ mood });
 export const setTier = (tier: string) => postKnobs({ tier });
+export const setLanguage = (language: string) => postKnobs({ language });
 
 /** Writes every live knob into the active tier's appsettings file -- both
  * the source tree's copy and the one the binary loads -- so a setting
