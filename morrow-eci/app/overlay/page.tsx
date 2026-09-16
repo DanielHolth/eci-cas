@@ -184,31 +184,95 @@ export default function Overlay() {
           HTML and the window does not flash opaque before React runs. The
           shell's WebView2 is transparent underneath this; a browser tab shows
           whatever is behind it, which is nothing. */}
-      <style>{`html, body { background: transparent !important; }`}</style>
+      <style>{`
+        html, body { background: transparent !important; }
 
-      <div className="flex h-screen w-screen select-none flex-col items-center justify-end overflow-hidden p-2">
-        <div ref={box} className="flex flex-col items-center gap-2">
-          {/* A third bubble, distinct from the other two: not something said
-              to the person (the reply bubble) and not something heard from
-              them (the transcript pill), but a thought of her own, showing
-              the instant it lands rather than once it has been spoken.
-              Minimal first pass -- placement/styling to be revisited against
-              the layout illustration. */}
-          {ideaTurnId && (
-            <p
-              role="status"
-              className="max-w-xs rounded-2xl border border-indigo-300/40 bg-indigo-950/80 px-3 py-2 text-center text-sm italic leading-snug text-indigo-100 shadow-lg backdrop-blur-sm"
-            >
-              {ideaText}
-            </p>
+        /* A cloud, not a rounded rectangle: a body plus a handful of
+           overlapping circles bumped out along the top and bottom edges, the
+           classic thought-bubble silhouette. Built from box-shadow rather
+           than a bitmap or an SVG path so it still respects the text inside
+           sizing the box, and one color (the fill) drives the whole shape
+           since every bump is a shadow of the same element rather than a
+           separately colored layer. */
+        .cloud-bubble {
+          position: relative;
+          background: rgba(49, 46, 129, 0.85);
+          border: 1px solid rgba(165, 180, 252, 0.35);
+          border-radius: 42% 40% 46% 44% / 60% 55% 58% 52%;
+        }
+        .cloud-bubble::before,
+        .cloud-bubble::after {
+          content: "";
+          position: absolute;
+          background: rgba(49, 46, 129, 0.85);
+          border: 1px solid rgba(165, 180, 252, 0.35);
+          border-radius: 50%;
+        }
+        .cloud-bubble::before {
+          width: 42%;
+          height: 46%;
+          top: -18%;
+          left: 14%;
+        }
+        .cloud-bubble::after {
+          width: 30%;
+          height: 34%;
+          bottom: -14%;
+          right: 18%;
+        }
+      `}</style>
+
+      <div className="flex h-screen w-screen select-none items-end justify-end overflow-hidden p-2">
+        {/* A cross around the avatar, not a stack: what the person said goes
+            above (with an arrow pointing down at her, the direction it was
+            heard from), what she says back goes below (a speech bubble with
+            a tail, the direction a voice comes from), and a thought she is
+            having on her own goes to the left (a cloud, disconnected from
+            both directions of the exchange). Grid rather than three absolute
+            positions: the avatar's own cell size still drives row/column
+            sizing, so `box` below keeps measuring one element that encloses
+            whatever combination of the three is currently showing. */}
+        <div
+          ref={box}
+          className="grid items-center justify-items-center gap-2"
+          style={{ gridTemplateAreas: `"idea prompt prompt" "idea avatar avatar" ". reply reply"`, gridTemplateColumns: "auto auto auto" }}
+        >
+          {heard && (
+            /* What she heard, above her, with an arrow pointing down at the
+               avatar: that is the direction a prompt arrives from. Reuses the
+               "heard" transcript rather than turn.input -- turn.input only
+               exists once the record round-trips, which is well after the
+               shell already has the raw dictation. */
+            <div style={{ gridArea: "prompt" }} className="flex flex-col items-center">
+              <p className="max-w-xs rounded-2xl bg-neutral-100/90 px-3 py-2 text-center text-sm leading-snug text-neutral-900 shadow-lg backdrop-blur-sm">
+                {heard}
+              </p>
+              <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-100/90">
+                <path d="M0 0 L8 10 L16 0 Z" fill="currentColor" />
+              </svg>
+            </div>
           )}
 
-          {(fresh || speaking) && said && (
-            /* No max height and nothing hidden: the window is what grows now,
-               and a bubble that clipped itself first would make that pointless. */
-            <p className="max-w-xs rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
-              {said}
-            </p>
+          {ideaTurnId && (
+            /* A thought of her own, to the side rather than in line with the
+               exchange, and drawn as a cloud with a trail of shrinking dots
+               back to the avatar -- the classic thought-bubble grammar --
+               rather than the same rounded rectangle as the other two, so it
+               reads as a different kind of bubble on sight, not just a
+               different position. */
+            <div style={{ gridArea: "idea" }} className="flex items-center gap-1.5">
+              <p
+                role="status"
+                className="cloud-bubble max-w-[13rem] px-4 py-3 text-center text-sm italic leading-snug text-indigo-100 shadow-lg"
+              >
+                {ideaText}
+              </p>
+              <span className="flex flex-col items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-indigo-200/70" />
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-200/60" />
+                <span className="h-1 w-1 rounded-full bg-indigo-200/50" />
+              </span>
+            </div>
           )}
 
           {/* The whole face is the handle: click to open the conversation, drag
@@ -230,6 +294,7 @@ export default function Overlay() {
               rather than the two tenths of opacity it used to get. */}
           <button
             type="button"
+            style={{ gridArea: "avatar" }}
             onPointerDown={(e) => {
               drag.current = { x: e.clientX, y: e.clientY };
               // Without this the pointer leaves the face on the first quick
@@ -272,25 +337,33 @@ export default function Overlay() {
             />
           </button>
 
-          {state.listening ? (
-            <p className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
-              Listening…
-            </p>
-          ) : heard ? (
-            /* Quieter than the reply bubble and in the place the status pill
-               uses, because it is the same kind of thing: a note about the
-               machinery, not something Morrow said. */
-            <p
-              className="max-w-xs truncate rounded-full bg-neutral-800/85 px-3 py-1 text-xs italic text-neutral-200 shadow"
-              role="status"
-            >
-              {heard}
-            </p>
-          ) : state.interactable ? (
-            <p className="rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
-              Click to open · drag to move
-            </p>
-          ) : null}
+          {(fresh || speaking) && said && (
+            /* What she says back, below her, styled as a speech bubble with a
+               tail pointing up into the avatar -- the direction a voice comes
+               from. No max height and nothing hidden: the window is what
+               grows now, and a bubble that clipped itself first would make
+               that pointless. */
+            <div style={{ gridArea: "reply" }} className="flex flex-col items-center">
+              <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-900/80">
+                <path d="M0 10 L8 0 L16 10 Z" fill="currentColor" />
+              </svg>
+              <p className="max-w-xs rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
+                {said}
+              </p>
+            </div>
+          )}
+
+          <div style={{ gridArea: "avatar" }} className="pointer-events-none mt-1 flex translate-y-full justify-center pt-1">
+            {state.listening ? (
+              <p className="pointer-events-auto rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
+                Listening…
+              </p>
+            ) : state.interactable ? (
+              <p className="pointer-events-auto rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
+                Click to open · drag to move
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
     </>
