@@ -176,11 +176,25 @@ public sealed class JsonlAgentStateStore : IAgentStateStore
             return;
         }
 
-        // Through a temp file: a crash midway leaves the original intact,
+        // Through a unique temp file: a crash midway leaves the original intact,
         // where an in-place rewrite would leave the persona's state half
-        // written and unparseable.
-        var temp = _path + ".trim";
+        // written and unparseable. A fixed name can collide with a stale temp
+        // left behind by an earlier interrupted run, which is exactly the kind
+        // of path fight that becomes an UnauthorizedAccessException on Windows.
+        var temp = Path.Combine(Path.GetDirectoryName(_path) ?? Directory.GetCurrentDirectory(),
+            Path.GetFileNameWithoutExtension(_path) + "." + Guid.NewGuid().ToString("n") + ".trim");
+
         await File.WriteAllLinesAsync(temp, lines.Where((_, i) => keep[i]), cancellationToken).ConfigureAwait(false);
-        File.Move(temp, _path, overwrite: true);
+
+        // Windows can reject an overwrite move when the destination is an
+        // existing temp file kept alive by the legacy migration path. A delete
+        // first is the simple, direct replacement and avoids the stale-temp
+        // collision that surfaced as UnauthorizedAccessException.
+        if (File.Exists(_path))
+        {
+            File.Delete(_path);
+        }
+
+        File.Move(temp, _path);
     }
 }

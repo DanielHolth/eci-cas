@@ -133,7 +133,7 @@ public class FactLogTests : IDisposable
     }
 
     private FactBackfill Backfill(IUtteranceLog said, IFactLog facts, IFactExtractor? extractor = null) =>
-        new(said, facts, extractor ?? new VerbatimFactExtractor(), Embeddings(),
+        new(said, facts, extractor ?? new VerbatimFactExtractor(), new FactReliabilityScorer(), Embeddings(),
             Options.Create(new UtteranceOptions()), NullLogger<FactBackfill>.Instance);
 
     [Fact]
@@ -182,6 +182,7 @@ public class FactLogTests : IDisposable
             log,
             facts,
             new VerbatimFactExtractor(),
+            new FactReliabilityScorer(),
             Weaver(facts),
             Options.Create(new UtteranceOptions()));
 
@@ -210,6 +211,7 @@ public class FactLogTests : IDisposable
             log,
             facts,
             new VerbatimFactExtractor(),
+            new FactReliabilityScorer(),
             Weaver(facts),
             Options.Create(new UtteranceOptions()));
 

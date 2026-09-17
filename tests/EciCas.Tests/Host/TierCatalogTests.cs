@@ -77,10 +77,9 @@ public class TierCatalogTests
     }
 
     /// <summary>
-    /// A tier is not only its models. Free also shrinks the Recall
-    /// fan-out and switches Reflection off entirely, and a switch that moved
-    /// the substrate table alone would be a different tier wearing the
-    /// name — the thing the roadmap warned about before this existed.
+    /// A tier is not only its models. Free also shrinks the Recall fan-out and
+    /// switches Reflection off entirely; a switch that moved only the substrate
+    /// table would be a different tier wearing the same name.
     /// </summary>
     [Fact]
     public void SwitchingCarriesTheWholeTier_NotJustItsModels()

@@ -279,6 +279,7 @@ public class SmokeTests
             services.AddSingleton<IFactLog>(new ParquetFactLog(Path.Combine(_dir, "utterances")));
             services.AddSingleton<IFactConsolidator>(new NullFactConsolidator());
             services.AddSingleton<IFactExtractor>(new VerbatimFactExtractor());
+            services.AddSingleton<IFactReliabilityScorer, FactReliabilityScorer>();
             services.AddSingleton<FactConsult>();
             services.AddSingleton<FactPicker>();
             services.AddSingleton<ThreadWeaver>();

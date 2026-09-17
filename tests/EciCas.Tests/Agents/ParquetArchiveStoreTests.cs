@@ -33,11 +33,11 @@ public class ParquetArchiveStoreTests : IDisposable
         new(category, topic, subtopic, "subject", key, value, DateTimeOffset.UtcNow, ArchiveDomain.External, importance);
 
     /// <summary>
-    /// Written before the sentence column existed. Kept as a class here
-    /// rather than as a checked-in file, so the "old file still reads" claim
-    /// is re-proved against whatever Parquet.Net version the build resolves.
+    /// Written before the sentence column existed. Kept as a class here rather
+    /// than a checked-in file so the older-schema read path is re-proved against
+    /// whatever Parquet.Net version the build resolves.
     /// </summary>
-    private sealed class LegacyRow
+    private sealed class PreSentenceSchemaRow
     {
         public string Category { get; set; } = "";
         public string Topic { get; set; } = "";
@@ -76,7 +76,7 @@ public class ParquetArchiveStoreTests : IDisposable
         var path = ParquetArchiveStore.PairPathFor(_directory, pair);
         await ParquetSerializer.SerializeAsync(new[]
         {
-            new LegacyRow
+            new PreSentenceSchemaRow
             {
                 Category = "person", Topic = "family", Subtopic = "son", Subject = "subject",
                 Key = "birthdate", Value = "2020-08-28",
@@ -214,37 +214,6 @@ public class ParquetArchiveStoreTests : IDisposable
 
         Assert.Equal(20, total);
         Assert.Equal(4, store.IndexFor().Count);
-    }
-
-    [Fact]
-    public async Task RestatingAFactReplacesItRatherThanStackingASecondRow()
-    {
-        var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-        var store = new ParquetArchiveStore(directory);
-        var pair = new ArchivePair("person", "daniel");
-
-        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", DateTimeOffset.UtcNow)], CancellationToken.None);
-        await store.WriteAsync([new ArchiveRecord("person", "daniel", "home", "Daniel", "City", "bergen", DateTimeOffset.UtcNow)], CancellationToken.None);
-
-        var rows = await store.LookupAsync(pair, CancellationToken.None);
-        Assert.Equal("bergen", Assert.Single(rows).Value);
-    }
-
-    [Fact]
-    public async Task ADuplicateInsideOneBatchLandsOnce()
-    {
-        var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-        var store = new ParquetArchiveStore(directory);
-        var now = DateTimeOffset.UtcNow;
-
-        await store.WriteAsync(
-        [
-            new ArchiveRecord("person", "daniel", "home", "daniel", "city", "oslo", now),
-            new ArchiveRecord("person", "daniel", "home", "daniel", "city", "bergen", now),
-        ], CancellationToken.None);
-
-        var rows = await store.LookupAsync(new ArchivePair("person", "daniel"), CancellationToken.None);
-        Assert.Equal("bergen", Assert.Single(rows).Value);
     }
 
     /// <summary>

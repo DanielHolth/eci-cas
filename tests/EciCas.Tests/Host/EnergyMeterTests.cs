@@ -50,8 +50,8 @@ public sealed class EnergyMeterTests
     [Fact]
     public void MaxIsWorthMoreThanADaysRegen()
     {
-        // The roadmap's invariant: a quiet week has to bank a reserve, which
-        // it cannot do if the ceiling is a day's income or less.
+        // A quiet week must still bank a reserve, so the ceiling cannot be a
+        // single day's regen or less.
         var options = new EnergyOptions();
         Assert.True(options.MaxUsd > options.RegenPerHourUsd * 24m);
     }

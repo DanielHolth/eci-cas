@@ -167,12 +167,13 @@ public sealed record Fact(
 public static class FactClasses
 {
     public const string Other = "other";
+    public const string Relation = "relation";
 
     public static readonly IReadOnlyList<string> All =
     [
         "date",       // an event pinned to a calendar day, resolved absolute
         "preference", // what somebody likes, wants, or chooses
-        "relation",   // how somebody stands to somebody else
+        Relation,      // how somebody stands to somebody else
         "location",   // where something or somebody is
         "state",      // how somebody is right now; the fastest to go stale
         "event",      // something that happened

@@ -49,6 +49,7 @@ public sealed class ScribeAgent : AgentBase
     private readonly IUtteranceLog _utterances;
     private readonly IFactLog _facts;
     private readonly IFactExtractor _extractor;
+    private readonly IFactReliabilityScorer _reliability;
     private readonly ThreadWeaver _weaver;
     private readonly UtteranceOptions _options;
     private readonly ILogger _logger;
@@ -64,14 +65,15 @@ public sealed class ScribeAgent : AgentBase
     private long _nextTurn;
 
     public ScribeAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ScribeAgent> logger,
-        IUtteranceLog utterances, IFactLog facts, IFactExtractor extractor, ThreadWeaver weaver,
-        IOptions<UtteranceOptions> options)
+        IUtteranceLog utterances, IFactLog facts, IFactExtractor extractor, IFactReliabilityScorer reliability,
+        ThreadWeaver weaver, IOptions<UtteranceOptions> options)
         : base(bus, activity, logger)
     {
         _bus = bus;
         _utterances = utterances;
         _facts = facts;
         _extractor = extractor;
+        _reliability = reliability;
         _weaver = weaver;
         _options = options.Value;
         _logger = logger;
@@ -143,7 +145,7 @@ public sealed class ScribeAgent : AgentBase
         var previous = UtteranceContext.PreviousReply(
             await _utterances.RepliesAsync(cancellationToken).ConfigureAwait(false), utterance);
         var sentences = await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false);
-        var facts = FactMint.Rows(utterance, sentences, _options);
+        var facts = await FactMint.RowsAsync(utterance, sentences, _options, _reliability, cancellationToken).ConfigureAwait(false);
 
         // A marker still goes in -- it is the record that this turn was read
         // and came back empty, and without it every boot pays for the same

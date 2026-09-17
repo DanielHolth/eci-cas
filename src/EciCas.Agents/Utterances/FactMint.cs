@@ -15,7 +15,12 @@ using EciCas.Core;
 /// </summary>
 public static class FactMint
 {
-    public static List<Fact> Rows(Utterance utterance, IReadOnlyList<ExtractedFact> extracted, UtteranceOptions options)
+    public static async Task<List<Fact>> RowsAsync(
+        Utterance utterance,
+        IReadOnlyList<ExtractedFact> extracted,
+        UtteranceOptions options,
+        IFactReliabilityScorer? scorer = null,
+        CancellationToken cancellationToken = default)
     {
         var rows = new List<Fact>();
         foreach (var fact in extracted)
@@ -41,7 +46,7 @@ public static class FactMint
                 continue;
             }
 
-            rows.Add(new Fact(
+            var row = new Fact(
                 Id: Guid.NewGuid().ToString("n"),
                 // The utterance's own turn, not today's: a recovered fact
                 // has been recallable since it was said.
@@ -53,7 +58,20 @@ public static class FactMint
                 OriginModel: fact.OriginModel,
                 Class: fact.Class,
                 Entity: fact.Entity,
-                Sensitivity: fact.Sensitivity));
+                Sensitivity: fact.Sensitivity);
+
+            if (scorer is not null)
+            {
+                var score = await scorer.ScoreAsync(row, cancellationToken).ConfigureAwait(false);
+                row = row with
+                {
+                    Confidence = score.Confidence,
+                    Freshness = score.Freshness,
+                    EvaluatedAt = score.EvaluatedAt,
+                };
+            }
+
+            rows.Add(row);
         }
 
         return rows;

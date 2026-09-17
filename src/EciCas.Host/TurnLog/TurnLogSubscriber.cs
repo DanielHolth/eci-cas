@@ -46,6 +46,7 @@ public sealed class TurnLogSubscriber : AgentBase
         public required TurnRecord Record { get; set; }
         public int Version { get; set; }
         public bool Settled { get; set; }
+        public CancellationTokenSource? SettleCts { get; set; }
     }
 
     public TurnLogSubscriber(IMessageBus bus, BusActivityTracker activity, ILogger<TurnLogSubscriber> logger,
@@ -102,6 +103,7 @@ public sealed class TurnLogSubscriber : AgentBase
 
         TurnRecord record;
         int version;
+        CancellationTokenSource settleCts;
         lock (_gate)
         {
             if (!_entries.TryGetValue(envelope.CorrelationId, out var entry))
@@ -125,6 +127,14 @@ public sealed class TurnLogSubscriber : AgentBase
             record = entry.Record;
             version = entry.Version;
 
+            if (entry.SettleCts is not null)
+            {
+                entry.SettleCts.Cancel();
+            }
+
+            settleCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            entry.SettleCts = settleCts;
+
             foreach (var writer in _clients.Values)
             {
                 writer.TryWrite(record);
@@ -133,7 +143,7 @@ public sealed class TurnLogSubscriber : AgentBase
 
         // Fire and forget on purpose: a subscriber that awaited its own
         // settle timer would hold the bus queue for three seconds per event.
-        _ = SettleAsync(envelope.CorrelationId, version, cancellationToken);
+        _ = SettleAsync(envelope.CorrelationId, version, settleCts, cancellationToken);
         return Task.CompletedTask;
     }
 
@@ -175,14 +185,23 @@ public sealed class TurnLogSubscriber : AgentBase
     /// version it captured — which is what makes "quiet for SettleMs" true
     /// without a timer to own, cancel and dispose per event.
     /// </summary>
-    private async Task SettleAsync(Guid correlationId, int version, CancellationToken cancellationToken)
+    private async Task SettleAsync(Guid correlationId, int version, CancellationTokenSource settleCts, CancellationToken cancellationToken)
     {
         try
         {
-            await Task.Delay(_options.SettleMs, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(_options.SettleMs, settleCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
+            lock (_gate)
+            {
+                if (_entries.TryGetValue(correlationId, out var entry) && ReferenceEquals(entry.SettleCts, settleCts))
+                {
+                    entry.SettleCts = null;
+                }
+            }
+
+            settleCts.Dispose();
             return;
         }
 
@@ -191,12 +210,24 @@ public sealed class TurnLogSubscriber : AgentBase
         {
             if (!_entries.TryGetValue(correlationId, out var entry) || entry.Settled || entry.Version != version)
             {
+                if (_entries.TryGetValue(correlationId, out var active) && ReferenceEquals(active.SettleCts, settleCts))
+                {
+                    active.SettleCts = null;
+                }
+
+                settleCts.Dispose();
                 return;
             }
 
             entry.Settled = true;
             record = entry.Record;
+            if (ReferenceEquals(entry.SettleCts, settleCts))
+            {
+                entry.SettleCts = null;
+            }
         }
+
+        settleCts.Dispose();
 
         foreach (var sink in _sinks)
         {

@@ -64,7 +64,7 @@ public class FactRebuildTests : IDisposable
         OriginModel: model);
 
     private FactBackfill Backfill(IUtteranceLog said, IFactLog facts) =>
-        new(said, facts, new VerbatimFactExtractor(), new StubEmbeddings(),
+        new(said, facts, new VerbatimFactExtractor(), new FactReliabilityScorer(), new StubEmbeddings(),
             Options.Create(new UtteranceOptions()), NullLogger<FactBackfill>.Instance);
 
     /// <summary>Two turns, one indexed weakly and one indexed well.</summary>

@@ -60,6 +60,7 @@ public static class HostBoot
         var surface = builder.AddSurface();
 
         builder.Services.AddConfiguredOptions(builder.Configuration);
+        builder.Services.AddArchitectureBoundaries();
 
         builder.Services.AddSingleton<BusActivityTracker>();
         builder.Services.AddSingleton<IMessageBus, ChannelBus>();

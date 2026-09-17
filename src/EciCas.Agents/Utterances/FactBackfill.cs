@@ -41,16 +41,19 @@ public sealed class FactBackfill
     private readonly IUtteranceLog _utterances;
     private readonly IFactLog _facts;
     private readonly IFactExtractor _extractor;
+    private readonly IFactReliabilityScorer _reliability;
     private readonly IEmbeddingProvider _embeddings;
     private readonly UtteranceOptions _options;
     private readonly ILogger<FactBackfill> _logger;
 
     public FactBackfill(IUtteranceLog utterances, IFactLog facts, IFactExtractor extractor,
-        IEmbeddingProvider embeddings, IOptions<UtteranceOptions> options, ILogger<FactBackfill> logger)
+        IFactReliabilityScorer reliability, IEmbeddingProvider embeddings, IOptions<UtteranceOptions> options,
+        ILogger<FactBackfill> logger)
     {
         _utterances = utterances;
         _facts = facts;
         _extractor = extractor;
+        _reliability = reliability;
         _embeddings = embeddings;
         _options = options.Value;
         _logger = logger;
@@ -121,7 +124,7 @@ public sealed class FactBackfill
                     $"the substrate stopped answering at turn {utterance.Turn}; the rest is left for the next boot");
             }
 
-            var rows = FactMint.Rows(utterance, extracted, _options);
+            var rows = await FactMint.RowsAsync(utterance, extracted, _options, _reliability, cancellationToken).ConfigureAwait(false);
             await _facts.RemoveAsync(owed[utterance.Turn], cancellationToken).ConfigureAwait(false);
             await _facts.AppendAsync(rows, cancellationToken).ConfigureAwait(false);
             turns++;
@@ -179,7 +182,7 @@ public sealed class FactBackfill
         foreach (var utterance in utterances)
         {
             var previous = UtteranceContext.PreviousReply(replies, utterance);
-            rows.AddRange(FactMint.Rows(utterance, await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false), _options));
+            rows.AddRange(await FactMint.RowsAsync(utterance, await _extractor.ExtractAsync(utterance, previous, cancellationToken).ConfigureAwait(false), _options, _reliability, cancellationToken).ConfigureAwait(false));
         }
 
         await _facts.AppendAsync(rows, cancellationToken).ConfigureAwait(false);
