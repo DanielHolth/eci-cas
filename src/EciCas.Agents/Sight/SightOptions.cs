@@ -10,10 +10,12 @@ namespace EciCas.Agents.Sight;
 public sealed class SightOptions
 {
     /// <summary>
-    /// Off means the screenshot is still taken and still read by the local
-    /// OCR, and nothing is ever sent anywhere. The picture leaves this
-    /// machine only when this is true and a provider with eyes is configured
-    /// for "Sight" -- two switches, not one.
+    /// Off means the screenshot -- if one was even taken; see
+    /// EciCas.Shell.ScreenShotOptions.Enabled, off by default, for the
+    /// switch that decides that -- is still read by the local OCR, and
+    /// nothing is ever sent anywhere. The picture leaves this machine only
+    /// when this is true and a provider with eyes is configured for "Sight"
+    /// -- three switches stand between a screen and a network call, not one.
     /// </summary>
     public bool Enabled { get; set; } = true;
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using EciCas.Core;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Agents.Toolkit;
 
@@ -19,12 +20,18 @@ namespace EciCas.Agents.Toolkit;
 /// toolkit that does not need it (guide-toolkit, say) should not have to
 /// carry the machinery for one it never calls.
 /// </summary>
-public sealed class PowerShellToolkit(ISubstrateProvider substrate) : IToolkit
+public sealed class PowerShellToolkit(ISubstrateProvider substrate, IOptions<PowerShellOptions> options) : IToolkit
 {
     public string Name => "powershell";
 
     public async Task<ToolkitOutcome> ExecuteAsync(string command, CancellationToken cancellationToken)
     {
+        if (!options.Value.Approved)
+        {
+            return new ToolkitOutcome(string.Empty, false,
+                "The PowerShell toolkit needs to be approved before it can run commands on this machine -- see PowerShell:Approved in configuration.");
+        }
+
         var script = await TranslateAsync(command, cancellationToken).ConfigureAwait(false);
 
         var start = new ProcessStartInfo

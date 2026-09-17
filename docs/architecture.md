@@ -27,8 +27,12 @@ subscribers (logger, console, SSE, turn log, telemetry) watch everything and are
 
 ## Sight
 
-The screen, as an advisory beside the rest. The shell captures a screenshot
-and runs local OCR the moment the voice key arms, and `Glimpse` starts a
+The screen, as an advisory beside the rest. `ScreenShotOptions.Enabled`
+(`Shell:Screen:Enabled`) gates whether a screenshot is taken at all —
+off by default on every tier, no exceptions, since capturing the screen
+without being asked first is the disclaimer moment, not a knob a tier file
+should ever flip. When it is on, the shell captures a screenshot and runs
+local OCR the moment the voice key arms, and `Glimpse` starts a
 low-detail look *before the turn exists* — the person spends a second or two
 speaking and the call runs through it, so the turn usually collects a
 finished answer.
@@ -41,6 +45,13 @@ finished answer.
 - **read** — "read my screen to me" (`ReadPhrases`). Goes straight to
   Security past Intent, because a reading is owed the screen and not a
   summary of it.
+
+`SightOptions.Enabled` (`Sight:Enabled`) is a second, separate switch: even
+with a screenshot in hand, this decides whether it (or its OCR transcript)
+ever reaches a vendor. Off means it is still read by the local OCR and
+nothing leaves the machine. Three switches stand between a screen and a
+network call, not one: capture, `Sight:Enabled`, and a `Substrates:Agents:Sight`
+entry actually pointing at a provider with eyes.
 
 `CloserEnabled` is the cost switch: off, nothing is ever sent at high detail
 — the escalation is not bought and a reading drops to the cheap detail rather
@@ -106,8 +117,12 @@ The flow is:
 
 1. The UI opens a left-side Toolkit panel listing available toolkits and
    their current status.
-2. The preview toggle enables the PowerShell toolkit; the toolkit guide is
-   always listed as a built-in explanation surface.
+2. `ToolkitManagerAgent` fans a turn out to whichever registered toolkit's
+   trigger exemplars it best matches, above `Toolkit:RouteFloor` — the built-in
+   ones (`powershell`, `guide`, `accessibility`, `discord`) and any approved
+   JSON manifest toolkit alike; the toolkit guide is always listed as a
+   built-in explanation surface (`MorrowGuide` plus each registered
+   descriptor).
 3. `ToolkitHandlerAgent` executes the requested command in-process and
    publishes the structured result back to the bus.
 4. `ToolkitManagerAgent` converts that result into a perception-ready text
@@ -118,6 +133,45 @@ The flow is:
 This keeps toolkit execution explicit and observable: the system can explain
 what it is doing, report a result, and keep the UI agent-local rather than
 mixing tool execution into the core bus semantics.
+
+**Built-in toolkits.** `PowerShellToolkit` translates natural language into a
+script via a substrate call, then runs it; `AccessibilityToolkit` speaks text
+aloud through the Windows speech engine; `DiscordToolkit` posts to a
+configured channel through a bot token; `GuideToolkit` answers "what can you
+do" from the live descriptor set plus `MorrowGuide`'s fixed prose about
+Morrow herself.
+
+**JSON manifest toolkits.** Anything dropped as a `*.json` file in the
+`Toolkits/` directory is read at startup by `ManifestToolkitLoader` as a
+`ToolkitManifest` — no rebuild required. A manifest can only compose one of
+two fixed verbs (`http_call` to an author-fixed URL, or `speak_text`), never
+arbitrary code, which keeps its ceiling small enough to be safe if the format
+is ever exposed as a Steam-Workshop-style "subscribe" button. Every manifest
+carries an `Approved` flag that defaults to `false` and that nothing in code
+ever sets: a manifest that fails validation, or is valid but not yet
+approved, is logged at startup and skipped, never registered as a callable
+`ManifestToolkit`. Turning one on is a deliberate, human, one-line edit —
+installing a manifest and it running are never the same action. See
+`Toolkits/README.md` for the manifest schema.
+
+**Consent gates.** Two of the built-in toolkits carry a real capability —
+running commands, capturing the screen — and both are off by default on
+every tier, with no tier file ever flipping them on:
+
+- `PowerShellOptions.Approved` (`PowerShell:Approved`) gates
+  `PowerShellToolkit.ExecuteAsync` directly, separately from the shared
+  `Toolkit:Enabled` switch every toolkit answers to. `Toolkit:Enabled` decides
+  whether the fan-out runs at all (off on Free/Budget); `PowerShell:Approved`
+  is PowerShell's own switch for its own risk, and defaults to `false`
+  everywhere. Not approved means `ExecuteAsync` returns a clear refusal
+  outcome instead of translating or running anything.
+- `ScreenShotOptions.Enabled` (`Shell:Screen:Enabled`), covered under Sight
+  above, gates whether a screenshot is ever taken in the first place — same
+  off-by-default, human-edit-only shape.
+
+Both follow the same pattern as a manifest's `Approved` flag: a config value
+nothing in code sets to `true`, so turning the feature on is a deliberate act
+by the person who read what it does.
 
 ## Config over code
 
