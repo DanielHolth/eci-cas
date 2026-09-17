@@ -10,6 +10,75 @@ Recall, Cataloger and the pair-store retrieval path are gone.
 
 ---
 
+# Milestone gate: product direction and explicit split layers
+
+These two milestones are hard blockers for every other feature stream. Nothing
+new should be planned or built until both are explicitly agreed and reflected in
+code boundaries.
+
+## Product direction
+
+This is the product-level decision that sets the operating model for the app.
+The current direction is:
+
+- Thick client on the user's machine.
+- Cross-platform host runtime across Windows, macOS and Linux.
+- Remote relay owns API keys and provider secrets.
+- Steam Cloud owns durable user state and the utterance parquet archive.
+- Client-side local state remains device-scoped and transient.
+
+This is not a feature. It is the strategic contract that determines where the
+app runs, where secrets live, and what gets synced.
+
+### Blocker status
+
+- Blocks feature work that assumes a single remote-hosted bot.
+- Blocks authentication design that stores API keys in the client.
+- Blocks archive design that keeps user memory on local disk only.
+- Blocks roadmap items that rely on a Windows-first shell as the product default.
+
+### Exit criteria
+
+- Product decision is written in one clear architecture statement.
+- Secret handling is assigned to the relay, not the client or archive.
+- Cloud sync scope is defined for utterance parquet and user state.
+- The product no longer implies a remote-only host or a local-only archive.
+
+## Explicit split layers
+
+This is the engineering milestone that makes the app portable and maintainable.
+The architecture must be clearly split into:
+
+- Shared core: bus, agents, prompts, archive contracts, routing, memory model.
+- Platform shell: OS/window/input capture, desktop integration, UI lifecycle.
+- Remote relay: provider auth, secret management, model gatewaying.
+- Sync layer: Steam Cloud archive/state and durable user memory.
+
+The shell, host, relay and sync layers must not be allowed to blur together.
+Once they do, cross-platform work and new features become entangled.
+
+### Blocker status
+
+- Blocks all feature development that adds runtime logic into the UI shell.
+- Blocks all portability work unless the host is explicitly separate from the desktop wrapper.
+- Blocks secret and provider integration if the client still owns credentials.
+- Blocks archive strategy if local disk and cloud sync are not distinguished.
+
+### Exit criteria
+
+- Each layer owns a clear responsibility and has a defined boundary.
+- The host runtime can run without a Windows-specific shell.
+- Provider secrets are not present in the local client runtime.
+- Steam Cloud sync is treated as a storage boundary, not as a hidden local cache.
+
+### Decision rule
+
+Until both milestones are accepted and reflected in the repo structure, all other
+feature work is parked behind this gate. The next clean planning chat should
+focus 100% on these two decisions and the work needed to make them real.
+
+---
+
 # Next
 
 ## Latency
