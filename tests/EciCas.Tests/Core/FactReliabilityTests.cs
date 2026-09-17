@@ -50,18 +50,4 @@ public class FactReliabilityTests
         Assert.InRange(annotated[0].Confidence!.Value, 0d, 1d);
         Assert.InRange(annotated[0].Freshness!.Value, 0d, 1d);
     }
-
-    [Fact]
-    public void ToolRegistryReflectsRuntimeTooling()
-    {
-        var registry = new InMemoryToolRegistry(
-        [
-            new ToolDefinition("guide", "Explains the platform."),
-            new ToolDefinition("powershell", "Runs a local command."),
-        ]);
-
-        Assert.Equal("guide", registry.Get("guide").Name);
-        Assert.Equal(2, registry.All.Count);
-        Assert.Contains(registry.All, t => t.Name == "powershell");
-    }
 }

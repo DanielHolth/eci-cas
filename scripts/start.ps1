@@ -221,8 +221,14 @@ function Test-EmbeddingWeights {
     # because a full validation belongs to the runtime. This is intentionally a
     # sub-10ms guard for the common fresh-install case.
     try {
-        $sample = [System.IO.File]::ReadAllBytes($ModelPath)
-        if ($sample.Length -lt 16) {
+        $stream = [System.IO.File]::OpenRead($ModelPath)
+        try {
+            $sample = New-Object byte[] 16
+            $read = $stream.Read($sample, 0, $sample.Length)
+        } finally {
+            $stream.Dispose()
+        }
+        if ($read -lt 16) {
             return $false
         }
 
