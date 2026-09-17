@@ -110,7 +110,7 @@ internal static class KnobsEndpoints
         // Read-modify-write of the parsed JSON rather than a re-serialise of
         // KnobDefaults: a tier file carries Classes, Agents and Rank too, and
         // nothing here has any business rewriting those.
-        app.MapPost("/api/knobs/save", (RuntimeKnobs knobs, TierCatalog tiers, IOptions<KnobDefaults> knobDefaults) =>
+        app.MapPost("/api/knobs/save", async (RuntimeKnobs knobs, TierCatalog tiers, IOptions<KnobDefaults> knobDefaults) =>
         {
             var file = $"appsettings.{tiers.Active}.json";
             var targets = new[]
@@ -127,27 +127,11 @@ internal static class KnobsEndpoints
                     continue;
                 }
 
-                var text = File.ReadAllText(path);
-                if (!TryWriteNumber(ref text, "RecallDepth", knobs.RecallDepth)
-                    || !TryWriteNumber(ref text, "MaxSentences", knobs.MaxSentences)
-                    || !TryWriteNumber(ref text, "ReflectionEvery", knobs.ReflectionEvery)
-                    || !TryWriteNumber(ref text, "PerceptionChars", knobs.PerceptionChars)
-                    || !TryWriteNumber(ref text, "ContextTurns", knobs.ContextTurns)
-                    || !TryWriteString(ref text, "Mood", knobs.Mood.ToString()))
+                if (!await SaveKnobsAsync([path], knobs))
                 {
                     return Results.Problem($"{file} is missing one of Knobs:RecallDepth, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.");
                 }
 
-                // Parsed to prove the edit, not to produce it. Round-tripping through
-                // JsonNode reformatted the whole file -- every one-line object in it
-                // exploded to eight lines and the trailing newline went -- which
-                // turned a two-number save into a diff nobody can read. Editing the
-                // two numbers in place leaves the file exactly as its author wrote
-                // it, and this parse is what keeps that from being a licence to emit
-                // broken JSON.
-                JsonNode.Parse(text);
-
-                File.WriteAllText(path, text);
                 written.Add(path);
             }
 
@@ -178,19 +162,10 @@ internal static class KnobsEndpoints
                          Path.Combine(SourceTierDirectory(), baseFile),
                      }.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (!File.Exists(path))
+                if (File.Exists(path))
                 {
-                    continue;
+                    await SaveLanguageAsync([path], knobs.Language);
                 }
-
-                var text = File.ReadAllText(path);
-                if (!TryWriteString(ref text, "Language", knobs.Language))
-                {
-                    continue;
-                }
-
-                JsonNode.Parse(text);
-                File.WriteAllText(path, text);
             }
 
             knobDefaults.Value.Language = knobs.Language;
@@ -241,6 +216,64 @@ internal static class KnobsEndpoints
     /// does not mention a knob is a tier file whose author left it to the base
     /// layer, and quietly writing one in would change what the tier means.
     /// </summary>
+    public static async Task<bool> SaveKnobsAsync(IEnumerable<string> paths, RuntimeKnobs knobs)
+    {
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var text = await File.ReadAllTextAsync(path);
+            if (!TryWriteNumber(ref text, "RecallDepth", knobs.RecallDepth)
+                || !TryWriteNumber(ref text, "MaxSentences", knobs.MaxSentences)
+                || !TryWriteNumber(ref text, "ReflectionEvery", knobs.ReflectionEvery)
+                || !TryWriteNumber(ref text, "PerceptionChars", knobs.PerceptionChars)
+                || !TryWriteNumber(ref text, "ContextTurns", knobs.ContextTurns)
+                || !TryWriteString(ref text, "Mood", knobs.Mood.ToString()))
+            {
+                return false;
+            }
+
+            JsonNode.Parse(text);
+
+            await WriteAtomicallyAsync(path, text);
+        }
+
+        return true;
+    }
+
+    public static async Task<bool> SaveLanguageAsync(IEnumerable<string> paths, string language)
+    {
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var text = await File.ReadAllTextAsync(path);
+            if (!TryWriteString(ref text, "Language", language))
+            {
+                continue;
+            }
+
+            JsonNode.Parse(text);
+            await WriteAtomicallyAsync(path, text);
+            return true;
+        }
+
+        return true;
+    }
+
+    private static async Task WriteAtomicallyAsync(string path, string text)
+    {
+        var tempPath = path + ".tmp";
+        await File.WriteAllTextAsync(tempPath, text);
+        File.Move(tempPath, path, overwrite: true);
+    }
+
     static bool TryWriteNumber(ref string json, string key, int value)
     {
         var pattern = new Regex($@"(""{Regex.Escape(key)}""\s*:\s*)-?\d+");

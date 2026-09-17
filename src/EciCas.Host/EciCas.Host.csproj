@@ -8,6 +8,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="EciCas.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Update="config\security-rules.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
