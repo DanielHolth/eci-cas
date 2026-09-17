@@ -24,18 +24,6 @@ internal static class BootChecks
 {
     public static async Task RunAsync(WebApplication app)
     {
-        var review = app.Services.GetRequiredService<IArchitectureReviewService>().Review();
-        if (review.MissingLayers.Count > 0)
-        {
-            Console.WriteLine(
-                $"Architecture review: missing explicit layer(s): {string.Join(", ", review.MissingLayers.Select(l => l.ToString()))}. This is a planning reminder, not a hard stop.");
-        }
-
-        if (review.Findings.Count > 0)
-        {
-            Console.WriteLine($"Architecture review: {string.Join("; ", review.Findings)}");
-        }
-
         var manifest = app.Services.GetRequiredService<IOptions<RoutingManifest>>().Value;
         RoutingManifest.Validate(manifest, app.Services.GetServices<IAgent>());
 

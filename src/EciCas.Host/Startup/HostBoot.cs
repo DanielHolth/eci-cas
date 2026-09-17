@@ -60,7 +60,12 @@ public static class HostBoot
         var surface = builder.AddSurface();
 
         builder.Services.AddConfiguredOptions(builder.Configuration);
-        builder.Services.AddArchitectureBoundaries();
+        builder.Services.AddSingleton<IFactReliabilityScorer, FactReliabilityScorer>();
+        builder.Services.AddSingleton<IToolRegistry>(new InMemoryToolRegistry(
+        [
+            new ToolDefinition("powershell", "Runs a local command."),
+            new ToolDefinition("guide", "Explains the platform and its capabilities."),
+        ]));
 
         builder.Services.AddSingleton<BusActivityTracker>();
         builder.Services.AddSingleton<IMessageBus, ChannelBus>();

@@ -24,9 +24,7 @@ roadmap item.
 - Remote relay: provider auth, secret management, and model gatewaying.
 - Sync layer: Steam Cloud archive/state and durable user memory.
 
-The shell, host, relay and sync layers are not allowed to blur together. The
-review service will warn on forbidden dependencies; it is a diagnostic, not a
-hard startup gate.
+The shell, host, relay and sync layers are not allowed to blur together.
 
 ## Turn flow
 
