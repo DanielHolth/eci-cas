@@ -4,11 +4,10 @@ public sealed record FactReliabilityScore(
     string FactId,
     double Confidence,
     double Freshness,
-    string? SourceText,
     DateTimeOffset EvaluatedAt)
 {
     public static FactReliabilityScore Empty(string factId) =>
-        new(factId, 0d, 0d, null, DateTimeOffset.UtcNow);
+        new(factId, 0d, 0d, DateTimeOffset.UtcNow);
 }
 
 public interface IFactReliabilityScorer
@@ -29,10 +28,17 @@ public sealed class FactReliabilityScorer : IFactReliabilityScorer
             fact.Id,
             Math.Clamp(confidence, 0d, 1d),
             Math.Clamp(freshness, 0d, 1d),
-            null,
             DateTimeOffset.UtcNow));
     }
 
+    /// <summary>
+    /// Scored at mint time, before <c>ThreadWeaver</c> runs — so a fact's own
+    /// <see cref="Fact.SupersededBy"/> is never set yet here; that column
+    /// lands on the *old* row being retired, not this one. Contradiction as a
+    /// confidence signal needs the weaver's verdict, which this scorer does
+    /// not see, so it is not attempted rather than faked with a check that
+    /// could never fire.
+    /// </summary>
     private static double ScoreConfidence(Fact fact)
     {
         var baseScore = 0.72d;
@@ -45,11 +51,6 @@ public sealed class FactReliabilityScorer : IFactReliabilityScorer
         if (!string.IsNullOrWhiteSpace(fact.Entity))
         {
             baseScore += 0.05d;
-        }
-
-        if (fact.SupersededBy is not null)
-        {
-            baseScore -= 0.15d;
         }
 
         if (string.Equals(fact.Class, FactClasses.Other, StringComparison.OrdinalIgnoreCase))

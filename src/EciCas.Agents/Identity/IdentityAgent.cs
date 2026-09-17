@@ -7,8 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace EciCas.Agents.Identity;
 
 /// <summary>
-/// Was Personality in the Python prototype, then Self, now Identity. The
-/// name kept shrinking toward what the code does: this is thin — a cached
+/// Was Personality, then Self, now Identity. The name kept shrinking toward
+/// what the code does: this is thin — a cached
 /// snippet with a fallback, no substrate call — and "Self" promised
 /// selfhood it does not deliver. Identity is also the name the persona and
 /// avatar picker will want when persona editing lands, at which point the

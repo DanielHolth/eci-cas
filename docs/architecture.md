@@ -45,6 +45,15 @@ hard startup gate.
 - Passages are reflection output, not user truth.
 - Durable state and archive live in the sync layer; local state is transient.
 
+**Fact reliability.** Every minted fact carries `Confidence` and `Freshness`
+(both 0–1), plus `EvaluatedAt` and `OriginModel`, written to the facts
+parquet by `FactReliabilityScorer` at mint time — before threading, so the
+scorer sees the fact in isolation, not against the archive. Freshness decays
+by `Class` and age. Confidence is a mint-time proxy (origin model present,
+entity resolved, class not `other`), not a judgment of extraction quality or
+contradiction — that needs the weaver's verdict, which runs after minting,
+and is open work (see `roadmap.md`).
+
 ## Governance and tools
 
 Governance owns the verdict and the final handoff. Tooling stays explicit and

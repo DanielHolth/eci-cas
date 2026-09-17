@@ -791,13 +791,12 @@ connect, since browsers hold `onopen` until the first body byte.
 drive vectors and publishes it on the advisory; Governance captures it
 (the verdict envelope never carried advisories) and forwards it on every
 Action/Conclusion. The block path re-reads the face *after* the frustration
-nudge, the whole point of nudging. Tuning: instant nudges ported verbatim
-from the prototype were an order of magnitude too small for
-`DriveVectors`' bucket edges (a critical event moved alertness to 0.105
-against a 0.35 low edge, six faces unreachable in practice) — resized
-against the edges. One departure from the Python bucket order: raised
-alertness outranks warmth, since both can be high at once and a smiling
-face through an emergency reads wrong.
+nudge, the whole point of nudging. Tuning: the first instant nudges were an
+order of magnitude too small for `DriveVectors`' bucket edges (a critical
+event moved alertness to 0.105 against a 0.35 low edge, six faces
+unreachable in practice) — resized against the edges. Raised alertness
+outranks warmth, since both can be high at once and a smiling face through
+an emergency reads wrong.
 
 **The turn was opaque.** A person saw an avatar and a reply, nothing about
 which faculties ran, what was read/written, what it cost. Fix is a

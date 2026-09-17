@@ -17,7 +17,8 @@ Current architecture rules:
 
 - Stream Intent tokens after the first sentence clears Security.
 - Carry fact-change context into reflection and salience decay.
-- Add reliability scoring with confidence and freshness on facts.
+- Score fact reliability against real extraction-quality and contradiction
+  signal instead of the current mint-time proxy (see `architecture.md`).
 - Keep tools explicit, provenance-aware, and auditable.
 
 ## Later
@@ -772,10 +773,7 @@ build, so community toolkits are a desktop feature and stay one.
 
 ## Out of scope
 
-- The Python prototype's messaging plumbing. The port targets business
-  logic.
 - A Budget Mode spend auto-latch.
-- `is_parroting()`: moot without the Librarian.
 
 ## Open design questions
 

@@ -100,7 +100,6 @@ public class ArchitectureContractTests
         Assert.InRange(result.Confidence, 0d, 1d);
         Assert.InRange(result.Freshness, 0d, 1d);
         Assert.Equal("f-1", result.FactId);
-        Assert.Null(result.SourceText);
         Assert.True(result.Confidence > 0.5d);
     }
 

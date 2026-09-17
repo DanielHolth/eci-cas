@@ -17,7 +17,7 @@ namespace EciCas.Agents.Archivist;
 /// what is worth keeping and files it where Librarian can later find it.
 ///
 /// Parallel publisher on events.bundle alongside Intent — never through the
-/// live reply path — this is exactly the hop that broke the Python bus.
+/// live reply path, which is exactly the kind of hop that can break a bus.
 ///
 /// Extraction only. It says what was stated and about whom; it does not say
 /// where that belongs. The address is CatalogerAgent's, one topic downstream
@@ -31,8 +31,8 @@ namespace EciCas.Agents.Archivist;
 /// parsed answer, and needs its own parse/filter, which doesn't fit that base
 /// class's model. One substrate call per turn. No deterministic fallback
 /// exists: only facts the LLM judges explicitly stated get extracted,
-/// matching the Python prototype's Archivist, which relies entirely on
-/// the same LLM discipline and may legitimately find nothing in a turn.
+/// relying entirely on that discipline, and it may legitimately find
+/// nothing in a turn.
 /// </summary>
 public sealed class ArchivistAgent : AgentBase, ICognitiveAgent
 {

@@ -41,7 +41,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     public const string ReflectedKind = "Reflected";
 
     /// <summary>
-    /// Slow-coloring feedback (Python current-spec.md §5.3), attached to the
+    /// Slow-coloring feedback (current-spec.md §5.3), attached to the
     /// Reflected control envelope Reflection already publishes. Carries a
     /// mood LABEL, never a numeric delta: Impulse owns every number that
     /// lands on the drive vectors, the same discipline CriticalNudge and
@@ -322,9 +322,9 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
         var now = states.Count > 0 ? states[0] : new DriveVectors();
 
-        // Ports Python's `engagement` appraisal axis (curiosity - 0.4*fatigue)
-        // from agents/impulse/agent.py — the closest existing analog to "eager
-        // enough to share an idea"; no new formula invented.
+        // Reuses Impulse's `engagement` appraisal axis (curiosity - 0.4*fatigue)
+        // — the closest existing analog to "eager enough to share an idea";
+        // no new formula invented.
         return (Math.Clamp(now.Curiosity - 0.4 * now.Fatigue, 0.0, 1.0), DriveTrend.Describe(states));
     }
 

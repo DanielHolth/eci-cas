@@ -19,13 +19,12 @@ namespace EciCas.Agents.Impulse;
 /// considered proposal and avoid double-concluding the event.
 ///
 /// Also owns the persona drive-vector state (see DriveVectors) that
-/// ReflectionAgent's push-vs-write gate reads — ported from the Python
-/// prototype's Impulse, minimally: nudged only from the isCritical signal
-/// already computed here, not the full drift/appraisal-axis machinery (see
-/// gap-analysis.md, that stays a separate follow-up). Persisted through
-/// IArchiveStore under DrivePath, same pattern IdentityAgent uses for identity —
-/// no direct reference from Reflection to this agent, preserving loose
-/// coupling.
+/// ReflectionAgent's push-vs-write gate reads — nudged only from the
+/// isCritical signal already computed here, not the full drift/appraisal-axis
+/// machinery (see gap-analysis.md, that stays a separate follow-up).
+/// Persisted through IArchiveStore under DrivePath, same pattern
+/// IdentityAgent uses for identity — no direct reference from Reflection to
+/// this agent, preserving loose coupling.
 /// </summary>
 public sealed class ImpulseAgent : AgentBase
 {
@@ -54,35 +53,32 @@ public sealed class ImpulseAgent : AgentBase
 
 
     /// <summary>
-    /// §5.4's Somatic shortcut, scoped down: Python ties this to a physical
-    /// Sensory input tagging approval/disapproval, with Impulse shifting
-    /// instantly and Intent reviewing alignment retroactively. No physical
-    /// sensor channel exists here, and there's no case for porting one just
-    /// for this — a keyword flag on the perceived text, same discipline as
-    /// CriticalTriggers above, gives the same "instant shift, no Intent
-    /// pre-approval" shape without a state machine.
+    /// §5.4's Somatic shortcut, scoped down: a physical Sensory input tagging
+    /// approval/disapproval would shift Impulse instantly, with Intent
+    /// reviewing alignment retroactively. No physical sensor channel exists
+    /// here, and there's no case for building one just for this — a keyword
+    /// flag on the perceived text, same discipline as CriticalTriggers above,
+    /// gives the same "instant shift, no Intent pre-approval" shape without a
+    /// state machine.
     /// </summary>
     private static readonly string[] PositiveTriggers = ["thanks", "thank you", "great job", "well done", "awesome"];
     private static readonly string[] NegativeTriggers = ["that's wrong", "that's not right", "terrible", "bad job"];
 
     /// <summary>
-    /// Fixed, named nudge applied on a critical event — same discipline as
-    /// Python's FRUSTRATION_NUDGE: something may ask for a shift, but the
-    /// number that lands is written here, in code.
+    /// Fixed, named nudge applied on a critical event: something may ask for
+    /// a shift, but the number that lands is written here, in code.
     ///
-    /// Sized against DriveVectors' bucket edges, not against the Python
-    /// prototype's numbers: a nudge called instant that leaves the appraised
-    /// face unchanged is not instant. One emergency crosses into "alert" on
-    /// its own; two thank-yous reach "warm"; sustained disapproval walks
-    /// engagement down into "sad". Slow colouring stays an order of
-    /// magnitude below all of it, which is the invariant ImpulseAgentTests
-    /// guards.
+    /// Sized against DriveVectors' bucket edges: a nudge called instant that
+    /// leaves the appraised face unchanged is not instant. One emergency
+    /// crosses into "alert" on its own; two thank-yous reach "warm"; sustained
+    /// disapproval walks engagement down into "sad". Slow colouring stays an
+    /// order of magnitude below all of it, which is the invariant
+    /// ImpulseAgentTests guards.
     /// </summary>
     private static readonly DriveVectors CriticalNudge = new(Curiosity: -0.05, Fatigue: 0.05, Urgency: 0.45, SocialDrive: 0, Temperature: -0.05);
 
     /// <summary>
-    /// Ported verbatim from Python's FRUSTRATION_NUDGE (agents/impulse/agent.py):
-    /// more urgency (this mattered and it didn't work), a little more fatigue
+    /// More urgency (this mattered and it didn't work), a little more fatigue
     /// (it cost something), slightly less warmth — applied when Governance
     /// signals a blocked exchange over system.control, never a direct call.
     /// </summary>
