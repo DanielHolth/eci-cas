@@ -48,10 +48,25 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
             return;
         }
 
-        _session = new InferenceSession(modelPath);
-        _tokenize = vocabPath.EndsWith(".model", StringComparison.OrdinalIgnoreCase)
-            ? XlmRoberta(vocabPath)
-            : Bert(vocabPath);
+        try
+        {
+            _session = new InferenceSession(modelPath);
+            _tokenize = vocabPath.EndsWith(".model", StringComparison.OrdinalIgnoreCase)
+                ? XlmRoberta(vocabPath)
+                : Bert(vocabPath);
+        }
+        catch (Exception ex) when (
+            ex is ArgumentException or InvalidOperationException or NotSupportedException or IOException or OnnxRuntimeException)
+        {
+            _session?.Dispose();
+            _session = null;
+            _tokenize = null;
+
+            _logger.LogWarning(
+                ex,
+                "Embedding model at {ModelPath} is unreadable or corrupt; passage retrieval is off until it is replaced.",
+                modelPath);
+        }
     }
 
     public bool Available => _session is not null && _tokenize is not null;

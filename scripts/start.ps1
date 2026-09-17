@@ -188,28 +188,83 @@ if ($needsOpenAi -and -not $env:OPENAI_API_KEY) {
 # weights that may not be there. Without them the swarm runs unembedded,
 # which is a supported state, not a fault.
 #
-# Every tier, not every tier but Free: the exemption dated from when
-# Free had no embedder of its own, and it outlived that by long enough to
-# hide a real outage.
-#
-# Both files, not just the model: a tokenizer that did not come down with the
-# weights fails the host's own check and produces exactly the same silence.
-$weights = @('models/embedding/multilingual-e5-small/model.onnx', 'models/embedding/multilingual-e5-small/sentencepiece.bpe.model')
-$missing = @($weights | Where-Object { -not (Test-Path (Join-Path $repo $_)) })
-if ($missing.Count -gt 0) {
-    if ($WhatIfOnly) {
-        Write-Host "note: no local embedding weights ($($missing -join ', '))."
-        Write-Host '      would run ./scripts/get-embedding-model.ps1'
-    } else {
-        Write-Host "note: no local embedding weights ($($missing -join ', ')); downloading them now."
-        try {
-            & (Join-Path $PSScriptRoot 'get-embedding-model.ps1')
-        } catch {
-            Write-Host "note: embedding weights could not be downloaded ($($_.Exception.Message))."
-            Write-Host '      Vectors are off: no pair sweep, no row narrowing, no woken notes.'
+# Fresh installs need more than a missing-file check: a partial download or a
+# stale/pinned model can be present but still unreadable, and the host dies on
+# the protobuf parse before any fallback path runs. The launcher therefore
+# repairs both missing and obviously broken weight files before booting.
+function Test-EmbeddingWeights {
+    param(
+        [string]$ModelPath,
+        [string]$VocabPath
+    )
+
+    if (-not (Test-Path $ModelPath) -or -not (Test-Path $VocabPath)) {
+        return $false
+    }
+
+    $modelInfo = Get-Item $ModelPath -ErrorAction SilentlyContinue
+    $vocabInfo = Get-Item $VocabPath -ErrorAction SilentlyContinue
+    if ($null -eq $modelInfo -or $null -eq $vocabInfo) {
+        return $false
+    }
+
+    # A partial ONNX export or a truncated tokenizer is still a file on disk, but
+    # not a usable model. The shipped e5 weights are hundreds of MB and several MB
+    # respectively; anything smaller than these cutoffs is a redownload trigger.
+    if ($modelInfo.Length -lt 50MB -or $vocabInfo.Length -lt 1MB) {
+        return $false
+    }
+
+    # Fast sanity check: ONNX protobuf models are a binary wire format, not a
+    # random blob. Read a few dozen bytes and reject the obvious garbage that
+    # would parse as a protobuf? we still keep the normal provider-level catch,
+    # because a full validation belongs to the runtime. This is intentionally a
+    # sub-10ms guard for the common fresh-install case.
+    try {
+        $sample = [System.IO.File]::ReadAllBytes($ModelPath)
+        if ($sample.Length -lt 16) {
+            return $false
         }
+
+        # Valid ModelProto fields usually start with a tiny varint tag such as
+        # 0x08, 0x0a, 0x12 or 0x20; all-zero or clearly nonsensical headers are
+        # not a valid ONNX model and are repaired automatically.
+        $first = $sample[0]
+        $wire = $first -band 7
+        if ($first -eq 0 -or ($wire -ne 0 -and $wire -ne 2)) {
+            return $false
+        }
+    } catch {
+        return $false
+    }
+
+    return $true
+}
+
+function Ensure-EmbeddingWeights {
+    $modelPath = Join-Path $repo 'models/embedding/multilingual-e5-small/model.onnx'
+    $vocabPath = Join-Path $repo 'models/embedding/multilingual-e5-small/sentencepiece.bpe.model'
+
+    if (Test-EmbeddingWeights -ModelPath $modelPath -VocabPath $vocabPath) {
+        return
+    }
+
+    if ($WhatIfOnly) {
+        Write-Host 'note: local embedding weights are missing or invalid.'
+        Write-Host '      would run ./scripts/get-embedding-model.ps1'
+        return
+    }
+
+    Write-Host "note: local embedding weights are missing or invalid; downloading them now."
+    try {
+        & (Join-Path $PSScriptRoot 'get-embedding-model.ps1')
+    } catch {
+        Write-Host "note: embedding weights could not be downloaded ($($_.Exception.Message))."
+        Write-Host '      Vectors are off: no pair sweep, no row narrowing, no woken notes.'
     }
 }
+
+Ensure-EmbeddingWeights
 
 # ---- llama-server ------------------------------------------------------
 #

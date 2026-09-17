@@ -94,7 +94,23 @@ public sealed class ParquetFactLog : IFactLog
     }
 
     public Task AppendAsync(IReadOnlyList<Fact> facts, CancellationToken cancellationToken) =>
-        facts.Count == 0 ? Task.CompletedTask : MutateAsync(rows => rows.AddRange(facts), cancellationToken);
+        facts.Count == 0 ? Task.CompletedTask : MutateAsync(rows =>
+        {
+            var existing = new HashSet<(long Turn, string Speaker, DateTimeOffset Timestamp, string Text)>(
+                rows.Select(FactKey),
+                new FactKeyComparer());
+
+            foreach (var fact in facts)
+            {
+                var key = FactKey(fact);
+                if (!existing.Add(key))
+                {
+                    continue;
+                }
+
+                rows.Add(fact);
+            }
+        }, cancellationToken);
 
     public Task UpdateDerivedAsync(IReadOnlyList<FactDerived> updates, CancellationToken cancellationToken)
     {
@@ -316,6 +332,22 @@ public sealed class ParquetFactLog : IFactLog
         }
 
         return dirty;
+    }
+
+    private static (long Turn, string Speaker, DateTimeOffset Timestamp, string Text) FactKey(Fact fact) =>
+        (fact.Turn, fact.Speaker, fact.Timestamp, fact.Text.Trim());
+
+    private sealed class FactKeyComparer : IEqualityComparer<(long Turn, string Speaker, DateTimeOffset Timestamp, string Text)>
+    {
+        public bool Equals((long Turn, string Speaker, DateTimeOffset Timestamp, string Text) x,
+            (long Turn, string Speaker, DateTimeOffset Timestamp, string Text) y) =>
+            x.Turn == y.Turn &&
+            string.Equals(x.Speaker, y.Speaker, StringComparison.Ordinal) &&
+            x.Timestamp == y.Timestamp &&
+            string.Equals(x.Text, y.Text, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((long Turn, string Speaker, DateTimeOffset Timestamp, string Text) obj) =>
+            HashCode.Combine(obj.Turn, StringComparer.Ordinal.GetHashCode(obj.Speaker), obj.Timestamp, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Text));
     }
 
     private async Task<IReadOnlyList<Fact>> LoadUnlockedAsync(CancellationToken cancellationToken)

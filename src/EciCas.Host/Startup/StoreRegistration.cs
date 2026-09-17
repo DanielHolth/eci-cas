@@ -150,10 +150,28 @@ internal static class StoreRegistration
         // utterance is its own single fact, which is how the archive behaved
         // before the split and is wrong in one direction only: long input
         // indexes badly, and re-reading it later fixes it.
+        //
+        // A local model is never used to scribe new facts. It is allowed to
+        // rebuild weak rows on boot, but the live write path must stay on the
+        // safer API-backed path or degrade to verbatim storage instead.
         services.AddSingleton<IFactExtractor>(sp =>
-            sp.GetRequiredService<IOptions<UtteranceOptions>>().Value.ExtractorEnabled
-                ? ActivatorUtilities.CreateInstance<SubstrateFactExtractor>(sp)
-                : new VerbatimFactExtractor());
+        {
+            var options = sp.GetRequiredService<IOptions<UtteranceOptions>>().Value;
+            if (!options.ExtractorEnabled)
+            {
+                return new VerbatimFactExtractor();
+            }
+
+            var substrates = sp.GetRequiredService<IOptions<SubstrateOptions>>().Value;
+            var entry = substrates.Agents.GetValueOrDefault(SubstrateFactExtractor.AgentName);
+            if (entry is { UseSubstrate: false } || entry is null ||
+                string.Equals(entry.Provider, "local", StringComparison.OrdinalIgnoreCase))
+            {
+                return new VerbatimFactExtractor();
+            }
+
+            return ActivatorUtilities.CreateInstance<SubstrateFactExtractor>(sp);
+        });
 
         // The consolidator files a new fact against the ones near it. With
         // Utterances:ConsolidatorEnabled false the null implementation stands

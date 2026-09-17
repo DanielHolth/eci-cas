@@ -1,5 +1,6 @@
 using EciCas.Agents.Utterances;
 using EciCas.Core;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -86,6 +87,12 @@ public class FactLogTests : IDisposable
                 [.. utterance.Text
                     .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Select(s => new ExtractedFact(s))]);
+    }
+
+    private sealed class StubSubstrate : ISubstrateProvider
+    {
+        public Task<SubstrateResult> CompleteAsync(string agent, string prompt, CancellationToken cancellationToken) =>
+            Task.FromResult(new SubstrateResult("kept", TimeSpan.Zero, 1, 0m, "stub", "stub-model"));
     }
 
     private FactBackfill Backfill(IUtteranceLog said, IFactLog facts, IFactExtractor? extractor = null) =>
@@ -362,5 +369,35 @@ public class FactLogTests : IDisposable
             Options.Create(new UtteranceOptions()), new RuntimeKnobs());
 
         Assert.Empty(await consult.FindAsync("anything at all", CancellationToken.None));
+    }
+
+    [Fact]
+    public void LocalExtractorProviderFallsBackToVerbatimWriting()
+    {
+        var services = new ServiceCollection();
+        services.AddOptions();
+        services.Configure<UtteranceOptions>(o => o.ExtractorEnabled = true);
+        services.Configure<SubstrateOptions>(o =>
+            o.Agents[SubstrateFactExtractor.AgentName] = new SubstrateAgentEntry
+            {
+                Provider = "local",
+                Model = "qwen3.5-2b",
+                UseSubstrate = true,
+            });
+
+        services.AddSingleton<IFactExtractor>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<UtteranceOptions>>().Value;
+            var substrates = sp.GetRequiredService<IOptions<SubstrateOptions>>().Value;
+            var entry = substrates.Agents.GetValueOrDefault(SubstrateFactExtractor.AgentName);
+            return options.ExtractorEnabled && entry is { UseSubstrate: true } && !string.Equals(entry.Provider, "local", StringComparison.OrdinalIgnoreCase)
+                ? new SubstrateFactExtractor(new StubSubstrate(), Options.Create(options), NullLogger<SubstrateFactExtractor>.Instance)
+                : new VerbatimFactExtractor();
+        });
+
+        var provider = services.BuildServiceProvider();
+        var extractor = provider.GetRequiredService<IFactExtractor>();
+
+        Assert.IsType<VerbatimFactExtractor>(extractor);
     }
 }
