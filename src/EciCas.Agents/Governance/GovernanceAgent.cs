@@ -6,6 +6,7 @@ using EciCas.Agents.Hindsight;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Security;
+using EciCas.Agents.Sight;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -56,6 +57,7 @@ public sealed class GovernanceAgent : AgentBase
     private readonly GovernanceOptions _options;
     private readonly IAgentStateStore _store;
     private readonly IInstructionStore _instructions;
+    private readonly SightOptions? _sightOptions;
     private readonly ConcurrentDictionary<Guid, BundleState> _bundles = new();
 
     /// <summary>
@@ -103,7 +105,7 @@ public sealed class GovernanceAgent : AgentBase
     }
 
     public GovernanceAgent(IMessageBus bus, BusActivityTracker activity, ILogger<GovernanceAgent> logger, IOptions<GovernanceOptions> options, IAgentStateStore store,
-        IInstructionStore instructions)
+        IInstructionStore instructions, IOptions<SightOptions>? sightOptions = null)
         : base(bus, activity, logger)
     {
         _bus = bus;
@@ -111,6 +113,7 @@ public sealed class GovernanceAgent : AgentBase
         _options = options.Value;
         _store = store;
         _instructions = instructions;
+        _sightOptions = sightOptions?.Value;
     }
 
     public override string Name => "Governance";
@@ -412,9 +415,13 @@ public sealed class GovernanceAgent : AgentBase
             return InstructionFile.Fill(_instructions.For(Name, "reasoning-down"), ("cause", intentDegraded));
         }
 
-        return impaired.Count == 0
+        var relevantImpaired = impaired
+            .Where(name => !string.Equals(name, "Sight", StringComparison.Ordinal) || _sightOptions is null || _sightOptions.Enabled)
+            .ToArray();
+
+        return relevantImpaired.Length == 0
             ? null
-            : InstructionFile.Fill(_instructions.For(Name, "less-grounded"), ("impaired", string.Join(" and ", impaired)));
+            : InstructionFile.Fill(_instructions.For(Name, "less-grounded"), ("impaired", string.Join(" and ", relevantImpaired)));
     }
 
     private string BlockedReply(Envelope verdict)

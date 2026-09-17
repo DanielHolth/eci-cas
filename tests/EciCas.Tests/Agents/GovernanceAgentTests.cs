@@ -3,6 +3,7 @@ using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Security;
+using EciCas.Agents.Sight;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -303,6 +304,33 @@ public class GovernanceAgentTests
         var spoken = action!.Meta.Get<string>(IntentAgent.ReplyKey)!;
         Assert.StartsWith("a real answer", spoken);
         Assert.Contains("Recall", spoken);
+    }
+
+    [Fact]
+    public async Task WhenSightIsDisabled_ItDoesNotAppearInTheGroundednessNotice()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var actionReader = bus.Subscribe(Topics.Action);
+        var agent = new GovernanceAgent(
+            bus,
+            activity,
+            NullLogger<GovernanceAgent>.Instance,
+            Options.Create(new GovernanceOptions { BundleRoster = ["Sight"] }),
+            new JsonlAgentStateStore(Path.GetTempFileName()),
+            ShippedInstructions.Store,
+            Options.Create(new SightOptions { Enabled = false }));
+
+        var perception = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var verdict = perception.Derive(Topics.Verdict, "Security", Severity.Neutral,
+            MetaBag.Empty.With(SecurityAgent.VerdictKey, Verdict.Green).With(IntentAgent.ReplyKey, "a real answer"));
+        await agent.HandleAsync(verdict, CancellationToken.None);
+
+        Assert.True(actionReader.TryRead(out var action));
+        Assert.Equal("a real answer", action!.Meta.Get<string>(IntentAgent.ReplyKey));
+        Assert.False(action.Meta.Get<bool>(GovernanceAgent.DegradedKey));
     }
 
     [Fact]
