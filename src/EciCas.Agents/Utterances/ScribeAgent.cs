@@ -53,6 +53,16 @@ public sealed class ScribeAgent : AgentBase
     private readonly UtteranceOptions _options;
     private readonly ILogger _logger;
 
+    public override string Name => "Scribe";
+    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.Conclusion];
+
+    /// <summary>The speaker every reply row is stamped with.</summary>
+    public const string ReplySpeaker = "assistant";
+
+    /// <summary>Open turns: the number each input took, until its conclusion.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, long> _open = new();
+    private long _nextTurn;
+
     public ScribeAgent(IMessageBus bus, BusActivityTracker activity, ILogger<ScribeAgent> logger,
         IUtteranceLog utterances, IFactLog facts, IFactExtractor extractor, ThreadWeaver weaver,
         IOptions<UtteranceOptions> options)
@@ -65,16 +75,8 @@ public sealed class ScribeAgent : AgentBase
         _weaver = weaver;
         _options = options.Value;
         _logger = logger;
+        _nextTurn = _utterances.TurnsRecorded;
     }
-
-    public override string Name => "Scribe";
-    public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.Conclusion];
-
-    /// <summary>The speaker every reply row is stamped with.</summary>
-    public const string ReplySpeaker = "assistant";
-
-    /// <summary>Open turns: the number each input took, until its conclusion.</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, long> _open = new();
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
@@ -86,11 +88,13 @@ public sealed class ScribeAgent : AgentBase
 
         var text = (envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty).Trim();
 
-        // The turn in progress is one past the concluded count, and the
-        // count moves only when the turn concludes (ConcludeAsync). Self
+        // Each perception reserves a distinct, monotonic turn ID before any
+        // conclusion is received. The durable counter moves only when a
+        // matching conclusion closes the turn, so duplicate or unknown
+        // conclusions cannot advance the archive in the wrong place. Self
         // turns take a number too: the denominator of every hit rate has to
         // count the turns that wanted nothing as honestly as the rest.
-        var turn = _utterances.TurnsRecorded + 1;
+        var turn = Interlocked.Increment(ref _nextTurn);
         _open[envelope.CorrelationId] = turn;
 
         if (text.Length == 0 || Self(envelope))
@@ -187,8 +191,13 @@ public sealed class ScribeAgent : AgentBase
     /// </summary>
     private async Task ConcludeAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        if (!_open.TryRemove(envelope.CorrelationId, out var open))
+        {
+            return;
+        }
+
         var reply = (envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? string.Empty).Trim();
-        if (_open.TryRemove(envelope.CorrelationId, out var open) && reply.Length > 0)
+        if (reply.Length > 0)
         {
             try
             {

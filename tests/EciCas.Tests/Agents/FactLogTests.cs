@@ -1,4 +1,7 @@
+using EciCas.Agents.Intent;
+using EciCas.Agents.Perception;
 using EciCas.Agents.Utterances;
+using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -76,6 +79,40 @@ public class FactLogTests : IDisposable
     private static Fact Embedded(Fact fact, string thread) =>
         fact with { ThreadId = thread, Embedding = Vector(fact.Text), EmbeddingModelId = "stub-bow" };
 
+    private sealed class CapturingUtteranceLog : IUtteranceLog
+    {
+        private readonly List<Utterance> _utterances = [];
+        private readonly List<Utterance> _replies = [];
+
+        public IReadOnlyList<Utterance> Utterances => _utterances;
+        public IReadOnlyList<Utterance> Replies => _replies;
+        public long TurnsRecorded { get; private set; }
+
+        public Task AppendAsync(IReadOnlyList<Utterance> utterances, CancellationToken cancellationToken)
+        {
+            _utterances.AddRange(utterances);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Utterance>> AllAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Utterance>>(_utterances);
+
+        public Task AppendReplyAsync(Utterance reply, CancellationToken cancellationToken)
+        {
+            _replies.Add(reply);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Utterance>> RepliesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Utterance>>(_replies);
+
+        public Task<long> RecordTurnAsync(CancellationToken cancellationToken)
+        {
+            TurnsRecorded++;
+            return Task.FromResult(TurnsRecorded);
+        }
+    }
+
     /// <summary>
     /// One line in, one fact per sentence out. Stands in for the substrate
     /// extractor so the tests around it cost nothing and never vary.
@@ -129,6 +166,65 @@ public class FactLogTests : IDisposable
         var next = new Utterance("u2", "I totally agree.", DateTimeOffset.UtcNow, "user", reopened.TurnsRecorded + 1);
         Assert.Equal("The first knob is Tier.", UtteranceContext.PreviousReply(replies, next));
         Assert.Null(UtteranceContext.PreviousReply(replies, next with { Turn = 1 }));
+    }
+
+    [Fact]
+    public async Task ConcurrentPerceptionsReceiveDistinctTurnNumbers()
+    {
+        var log = new CapturingUtteranceLog();
+        var facts = new ParquetFactLog(_dir);
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var agent = new ScribeAgent(
+            bus,
+            activity,
+            NullLogger<ScribeAgent>.Instance,
+            log,
+            facts,
+            new VerbatimFactExtractor(),
+            Weaver(facts),
+            Options.Create(new UtteranceOptions()));
+
+        var first = Envelope.Create(Topics.Perception, "user", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "first input"));
+        var second = Envelope.Create(Topics.Perception, "user", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "second input"));
+
+        await agent.HandleAsync(first, CancellationToken.None);
+        await agent.HandleAsync(second, CancellationToken.None);
+
+        Assert.Equal([1, 2], log.Utterances.Select(u => u.Turn).ToArray());
+    }
+
+    [Fact]
+    public async Task DuplicateOrUnknownConclusionsDoNotAdvanceTheTurnCounter()
+    {
+        var log = new CapturingUtteranceLog();
+        var facts = new ParquetFactLog(_dir);
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var agent = new ScribeAgent(
+            bus,
+            activity,
+            NullLogger<ScribeAgent>.Instance,
+            log,
+            facts,
+            new VerbatimFactExtractor(),
+            Weaver(facts),
+            Options.Create(new UtteranceOptions()));
+
+        var perception = Envelope.Create(Topics.Perception, "user", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "hello there"));
+        await agent.HandleAsync(perception, CancellationToken.None);
+
+        var conclusion = perception.Derive(Topics.Conclusion, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(IntentAgent.ReplyKey, "I can help."));
+        await agent.HandleAsync(conclusion, CancellationToken.None);
+        await agent.HandleAsync(conclusion.Derive(Topics.Conclusion, "Governance", Severity.Neutral,
+            MetaBag.Empty.With(IntentAgent.ReplyKey, "I can help again.")), CancellationToken.None);
+
+        Assert.Equal(1, log.TurnsRecorded);
+        Assert.Single(log.Replies);
     }
 
     /// <summary>
