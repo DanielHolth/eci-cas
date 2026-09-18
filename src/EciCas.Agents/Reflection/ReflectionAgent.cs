@@ -237,7 +237,9 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // events.perception, no matter how eager the persona was.
         if (candidates.Count == 0)
         {
-            var thought = notes.FirstOrDefault(n => !n.IsRevisit);
+            // A revisit counts too: a batch whose only line sharpened an
+            // older note still had a thought, and it is the top passage.
+            var thought = notes.FirstOrDefault(n => !n.IsRevisit)?.Text ?? passages.FirstOrDefault();
             if (thought is null)
             {
                 // A batch can legitimately surface no idea and still have a
@@ -247,7 +249,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 return;
             }
 
-            candidates = [new Candidate(PushedImportance, "thought", thought.Text)];
+            candidates = [new Candidate(PushedImportance, "thought", thought)];
         }
 
         var best = candidates.MaxBy(c => c.Score)!;
