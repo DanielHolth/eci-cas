@@ -14,12 +14,16 @@ internal sealed class ShellOptions
     /// Push-to-talk. Held, not pressed: the overlay says "Listening" for as
     /// long as it is down.
     ///
-    /// Nothing is taken from anyone -- the key is watched, not claimed, so it
-    /// still types a hyphen in a game, a chat box or a terminal. The other side
-    /// of that same coin: typing a hyphen opens the microphone. Someone who
-    /// writes a lot of hyphens should put a modifier in front of it here.
+    /// Nothing is taken from anyone -- the key is watched, not claimed, so
+    /// whatever it is still reaches every other app in front. That is why the
+    /// default is a key with no character behind it (Pause) rather than a
+    /// printable one: a modifier in front of a symbol key (e.g. "Ctrl+-")
+    /// looks safe but is not -- Ctrl has no ASCII control code for most
+    /// symbols, so plenty of apps (games and chat boxes especially, reading
+    /// raw key state rather than WM_CHAR) still see the bare character and
+    /// type it anyway. A key with no character never has this problem.
     /// </summary>
-    public string VoiceKey { get; set; } = "-";
+    public string VoiceKey { get; set; } = "Pause";
 
     /// <summary>Toggles whether clicks land on Morrow or pass through her to
     /// the desktop. Shift comes from the character on nearly every layout, so
