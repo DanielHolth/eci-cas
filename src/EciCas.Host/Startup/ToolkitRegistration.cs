@@ -22,7 +22,6 @@ internal static class ToolkitRegistration
     {
         services.AddSingleton<IToolkit, PowerShellToolkit>();
         services.AddSingleton<IToolkit, GuideToolkit>();
-        services.AddSingleton<IToolkit, AccessibilityToolkit>();
         services.AddSingleton<IToolkit, DiscordToolkit>();
 
         // JSON toolkits -- see ManifestToolkit and ManifestToolkitLoader. A
@@ -101,17 +100,14 @@ internal static class ToolkitRegistration
                     "I'm new here, how does this work?",
                     "What can I do in the settings?",
                 ]),
-            new ToolkitDescriptor(
-                "accessibility",
-                "Speaks text aloud through the Windows speech engine -- reads a reply, a screen description, or any given text out loud.",
-                [
-                    "Read that to me out loud.",
-                    "Can you say that aloud instead of just showing it?",
-                    "Speak the screen description to me.",
-                    "I can't read that right now, can you read it to me?",
-                    "Use your voice to tell me what that says.",
-                    "Say this out loud for me.",
-                ]),
+            // "accessibility" is not a real toolkit yet -- it was one example
+            // of a future one, but AccessibilityToolkit/SpeechOutput speak
+            // through the Windows default SAPI voice, unrelated to the
+            // browser's chosen voice, and its exemplars ("say this aloud",
+            // "read it to me") were close enough to ordinary conversation to
+            // misroute an ordinary turn here, echoing the person's own words
+            // back in the wrong voice. Registration and catalog entry both
+            // removed until it's actually designed.
             new ToolkitDescriptor(
                 "discord",
                 "Posts a message to Morrow's Discord channel through the bot Morrow is installed as.",
