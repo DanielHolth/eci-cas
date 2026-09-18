@@ -26,6 +26,12 @@ internal sealed class ShellOptions
     /// it is not written here.</summary>
     public string InteractKey { get; set; } = "|";
 
+    /// <summary>Strip the frame off a game running "Windowed" at the
+    /// monitor's native resolution, so it fills the screen borderless and
+    /// Morrow can sit on top of it. Only windows whose client area is the
+    /// whole monitor qualify -- see <see cref="Games"/>.</summary>
+    public bool DeborderGames { get; set; } = true;
+
     /// <summary>The watermark's size in device-independent pixels. The face
     /// draws to fit, so this is the whole of the overlay's geometry aside from
     /// where it was last dragged.</summary>

@@ -1,4 +1,5 @@
-﻿using System.Windows;
+using System.Windows;
+using System.Windows.Interop;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Sight;
 using EciCas.Core;
@@ -30,6 +31,7 @@ public partial class App : System.Windows.Application
 {
     private WebApplication? _host;
     private WinForms.NotifyIcon? _tray;
+    private Games? _games;
     private OverlayWindow? _overlay;
     private SessionWindow? _session;
     private HotKeys? _hotKeys;
@@ -103,6 +105,9 @@ public partial class App : System.Windows.Application
         _overlay.SessionRequested += () => _ = _session.RevealAsync();
         _overlay.Show();
 
+        _games = new Games(new WindowInteropHelper(_overlay).Handle, options.DeborderGames);
+        _games.Exclusive += WarnExclusive;
+
         _dictation = new Dictation(options.Dictation, _host.Services.GetRequiredService<RuntimeKnobs>());
 
         // Beside the archive, in this process's own build output, for the
@@ -141,6 +146,11 @@ public partial class App : System.Windows.Application
         if (_hotKeys is not null)
         {
             _hotKeys.Interact += () => _overlay.Interactable = !_overlay.Interactable;
+
+            // Either key pulls her back above a game that climbed over her,
+            // which is the moment the person is looking for her anyway.
+            _hotKeys.Interact += _games!.Surface;
+            _hotKeys.VoiceDown += _games!.Surface;
 
             // Held is the whole gesture: down opens the microphone, up closes
             // it and transcribes the take. The face follows Dictation rather
@@ -300,8 +310,26 @@ public partial class App : System.Windows.Application
         Shutdown(1);
     }
 
+    /// <summary>
+    /// Once a session: nothing can draw over exclusive fullscreen, so say what
+    /// fixes it. A balloon because Windows holds it until the game lets go of
+    /// the screen, which is when it can actually be read. Voice keeps working
+    /// in the meantime.
+    /// </summary>
+    private void WarnExclusive()
+    {
+        if (_warnedExclusive || _tray is null) return;
+        _warnedExclusive = true;
+        Dispatcher.BeginInvoke(() => _tray.ShowBalloonTip(10000, "Morrow can't show over this game",
+            "It is in exclusive fullscreen. Set the game to Windowed and Morrow will remove the borders. " +
+            "Voice still works either way.", WinForms.ToolTipIcon.Info));
+    }
+
+    private bool _warnedExclusive;
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _games?.Dispose();
         _hotKeys?.Dispose();
         _dictation?.Dispose();
         if (_tray is not null)
