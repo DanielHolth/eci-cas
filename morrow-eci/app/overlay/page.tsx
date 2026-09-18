@@ -366,17 +366,23 @@ export default function Overlay() {
             </div>
           )}
 
-          <div style={{ gridArea: "avatar" }} className="pointer-events-none mt-1 flex translate-y-full justify-center pt-1">
-            {state.listening ? (
-              <p className="pointer-events-auto rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
-                Listening…
-              </p>
-            ) : state.interactable ? (
-              <p className="pointer-events-auto rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
-                Click to open · drag to move
-              </p>
-            ) : null}
-          </div>
+          {/* Shares the avatar's grid cell and is pushed below her by its own
+              height, which puts it right where the reply bubble sits -- so
+              it only shows when there is no reply to cover. Otherwise the
+              hint painted over the very thing it was standing in for. */}
+          {!((fresh || speaking) && said) && (
+            <div style={{ gridArea: "avatar" }} className="pointer-events-none mt-1 flex translate-y-full justify-center pt-1">
+              {state.listening ? (
+                <p className="pointer-events-auto rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
+                  Listening…
+                </p>
+              ) : state.interactable ? (
+                <p className="pointer-events-auto rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
+                  Click to open · drag to move
+                </p>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
     </>
