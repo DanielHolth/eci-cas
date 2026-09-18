@@ -83,6 +83,33 @@ export default function Overlay() {
   const [fresh, setFresh] = useState(false);
   const first = useRef(true);
 
+  // She can take ten to twenty seconds on a cold call, and a corner that
+  // shows nothing in that gap reads as broken rather than busy. Elapsed time
+  // is tracked locally rather than off the record's own timestamps: the
+  // pipeline is still writing this turn, so nothing it reports yet is final,
+  // and a plain wall clock started the moment the turn appeared is enough to
+  // tell "thinking" from "still waiting on a cold model."
+  const [thinkingMs, setThinkingMs] = useState(0);
+  const thinkingSince = useRef<number | null>(null);
+  const thinkingTurnId = useRef<string | null>(null);
+  const thinking = replayed && !!turn && turn.stage !== "done";
+  useEffect(() => {
+    if (!thinking || !turn) {
+      thinkingSince.current = null;
+      thinkingTurnId.current = null;
+      setThinkingMs(0);
+      return;
+    }
+    if (thinkingTurnId.current !== turn.turnId) {
+      thinkingTurnId.current = turn.turnId;
+      thinkingSince.current = Date.now();
+    }
+    const id = setInterval(() => {
+      if (thinkingSince.current) setThinkingMs(Date.now() - thinkingSince.current);
+    }, 500);
+    return () => clearInterval(id);
+  }, [thinking, turn?.turnId]);
+
   // The idea bubble: shown the instant Reflection's own idea lands on
   // perception, long before it has been thought through into a reply, so the
   // person sees her have the thought while she is still finishing the last
@@ -350,28 +377,52 @@ export default function Overlay() {
             />
           </button>
 
-          {(fresh || speaking) && said && (
-            /* What she says back, below her, styled as a speech bubble with a
-               tail pointing up into the avatar -- the direction a voice comes
-               from. No max height and nothing hidden: the window is what
-               grows now, and a bubble that clipped itself first would make
-               that pointless. */
+          {thinking && !said ? (
+            /* Nothing to read yet is not the same as nothing happening. A
+               cold call can take ten to twenty seconds, and a corner that
+               goes quiet for that long reads as stuck rather than working. */
             <div style={{ gridArea: "reply" }} className="flex flex-col items-center">
               <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-900/80">
                 <path d="M0 10 L8 0 L16 10 Z" fill="currentColor" />
               </svg>
-              <p className="max-w-xs rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
-                {said}
+              <p
+                role="status"
+                className="flex items-center gap-1.5 rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm"
+              >
+                <span className="flex gap-0.5">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-300 [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-300 [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-300" />
+                </span>
+                {thinkingMs > 4000 ? "Warming up…" : "Thinking…"}
               </p>
             </div>
+          ) : (
+            (fresh || speaking) &&
+            said && (
+              /* What she says back, below her, styled as a speech bubble with
+                 a tail pointing up into the avatar -- the direction a voice
+                 comes from. No max height and nothing hidden: the window is
+                 what grows now, and a bubble that clipped itself first would
+                 make that pointless. */
+              <div style={{ gridArea: "reply" }} className="flex flex-col items-center">
+                <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-900/80">
+                  <path d="M0 10 L8 0 L16 10 Z" fill="currentColor" />
+                </svg>
+                <p className="max-w-xs rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
+                  {said}
+                </p>
+              </div>
+            )
           )}
 
-          {/* Shares the avatar's grid cell and is pushed below her by its own
-              height, which puts it right where the reply bubble sits -- so
-              it only shows when there is no reply to cover. Otherwise the
-              hint painted over the very thing it was standing in for. */}
-          {!((fresh || speaking) && said) && (
-            <div style={{ gridArea: "avatar" }} className="pointer-events-none mt-1 flex translate-y-full justify-center pt-1">
+          {/* Used to share the avatar's grid cell and get pushed below her by
+              its own height -- landing exactly where the reply/thinking
+              bubble renders and painting over it, silently, every time she
+              was interactable. Its own row now, so the two can never
+              collide regardless of timing. */}
+          {!(thinking || ((fresh || speaking) && said)) && (
+            <div style={{ gridArea: "reply" }} className="pointer-events-none flex justify-center">
               {state.listening ? (
                 <p className="pointer-events-auto rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
                   Listening…
