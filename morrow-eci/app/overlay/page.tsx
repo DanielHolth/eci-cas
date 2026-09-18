@@ -290,7 +290,10 @@ export default function Overlay() {
         <div
           ref={box}
           className="grid items-center justify-items-center gap-2"
-          style={{ gridTemplateAreas: `"idea prompt prompt" "idea avatar avatar" ". reply reply"`, gridTemplateColumns: "auto auto auto" }}
+          style={{
+            gridTemplateAreas: `"idea prompt prompt" "idea avatar avatar" ". reply reply" ". status status"`,
+            gridTemplateColumns: "auto auto auto",
+          }}
         >
           {heard && (
             /* What she heard, above her, with an arrow feeding into the
@@ -435,24 +438,23 @@ export default function Overlay() {
             )
           )}
 
-          {/* Used to share the avatar's grid cell and get pushed below her by
-              its own height -- landing exactly where the reply/thinking
-              bubble renders and painting over it, silently, every time she
-              was interactable. Its own row now, so the two can never
-              collide regardless of timing. */}
-          {!(thinking || ((fresh || speaking) && said)) && (
-            <div style={{ gridArea: "reply" }} className="pointer-events-none flex justify-center">
-              {state.listening ? (
-                <p className="pointer-events-auto rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
-                  Listening…
-                </p>
-              ) : state.interactable ? (
-                <p className="pointer-events-auto rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
-                  Click to open · drag to move
-                </p>
-              ) : null}
-            </div>
-          )}
+          {/* Used to share the reply cell and get suppressed by the same
+              condition that hides it from an occupied reply bubble --
+              which meant listening never showed again once any reply had
+              ever landed, because `said` never goes back to empty. Its own
+              row now, shown purely off shell state, so it can never be
+              blocked by what the reply/thinking bubble is doing. */}
+          <div style={{ gridArea: "status" }} className="pointer-events-none flex justify-center">
+            {state.listening ? (
+              <p className="pointer-events-auto rounded-full bg-red-600/90 px-3 py-1 text-xs font-semibold text-white shadow" role="status">
+                Listening…
+              </p>
+            ) : state.interactable ? (
+              <p className="pointer-events-auto rounded-full bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow" role="status">
+                Click to open · drag to move
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
     </>

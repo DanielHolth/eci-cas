@@ -80,6 +80,22 @@ public sealed class TurnLogSubscriber : AgentBase
 
     public override Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
+        // ToolkitManager stamps these on their own correlation id, deliberately
+        // disconnected from the perception that triggered the run: the result
+        // can land well after that turn has settled, and ToolkitManager
+        // reports it on whichever future turn happens to be live via
+        // Advisories (see ReportFinishedRuns). TurnProjection has no case for
+        // either topic, so the first one to arrive under an id this subscriber
+        // has never seen used to open a bare entry -- no perception, no
+        // calls, nothing ever fills it in -- and it sat in the log forever as
+        // an empty turn between two real ones. Skipped here rather than
+        // taught to TurnProjection: they are not a turn, they are the run
+        // that a turn's Advisories line will describe once it finishes.
+        if (envelope.Topic is Topics.ToolkitRequest or Topics.ToolkitResult)
+        {
+            return Task.CompletedTask;
+        }
+
         // Counted here rather than off the record, because a record is
         // rebuilt on every envelope and re-summing it would double-count. A
         // telemetry envelope is published once per call and never replayed,
