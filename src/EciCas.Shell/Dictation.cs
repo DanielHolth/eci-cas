@@ -240,10 +240,13 @@ internal sealed class Dictation : IDisposable
             var text = segment.Text.Trim();
 
             // Whisper narrates what it cannot transcribe: [BLANK_AUDIO], a
-            // parenthesised (wind), an asterisked *laughs*. Those are
-            // annotations about the recording rather than things the person
-            // said, and Perception would take them for an utterance.
-            if (text.Length == 0 || Annotation(text))
+            // parenthesised (wind), an asterisked *laughs*, or -- for the
+            // trailing breath after the key comes up, with nothing bracketing
+            // it to catch -- a bare "...". All four are annotations about the
+            // recording rather than things the person said, and Perception
+            // would take any of them for an utterance: a real turn with
+            // nothing in it, wedged between the ones either side.
+            if (text.Length == 0 || Annotation(text) || !text.Any(char.IsLetterOrDigit))
             {
                 continue;
             }

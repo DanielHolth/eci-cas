@@ -302,10 +302,10 @@ export default function Overlay() {
                turn.input only exists once the record round-trips, which is
                well after the shell already has the raw dictation. */
             <div style={{ gridArea: "prompt" }} className="flex items-center gap-1">
-              <svg width="10" height="16" viewBox="0 0 10 16" className="shrink-0 text-neutral-100/90">
+              <svg width="10" height="16" viewBox="0 0 10 16" className="shrink-0 text-neutral-900/80">
                 <path d="M0 0 L10 8 L0 16 Z" fill="currentColor" />
               </svg>
-              <p className="max-w-xs rounded-2xl bg-neutral-100/90 px-3 py-2 text-center text-sm leading-snug text-neutral-900 shadow-lg backdrop-blur-sm">
+              <p className="max-w-xs rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
                 {heard}
               </p>
             </div>
@@ -425,10 +425,10 @@ export default function Overlay() {
                  what grows now, and a bubble that clipped itself first would
                  make that pointless. */
               <div style={{ gridArea: "reply" }} className="flex flex-col items-center">
-                <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-900/80">
+                <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-100/90">
                   <path d="M0 10 L8 0 L16 10 Z" fill="currentColor" />
                 </svg>
-                <p className="max-w-xs rounded-2xl bg-neutral-900/80 px-3 py-2 text-center text-sm leading-snug text-neutral-50 shadow-lg backdrop-blur-sm">
+                <p className="max-w-xs rounded-2xl bg-neutral-100/90 px-3 py-2 text-center text-sm leading-snug text-neutral-900 shadow-lg backdrop-blur-sm">
                   {said}
                 </p>
               </div>
