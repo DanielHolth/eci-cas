@@ -1,6 +1,5 @@
 using System.Reflection;
 using EciCas.Agents.Action;
-using EciCas.Agents.Archivist;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Identity;
@@ -262,7 +261,7 @@ public class SmokeTests
                     ["Intent"] = new SubstrateAgentEntry(),
                     ["Recall"] = new SubstrateAgentEntry(),
                     ["Reflection"] = new SubstrateAgentEntry(),
-                    ["Archivist"] = new SubstrateAgentEntry(),
+                    ["Scribe"] = new SubstrateAgentEntry(),
                     ["consolidator"] = new SubstrateAgentEntry(),
                 },
             }));

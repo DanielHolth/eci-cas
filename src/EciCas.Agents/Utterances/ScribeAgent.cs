@@ -1,4 +1,3 @@
-using EciCas.Agents.Archivist;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Reflection;
@@ -56,6 +55,21 @@ public sealed class ScribeAgent : AgentBase
 
     public override string Name => "Scribe";
     public override IReadOnlyCollection<string> Subscriptions => [Topics.Perception, Topics.Conclusion];
+
+    /// <summary>
+    /// The bus vocabulary for "the archive grew" — a SystemControl envelope
+    /// carrying this kind, published here and by Reflection for its own
+    /// ideas. Identity, Impulse and Governance key off these rather than the
+    /// agent name, so they're public rather than private to this class.
+    /// </summary>
+    public const string ControlKindKey = "control.kind";
+    public const string WrittenKind = "Written";
+
+    /// <summary>What the flush actually put on disk, one "path = value" string per record — the same strings the log line prints, so the surface and the console agree without either reading the other.</summary>
+    public const string WrittenRecordsKey = "scribe.written";
+
+    /// <summary>The fact ids behind those strings, in the same order. What lets a surface offer to correct a row rather than only to read it — a made-up fact is worth nothing if the only way to remove it is a parquet tool.</summary>
+    public const string WrittenIdsKey = "scribe.written.ids";
 
     /// <summary>The speaker every reply row is stamped with.</summary>
     public const string ReplySpeaker = "assistant";
@@ -173,15 +187,12 @@ public sealed class ScribeAgent : AgentBase
         // typed, once per turn, forever.
         if (_options.ExtractorEnabled)
         {
-            // Archivist's old constants, kept in ArchiveWriteSignal now that
-            // it's gone: Identity and Impulse listen for "the archive grew",
-            // not for whichever agent is holding the pen this month.
             var kept = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Text)];
             var ids = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Id)];
             _bus.Publish(Topics.SystemControl, envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
-                MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ArchiveWriteSignal.WrittenKind)
-                    .With(ArchiveWriteSignal.WrittenRecordsKey, kept)
-                    .With(ArchiveWriteSignal.WrittenIdsKey, ids)));
+                MetaBag.Empty.With(ControlKindKey, WrittenKind)
+                    .With(WrittenRecordsKey, kept)
+                    .With(WrittenIdsKey, ids)));
         }
     }
 

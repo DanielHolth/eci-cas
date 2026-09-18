@@ -6,7 +6,7 @@ using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Reflection;
-using EciCas.Agents.Archivist;
+using EciCas.Agents.Utterances;
 using EciCas.Bus;
 using EciCas.Core;
 using EciCas.Substrates;
@@ -62,7 +62,7 @@ public class ImpulseAgentTests
         var (agent, _, _, store) = Create();
         var control = Envelope.Create(Topics.SystemControl, "Governance", Severity.Elevated,
             MetaBag.Empty
-                .With(ArchiveWriteSignal.ControlKindKey, GovernanceAgent.FrustrationKind));
+                .With(ScribeAgent.ControlKindKey, GovernanceAgent.FrustrationKind));
 
         await agent.HandleAsync(control, CancellationToken.None);
 
@@ -230,7 +230,7 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
         var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
-            MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ReflectionAgent.ReflectedKind)
+            MetaBag.Empty.With(ScribeAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
                 .With(ReflectionAgent.MoodKey, "curious"));
 
         await agent.HandleAsync(reflected, CancellationToken.None);
@@ -248,7 +248,7 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
         var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
-            MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ReflectionAgent.ReflectedKind)
+            MetaBag.Empty.With(ScribeAgent.ControlKindKey, ReflectionAgent.ReflectedKind)
                 .With(ReflectionAgent.MoodKey, "ecstatic"));
 
         await agent.HandleAsync(reflected, CancellationToken.None);
@@ -261,7 +261,7 @@ public class ImpulseAgentTests
     {
         var (agent, _, _, store) = Create();
         var reflected = Envelope.Create(Topics.SystemControl, "Reflection", Severity.Neutral,
-            MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ReflectionAgent.ReflectedKind));
+            MetaBag.Empty.With(ScribeAgent.ControlKindKey, ReflectionAgent.ReflectedKind));
 
         await agent.HandleAsync(reflected, CancellationToken.None);
 

@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using EciCas.Agents.Archivist;
+using EciCas.Agents.Utterances;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Intent;
 using EciCas.Agents.Perception;
@@ -156,7 +156,7 @@ public sealed class ImpulseAgent : AgentBase
     {
         if (envelope.Topic == Topics.SystemControl)
         {
-            var kind = envelope.Meta.Get<string>(ArchiveWriteSignal.ControlKindKey);
+            var kind = envelope.Meta.Get<string>(ScribeAgent.ControlKindKey);
             if (kind == GovernanceAgent.FrustrationKind)
             {
                 await NudgeAsync(FrustrationNudge, cancellationToken).ConfigureAwait(false);

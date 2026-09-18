@@ -1,4 +1,3 @@
-using EciCas.Agents.Archivist;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
@@ -192,8 +191,8 @@ public class TurnLogTests
         var perception = Perception("vera is six");
         var record = Project(perception,
             perception.Derive(Topics.SystemControl, "Archivist", Severity.Neutral,
-                MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ArchiveWriteSignal.WrittenKind)
-                    .With(ArchiveWriteSignal.WrittenRecordsKey, (IReadOnlyList<string>)["person/family/daniel/daughter/age = 6"])),
+                MetaBag.Empty.With(ScribeAgent.ControlKindKey, ScribeAgent.WrittenKind)
+                    .With(ScribeAgent.WrittenRecordsKey, (IReadOnlyList<string>)["person/family/daniel/daughter/age = 6"])),
             perception.Derive(Topics.SystemControl, "Reflection", Severity.Neutral,
                 MetaBag.Empty.With(ReflectionAgent.PassagesKey, (IReadOnlyList<string>)["ages come up often"])
                     .With(ReflectionAgent.IdeaKey, "ask about her birthday")));

@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using EciCas.Agents.Archivist;
+using EciCas.Agents.Utterances;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Intent;
@@ -286,7 +286,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private void PublishReflected(Envelope flush, string? mood, IReadOnlyList<string> passages, string? idea)
     {
-        var meta = MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ReflectedKind);
+        var meta = MetaBag.Empty.With(ScribeAgent.ControlKindKey, ReflectedKind);
         if (mood is not null)
         {
             meta = meta.With(MoodKey, mood);

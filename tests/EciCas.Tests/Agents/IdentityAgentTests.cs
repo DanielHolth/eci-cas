@@ -1,4 +1,4 @@
-using EciCas.Agents.Archivist;
+using EciCas.Agents.Utterances;
 using EciCas.Agents.Recall;
 using EciCas.Agents.Identity;
 using EciCas.Bus;
@@ -176,7 +176,7 @@ public class IdentityAgentTests
         Assert.True(advisories.TryRead(out _));
 
         var written = Envelope.Create(Topics.SystemControl, "Archivist", Severity.Neutral,
-            MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ArchiveWriteSignal.WrittenKind));
+            MetaBag.Empty.With(ScribeAgent.ControlKindKey, ScribeAgent.WrittenKind));
         await agent.HandleAsync(written, CancellationToken.None);
 
         var second = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
@@ -199,7 +199,7 @@ public class IdentityAgentTests
 
         await archive.WriteAsync([Named("Sol")], CancellationToken.None);
         await agent.HandleAsync(Envelope.Create(Topics.SystemControl, "Archivist", Severity.Neutral,
-            MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ArchiveWriteSignal.WrittenKind)), CancellationToken.None);
+            MetaBag.Empty.With(ScribeAgent.ControlKindKey, ScribeAgent.WrittenKind)), CancellationToken.None);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral), CancellationToken.None);
         Assert.True(advisories.TryRead(out var after));

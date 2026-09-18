@@ -1,4 +1,3 @@
-using EciCas.Agents.Archivist;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
@@ -38,7 +37,7 @@ public static class TurnProjection
         };
 
         // Every envelope moves the end of the event, including the ones that
-        // arrive after the reply: Archivist's write and Reflection's batch
+        // arrive after the reply: Scribe's write and Reflection's batch
         // are part of what the turn cost, even though nobody waited for them.
         record = record with { EndedAt = Later(record.EndedAt, envelope.Timestamp) };
 
@@ -115,8 +114,8 @@ public static class TurnProjection
 
     private static TurnRecord ApplyControl(TurnRecord record, Envelope envelope) => record with
     {
-        Writes = envelope.Meta.Get<IReadOnlyList<string>>(ArchiveWriteSignal.WrittenRecordsKey) ?? record.Writes,
-        WriteIds = envelope.Meta.Get<IReadOnlyList<string>>(ArchiveWriteSignal.WrittenIdsKey) ?? record.WriteIds,
+        Writes = envelope.Meta.Get<IReadOnlyList<string>>(ScribeAgent.WrittenRecordsKey) ?? record.Writes,
+        WriteIds = envelope.Meta.Get<IReadOnlyList<string>>(ScribeAgent.WrittenIdsKey) ?? record.WriteIds,
         Passages = envelope.Meta.Get<IReadOnlyList<string>>(ReflectionAgent.PassagesKey) ?? record.Passages,
         Idea = envelope.Meta.Get<string>(ReflectionAgent.IdeaKey) ?? record.Idea,
     };

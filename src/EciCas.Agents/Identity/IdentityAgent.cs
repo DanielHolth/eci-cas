@@ -1,5 +1,5 @@
-﻿using EciCas.Agents.Archivist;
-using EciCas.Agents.Perception;
+﻿using EciCas.Agents.Perception;
+using EciCas.Agents.Utterances;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -15,7 +15,7 @@ namespace EciCas.Agents.Identity;
 /// agent gets thicker and the name still fits.
 ///
 /// Identity lookup: a persona snippet read from IArchiveStore and cached,
-/// re-hydrated whenever Archivist announces a new epoch on
+/// re-hydrated whenever Scribe announces a new epoch on
 /// system.control (a write could have touched the persona record). Falls
 /// back to a fixed snippet when the store has nothing under "assistant/persona"
 /// yet — nothing writes persona records in this pass, so that's the only
@@ -113,7 +113,7 @@ public sealed class IdentityAgent : AgentBase
 
     private async Task OnControlAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (envelope.Meta.Get<string>(ArchiveWriteSignal.ControlKindKey) != ArchiveWriteSignal.WrittenKind)
+        if (envelope.Meta.Get<string>(ScribeAgent.ControlKindKey) != ScribeAgent.WrittenKind)
         {
             return;
         }
