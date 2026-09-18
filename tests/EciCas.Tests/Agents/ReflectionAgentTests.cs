@@ -83,6 +83,33 @@ public class ReflectionAgentTests
         Assert.Contains(quiet, r => r.Value == "a minor follow-up thought" && r.Domain == ArchiveDomain.Internal && r.Importance == 0.1);
     }
 
+    /// <summary>
+    /// §1 of the reflection prompt asks for "zero or more" scored lines, and
+    /// a weak substrate commonly writes only its §3 thought line and skips
+    /// scoring entirely. That thought is still the batch's one idea and
+    /// should reach events.perception, not get dropped for lack of a score.
+    /// </summary>
+    [Fact]
+    public async Task WithNoScoredCandidates_FallsBackToThoughtLine_AndStillPushes()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var perceptions = bus.Subscribe(Topics.Perception);
+        var store = new InMemoryArchiveStore();
+        var stateStore = new JsonlAgentStateStore(Path.GetTempFileName());
+
+        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult(
+            "mood|curious\nthought|assistant/reflection|the user keeps circling the same question", TimeSpan.Zero, 10, 0m)));
+        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
+            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1, MaxIdeaGeneration = 1 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
+
+        await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
+
+        Assert.True(perceptions.TryRead(out var idea));
+        Assert.Equal("the user keeps circling the same question", idea!.Meta.Get<string>(PerceptionAgent.TextKey));
+        Assert.Equal("self", idea.Meta.Get<string>(ReflectionAgent.TriggeredByKey));
+    }
+
     [Fact]
     public async Task AtGenerationCap_NeverPushes_EvenWithHighEagerness()
     {

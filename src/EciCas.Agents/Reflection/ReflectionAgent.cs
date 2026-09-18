@@ -228,13 +228,26 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
         var passages = await WritePassagesAsync(notes, previous, batch, cancellationToken).ConfigureAwait(false);
 
+        // §1 of the prompt asks for "zero or more" scored lines, and a small
+        // substrate routinely writes only its §3 thought and skips scoring
+        // entirely — that thought is still the batch's one idea, just
+        // unscored. Falling back to it is what keeps a weak model's batches
+        // from going quiet forever: without this, "zero or more" plus a
+        // model that never bothers with §1 meant nothing ever reached
+        // events.perception, no matter how eager the persona was.
         if (candidates.Count == 0)
         {
-            // A batch can legitimately surface no idea and still have a
-            // tone worth colouring by, so the control envelope goes out
-            // either way — only a failed or echoed call skips it.
-            PublishReflected(flush, mood, passages, idea: null);
-            return;
+            var thought = notes.FirstOrDefault(n => !n.IsRevisit);
+            if (thought is null)
+            {
+                // A batch can legitimately surface no idea and still have a
+                // tone worth colouring by, so the control envelope goes out
+                // either way — only a failed or echoed call skips it.
+                PublishReflected(flush, mood, passages, idea: null);
+                return;
+            }
+
+            candidates = [new Candidate(PushedImportance, "thought", thought.Text)];
         }
 
         var best = candidates.MaxBy(c => c.Score)!;
