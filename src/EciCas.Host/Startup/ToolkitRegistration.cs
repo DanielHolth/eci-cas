@@ -101,13 +101,14 @@ internal static class ToolkitRegistration
                     "What can I do in the settings?",
                 ]),
             // "accessibility" is not a real toolkit yet -- it was one example
-            // of a future one, but AccessibilityToolkit/SpeechOutput speak
-            // through the Windows default SAPI voice, unrelated to the
-            // browser's chosen voice, and its exemplars ("say this aloud",
-            // "read it to me") were close enough to ordinary conversation to
-            // misroute an ordinary turn here, echoing the person's own words
-            // back in the wrong voice. Registration and catalog entry both
-            // removed until it's actually designed.
+            // of a future one, but AccessibilityToolkit spoke through the
+            // Windows default SAPI voice, unrelated to the browser's chosen
+            // voice, and its exemplars ("say this aloud", "read it to me")
+            // were close enough to ordinary conversation to misroute an
+            // ordinary turn here, echoing the person's own words back in the
+            // wrong voice. Registration, catalog entry, and the class itself
+            // are gone until it's actually designed; SpeechOutput stays --
+            // ManifestToolkit's speak_text verb still calls it.
             new ToolkitDescriptor(
                 "discord",
                 "Posts a message to Morrow's Discord channel through the bot Morrow is installed as.",

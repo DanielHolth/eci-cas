@@ -3,11 +3,10 @@ using System.Speech.Synthesis;
 namespace EciCas.Agents.Toolkit;
 
 /// <summary>
-/// The one place that touches <see cref="SpeechSynthesizer"/>, shared by
-/// <see cref="AccessibilityToolkit"/> and any manifest toolkit whose verb is
-/// <c>speak_text</c> -- two callers, one Windows-speech dependency, so a
-/// future change to how Morrow speaks (voice selection, rate) has one method
-/// to change rather than a duplicate per caller.
+/// The one place that touches <see cref="SpeechSynthesizer"/>, called by any
+/// manifest toolkit whose verb is <c>speak_text</c> -- one Windows-speech
+/// dependency behind one method, so a future change to how Morrow speaks
+/// (voice selection, rate) has one place to change.
 /// </summary>
 internal static class SpeechOutput
 {

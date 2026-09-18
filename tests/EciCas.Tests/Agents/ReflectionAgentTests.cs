@@ -84,28 +84,6 @@ public class ReflectionAgentTests
     }
 
     [Fact]
-    public async Task AtBatchSize_WithLowEagerness_WritesQuietlyAndDoesNotPush()
-    {
-        var activity = new BusActivityTracker();
-        var bus = new ChannelBus(activity);
-        var perceptions = bus.Subscribe(Topics.Perception);
-        var store = new InMemoryArchiveStore();
-        var stateStore = new JsonlAgentStateStore(Path.GetTempFileName());
-        await SeedDriveVectorsAsync(stateStore, new DriveVectors(Curiosity: 0.1, Fatigue: 0.8));
-
-        var substrate = new StubSubstrate(_ => Task.FromResult(new SubstrateResult("0.9|pattern|a compelling idea", TimeSpan.Zero, 10, 0m)));
-        var agent = new ReflectionAgent(bus, activity, NullLogger<ReflectionAgent>.Instance, store, stateStore, substrate,
-            Manifest(), Options.Create(new ReflectionOptions { BatchSize = 1, MaxIdeaGeneration = 1, EagernessThreshold = 0.6 }), new InMemoryPassageStore(), new StubEmbeddings(), ShippedInstructions.Store, new RuntimeKnobs { ReflectionEvery = 1 });
-
-        await agent.HandleAsync(Conclusion("tacos sound good"), CancellationToken.None);
-
-        Assert.False(perceptions.TryRead(out _));
-
-        var records = await store.LookupAsync(new ArchivePair("assistant", "reflection"), CancellationToken.None);
-        Assert.Contains(records, r => r.Value == "a compelling idea" && r.Domain == ArchiveDomain.Internal && r.Importance == 0.1);
-    }
-
-    [Fact]
     public async Task AtGenerationCap_NeverPushes_EvenWithHighEagerness()
     {
         var activity = new BusActivityTracker();

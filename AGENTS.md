@@ -43,6 +43,17 @@ usual.)"* is the template: true, caused, silent otherwise. A persona
 narrating an ungrounded mood is the failure this avoids — also why the
 drive window reaches Reflection as words, never numbers.
 
+## Replacing functionality: leave no trace
+
+When a new implementation supersedes an old one, delete the old one
+completely rather than leaving anything shaped around it. That includes a
+holder class introduced only to give surviving constants somewhere to live —
+fold them directly onto whatever component now actually owns that concern.
+A class named after the thing that got deleted is still a trace of it, even
+with the logic gone. `ArchivistAgent`'s bus constants belong on `ScribeAgent`
+(the agent that publishes them today), not in an `ArchiveWriteSignal` waypoint
+named for the agent that no longer exists.
+
 ## Commands
 
 "Reset parquet" — `docs/appendix.md` § Resetting the archive.
