@@ -2,11 +2,14 @@
 using EciCas.Agents.Perception;
 using EciCas.Agents.Sight;
 using EciCas.Core;
+using EciCas.Host;
 using EciCas.Host.Startup;
+using EciCas.Substrates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using WinForms = System.Windows.Forms;
 
 namespace EciCas.Shell;
@@ -32,6 +35,19 @@ public partial class App : System.Windows.Application
     private HotKeys? _hotKeys;
     private Dictation? _dictation;
     private ScreenShots? _shots;
+
+    /// <summary>When the voice key last went down. Boot already pays the cold
+    /// call once (see SubstrateWarmup), so this starts at boot time rather
+    /// than at negative infinity -- otherwise the very first press of a
+    /// session would re-warm a model that just finished warming.</summary>
+    private DateTimeOffset _lastVoiceDown = DateTimeOffset.UtcNow;
+
+    /// <summary>Away long enough that the model behind it may have gone
+    /// cold -- a local server can evict idle weights, and a vendor connection
+    /// can drop. Ten minutes, not the length of a coffee break: cheap to
+    /// re-warm and expensive to guess wrong on the side that leaves someone
+    /// waiting.</summary>
+    private static readonly TimeSpan IdleThreshold = TimeSpan.FromMinutes(10);
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -132,11 +148,45 @@ public partial class App : System.Windows.Application
             // tap of it must not so much as flicker -- see DictationOptions.HoldMs.
             _hotKeys.VoiceDown += _dictation.Press;
             _hotKeys.VoiceUp += _dictation.Release;
+
+            // A gentle head start on the cold call: the key going down is the
+            // earliest moment there is any signal a question is coming, well
+            // before the mic has even armed (see DictationOptions.HoldMs) or
+            // the take has been transcribed. Fired here rather than from
+            // Dictation.Opened so the model is already loading while the
+            // person is still talking, not after.
+            _hotKeys.VoiceDown += () => _ = WarmIfIdleAsync();
         }
 
         _tray.Text = _dictation.Ready ? "Morrow" : "Morrow — no speech model";
         _tray.DoubleClick += (_, _) => _ = _session.RevealAsync();
         _tray.ContextMenuStrip = TrayMenu();
+    }
+
+    /// <summary>
+    /// Re-runs the same throwaway completion boot uses, but only when the key
+    /// going down is the first sign of life in a while -- a press seconds
+    /// after the last one is not idle, and re-warming on every single press
+    /// would double every ordinary turn's load on the substrate for nothing.
+    /// Not awaited by the caller: this races the mic arming and the take
+    /// being spoken, not the turn itself, and it must never make a press feel
+    /// slower than it already does.
+    /// </summary>
+    private async Task WarmIfIdleAsync()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var idle = now - _lastVoiceDown > IdleThreshold;
+        _lastVoiceDown = now;
+        if (!idle || _host is null) return;
+
+        var substrates = _host.Services.GetRequiredService<ISubstrateProvider>();
+        var options = _host.Services.GetRequiredService<IOptions<SubstrateOptions>>();
+        var configuration = _host.Services.GetRequiredService<IConfiguration>();
+        var budgetMs = int.TryParse(configuration["Substrates:WarmupMs"], out var budget) ? budget : 60_000;
+        if (budgetMs <= 0) return;
+
+        await SubstrateWarmup.RunAsync(
+            substrates, options.Value, TimeSpan.FromMilliseconds(budgetMs), Console.WriteLine, CancellationToken.None);
     }
 
     /// <summary>
