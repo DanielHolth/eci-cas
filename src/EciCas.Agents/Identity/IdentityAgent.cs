@@ -113,7 +113,7 @@ public sealed class IdentityAgent : AgentBase
 
     private async Task OnControlAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (envelope.Meta.Get<string>(ArchivistAgent.ControlKindKey) != ArchivistAgent.WrittenKind)
+        if (envelope.Meta.Get<string>(ArchiveWriteSignal.ControlKindKey) != ArchiveWriteSignal.WrittenKind)
         {
             return;
         }

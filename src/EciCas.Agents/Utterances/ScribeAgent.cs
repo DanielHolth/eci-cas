@@ -173,15 +173,15 @@ public sealed class ScribeAgent : AgentBase
         // typed, once per turn, forever.
         if (_options.ExtractorEnabled)
         {
-            // Still Archivist's constants, for the same reason Cataloger used
-            // them: Identity and Impulse listen for "the archive grew", not
-            // for whichever agent is holding the pen this month.
+            // Archivist's old constants, kept in ArchiveWriteSignal now that
+            // it's gone: Identity and Impulse listen for "the archive grew",
+            // not for whichever agent is holding the pen this month.
             var kept = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Text)];
             var ids = (IReadOnlyList<string>)[.. woven.Rows.Select(row => row.Id)];
             _bus.Publish(Topics.SystemControl, envelope.Derive(Topics.SystemControl, Name, envelope.Severity,
-                MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)
-                    .With(ArchivistAgent.WrittenRecordsKey, kept)
-                    .With(ArchivistAgent.WrittenIdsKey, ids)));
+                MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ArchiveWriteSignal.WrittenKind)
+                    .With(ArchiveWriteSignal.WrittenRecordsKey, kept)
+                    .With(ArchiveWriteSignal.WrittenIdsKey, ids)));
         }
     }
 

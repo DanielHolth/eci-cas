@@ -176,7 +176,7 @@ public class IdentityAgentTests
         Assert.True(advisories.TryRead(out _));
 
         var written = Envelope.Create(Topics.SystemControl, "Archivist", Severity.Neutral,
-            MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind));
+            MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ArchiveWriteSignal.WrittenKind));
         await agent.HandleAsync(written, CancellationToken.None);
 
         var second = Envelope.Create(Topics.Perception, "Perception", Severity.Neutral);
@@ -199,7 +199,7 @@ public class IdentityAgentTests
 
         await archive.WriteAsync([Named("Sol")], CancellationToken.None);
         await agent.HandleAsync(Envelope.Create(Topics.SystemControl, "Archivist", Severity.Neutral,
-            MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ArchivistAgent.WrittenKind)), CancellationToken.None);
+            MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ArchiveWriteSignal.WrittenKind)), CancellationToken.None);
 
         await agent.HandleAsync(Envelope.Create(Topics.Perception, "Perception", Severity.Neutral), CancellationToken.None);
         Assert.True(advisories.TryRead(out var after));

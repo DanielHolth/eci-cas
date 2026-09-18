@@ -183,7 +183,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
             _logger.LogDebug("{Agent} response <<<\n{Response}", Name, result.Text);
             SubstrateTrace.Publish(_bus, flush, Name, result);
 
-            // Same guard as ArchivistAgent.ExtractFactsAsync: the mock
+            // Same guard the old ArchivistAgent's extraction used: the mock
             // tier echoes the prompt back verbatim, and its own worked
             // example ("0.7|hypothesis|...") is a valid score|subtopic|idea
             // line that ParseCandidates would otherwise harvest as real.
@@ -286,7 +286,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
     /// </summary>
     private void PublishReflected(Envelope flush, string? mood, IReadOnlyList<string> passages, string? idea)
     {
-        var meta = MetaBag.Empty.With(ArchivistAgent.ControlKindKey, ReflectedKind);
+        var meta = MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, ReflectedKind);
         if (mood is not null)
         {
             meta = meta.With(MoodKey, mood);

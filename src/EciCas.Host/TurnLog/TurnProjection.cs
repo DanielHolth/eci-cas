@@ -115,8 +115,8 @@ public static class TurnProjection
 
     private static TurnRecord ApplyControl(TurnRecord record, Envelope envelope) => record with
     {
-        Writes = envelope.Meta.Get<IReadOnlyList<string>>(ArchivistAgent.WrittenRecordsKey) ?? record.Writes,
-        WriteIds = envelope.Meta.Get<IReadOnlyList<string>>(ArchivistAgent.WrittenIdsKey) ?? record.WriteIds,
+        Writes = envelope.Meta.Get<IReadOnlyList<string>>(ArchiveWriteSignal.WrittenRecordsKey) ?? record.Writes,
+        WriteIds = envelope.Meta.Get<IReadOnlyList<string>>(ArchiveWriteSignal.WrittenIdsKey) ?? record.WriteIds,
         Passages = envelope.Meta.Get<IReadOnlyList<string>>(ReflectionAgent.PassagesKey) ?? record.Passages,
         Idea = envelope.Meta.Get<string>(ReflectionAgent.IdeaKey) ?? record.Idea,
     };

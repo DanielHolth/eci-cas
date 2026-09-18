@@ -156,7 +156,7 @@ public sealed class ImpulseAgent : AgentBase
     {
         if (envelope.Topic == Topics.SystemControl)
         {
-            var kind = envelope.Meta.Get<string>(ArchivistAgent.ControlKindKey);
+            var kind = envelope.Meta.Get<string>(ArchiveWriteSignal.ControlKindKey);
             if (kind == GovernanceAgent.FrustrationKind)
             {
                 await NudgeAsync(FrustrationNudge, cancellationToken).ConfigureAwait(false);

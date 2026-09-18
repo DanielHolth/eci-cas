@@ -26,7 +26,7 @@ public sealed class GovernanceAgent : AgentBase
 
     /// <summary>
     /// system.control kind published on a Red verdict — mirrors
-    /// ArchivistAgent.WrittenKind/ReflectionAgent.ReflectedKind's
+    /// ArchiveWriteSignal.WrittenKind/ReflectionAgent.ReflectedKind's
     /// convention. ImpulseAgent listens for this to apply FrustrationNudge,
     /// with no direct reference between the two agents.
     /// </summary>
@@ -447,7 +447,7 @@ public sealed class GovernanceAgent : AgentBase
             : new DriveVectors();
         var expression = vectors.Expression();
 
-        var controlMeta = MetaBag.Empty.With(ArchivistAgent.ControlKindKey, FrustrationKind);
+        var controlMeta = MetaBag.Empty.With(ArchiveWriteSignal.ControlKindKey, FrustrationKind);
         var control = Envelope.Create(Topics.SystemControl, Name, Severity.Elevated, controlMeta);
         _bus.Publish(Topics.SystemControl, control);
 
