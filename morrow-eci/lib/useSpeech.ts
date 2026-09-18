@@ -266,6 +266,14 @@ export function useSpeech(
         }
         queue.current.push({ text, self: false });
       } else {
+        // The idea itself is spoken first, as its own utterance, so the
+        // person hears her have the thought before hearing her answer it --
+        // otherwise the reply starts talking about an idea nobody heard yet,
+        // and the only trace of it is a bubble that may already have been
+        // read past. Both go through the settle beat: `drain` only waits
+        // before a `self` item, so queuing two in a row still gets one pause
+        // before the pair starts, not one before each.
+        if (turn.ideaText) queue.current.push({ text: turn.ideaText, self: true });
         queue.current.push({ text, self: true });
       }
     }

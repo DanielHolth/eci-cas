@@ -83,13 +83,23 @@ export default function Overlay() {
   // real answer sitting earlier in the array. Matching useSpeech's own
   // selection -- the newest turn that actually has an answer -- keeps the
   // bubble pointed at whatever speech is pointed at.
-  const replied = [...turns].reverse().find((t) => !t.selfTriggered && t.output?.text);
+  //
+  // Self-triggered turns are included on purpose now -- excluding them here
+  // while useSpeech spoke them anyway was the bug: her voice moved on to the
+  // idea's own reply while this bubble stayed frozen on whatever a person
+  // last asked, so nothing on screen ever matched the second half of what
+  // was heard. `repliedSelf` below is what keeps that reply legible as
+  // "her own thought continuing" rather than looking like a person asked it.
+  const replied = [...turns].reverse().find((t) => t.output?.text);
   const said = replied?.output?.text;
+  const repliedSelf = replied?.selfTriggered ?? false;
 
   // Whether there is unfinished business *after* the last answer -- a
   // person-triggered turn newer than `replied` that has not concluded yet.
   // Not just "does anything remain unconcluded": a dead turn stuck behind the
-  // real answer must not re-arm the thinking indicator forever.
+  // real answer must not re-arm the thinking indicator forever. Still scoped
+  // to person-triggered turns: a self-triggered idea in flight is not the
+  // "thinking about what you asked" state this indicator means.
   const repliedSeq = replied ? turns.indexOf(replied) : -1;
   const turn = turns.slice(repliedSeq + 1).find((t) => !t.selfTriggered && t.stage !== "done");
 
@@ -242,38 +252,43 @@ export default function Overlay() {
       <style>{`
         html, body { background: transparent !important; }
 
-        /* A cloud, not a rounded rectangle: a body plus a handful of
-           overlapping circles bumped out along the top and bottom edges, the
-           classic thought-bubble silhouette. Built from box-shadow rather
-           than a bitmap or an SVG path so it still respects the text inside
-           sizing the box, and one color (the fill) drives the whole shape
-           since every bump is a shadow of the same element rather than a
-           separately colored layer. */
+        /* A cloud, not a rounded rectangle: an oval body ringed by four
+           bump circles (one per corner, via box-shadow clones on the two
+           pseudo-elements) so the outline is fluffy on every edge instead of
+           bulging once on top and once on bottom. box-shadow rather than a
+           bitmap or an SVG path so the shape still stretches to fit whatever
+           text lands inside it, and one color drives the whole thing since
+           every bump is a shadow of the same element rather than a
+           separately colored layer. Cream on a fill, not the app's indigo
+           palette, on purpose: this is the one bubble that is not part of
+           the exchange -- see the "disconnected from both directions"
+           comment below -- and the classic cartoon thought-cloud reads as
+           cream-on-dark, not as another dark chat bubble. */
         .cloud-bubble {
           position: relative;
-          background: rgba(49, 46, 129, 0.85);
-          border: 1px solid rgba(165, 180, 252, 0.35);
-          border-radius: 42% 40% 46% 44% / 60% 55% 58% 52%;
+          background: rgba(255, 251, 235, 0.96);
+          border-radius: 62% 58% 60% 56% / 70% 66% 68% 64%;
         }
         .cloud-bubble::before,
         .cloud-bubble::after {
           content: "";
           position: absolute;
-          background: rgba(49, 46, 129, 0.85);
-          border: 1px solid rgba(165, 180, 252, 0.35);
+          background: inherit;
           border-radius: 50%;
         }
         .cloud-bubble::before {
-          width: 42%;
-          height: 46%;
-          top: -18%;
-          left: 14%;
+          width: 30%;
+          height: 36%;
+          top: -16%;
+          left: 8%;
+          box-shadow: 175% 2% 0 -4% rgba(255, 251, 235, 0.96);
         }
         .cloud-bubble::after {
-          width: 30%;
-          height: 34%;
+          width: 26%;
+          height: 32%;
           bottom: -14%;
-          right: 18%;
+          left: 12%;
+          box-shadow: 165% -2% 0 -4% rgba(255, 251, 235, 0.96);
         }
       `}</style>
 
@@ -324,14 +339,14 @@ export default function Overlay() {
             <div style={{ gridArea: "idea" }} className="flex items-center gap-1.5">
               <p
                 role="status"
-                className="cloud-bubble max-w-[13rem] px-4 py-3 text-center text-sm italic leading-snug text-indigo-100 shadow-lg"
+                className="cloud-bubble max-w-[13rem] px-4 py-3 text-center text-sm italic leading-snug text-indigo-950 shadow-lg"
               >
                 {ideaText}
               </p>
               <span className="flex flex-col items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded-full bg-indigo-200/70" />
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-200/60" />
-                <span className="h-1 w-1 rounded-full bg-indigo-200/50" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-50/90" />
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-50/80" />
+                <span className="h-1 w-1 rounded-full bg-amber-50/70" />
               </span>
             </div>
           )}
@@ -428,10 +443,26 @@ export default function Overlay() {
                  what grows now, and a bubble that clipped itself first would
                  make that pointless. */
               <div style={{ gridArea: "reply" }} className="flex flex-col items-center">
-                <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-100/90">
+                <svg
+                  width="16"
+                  height="10"
+                  viewBox="0 0 16 10"
+                  className={repliedSelf ? "text-amber-50/90" : "text-neutral-100/90"}
+                >
                   <path d="M0 10 L8 0 L16 10 Z" fill="currentColor" />
                 </svg>
-                <p className="max-w-xs rounded-2xl bg-neutral-100/90 px-3 py-2 text-center text-sm leading-snug text-neutral-900 shadow-lg backdrop-blur-sm">
+                {/* Tinted cream to match the idea cloud, not the plain reply
+                    bubble, when this is her answering her own thought -- the
+                    same grammar the cloud used, carried through so the two
+                    read as one continuous thing instead of a thought and then
+                    an unrelated reply that happens to follow it. */}
+                <p
+                  className={`max-w-xs rounded-2xl px-3 py-2 text-center text-sm leading-snug shadow-lg backdrop-blur-sm ${
+                    repliedSelf
+                      ? "bg-amber-50/95 text-indigo-950"
+                      : "bg-neutral-100/90 text-neutral-900"
+                  }`}
+                >
                   {said}
                 </p>
               </div>
