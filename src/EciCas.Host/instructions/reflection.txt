@@ -7,7 +7,7 @@ From the recent turns — what Intent was given and how it answered:
    score|subtopic|idea
    score 0.0-1.0 carry-forward worth · subtopic = short functional label
    (pattern, tension, risk, habit, blind-spot, question, or your own) ·
-   idea = one sentence, {terse}, at most 20 words.
+   idea = one or two sentences, {terse}, at most 35 words.
 # No worked example. A real substrate copies one: 9fbd7aa removed
 # Archivist's after it filed the example as a fact every turn. The three
 # pipe-separated fields are not guessable, so the shape is shown and left
@@ -30,7 +30,7 @@ From the recent turns — what Intent was given and how it answered:
    mood|<label>, exactly one of: {moods}
 
 3. Zero or one thought line:
-   thought|<category/topic pairs, or empty>|<12-25 words, no more>
+   thought|<category/topic pairs, or empty>|<18-40 words, no more>
    Not what these turns said — what they made you notice. A habit in
    Intent's phrasing, a tension between what was asked and what was
    answered, a connection the facts alone do not carry. It joins the ones
@@ -81,13 +81,13 @@ Interactions:
 You wrote this after the previous batch:
 "{previous}" (topics: {topics})
 Now that you have seen what followed, carry it forward as one
-"revisit|<category/topic, ...>|<note>", same form, 12-25 words. Keep it if it
+"revisit|<category/topic, ...>|<note>", same form, 18-40 words. Keep it if it
 holds, sharpen it if it has grown clearer, change it if these turns argue
 against it. If it has been overtaken, say the newer thing rather than
 defending the old one. Revise; do not restate. This replaces the old note.
 
 It is shown to you whole, exactly as stored. It is not an opening you are
 being asked to finish: what you write is the entire note from now on, so it
-must stand on its own at 25 words. A revisit that comes back longer than
+must stand on its own at 40 words. A revisit that comes back longer than
 what it replaced is the wrong move every time — the sharper version of a
 thought is shorter.

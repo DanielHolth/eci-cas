@@ -236,6 +236,11 @@ public static class ArchiveWriteStyle
 {
     public const string TerseValue = "1-5 keywords, or one terse sentence with no filler";
 
+    /// <summary>Room to finish a thought rather than clip it -- Reflection's
+    /// ideas, notes and revisits read as over-compressed at TerseValue's
+    /// length, so this asks for a plain sentence instead of keyword density.</summary>
+    public const string PlainValue = "a plain, complete sentence with no filler";
+
 }
 
 /// <summary>

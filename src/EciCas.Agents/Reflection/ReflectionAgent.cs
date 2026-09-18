@@ -160,7 +160,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
         // One read of the drive history serves both jobs below: the note is
         // written knowing how the mood has been moving, and the same newest
         // state decides whether the idea is worth pushing.
-        var (eagerness, driveTrend) = await GetDriveAsync(cancellationToken).ConfigureAwait(false);
+        var (_, driveTrend) = await GetDriveAsync(cancellationToken).ConfigureAwait(false);
 
         // One correlation for the whole flush. The batch is the persona's own
         // work across several turns, not the work of whichever turn happened
@@ -239,7 +239,14 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
 
         var best = candidates.MaxBy(c => c.Score)!;
         var maxGeneration = batch.Max(b => b.Generation);
-        var shouldPush = maxGeneration < _options.MaxIdeaGeneration && eagerness >= _options.EagernessThreshold;
+
+        // Eagerness used to gate this too (eagerness >= _options.EagernessThreshold):
+        // a drive-vector reading deciding whether the batch's best idea was worth
+        // surfacing. Asked for by no one, and it made Reflection go quiet for
+        // stretches with nothing wrong -- every batch that clears a candidate at
+        // all should say so, ranked by its own scoring, not by how curious Impulse
+        // happened to be that minute.
+        var shouldPush = maxGeneration < _options.MaxIdeaGeneration;
 
         var now = DateTimeOffset.UtcNow;
         // Category/Topic are fixed (assistant/reflection); Subtopic is the LLM's
@@ -423,7 +430,7 @@ public sealed class ReflectionAgent : AgentBase, ICognitiveAgent
                 ("topics", string.Join(", ", previous.Pairs.Select(p => $"{p.Category}/{p.Topic}"))));
 
         return InstructionFile.Fill(_instructions.For(Name),
-            ("terse", ArchiveWriteStyle.TerseValue),
+            ("terse", ArchiveWriteStyle.PlainValue),
             ("moods", MoodLabels),
             ("drive", driveTrend),
             ("revisit", revisit),
