@@ -252,22 +252,23 @@ export default function Overlay() {
       <style>{`
         html, body { background: transparent !important; }
 
-        /* A cloud, not a rounded rectangle: an oval body ringed by four
-           bump circles (one per corner, via box-shadow clones on the two
-           pseudo-elements) so the outline is fluffy on every edge instead of
-           bulging once on top and once on bottom. box-shadow rather than a
-           bitmap or an SVG path so the shape still stretches to fit whatever
-           text lands inside it, and one color drives the whole thing since
-           every bump is a shadow of the same element rather than a
-           separately colored layer. Cream on a fill, not the app's indigo
-           palette, on purpose: this is the one bubble that is not part of
-           the exchange -- see the "disconnected from both directions"
-           comment below -- and the classic cartoon thought-cloud reads as
-           cream-on-dark, not as another dark chat bubble. */
+        /* A cloud, not a rounded rectangle: an oval body ringed by six
+           bump circles -- three along the top, three along the bottom, each
+           row drawn as one pseudo-element plus box-shadow clones of itself
+           -- so the outline is scalloped the whole way round like a cartoon
+           thought cloud instead of bulging once on each side. box-shadow
+           rather than a bitmap or an SVG path so the shape still stretches
+           to fit whatever text lands inside it, and one color drives the
+           whole thing since every bump is a shadow of the same element
+           rather than a separately colored layer. Cream on a fill, not the
+           app's indigo palette, on purpose: this is the one bubble that is
+           not part of the exchange -- see the "disconnected from both
+           directions" comment below -- and the classic cartoon thought-cloud
+           reads as cream-on-dark, not as another dark chat bubble. */
         .cloud-bubble {
           position: relative;
           background: rgba(255, 251, 235, 0.96);
-          border-radius: 62% 58% 60% 56% / 70% 66% 68% 64%;
+          border-radius: 50% / 42%;
         }
         .cloud-bubble::before,
         .cloud-bubble::after {
@@ -275,20 +276,31 @@ export default function Overlay() {
           position: absolute;
           background: inherit;
           border-radius: 50%;
+          /* Behind the parent's own fill, so a bump that laps over the body
+             never doubles up the translucent cream over the text. */
+          z-index: -1;
         }
+        /* Top row: a big bump left of centre with two more clones walking
+           right, the middle one riding highest, so no two are level. */
         .cloud-bubble::before {
-          width: 30%;
-          height: 36%;
-          top: -16%;
-          left: 8%;
-          box-shadow: 175% 2% 0 -4% rgba(255, 251, 235, 0.96);
+          width: 42%;
+          height: 52%;
+          top: -22%;
+          left: 4%;
+          box-shadow:
+            62% -10% 0 -3% rgba(255, 251, 235, 0.96),
+            125% 8% 0 -7% rgba(255, 251, 235, 0.96);
         }
+        /* Bottom row: the same walk, offset so the bumps interleave with the
+           top ones rather than sitting directly under them. */
         .cloud-bubble::after {
-          width: 26%;
-          height: 32%;
-          bottom: -14%;
-          left: 12%;
-          box-shadow: 165% -2% 0 -4% rgba(255, 251, 235, 0.96);
+          width: 38%;
+          height: 48%;
+          bottom: -20%;
+          left: 10%;
+          box-shadow:
+            65% 10% 0 -4% rgba(255, 251, 235, 0.96),
+            130% -8% 0 -8% rgba(255, 251, 235, 0.96);
         }
       `}</style>
 
@@ -343,10 +355,15 @@ export default function Overlay() {
               >
                 {ideaText}
               </p>
-              <span className="flex flex-col items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-50/90" />
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-50/80" />
+              {/* The trail, read from the avatar outwards: a small dot next
+                  to her face growing into bigger ones as it approaches the
+                  cloud, which is the direction a cartoon thought travels.
+                  Laid along the gap between the two, and stepped down as it
+                  goes so it curves rather than running level. */}
+              <span className="flex shrink-0 flex-row-reverse items-end gap-1 pb-1">
                 <span className="h-1 w-1 rounded-full bg-amber-50/70" />
+                <span className="mb-1 h-1.5 w-1.5 rounded-full bg-amber-50/80" />
+                <span className="mb-2.5 h-2.5 w-2.5 rounded-full bg-amber-50/90" />
               </span>
             </div>
           )}
