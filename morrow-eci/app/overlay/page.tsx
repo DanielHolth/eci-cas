@@ -74,7 +74,14 @@ export default function Overlay() {
     return () => clearTimeout(timer);
   }, [state.heardAt, state.heard, fadeMs]);
 
-  const turn = turns[turns.length - 1];
+  // The last exchange, not the last turn: Reflection can push a
+  // self-triggered idea on top of an answered turn, and that idea can sit
+  // unconcluded for a while (see the idea bubble below, which tracks it
+  // separately). Watching the literal last array entry meant the reply and
+  // thinking indicator got stuck on that trailing idea forever -- speech
+  // still played the real answer, because useSpeech scans every turn rather
+  // than only the last one, but nothing on screen pointed at it any more.
+  const turn = [...turns].reverse().find((t) => !t.selfTriggered);
   const said = turn?.output?.text;
 
   // Fresh enough to be worth the pixels. Driven by the text rather than by
