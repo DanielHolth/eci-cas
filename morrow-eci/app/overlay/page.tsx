@@ -74,15 +74,24 @@ export default function Overlay() {
     return () => clearTimeout(timer);
   }, [state.heardAt, state.heard, fadeMs]);
 
-  // The last exchange, not the last turn: Reflection can push a
-  // self-triggered idea on top of an answered turn, and that idea can sit
-  // unconcluded for a while (see the idea bubble below, which tracks it
-  // separately). Watching the literal last array entry meant the reply and
-  // thinking indicator got stuck on that trailing idea forever -- speech
-  // still played the real answer, because useSpeech scans every turn rather
-  // than only the last one, but nothing on screen pointed at it any more.
-  const turn = [...turns].reverse().find((t) => !t.selfTriggered);
-  const said = turn?.output?.text;
+  // The last *answered* exchange, not the last exchange, full stop: a
+  // person-triggered turn can sit unconcluded indefinitely -- cancelled,
+  // superseded, or just slow -- while a later one is already in. Pointing at
+  // "the last non-self-triggered turn" got stuck on that dead turn forever,
+  // stage never reaching "done", even though useSpeech (which scans every
+  // turn for output text, not just the newest one) had already spoken the
+  // real answer sitting earlier in the array. Matching useSpeech's own
+  // selection -- the newest turn that actually has an answer -- keeps the
+  // bubble pointed at whatever speech is pointed at.
+  const replied = [...turns].reverse().find((t) => !t.selfTriggered && t.output?.text);
+  const said = replied?.output?.text;
+
+  // Whether there is unfinished business *after* the last answer -- a
+  // person-triggered turn newer than `replied` that has not concluded yet.
+  // Not just "does anything remain unconcluded": a dead turn stuck behind the
+  // real answer must not re-arm the thinking indicator forever.
+  const repliedSeq = replied ? turns.indexOf(replied) : -1;
+  const turn = turns.slice(repliedSeq + 1).find((t) => !t.selfTriggered && t.stage !== "done");
 
   // Fresh enough to be worth the pixels. Driven by the text rather than by
   // the turn: a turn is edited into existence over several records, and the
@@ -99,7 +108,7 @@ export default function Overlay() {
   const [thinkingMs, setThinkingMs] = useState(0);
   const thinkingSince = useRef<number | null>(null);
   const thinkingTurnId = useRef<string | null>(null);
-  const thinking = replayed && !!turn && turn.stage !== "done";
+  const thinking = replayed && !!turn;
   useEffect(() => {
     if (!thinking || !turn) {
       thinkingSince.current = null;
@@ -170,10 +179,10 @@ export default function Overlay() {
       // about fading -- not the moment speech for it starts, and not on a
       // timer counted from when the idea itself arrived. All three bubbles
       // (heard, idea, reply) go together.
-      setIdeaTurnId((id) => (id === turn?.turnId ? null : id));
+      setIdeaTurnId((id) => (id === replied?.turnId ? null : id));
     }, fadeMs);
     return () => clearTimeout(timer);
-  }, [said, turn?.turnId, fadeMs]);
+  }, [said, replied?.turnId, fadeMs]);
 
   // How far the content reaches beyond the avatar on each side, reported to
   // the shell so the window can grow to fit -- and grow around a fixed point
