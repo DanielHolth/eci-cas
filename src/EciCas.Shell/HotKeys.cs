@@ -23,13 +23,9 @@ namespace EciCas.Shell;
 /// asks about the keys it is given and learns nothing about any other.
 ///
 /// The cost, stated plainly because it is the trade the user chose: a bare key
-/// that is not swallowed is a key that fires when it is typed, and it goes on
-/// typing wherever focus is. A modifier in front of a symbol does not reliably
-/// fix this -- Ctrl+- still reaches plenty of apps as a bare '-', since Ctrl
-/// has no control-code mapping for most symbols and games in particular tend
-/// to read raw key state rather than the OS's WM_CHAR. The way out that
-/// actually holds is binding to a key with no character at all (see
-/// ShellOptions.VoiceKey's default, Pause), not a change here.
+/// that is not swallowed is a key that fires when it is typed. Typing a hyphen
+/// in chat opens the microphone for as long as the hyphen is held. The way out
+/// is a modifier in the config, not a change here.
 /// </summary>
 internal sealed class HotKeys : IDisposable
 {
