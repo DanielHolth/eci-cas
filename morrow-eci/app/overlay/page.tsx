@@ -284,18 +284,21 @@ export default function Overlay() {
           style={{ gridTemplateAreas: `"idea prompt prompt" "idea avatar avatar" ". reply reply"`, gridTemplateColumns: "auto auto auto" }}
         >
           {heard && (
-            /* What she heard, above her, with an arrow pointing down at the
-               avatar: that is the direction a prompt arrives from. Reuses the
-               "heard" transcript rather than turn.input -- turn.input only
-               exists once the record round-trips, which is well after the
-               shell already has the raw dictation. */
-            <div style={{ gridArea: "prompt" }} className="flex flex-col items-center">
+            /* What she heard, above her, with an arrow feeding into the
+               bubble from the left: that reads as something arriving from
+               outside her, which is what a heard prompt is. A tail dropping
+               down into the avatar said the opposite -- that this came from
+               her -- which is backwards for the one bubble that is never
+               hers. Reuses the "heard" transcript rather than turn.input --
+               turn.input only exists once the record round-trips, which is
+               well after the shell already has the raw dictation. */
+            <div style={{ gridArea: "prompt" }} className="flex items-center gap-1">
+              <svg width="10" height="16" viewBox="0 0 10 16" className="shrink-0 text-neutral-100/90">
+                <path d="M0 0 L10 8 L0 16 Z" fill="currentColor" />
+              </svg>
               <p className="max-w-xs rounded-2xl bg-neutral-100/90 px-3 py-2 text-center text-sm leading-snug text-neutral-900 shadow-lg backdrop-blur-sm">
                 {heard}
               </p>
-              <svg width="16" height="10" viewBox="0 0 16 10" className="text-neutral-100/90">
-                <path d="M0 0 L8 10 L16 0 Z" fill="currentColor" />
-              </svg>
             </div>
           )}
 
