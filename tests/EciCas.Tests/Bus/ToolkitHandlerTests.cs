@@ -21,7 +21,7 @@ public class ToolkitHandlerTests
         var activity = new BusActivityTracker();
         var bus = new ChannelBus(activity);
         var handler = new ToolkitHandlerAgent(
-            bus, toolkits, Options.Create(options), activity, NullLogger<ToolkitHandlerAgent>.Instance);
+            bus, new ToolkitCatalog([], toolkits), Options.Create(options), activity, NullLogger<ToolkitHandlerAgent>.Instance);
 
         var reader = bus.Subscribe(Topics.ToolkitResult);
         await handler.StartAsync(CancellationToken.None);

@@ -60,6 +60,8 @@ public sealed class FileInstructionStore : IInstructionStore
             // transcript rides alongside it as its own message part, not as
             // text poured into a placeholder.
             ["Sight"] = [],
+            ["Settings"] = ["settings", "request"],
+            ["Toolsmith"] = ["capabilities", "toolkits", "request", "problem"],
         };
 
     /// <summary>
@@ -101,6 +103,10 @@ public sealed class FileInstructionStore : IInstructionStore
                 ("glance", []),
                 ("look", []),
                 ("read", [])),
+            ["Settings"] = Sections((InstructionFile.MainSection, ["settings", "request"])),
+            ["Toolsmith"] = Sections(
+                (InstructionFile.MainSection, ["capabilities", "toolkits", "request"]),
+                ("retry", ["problem"])),
         };
 
     private static IReadOnlyDictionary<string, string[]> Sections(params (string Section, string[] Names)[] entries) =>

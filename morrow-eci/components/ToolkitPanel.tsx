@@ -5,12 +5,18 @@ import { ResizableAside } from "@/components/ResizableAside";
 import { API_BASE } from "@/lib/api";
 import type { TurnRecord } from "@/types/events";
 
-type ToolkitStatus = "ready" | "disabled";
+type ToolkitStatus = "ready" | "disabled" | "pending" | "unavailable" | "invalid";
 
 interface ToolkitItem {
+  file: string;
+  pack: string | null;
   name: string;
-  description: string;
+  description: string | null;
+  capability: string | null;
+  risk: string | null;
+  options: unknown;
   status: ToolkitStatus;
+  reason: string | null;
 }
 
 interface LastRun {
@@ -45,12 +51,19 @@ export function ToolkitPanel({
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
+  const load = () =>
     fetch(`${API_BASE}/api/toolkits`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((data: ToolkitItem[]) => setItems(data))
       .catch(() => setFailed(true));
+
+  useEffect(() => {
+    load();
   }, []);
+
+  /** Approve is the only way a manifest gets turned on -- always a person's click, on the raw verb. */
+  const act = (file: string, action: "approve" | "discard") =>
+    fetch(`${API_BASE}/api/toolkits/${encodeURIComponent(file)}/${action}`, { method: "POST" }).then(load);
 
   const runs = useMemo(() => lastRuns(records), [records]);
 
@@ -74,7 +87,7 @@ export function ToolkitPanel({
           {failed && <p className="text-xs text-red-600 dark:text-red-400">Could not reach the Host.</p>}
           <ul className="space-y-2">
             {tools.map((tool) => (
-              <li key={tool.name}>
+              <li key={tool.file}>
                 <button
                   type="button"
                   onClick={() => setSelectedName(tool.name)}
@@ -90,7 +103,7 @@ export function ToolkitPanel({
                       {tool.status}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{tool.description}</p>
+                  <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{tool.description ?? tool.reason}</p>
                 </button>
               </li>
             ))}
@@ -106,6 +119,18 @@ export function ToolkitPanel({
                   <dd className="font-medium text-neutral-800 dark:text-neutral-100">{selected.status}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
+                  <dt>Runs</dt>
+                  <dd className="font-medium text-neutral-800 dark:text-neutral-100">
+                    {selected.capability ?? "?"}{selected.risk ? ` (${selected.risk})` : ""}{selected.pack ? ` from ${selected.pack}` : ""}
+                  </dd>
+                </div>
+                {selected.reason && (
+                  <div className="flex justify-between gap-4">
+                    <dt>Why</dt>
+                    <dd className="text-right font-medium text-neutral-800 dark:text-neutral-100">{selected.reason}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4">
                   <dt>Last run</dt>
                   <dd className="font-medium text-neutral-800 dark:text-neutral-100">
                     {run ? `${run.result} (turn ${run.turn})` : "not run yet"}
@@ -118,6 +143,26 @@ export function ToolkitPanel({
                   </div>
                 )}
               </dl>
+              {selected.status === "pending" && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300">
+                    Not running. This is exactly what it would do -- read it, not the description:
+                  </p>
+                  <pre className="overflow-x-auto rounded-lg bg-neutral-900 p-2 text-[11px] text-neutral-100">
+                    {JSON.stringify({ capability: selected.capability, options: selected.options ?? null }, null, 2)}
+                  </pre>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => act(selected.file, "approve")}
+                      className="rounded-lg bg-neutral-900 px-3 py-1 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
+                      Approve
+                    </button>
+                    <button type="button" onClick={() => act(selected.file, "discard")}
+                      className="rounded-lg border border-neutral-300 px-3 py-1 text-xs text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">
+                      Discard
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

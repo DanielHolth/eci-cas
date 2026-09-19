@@ -7,8 +7,7 @@ namespace EciCas.Agents.Toolkit;
 
 /// <summary>
 /// Receives toolkit requests and executes a tool in-process, dispatching by
-/// name onto whichever <see cref="IToolkit"/> is registered for it -- see
-/// <see cref="Startup.ToolkitRegistration"/> for the roster. Reports its
+/// name onto whichever toolkit the <see cref="IToolkitCatalog"/> holds for it. Reports its
 /// result on the toolkit result topic so a manager can surface it back as
 /// perception.
 ///
@@ -21,19 +20,19 @@ namespace EciCas.Agents.Toolkit;
 public sealed class ToolkitHandlerAgent : AgentBase
 {
     private readonly IMessageBus _bus;
-    private readonly IReadOnlyDictionary<string, IToolkit> _toolkits;
+    private readonly IToolkitCatalog _catalog;
     private readonly ToolkitOptions _options;
 
     public ToolkitHandlerAgent(
         IMessageBus bus,
-        IEnumerable<IToolkit> toolkits,
+        IToolkitCatalog catalog,
         IOptions<ToolkitOptions> options,
         BusActivityTracker activity,
         ILogger<ToolkitHandlerAgent> logger)
         : base(bus, activity, logger)
     {
         _bus = bus;
-        _toolkits = toolkits.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        _catalog = catalog;
         _options = options.Value;
     }
 
@@ -75,7 +74,7 @@ public sealed class ToolkitHandlerAgent : AgentBase
     private async Task<(string output, bool success, string? error, IReadOnlyList<ToolkitReference>? references, IReadOnlyList<ToolkitSubstrateCall>? usage)> RunToolAsync(
         string name, string command, CancellationToken cancellationToken)
     {
-        if (!_options.Allows(name) || !_toolkits.TryGetValue(name, out var toolkit))
+        if (_catalog.Find(name) is not { } toolkit)
         {
             return (string.Empty, false, $"Unsupported toolkit '{name}'.", null, null);
         }

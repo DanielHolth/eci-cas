@@ -45,6 +45,17 @@ public static class HostBoot
         var tier = builder.Configuration["Tier"] is { Length: > 0 } named ? named : "Mock";
         builder.Configuration.AddJsonFile($"appsettings.{tier}.json", optional: false, reloadOnChange: false);
 
+        // Approved packs layer their config over the tier; safe mode skips
+        // every pack so a broken one can always be backed out of.
+        var packs = Packs.Active(builder.Configuration, Console.WriteLine);
+        foreach (var pack in packs)
+        {
+            if (Packs.Resolve(pack, pack.Contributes?.Config) is { } config)
+            {
+                builder.Configuration.AddJsonFile(config, optional: true, reloadOnChange: false);
+            }
+        }
+
         // Shorthand for Console:Verbose, same spirit as the bare Tier switch above.
         var verbose = builder.Configuration["Verbose"];
         if (!string.IsNullOrEmpty(verbose))
@@ -70,7 +81,7 @@ public static class HostBoot
         await builder.AddStoresAsync();
 
         builder.AddKnobs(tier);
-        builder.Services.AddToolkits(builder.Configuration);
+        builder.Services.AddToolkits(builder.Configuration, packs);
         builder.Services.AddAgents();
 
         var app = builder.Build();

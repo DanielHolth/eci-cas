@@ -115,8 +115,16 @@ public sealed record Passage(
     IReadOnlyList<string>? ParentIds = null,
     int EchoDepth = 0,
     int Generation = 0,
-    string ModelId = "")
+    string ModelId = "",
+    string Scope = Passage.Private,
+    string Provenance = Passage.Self)
 {
+    /// <summary>Scope: never leaves this machine. Room for "shared" once memory federation exists.</summary>
+    public const string Private = "private";
+
+    /// <summary>Provenance: written by this Morrow, not received from another.</summary>
+    public const string Self = "self";
+
     public IReadOnlyList<string> ParentIds { get; init; } = ParentIds ?? [];
 }
 

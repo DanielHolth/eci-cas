@@ -22,12 +22,10 @@ public sealed class ToolkitOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Which toolkits this tier may use, by name. Empty means all. Lets a tier
-    /// that must not run PowerShell still search: Budget lists search and guide.
+    /// The riskiest capability a manifest may use on this tier. Lets a tier
+    /// that must not run code on the machine still search: Budget is Network.
     /// </summary>
-    public string[] Allowed { get; set; } = [];
-
-    public bool Allows(string name) => Allowed.Length == 0 || Allowed.Contains(name, StringComparer.OrdinalIgnoreCase);
+    public CapabilityRisk MaxRisk { get; set; } = CapabilityRisk.System;
 
     /// <summary>
     /// Minimum cosine similarity between a turn and a toolkit's best trigger

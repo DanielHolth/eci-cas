@@ -105,6 +105,11 @@ public partial class App : System.Windows.Application
         _overlay.SessionRequested += () => _ = _session.RevealAsync();
         _overlay.Show();
 
+        // Asked for out loud, through the settings toolkit. Its thread is a
+        // bus worker's, so the move is handed to the window's own.
+        _host.Services.GetRequiredService<OverlayAnchor>().MoveRequested += position =>
+            _overlay.Dispatcher.Invoke(() => _overlay.MoveTo(position));
+
         _games = new Games(new WindowInteropHelper(_overlay).Handle, options.DeborderGames);
         _games.Exclusive += WarnExclusive;
 

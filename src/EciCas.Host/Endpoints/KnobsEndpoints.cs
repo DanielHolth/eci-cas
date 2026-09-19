@@ -105,106 +105,10 @@ internal static class KnobsEndpoints
             return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
         });
 
-        // Writes every live knob back into the active tier's file, so a setting
-        // found by dragging survives the restart that found it. Both copies get it:
-        // the source tree's file is the one a human and git read, and the one under
-        // the binary is the one the next boot actually loads -- writing only the
-        // source means the next run silently ignores the save, and writing only the
-        // build output means the next `dotnet build` silently reverts it.
-        //
-        // Read-modify-write of the parsed JSON rather than a re-serialise of
-        // KnobDefaults: a tier file carries Classes, Agents and Rank too, and
-        // nothing here has any business rewriting those.
         app.MapPost("/api/knobs/save", async (RuntimeKnobs knobs, TierCatalog tiers, IOptions<KnobDefaults> knobDefaults) =>
-        {
-            var file = $"appsettings.{tiers.Active}.json";
-            var targets = new[]
-            {
-                Path.Combine(AppContext.BaseDirectory, file),
-                Path.Combine(SourceTierDirectory(), file),
-            };
-
-            var written = new List<string>();
-            foreach (var path in targets.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                if (!File.Exists(path))
-                {
-                    continue;
-                }
-
-                if (!await SaveKnobsAsync([path], knobs))
-                {
-                    return Results.Problem($"{file} is missing one of Knobs:RecallDepth, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.");
-                }
-
-                written.Add(path);
-            }
-
-            if (written.Count == 0)
-            {
-                return Results.NotFound($"No {file} to write -- {tiers.Active} has no tier file on disk.");
-            }
-
-            // The bound options are what the payload reports as "saved", so they have
-            // to move with the file or the Save button stays lit after a good save.
-            knobDefaults.Value.RecallDepth = knobs.RecallDepth;
-            knobDefaults.Value.MaxSentences = knobs.MaxSentences;
-            knobDefaults.Value.ReflectionEvery = knobs.ReflectionEvery;
-            knobDefaults.Value.PerceptionChars = knobs.PerceptionChars;
-            knobDefaults.Value.ContextTurns = knobs.ContextTurns;
-            knobDefaults.Value.Mood = knobs.Mood;
-
-            // Language has no per-tier opinion -- it lives in the base
-            // appsettings.json under Shell:Dictation, not any tier file --
-            // so its save is separate and best-effort: a tier without a base
-            // file reachable (there always is one) simply keeps whatever the
-            // process booted with, rather than failing the whole save the
-            // way a missing tier key does above.
-            const string baseFile = "appsettings.json";
-            foreach (var path in new[]
-                     {
-                         Path.Combine(AppContext.BaseDirectory, baseFile),
-                         Path.Combine(SourceTierDirectory(), baseFile),
-                     }.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                if (File.Exists(path))
-                {
-                    await SaveLanguageAsync([path], knobs.Language);
-                }
-            }
-
-            knobDefaults.Value.Language = knobs.Language;
-
-            // Same best-effort base-file write as Language, same reason: no
-            // tier has an opinion on consent, so there is nothing in the
-            // tier file's Knobs section to fail on if it's missing.
-            const string screenFile = "appsettings.json";
-            // The shell is the process that reads this key, and it loads its
-            // own build-output copy, so that copy is written too when the
-            // source tree is there to walk to.
-            var screenTargets = new List<string>
-            {
-                Path.Combine(AppContext.BaseDirectory, screenFile),
-                Path.Combine(SourceTierDirectory(), screenFile),
-            };
-            var shellBin = Path.Combine(SourceTierDirectory(), "..", "EciCas.Shell", "bin");
-            if (Directory.Exists(shellBin))
-            {
-                screenTargets.AddRange(Directory.EnumerateFiles(shellBin, screenFile, SearchOption.AllDirectories));
-            }
-
-            foreach (var path in screenTargets.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                if (File.Exists(path))
-                {
-                    await SaveScreenCaptureAsync([path], knobs.ScreenCaptureEnabled);
-                }
-            }
-
-            knobDefaults.Value.ScreenCaptureEnabled = knobs.ScreenCaptureEnabled;
-
-            return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
-        });
+            await SaveAllAsync(knobs, tiers, knobDefaults.Value) is { } problem
+                ? Results.Problem(problem)
+                : Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions));
 
         static object ToKnobsPayload(RuntimeKnobs knobs, TierCatalog tiers, KnobDefaults knobDefaults) => new
         {
@@ -242,6 +146,107 @@ internal static class KnobsEndpoints
             savedScreenCaptureEnabled = knobDefaults.ScreenCaptureEnabled,
             screenCaptureEnabled = knobs.ScreenCaptureEnabled,
         };
+    }
+
+    /// <summary>
+    /// Writes every live knob back into the active tier's file, so a setting
+    /// found by dragging (or asked for out loud) survives the restart. Both
+    /// copies get it: the source tree's file is the one a human and git read,
+    /// and the one under the binary is the one the next boot actually loads --
+    /// writing only one means the next run or the next build silently loses it.
+    /// Read-modify-write of the text rather than a re-serialise of
+    /// KnobDefaults: a tier file carries Classes, Agents and Rank too, and
+    /// nothing here has any business rewriting those. Returns a problem, or null.
+    /// </summary>
+    public static async Task<string?> SaveAllAsync(RuntimeKnobs knobs, TierCatalog tiers, KnobDefaults defaults)
+    {
+        var file = $"appsettings.{tiers.Active}.json";
+        var targets = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, file),
+            Path.Combine(SourceTierDirectory(), file),
+        };
+
+        var written = new List<string>();
+        foreach (var path in targets.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            if (!await SaveKnobsAsync([path], knobs))
+            {
+                return $"{file} is missing one of Knobs:RecallDepth, Knobs:MaxSentences, Knobs:ReflectionEvery, Knobs:PerceptionChars, Knobs:ContextTurns, Knobs:Mood.";
+            }
+
+            written.Add(path);
+        }
+
+        if (written.Count == 0)
+        {
+            return $"No {file} to write -- {tiers.Active} has no tier file on disk.";
+        }
+
+        // The bound options are what the payload reports as "saved", so they have
+        // to move with the file or the Save button stays lit after a good save.
+        defaults.RecallDepth = knobs.RecallDepth;
+        defaults.MaxSentences = knobs.MaxSentences;
+        defaults.ReflectionEvery = knobs.ReflectionEvery;
+        defaults.PerceptionChars = knobs.PerceptionChars;
+        defaults.ContextTurns = knobs.ContextTurns;
+        defaults.Mood = knobs.Mood;
+
+        // Language has no per-tier opinion -- it lives in the base
+        // appsettings.json under Shell:Dictation, not any tier file --
+        // so its save is separate and best-effort: a tier without a base
+        // file reachable (there always is one) simply keeps whatever the
+        // process booted with, rather than failing the whole save the
+        // way a missing tier key does above.
+        const string baseFile = "appsettings.json";
+        foreach (var path in new[]
+                 {
+                     Path.Combine(AppContext.BaseDirectory, baseFile),
+                     Path.Combine(SourceTierDirectory(), baseFile),
+                 }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (File.Exists(path))
+            {
+                await SaveLanguageAsync([path], knobs.Language);
+            }
+        }
+
+        defaults.Language = knobs.Language;
+
+        // Same best-effort base-file write as Language, same reason: no
+        // tier has an opinion on consent, so there is nothing in the
+        // tier file's Knobs section to fail on if it's missing.
+        const string screenFile = "appsettings.json";
+        // The shell is the process that reads this key, and it loads its
+        // own build-output copy, so that copy is written too when the
+        // source tree is there to walk to.
+        var screenTargets = new List<string>
+        {
+            Path.Combine(AppContext.BaseDirectory, screenFile),
+            Path.Combine(SourceTierDirectory(), screenFile),
+        };
+        var shellBin = Path.Combine(SourceTierDirectory(), "..", "EciCas.Shell", "bin");
+        if (Directory.Exists(shellBin))
+        {
+            screenTargets.AddRange(Directory.EnumerateFiles(shellBin, screenFile, SearchOption.AllDirectories));
+        }
+
+        foreach (var path in screenTargets.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (File.Exists(path))
+            {
+                await SaveScreenCaptureAsync([path], knobs.ScreenCaptureEnabled);
+            }
+        }
+
+        defaults.ScreenCaptureEnabled = knobs.ScreenCaptureEnabled;
+
+        return null;
     }
 
     /// <summary>

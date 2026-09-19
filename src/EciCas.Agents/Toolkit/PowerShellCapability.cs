@@ -11,8 +11,7 @@ namespace EciCas.Agents.Toolkit;
 /// other topics on the same thread while this one is in flight.
 ///
 /// ToolkitManagerAgent routes here on meaning, not syntax -- "clean up my
-/// downloads folder to make disk space" is a valid <paramref
-/// name="command"/> to <see cref="ExecuteAsync"/>, not just literal
+/// downloads folder to make disk space" is a valid command to <see cref="ExecuteAsync"/>, not just literal
 /// PowerShell. So this toolkit owns its own translation step: a substrate
 /// call turns the ask into a script before anything is run. This is the
 /// "heavy lifting" that makes the toolkit versatile rather than a thin
@@ -20,14 +19,18 @@ namespace EciCas.Agents.Toolkit;
 /// toolkit that does not need it (guide-toolkit, say) should not have to
 /// carry the machinery for one it never calls.
 /// </summary>
-public sealed class PowerShellToolkit(ISubstrateProvider substrate, IOptions<PowerShellOptions> options) : IToolkit
+public sealed class PowerShellCapability(ISubstrateProvider substrate, IOptions<PowerShellOptions> options) : ICapability
 {
     public string Name => "powershell";
 
-    public async Task<ToolkitOutcome> ExecuteAsync(string command, CancellationToken cancellationToken)
+    public string Description => "Translates the person's ask into a PowerShell script and runs it on this machine. Needs PowerShell:Approved.";
+
+    public CapabilityRisk Risk => CapabilityRisk.System;
+
+    public async Task<ToolkitOutcome> ExecuteAsync(CapabilityCall call, CancellationToken cancellationToken)
     {
         var usage = new List<ToolkitSubstrateCall>();
-        var outcome = await RunAsync(command, usage, cancellationToken).ConfigureAwait(false);
+        var outcome = await RunAsync(call.Command, usage, cancellationToken).ConfigureAwait(false);
         return usage.Count == 0 ? outcome : outcome with { Usage = usage };
     }
 

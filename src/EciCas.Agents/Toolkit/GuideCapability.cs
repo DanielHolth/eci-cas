@@ -8,14 +8,18 @@ namespace EciCas.Agents.Toolkit;
 /// through the ordinary ToolkitRequest/ToolkitResult round trip. Same
 /// pipeline, no branch.
 /// </summary>
-public sealed class GuideToolkit(IToolkitCatalog catalog) : IToolkit
+public sealed class GuideCapability : ICapability
 {
     public string Name => "guide";
 
-    public Task<ToolkitOutcome> ExecuteAsync(string command, CancellationToken cancellationToken)
+    public string Description => "Tells the person what Morrow is and lists the toolkits she can reach.";
+
+    public CapabilityRisk Risk => CapabilityRisk.Local;
+
+    public Task<ToolkitOutcome> ExecuteAsync(CapabilityCall call, CancellationToken cancellationToken)
     {
-        var entries = catalog.All
-            .Where(d => !d.Name.Equals(Name, StringComparison.OrdinalIgnoreCase))
+        var entries = call.Catalog.All
+            .Where(d => call.Catalog.Find(d.Name) is not ManifestToolkit { Capability: GuideCapability })
             .Select(d => $"- {d.Name}: {d.Description}");
 
         var capabilities = entries.Any()

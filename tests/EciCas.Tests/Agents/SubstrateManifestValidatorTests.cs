@@ -107,7 +107,7 @@ public class SubstrateManifestValidatorTests
         {
             Assert.True(catalog.Switch(preset.Name));
             SubstrateManifestValidator.Validate(substrates, agents,
-                [SubstrateConsolidator.AgentName, SubstrateFactExtractor.AgentName, FactPicker.AgentName, MaintenanceOptions.RebuildAgentName]);
+                [SubstrateConsolidator.AgentName, SubstrateFactExtractor.AgentName, FactPicker.AgentName, MaintenanceOptions.RebuildAgentName, EciCas.Agents.Toolkit.SettingsCapability.AgentName, EciCas.Agents.Toolkit.ToolsmithCapability.AgentName]);
         }
     }
 }

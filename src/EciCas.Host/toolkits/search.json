@@ -1,0 +1,34 @@
+{
+  "name": "search",
+  "description": "Searches the web for current information and returns snippets with links -- news, weather, prices, recent events, anything after her training.",
+  "triggers": [
+    "What's the latest news on this?",
+    "Search the web for that.",
+    "Look it up online.",
+    "What is the weather in Oslo right now?",
+    "Who won the game last night?",
+    "What's the current price of Bitcoin?",
+    "Google that for me.",
+    "Find recent information about this.",
+    "What is in the news right now?",
+    "What is the weather like tomorrow?",
+    "Can you check that online? Things may have changed.",
+    "Search online for the current king of Norway.",
+    "Please use the toolkit to search the internet for this.",
+    "Who is the current president of France?",
+    "You have a toolkit. Use it to search the web.",
+    "Search online to be sure.",
+    "Search the web for me.",
+    "Look up how this works.",
+    "I would like you to look up how something works in a game.",
+    "Can you look that up and tell me?",
+    "Find out how it works online.",
+    "Look up how automation works in the game called Factorio.",
+    "Can you look up the rules of that game for me?",
+    "Are you able to search the web?"
+  ],
+  "verb": {
+    "capability": "web_search"
+  },
+  "approved": true
+}

@@ -17,13 +17,18 @@ namespace EciCas.Agents.Toolkit;
 /// connection, which is a different shape of thing (a long-running listener
 /// feeding Perception, not a request/response toolkit) and is not built yet.
 /// </summary>
-public sealed class DiscordToolkit(IHttpClientFactory httpClientFactory, IOptions<DiscordOptions> options) : IToolkit
+public sealed class DiscordPostCapability(IHttpClientFactory httpClientFactory, IOptions<DiscordOptions> options) : ICapability
 {
-    public string Name => "discord";
+    public string Name => "discord_post";
 
-    public async Task<ToolkitOutcome> ExecuteAsync(string command, CancellationToken cancellationToken)
+    public string Description => "Posts the person's words to the configured Discord channel as Morrow.";
+
+    public CapabilityRisk Risk => CapabilityRisk.Network;
+
+    public async Task<ToolkitOutcome> ExecuteAsync(CapabilityCall call, CancellationToken cancellationToken)
     {
         var settings = options.Value;
+        var command = call.Command;
         if (!settings.Enabled)
         {
             return new ToolkitOutcome(string.Empty, false, "The Discord toolkit is turned off.");

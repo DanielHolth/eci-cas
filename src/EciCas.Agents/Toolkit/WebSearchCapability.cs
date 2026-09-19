@@ -9,17 +9,32 @@ namespace EciCas.Agents.Toolkit;
 /// the most relevant passages of the best-matching hit's page, read and
 /// ranked locally by embedding. No model call anywhere in here.
 /// </summary>
-public sealed class SearchToolkit(
+public sealed class WebSearchCapability(
     IEnumerable<ISearchProvider> providers,
     IOptions<SearchOptions> options,
     IPageReader reader,
-    IEmbeddingProvider embeddings) : IToolkit
+    IEmbeddingProvider embeddings) : ICapability
 {
-    public string Name => "search";
+    /// <param name="MaxResults">Overrides the tier's <see cref="SearchOptions.MaxResults"/>.</param>
+    /// <param name="QueryTemplate">Wraps the person's words, e.g. <c>"site:wikipedia.org {command}"</c>.</param>
+    public sealed record Options(int? MaxResults = null, string? QueryTemplate = null);
 
-    public async Task<ToolkitOutcome> ExecuteAsync(string command, CancellationToken cancellationToken)
+    public string Name => "web_search";
+
+    public string Description => "Searches the web for the person's words and reads the best page. Options: maxResults, queryTemplate containing {command}.";
+
+    public CapabilityRisk Risk => CapabilityRisk.Network;
+
+    public Type? OptionsType => typeof(Options);
+
+    public string? Validate(object? options) =>
+        options is Options { QueryTemplate: { } template } && !template.Contains("{command}") ? "queryTemplate must contain {command}" : null;
+
+    public async Task<ToolkitOutcome> ExecuteAsync(CapabilityCall call, CancellationToken cancellationToken)
     {
         var settings = options.Value;
+        var own = call.Options as Options ?? new Options();
+        var command = own.QueryTemplate?.Replace("{command}", call.Command.Trim()) ?? call.Command;
         if (!settings.Enabled)
         {
             return new ToolkitOutcome(string.Empty, false, "Web search is turned off.");
@@ -44,7 +59,7 @@ public sealed class SearchToolkit(
 
         try
         {
-            var hits = await provider.SearchAsync(query, settings.MaxResults, cancellationToken).ConfigureAwait(false);
+            var hits = await provider.SearchAsync(query, own.MaxResults ?? settings.MaxResults, cancellationToken).ConfigureAwait(false);
             if (hits.Count == 0)
             {
                 return new ToolkitOutcome("The search found nothing.", true, null);

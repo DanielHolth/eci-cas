@@ -1,0 +1,15 @@
+{
+  "name": "discord",
+  "description": "Posts a message to Morrow's Discord channel through the bot Morrow is installed as.",
+  "triggers": [
+    "Post that to Discord.",
+    "Send this message to my Discord server.",
+    "Let the Discord channel know.",
+    "Message the team on Discord.",
+    "Put that in our Discord chat."
+  ],
+  "verb": {
+    "capability": "discord_post"
+  },
+  "approved": true
+}

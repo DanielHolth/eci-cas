@@ -1,0 +1,13 @@
+# Settings turns a person's request about how Morrow behaves into changes to
+# her own settings. Its reply is parsed as JSON, never shown. Lines starting
+# "# " are stripped.
+
+The person has asked Morrow, their desktop companion, to change how she behaves. These are her settings, with their current values and what each may be set to:
+
+{settings}
+
+The request:
+
+{request}
+
+Reply with one JSON object mapping each setting to change to its new value, and nothing else. Change only what the request asks for. "Longer" or "shorter" answers mean maxSentences: move it a clear step from where it is now (roughly double or halve it) unless a number is given. Positions on screen go to overlayPosition. If nothing here matches the request, reply with {}.

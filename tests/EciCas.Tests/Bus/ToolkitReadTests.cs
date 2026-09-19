@@ -51,11 +51,20 @@ public sealed class ToolkitReadTests
     }
 
     [Fact]
-    public void ToolkitOptions_EmptyAllowsAll_ListRestricts()
+    public void A_capability_above_the_tiers_risk_ceiling_is_unavailable_and_unapproved_is_pending()
     {
-        Assert.True(new ToolkitOptions().Allows("powershell"));
-        var budget = new ToolkitOptions { Allowed = ["search", "guide"] };
-        Assert.True(budget.Allows("Search"));
-        Assert.False(budget.Allows("powershell"));
+        var folder = Directory.CreateTempSubdirectory().FullName;
+        File.WriteAllText(Path.Combine(folder, "ps.json"), """{"name":"ps","description":"d","triggers":["t"],"verb":{"capability":"speak_text"},"approved":true}""");
+        File.WriteAllText(Path.Combine(folder, "hook.json"), """{"name":"hook","description":"d","triggers":["t"],"verb":{"capability":"http_call","options":{"url":"https://example.com/x"}},"approved":true}""");
+        File.WriteAllText(Path.Combine(folder, "draft.json"), """{"name":"draft","description":"d","triggers":["t"],"verb":{"capability":"speak_text"}}""");
+
+        using var catalog = new ManifestCatalog([new ManifestSource(folder)], "Budget",
+            new ToolkitOptions { MaxRisk = CapabilityRisk.Local },
+            [new SpeakTextCapability(), new HttpCallCapability(null!)], _ => { }, watch: false);
+
+        Assert.Equal(["ps"], catalog.All.Select(d => d.Name));
+        Assert.Equal(ManifestStatus.Unavailable, catalog.Entries.Single(e => e.File == "hook.json").Status);
+        Assert.Equal(ManifestStatus.Pending, catalog.Entries.Single(e => e.File == "draft.json").Status);
+        Directory.Delete(folder, true);
     }
 }

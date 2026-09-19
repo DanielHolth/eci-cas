@@ -1,0 +1,20 @@
+{
+  "name": "settings",
+  "description": "Changes Morrow's own settings when asked -- answer length, mood, language, how much she remembers, and where the overlay sits on screen.",
+  "triggers": [
+    "I want your answers to be longer.",
+    "Please keep your replies shorter.",
+    "Can you move to the top left of my screen?",
+    "Move yourself to the bottom right corner.",
+    "Be more cheerful from now on.",
+    "Talk to me in French from now on.",
+    "Remember more of our conversation.",
+    "Change your mood to calm.",
+    "Go sit in the top right corner.",
+    "Your answers are too long, cut them down."
+  ],
+  "verb": {
+    "capability": "settings"
+  },
+  "approved": true
+}

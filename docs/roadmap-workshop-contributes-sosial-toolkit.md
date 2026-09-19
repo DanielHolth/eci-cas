@@ -1,6 +1,6 @@
 # Roadmap: packs, workshop contributions, social Morrows, toolsmith
 
-Status: design, nothing built. Written 2026-09-19 after the toolkit search/read work. Scope is deliberately wide; the sections are ordered by dependency, not by size.
+Status: sections 1-3 built 2026-09-19 (capabilities + manifests, toolsmith, packs with safe mode, `settings` capability); the `native` verb landed as `verb.capability` with no `kind`. Passages carry `Scope`/`Provenance` (section 4's schema decision). Not built: skin sandbox, out-of-process agents, identity/relay/friends, memory federation, the privacy-policy toolkit, toolsmith dry-run. Written 2026-09-19 after the toolkit search/read work. Scope is deliberately wide; the sections are ordered by dependency, not by size.
 
 The thread: today a "toolkit" is a C# class plus a hardcoded descriptor. The goal is an ecosystem where the person, the toolsmith and outside contributors (Steam Workshop) can change what Morrow *does*, *looks like*, *sounds like* and *runs on*, and where friends' Morrows can consult each other, all without the trust model getting weaker than it is now.
 

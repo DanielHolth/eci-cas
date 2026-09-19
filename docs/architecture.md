@@ -99,32 +99,32 @@ This keeps toolkit execution explicit and observable: the system can explain
 what it is doing, report a result, and keep the UI agent-local rather than
 mixing tool execution into the core bus semantics.
 
-**Built-in toolkits.** `PowerShellToolkit` translates natural language into a
-script via a substrate call, then runs it; `AccessibilityToolkit` speaks text
-aloud through the Windows speech engine; `DiscordToolkit` posts to a
-configured channel through a bot token; `GuideToolkit` answers "what can you
-do" from the live descriptor set plus `MorrowGuide`'s fixed prose about
-Morrow herself.
+**Toolkits are manifests over capabilities.** A capability (`ICapability`)
+is native code with a risk level -- `web_search`, `guide`, `settings`,
+`toolsmith`, `speak_text` (Local/Network), `http_call`, `discord_post`
+(Network), `powershell` (System). A toolkit is a JSON manifest naming one
+capability plus options, with its routing prose and triggers; the built-ins
+ship as manifests in `Toolkits/`. `ManifestCatalog` loads the folder plus
+approved packs' folders, validates options strictly against the
+capability's options type, gates by `tiers` and the tier's `Toolkit:MaxRisk`,
+and watches for changes. It is the one `IToolkitCatalog` routing, dispatch,
+the guide and the Toolkit tab read.
 
-**JSON manifest toolkits.** Anything dropped as a `*.json` file in the
-`Toolkits/` directory is read at startup by `ManifestToolkitLoader` as a
-`ToolkitManifest` — no rebuild required. A manifest can only compose one of
-two fixed verbs (`http_call` to an author-fixed URL, or `speak_text`), never
-arbitrary code, which keeps its ceiling small enough to be safe if the format
-is ever exposed as a Steam-Workshop-style "subscribe" button. Every manifest
-carries an `Approved` flag that defaults to `false` and that nothing in code
-ever sets: a manifest that fails validation, or is valid but not yet
-approved, is logged at startup and skipped, never registered as a callable
-`ManifestToolkit`. Turning one on is a deliberate, human, one-line edit —
-installing a manifest and it running are never the same action. See
-`Toolkits/README.md` for the manifest schema.
+`approved` defaults to `false` and is only ever set by a person -- by hand,
+or the Approve button in the Toolkit tab, which shows the raw verb. The
+`toolsmith` capability drafts manifests pending (and re-drafts once on
+validation, secret-shaped options, or routing conflicts measured with e5);
+the `settings` capability changes Morrow's own knobs and overlay position
+but never consent switches or tier. Packs (`Packs/*/pack.json`) contribute
+toolkits, a config layer over the tier file and theme tokens, only once
+approved, and `--SafeMode=true` skips them all. See `Toolkits/README.md`.
 
 **Consent gates.** Two of the built-in toolkits carry a real capability —
 running commands, capturing the screen — and both are off by default on
 every tier, with no tier file ever flipping them on:
 
 - `PowerShellOptions.Approved` (`PowerShell:Approved`) gates
-  `PowerShellToolkit.ExecuteAsync` directly, separately from the shared
+  `PowerShellCapability.ExecuteAsync` directly, separately from the shared
   `Toolkit:Enabled` switch every toolkit answers to. `Toolkit:Enabled` decides
   whether the fan-out runs at all (off on Free/Budget); `PowerShell:Approved`
   is PowerShell's own switch for its own risk, and defaults to `false`

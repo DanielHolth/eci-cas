@@ -67,6 +67,10 @@ public sealed class ToolkitManagerAgent : AgentBase
     private readonly SemaphoreSlim _exemplarLock = new(1, 1);
     private (string Name, float[][] Vectors)[]? _exemplars;
 
+    // The roster the exemplars were built from; a reload swaps the list, so a
+    // different reference means rebuild.
+    private IReadOnlyList<ToolkitDescriptor>? _exemplarsFor;
+
     public ToolkitManagerAgent(
         IMessageBus bus,
         IToolkitCatalog catalog,
@@ -231,7 +235,8 @@ public sealed class ToolkitManagerAgent : AgentBase
 
     private async Task<(string Name, float[][] Vectors)[]> EnsureExemplarsAsync(CancellationToken cancellationToken)
     {
-        if (_exemplars is not null)
+        var roster = _catalog.All;
+        if (_exemplars is not null && ReferenceEquals(_exemplarsFor, roster))
         {
             return _exemplars;
         }
@@ -239,13 +244,13 @@ public sealed class ToolkitManagerAgent : AgentBase
         await _exemplarLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_exemplars is not null)
+            if (_exemplars is not null && ReferenceEquals(_exemplarsFor, roster))
             {
                 return _exemplars;
             }
 
             var built = new List<(string, float[][])>();
-            foreach (var descriptor in _catalog.All)
+            foreach (var descriptor in roster)
             {
                 if (descriptor.Triggers.Count == 0)
                 {
@@ -257,6 +262,7 @@ public sealed class ToolkitManagerAgent : AgentBase
             }
 
             _exemplars = [.. built];
+            _exemplarsFor = roster;
             return _exemplars;
         }
         finally

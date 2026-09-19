@@ -1,0 +1,21 @@
+{
+  "name": "toolsmith",
+  "description": "Drafts a new toolkit from a description and leaves it waiting for approval in the Toolkit tab.",
+  "triggers": [
+    "Make me a toolkit that calls my home automation webhook.",
+    "Can you build a new tool for that?",
+    "Create a toolkit that posts to this URL.",
+    "I want you to have a tool that does this.",
+    "Write yourself a toolkit for checking my server.",
+    "Add a new skill that reads text aloud."
+  ],
+  "verb": {
+    "capability": "toolsmith"
+  },
+  "tiers": [
+    "pro",
+    "premium",
+    "mock"
+  ],
+  "approved": true
+}

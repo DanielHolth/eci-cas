@@ -1,6 +1,6 @@
 namespace EciCas.Agents.Toolkit;
 
-/// <summary>One web search engine behind <see cref="SearchToolkit"/>; selected by <see cref="SearchOptions.Provider"/>.</summary>
+/// <summary>One web search engine behind <see cref="WebSearchCapability"/>; selected by <see cref="SearchOptions.Provider"/>.</summary>
 public interface ISearchProvider
 {
     /// <summary>Matched case-insensitively against <see cref="SearchOptions.Provider"/>.</summary>

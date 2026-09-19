@@ -1,0 +1,22 @@
+{
+  "name": "powershell",
+  "description": "Runs PowerShell on this machine -- file and folder cleanup, disk space, process and service checks, quick system queries.",
+  "triggers": [
+    "Clean up my downloads folder to make some disk space.",
+    "Free up disk space on my computer.",
+    "What's taking up all the space on my hard drive?",
+    "Delete old temp files.",
+    "List the files in a folder.",
+    "Check if a program is running.",
+    "What processes are using the most memory right now?",
+    "Find and remove duplicate files.",
+    "Show me my disk usage.",
+    "Kill a frozen process.",
+    "Check my network connection.",
+    "Rename a bunch of files at once."
+  ],
+  "verb": {
+    "capability": "powershell"
+  },
+  "approved": true
+}

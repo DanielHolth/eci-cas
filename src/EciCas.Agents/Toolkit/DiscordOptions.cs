@@ -1,7 +1,7 @@
 namespace EciCas.Agents.Toolkit;
 
 /// <summary>
-/// Where <see cref="DiscordToolkit"/> posts and how it authenticates. The
+/// Where <see cref="DiscordPostCapability"/> posts and how it authenticates. The
 /// token is never a literal here -- same convention as
 /// <c>Substrates:Providers:*:ApiKeyEnvironmentVariable</c> -- because a bot
 /// token checked into appsettings is a bot token checked into git.

@@ -41,9 +41,9 @@ public class SearchToolkitTests
     public async Task Hits_come_back_terse_without_urls_with_the_page_extract_and_as_references()
     {
         var hit = new ToolkitReference("Title", "https://example.com", "What it says");
-        var toolkit = new SearchToolkit([new FakeProvider(() => [hit])], Options.Create(new SearchOptions()), new FakeReader("Passage from the page."), new NullEmbeddingProvider());
+        var toolkit = new WebSearchCapability([new FakeProvider(() => [hit])], Options.Create(new SearchOptions()), new FakeReader("Passage from the page."), new NullEmbeddingProvider());
 
-        var outcome = await toolkit.ExecuteAsync("latest news", CancellationToken.None);
+        var outcome = await toolkit.ExecuteAsync(new CapabilityCall("latest news", null, new ToolkitCatalog([])), CancellationToken.None);
 
         Assert.True(outcome.Success);
         Assert.DoesNotContain("https://example.com", outcome.Output);
@@ -55,11 +55,11 @@ public class SearchToolkitTests
     [Fact]
     public async Task A_refusing_engine_is_a_failure_not_an_empty_result()
     {
-        var toolkit = new SearchToolkit(
+        var toolkit = new WebSearchCapability(
             [new FakeProvider(() => throw new SearchUnavailableException("challenge"))],
             Options.Create(new SearchOptions()), new FakeReader("Passage from the page."), new NullEmbeddingProvider());
 
-        var outcome = await toolkit.ExecuteAsync("anything", CancellationToken.None);
+        var outcome = await toolkit.ExecuteAsync(new CapabilityCall("anything", null, new ToolkitCatalog([])), CancellationToken.None);
 
         Assert.False(outcome.Success);
         Assert.Contains("unavailable", outcome.Error);
@@ -69,11 +69,11 @@ public class SearchToolkitTests
     public async Task Turned_off_never_reaches_the_provider()
     {
         var called = false;
-        var toolkit = new SearchToolkit(
+        var toolkit = new WebSearchCapability(
             [new FakeProvider(() => { called = true; return []; })],
             Options.Create(new SearchOptions { Enabled = false }), new FakeReader(null), new NullEmbeddingProvider());
 
-        var outcome = await toolkit.ExecuteAsync("anything", CancellationToken.None);
+        var outcome = await toolkit.ExecuteAsync(new CapabilityCall("anything", null, new ToolkitCatalog([])), CancellationToken.None);
 
         Assert.False(outcome.Success);
         Assert.False(called);

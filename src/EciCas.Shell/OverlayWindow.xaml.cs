@@ -185,6 +185,24 @@ internal partial class OverlayWindow : Window
         Placement.Save(this, _restingLeft, _restingTop);
     }
 
+    /// <summary>Rests her at a named spot of the work area and remembers it,
+    /// as a drag there would. See <see cref="EciCas.Core.OverlayAnchor.Positions"/>.</summary>
+    public void MoveTo(string position)
+    {
+        var screen = SystemParameters.WorkArea;
+        const double inset = 24;
+        _restingLeft = position.EndsWith("left") ? screen.Left + inset
+            : position.EndsWith("right") ? screen.Right - _options.Width - inset
+            : screen.Left + (screen.Width - _options.Width) / 2;
+        _restingTop = position.StartsWith("top") ? screen.Top + inset
+            : position.StartsWith("bottom") ? screen.Bottom - _options.Height - inset
+            : screen.Top + (screen.Height - _options.Height) / 2;
+
+        Left = _restingLeft - (Width - _options.Width) / 2;
+        Top = _restingTop - (Height - _options.Height);
+        Placement.Save(this, _restingLeft, _restingTop);
+    }
+
     private const int WM_NCLBUTTONDOWN = 0x00A1;
     private static readonly IntPtr HTCAPTION = 2;
 

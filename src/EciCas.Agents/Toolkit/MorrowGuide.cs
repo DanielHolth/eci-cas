@@ -1,9 +1,9 @@
 namespace EciCas.Agents.Toolkit;
 
 /// <summary>
-/// The fixed half of what <see cref="GuideToolkit"/> says: how Morrow
+/// The fixed half of what <see cref="GuideCapability"/> says: how Morrow
 /// herself works, independent of which toolkits happen to be registered.
-/// Kept as data rather than folded into <see cref="GuideToolkit"/>'s method
+/// Kept as data rather than folded into <see cref="GuideCapability"/>'s method
 /// body so it reads as documentation and stays easy to keep current as the
 /// shell grows -- a wrong keybinding here is a support question, not a typo
 /// in a comment nobody sees.
@@ -29,6 +29,6 @@ internal static class MorrowGuide
 
         A couple of things are opt-in on purpose and not switched from Settings at all: the PowerShell toolkit (running commands on your machine) and screen capture both default to off and stay off until someone edits configuration directly to turn them on -- the same deliberate, one-line, human edit a JSON toolkit manifest needs before it can run.
 
-        Toolkits are the things I can actually *do*, beyond talking -- ask "what can you do" any time and I'll list whichever ones are turned on for your tier. Some toolkits are plain JSON files (see the Toolkits folder) instead of code -- they still need a human to approve one before it runs, so dropping a file in never turns it on by itself.
+        Toolkits are the things I can actually *do*, beyond talking -- ask "what can you do" any time and I'll list whichever ones are turned on for your tier. Every toolkit is a small JSON manifest (see the Toolkits folder) over a fixed set of built-in capabilities. You can ask me to change my own settings -- "make your answers longer", "move to the top left" -- and on Pro I can draft a new toolkit from a description. A draft, a hand-dropped file or a pack never runs until you approve it in the Toolkit tab, and I can never approve one myself.
         """;
 }

@@ -51,6 +51,10 @@ public sealed class ParquetPassageStore : IPassageStore
         // the stamp existed", which the mismatch check must not read as a
         // model that disagrees with the current one.
         public string? ModelId { get; set; }
+
+        // Null reads as the defaults: private, written by this Morrow.
+        public string? Scope { get; set; }
+        public string? Provenance { get; set; }
     }
 
     private readonly string _path;
@@ -183,6 +187,8 @@ public sealed class ParquetPassageStore : IPassageStore
         EchoDepth = p.EchoDepth,
         Generation = p.Generation,
         ModelId = p.ModelId,
+        Scope = p.Scope,
+        Provenance = p.Provenance,
     };
 
     private static Passage FromRow(PassageRow r) => new(
@@ -194,7 +200,9 @@ public sealed class ParquetPassageStore : IPassageStore
         r.ParentIds is null ? [] : JsonSerializer.Deserialize<List<string>>(r.ParentIds) ?? [],
         r.EchoDepth ?? 0,
         r.Generation ?? 0,
-        r.ModelId ?? "");
+        r.ModelId ?? "",
+        r.Scope ?? Passage.Private,
+        r.Provenance ?? Passage.Self);
 
     private static byte[] EncodeFloats(float[] v)
     {
