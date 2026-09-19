@@ -15,7 +15,7 @@ Both keys can be changed in `appsettings.json` under `Shell` (`VoiceKey`, `Inter
 
 - **The watermark.** Morrow sits as a small face in a corner of your desktop. Speech bubbles (what she heard, what she is thinking, her reply) appear above her and fade after a while.
 - **The tray icon.** Double-click it, or right-click and choose **Open conversation**, to open the full conversation window.
-- **Talking.** Hold `-` and speak, or type in the conversation window's input box. The input box counts characters against the *Input length* knob, so long messages are not cut silently.
+- **Talking.** The default way is to hold `-` and speak. You can also type in the conversation window's input box and press Enter. The input box counts characters against the *Input length* knob, so long messages are not cut silently.
 - **Screen capture.** Off by default. When turned on (see *Enable screen capture* below), Morrow takes one screenshot each time you start talking, so a question can be about what is on your screen.
 
 ## The conversation window
@@ -28,10 +28,10 @@ Both keys can be changed in `appsettings.json` under `Shell` (`VoiceKey`, `Inter
 
 ### Body
 
-- **Face**: Morrow's avatar. Its expression follows her mood and speech, and it moves faster when her energy is full.
-- **Energy meter**: shows her level and how much energy she has left. When it runs dry she says so in her own voice.
+- **Face**: Morrow's avatar. Its expression follows her mood and speech.
+- **Energy meter**: shows her level and how much energy she has left. While she has energy she answers with the paid API models. When it runs dry she falls back to the smaller local model, and says so in her own voice, so answers get shorter and duller until it refills.
 - **Transcript**: the conversation so far.
-- **Input box**: type here and press Enter.
+- **Input box**: an alternative to the voice key; type here and press Enter.
 
 ## Panels
 
