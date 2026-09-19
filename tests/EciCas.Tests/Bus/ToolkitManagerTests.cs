@@ -69,4 +69,26 @@ public class ToolkitManagerTests
 
         Assert.False(perceptions.TryRead(out _));
     }
+
+    [Fact]
+    public async Task Manager_OrdinaryTurn_TellsIntentWhatToolkitsItHas()
+    {
+        var activity = new BusActivityTracker();
+        var bus = new ChannelBus(activity);
+        var advisories = bus.Subscribe(Topics.Advisories);
+        var catalog = new ToolkitCatalog([new ToolkitDescriptor("search", "Searches the web for current information -- news, prices.", ["Search the web."])]);
+        var manager = new ToolkitManagerAgent(bus, catalog, new NoEmbedder(), Options.Create(new ToolkitOptions()), activity, NullLogger<ToolkitManagerAgent>.Instance);
+        await manager.StartAsync(CancellationToken.None);
+
+        bus.Publish(Topics.Perception, Envelope.Create(Topics.Perception, "Perception", Severity.Neutral,
+            MetaBag.Empty.With(PerceptionAgent.TextKey, "hello there")));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var advisory = await advisories.ReadAsync(cts.Token);
+        await manager.StopAsync(CancellationToken.None);
+
+        var advice = advisory.Meta.Get<string>(ToolkitManagerAgent.AdviceKey);
+        Assert.Contains("search (Searches the web for current information)", advice);
+        Assert.DoesNotContain("news, prices", advice);
+    }
 }

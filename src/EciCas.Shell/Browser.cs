@@ -92,8 +92,17 @@ internal static class Browser
         settings.IsZoomControlEnabled = false;
 
         // Nothing in this product opens a second window, so a page that asks
-        // for one is a page doing something unintended.
-        view.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
+        // for one is not given one. The one legitimate ask is a link the person
+        // clicked (a References entry, target=_blank): that goes to their
+        // default browser, http(s) only, and never into this control.
+        view.CoreWebView2.NewWindowRequested += (_, e) =>
+        {
+            e.Handled = true;
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && target.Scheme is "http" or "https" && e.IsUserInitiated)
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target.AbsoluteUri) { UseShellExecute = true });
+            }
+        };
 
         view.Source = uri;
     }

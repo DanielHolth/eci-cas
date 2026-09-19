@@ -156,6 +156,9 @@ internal static class ToolkitRegistration
                     "Search online for the current king of Norway.",
                     "Please use the toolkit to search the internet for this.",
                     "Who is the current president of France?",
+                    "You have a toolkit. Use it to search the web.",
+                    "Search online to be sure.",
+                    "Search the web for me.",
                 ]),
             new ToolkitDescriptor(
                 "discord",

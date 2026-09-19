@@ -104,8 +104,27 @@ public sealed class ToolkitManagerAgent : AgentBase
             && envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) != ToolkitTrigger
             && await TryRouteAsync(envelope, cancellationToken).ConfigureAwait(false);
 
-        var meta = routed ? MetaBag.Empty.With(AdviceKey, RunningAdvice) : MetaBag.Empty;
+        // Routed: a run has started. Otherwise, on an ordinary turn, Intent is
+        // told what it can do, because nothing else does -- without this it
+        // answers "I can't search the web" while the search toolkit sits idle.
+        // Built from the catalog, so a new toolkit announces itself.
+        var advice = routed ? RunningAdvice
+            : _options.Enabled && envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) != ToolkitTrigger ? CapabilityAdvice()
+            : null;
+        var meta = advice is null ? MetaBag.Empty : MetaBag.Empty.With(AdviceKey, advice);
         _bus.Publish(Topics.Advisories, envelope.Derive(Topics.Advisories, Name, envelope.Severity, meta));
+    }
+
+    private string? CapabilityAdvice()
+    {
+        if (_catalog.All.Count == 0)
+        {
+            return null;
+        }
+
+        var abilities = string.Join("; ", _catalog.All.Select(t => $"{t.Name} ({t.Description.Split(" -- ")[0].TrimEnd('.')})"));
+        return $"You have toolkits: {abilities}. One starts by itself when the person clearly asks for it, and its result comes back to you. " +
+            "Never say you cannot do these things. If they ask for one and nothing has started, ask what exactly they want looked up or done.";
     }
 
     private void OnResult(Envelope envelope)
@@ -125,7 +144,7 @@ public sealed class ToolkitManagerAgent : AgentBase
         // words are quoted so the answer can be about what they asked.
         var text = PromptCap.Apply(
             $"I ran my {name} toolkit for the request \"{PromptCap.Apply(command, 200)}\" and {findings} " +
-            "Answer that request now from this in one or two short sentences, in my own voice" +
+            "Treat this as current and more recent than anything I remember. Answer that request now from this in one or two short sentences, in my own voice" +
             (success ? "." : ", and say plainly that it did not work."),
             FindingsChars);
 

@@ -67,6 +67,20 @@ function Line({ agent, children }: { agent: string; children: React.ReactNode })
   );
 }
 
+/** Intent's input is one string: the reply target, then each advisory as
+ * "[Label: body]". Split before every "[Label: " and it reads as one line per
+ * source, and anything a future agent adds shows up without touching this. */
+function inputParts(input: string): { label: string; body: string }[] {
+  return input
+    .split(/\s(?=\[[A-Z][A-Za-z ]{0,30}:\s)/)
+    .map((piece) => piece.trim().replace(/^\[/, "").replace(/\]$/, ""))
+    .filter(Boolean)
+    .map((piece) => {
+      const at = piece.indexOf(":");
+      return at > 0 && at < 32 ? { label: piece.slice(0, at), body: piece.slice(at + 1).trim() } : { label: "Input", body: piece };
+    });
+}
+
 /** Only an event that started from something perceived is waiting on a
  * reply. A Reflection flush never gets an Action envelope, so a permanent
  * "still arriving" marker on it would be a lie. */
@@ -124,29 +138,44 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
 
       {expanded && (
         <div className="px-3 pb-3 font-mono text-[11px] leading-relaxed">
-          {record.perception && (
-            // A self-triggered turn's perception is Reflection's idea capped
-            // by PromptCap for the next hop's prompt, not for a reader — show
-            // the uncapped record.idea here instead when it is available.
-            <Line agent={record.toolkitTriggered ? "Toolkit" : record.selfTriggered ? "Idea" : "Perception"}>
-              {record.selfTriggered ? (record.idea ?? record.perception) : record.perception}
-            </Line>
+          {/* Intent's input already carries the perception, Sight, Recall,
+              Hindsight and every advisory, so when we have it, it replaces
+              those lines instead of repeating them. Turns that never reached
+              Intent (blocked, still arriving) fall back to the per-agent lines. */}
+          {record.intentInput ? (
+            <div className="space-y-1.5 py-0.5">
+              {inputParts(record.intentInput).map((part, i) => (
+                <Line key={`in-${i}`} agent={part.label}>
+                  {part.body}
+                </Line>
+              ))}
+            </div>
+          ) : (
+            <>
+              {record.perception && (
+                // A self-triggered turn's perception is Reflection's idea capped
+                // by PromptCap for the next hop's prompt, not for a reader — show
+                // the uncapped record.idea here instead when it is available.
+                <Line agent={record.toolkitTriggered ? "Toolkit" : record.selfTriggered ? "Idea" : "Perception"}>
+                  {record.selfTriggered ? (record.idea ?? record.perception) : record.perception}
+                </Line>
+              )}
+              {/* Impulse: its word is worn on the face, and the sentence behind
+                  it says little the reply does not — the room here is better
+                  spent on what she was actually looking at. */}
+              {record.sight && <Line agent="Sight">{record.sight}</Line>}
+              {record.reads.map((read, i) => (
+                <Line key={`read-${i}`} agent={`Recall-${i + 1}`}>
+                  {read}
+                </Line>
+              ))}
+              {record.hindsight.map((note, i) => (
+                <Line key={`note-${i}`} agent={`Hindsight-${i + 1}`}>
+                  {note}
+                </Line>
+              ))}
+            </>
           )}
-          {/* Impulse: its word is worn on the face, and the sentence behind
-              it says little the reply does not — the room here is better
-              spent on what she was actually looking at. */}
-          {record.sight && <Line agent="Sight">{record.sight}</Line>}
-          {record.reads.map((read, i) => (
-            <Line key={`read-${i}`} agent={`Recall-${i + 1}`}>
-              {read}
-            </Line>
-          ))}
-          {record.hindsight.map((note, i) => (
-            <Line key={`note-${i}`} agent={`Hindsight-${i + 1}`}>
-              {note}
-            </Line>
-          ))}
-          {record.intentInput && <Line agent="Intent input">{record.intentInput}</Line>}
           {record.intent && <Line agent="Intent">{record.intent}</Line>}
           {record.verdict && (
             <Line agent="Security">
