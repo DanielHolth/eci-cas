@@ -159,6 +159,10 @@ internal static class ToolkitRegistration
                     "You have a toolkit. Use it to search the web.",
                     "Search online to be sure.",
                     "Search the web for me.",
+                    "Look up how this works.",
+                    "I would like you to look up how something works in a game.",
+                    "Can you look that up and tell me?",
+                    "Find out how it works online.",
                 ]),
             new ToolkitDescriptor(
                 "discord",

@@ -124,7 +124,8 @@ public sealed class ToolkitManagerAgent : AgentBase
 
         var abilities = string.Join("; ", _catalog.All.Select(t => $"{t.Name} ({t.Description.Split(" -- ")[0].TrimEnd('.')})"));
         return $"You have toolkits: {abilities}. One starts by itself when the person clearly asks for it, and its result comes back to you. " +
-            "Never say you cannot do these things. If they ask for one and nothing has started, ask what exactly they want looked up or done.";
+            "None has started on this message. Never say you cannot do these things, but do not say you are searching, looking up or running anything either: nothing is happening. " +
+            "If they seem to want one, say so and ask them to put it as a plain request, e.g. \"search the web for ...\".";
     }
 
     private void OnResult(Envelope envelope)
