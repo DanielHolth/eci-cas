@@ -28,5 +28,5 @@ public sealed class ToolkitOptions
     /// call is -- this is an unattended background match, not a considered
     /// reply Intent can revise.
     /// </summary>
-    public double RouteFloor { get; set; } = 0.80;
+    public double RouteFloor { get; set; } = 0.87;
 }

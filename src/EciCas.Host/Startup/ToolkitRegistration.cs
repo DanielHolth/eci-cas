@@ -110,6 +110,7 @@ internal static class ToolkitRegistration
                     "How do I talk to you?",
                     "I'm new here, how does this work?",
                     "What can I do in the settings?",
+                    "How do I change your voice?",
                 ]),
             // "accessibility" is not a real toolkit yet -- it was one example
             // of a future one, but AccessibilityToolkit spoke through the
@@ -133,6 +134,8 @@ internal static class ToolkitRegistration
                     "Google that for me.",
                     "Find recent information about this.",
                     "What is in the news right now?",
+                    "What is the weather like tomorrow?",
+                    "Can you check that online? Things may have changed.",
                     "Search online for the current king of Norway.",
                     "Please use the toolkit to search the internet for this.",
                     "Who is the current president of France?",
