@@ -42,8 +42,15 @@ public sealed class ToolkitManagerAgent : AgentBase
     /// <summary>Value of <see cref="ReflectionAgent.TriggeredByKey"/> on a perception that reports a finished toolkit run.</summary>
     public const string ToolkitTrigger = "toolkit";
 
-    /// <summary>The findings block is longer than a person's input, so it is capped on its own terms rather than at the input-length knob.</summary>
-    private const int FindingsChars = 700;
+    /// <summary>
+    /// The findings block is longer than a person's input, so it is capped on
+    /// its own terms rather than at the input-length knob. A ceiling, not a
+    /// target: a toolkit shortens its own output. It exists because this text
+    /// is folded into every advisor's prompt on the report turn; the report
+    /// is a dead end (never routed, never archived), so unlike the 240-char
+    /// default it cannot compound across hops.
+    /// </summary>
+    private const int FindingsChars = 5000;
 
     /// <summary>Meta key on this agent's advisory: what Intent should say while a routed toolkit is still running.</summary>
     public const string AdviceKey = "toolkit.advice";
