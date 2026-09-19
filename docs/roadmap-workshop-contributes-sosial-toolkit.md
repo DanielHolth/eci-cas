@@ -165,3 +165,14 @@ Step 6 is out of order on purpose: it is a schema decision that gets expensive t
 - Do shared answers ever get an opt-in short-lived cache at the relay, or is "offline means unavailable" final?
 - How is a pack's `apiVersion` bumped without breaking installed packs (deprecation window)?
 - Does `ask each time` block the friend's turn, or answer "checking with them" and follow up like a toolkit result?
+
+## 7. Starting points in the code (as of 2026-09-19)
+
+- **Toolkit pipeline:** `ToolkitManagerAgent` routes by e5 cosine against `ToolkitDescriptor.Triggers` (`RouteFloor` 0.87, `RouteMargin` 0.03), publishes `ToolkitRequest`; `ToolkitHandlerAgent` dispatches by `IToolkit.Name`; the result comes back as a `Topics.Perception` with `TriggeredByKey="toolkit"`. All in `src/EciCas.Agents/Toolkit/`.
+- **Hardcoded descriptors:** `src/EciCas.Host/Startup/ToolkitRegistration.cs` (`All(...)`), filtered by `ToolkitOptions.Allowed` / `Allows` (Budget lists `search`, `guide`). This is what section 1 replaces.
+- **Manifests today:** `ToolkitManifest.cs` (verbs `http_call`, `speak_text`), `ManifestToolkit.cs`, `ManifestToolkitLoader.cs` (`Approved` gate, pending/invalid reporting). The `native` verb extends these.
+- **Search and read:** `SearchToolkit` (terse hits, hot-hit pick by e5, page extract), `PageReader`, `ReaderGuard` (SSRF guard at connect time). These are the first candidates to become capabilities `web_search` / `read_page`.
+- **Slots that already exist as config:** `Substrates:Providers` (endpoint, model, `ApiKeyEnvironmentVariable`), `BundleRoster`, per-tier `appsettings.{Tier}.json`, knobs via `KnobRegistration`.
+- **UI:** Next.js front end in `morrow-eci/`, talking to the Host at http://localhost:5179 through the event API. `ReferencesPanel`, `EventLogEntry` (now with an "Intent input" debug line), `types/events.ts`.
+- **Not built / loose ends from this session:** no standalone "read this URL" toolkit (the page read only runs inside search); Free tier still has toolkits fully disabled; the route margin, the toolkit-turn ack and the Budget search path have not been verified end to end in the running app.
+- **Passage store:** scope and provenance fields do not exist yet (section 4, step 6). Category/topic vocabulary lives with the Cataloger.
