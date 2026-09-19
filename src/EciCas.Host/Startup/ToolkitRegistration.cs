@@ -163,6 +163,9 @@ internal static class ToolkitRegistration
                     "I would like you to look up how something works in a game.",
                     "Can you look that up and tell me?",
                     "Find out how it works online.",
+                    "Look up how automation works in the game called Factorio.",
+                    "Can you look up the rules of that game for me?",
+                    "Are you able to search the web?",
                 ]),
             new ToolkitDescriptor(
                 "discord",
