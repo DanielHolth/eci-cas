@@ -110,6 +110,7 @@ public static class HostBoot
         app.MapKnobs(jsonOptions, surface.WarmupBudgetMs);
         app.MapVitals(jsonOptions);
         app.MapFacts(jsonOptions);
+        app.MapToolkits(jsonOptions);
         app.MapStreams(jsonOptions);
 
         await app.StartAsync();

@@ -97,7 +97,8 @@ public sealed class ToolkitManagerAgent : AgentBase
             envelope.Meta.Get<string>(ToolkitResult.OutputKey) ?? string.Empty,
             envelope.Meta.Get<bool>(ToolkitResult.SuccessKey),
             envelope.Meta.Get<string>(ToolkitResult.ErrorKey),
-            Finished: true);
+            Finished: true,
+            envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey));
     }
 
     private void ReportFinishedRuns(Envelope perception)
@@ -123,7 +124,8 @@ public sealed class ToolkitManagerAgent : AgentBase
                     .With(AdviceKey, text)
                     .With(ToolkitResult.NameKey, run.Name)
                     .With(ToolkitResult.OutputKey, run.Output)
-                    .With(ToolkitResult.SuccessKey, run.Success));
+                    .With(ToolkitResult.SuccessKey, run.Success)
+                    .With(ToolkitResult.ReferencesKey, run.References ?? []));
 
             _bus.Publish(Topics.Advisories, advisory);
         }
@@ -222,5 +224,5 @@ public sealed class ToolkitManagerAgent : AgentBase
         }
     }
 
-    private sealed record RunState(string Name, string Output, bool Success, string? Error, bool Finished);
+    private sealed record RunState(string Name, string Output, bool Success, string? Error, bool Finished, IReadOnlyList<ToolkitReference>? References = null);
 }

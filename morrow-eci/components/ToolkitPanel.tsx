@@ -1,64 +1,65 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ResizableAside } from "@/components/ResizableAside";
+import { API_BASE } from "@/lib/api";
+import type { TurnRecord } from "@/types/events";
 
-type ToolkitStatus = "running" | "finished" | "ready" | "disabled" | "idle";
+type ToolkitStatus = "ready" | "disabled";
 
-type ToolkitItem = {
-  id: string;
+interface ToolkitItem {
   name: string;
   description: string;
   status: ToolkitStatus;
-  lastStatus: string;
-  updatedAt: string;
-};
-
-function sortToolkits(items: ToolkitItem[]) {
-  return [...items].sort((a, b) => {
-    const rank = (item: ToolkitItem) => {
-      if (item.status === "running") return 0;
-      if (item.status === "finished") return 1;
-      return 2;
-    };
-
-    const byRank = rank(a) - rank(b);
-    if (byRank !== 0) return byRank;
-
-    if (rank(a) === 1 && rank(b) === 1) {
-      return b.updatedAt.localeCompare(a.updatedAt);
-    }
-
-    return b.updatedAt.localeCompare(a.updatedAt);
-  });
 }
 
-export function ToolkitPanel({ enablePowerShell, onClose }: { enablePowerShell: boolean; onClose: () => void }) {
-  const [selectedId, setSelectedId] = useState<string>("toolkit-guide");
+interface LastRun {
+  result: string;
+  at: string;
+  turn: number;
+}
 
-  const tools = useMemo<ToolkitItem[]>(() => {
-    const items: ToolkitItem[] = [
-      {
-        id: "toolkit-guide",
-        name: "Toolkit Guide",
-        description: "Explains what toolkits are available and how Morrow can use them.",
-        status: "ready",
-        lastStatus: "ready",
-        updatedAt: "2026-09-15T09:00:00Z",
-      },
-      {
-        id: "powershell-toolkit",
-        name: "PowerShell Toolkit",
-        description: "Runs PowerShell commands for the preview environment and reports the result back as a perception event.",
-        status: enablePowerShell ? "ready" : "disabled",
-        lastStatus: enablePowerShell ? "ready" : "disabled",
-        updatedAt: enablePowerShell ? "2026-09-15T09:05:00Z" : "2026-09-15T08:45:00Z",
-      },
-    ];
-    return sortToolkits(items);
-  }, [enablePowerShell]);
+/** Latest "name: ok" / "name: failed" per toolkit, read off the turn log --
+ * a run reports on the turn after it, so that is the turn shown. */
+function lastRuns(records: TurnRecord[]): Map<string, LastRun> {
+  const runs = new Map<string, LastRun>();
+  for (const r of records) {
+    for (const line of r.toolkits ?? []) {
+      const [name, result] = line.split(": ");
+      if (name) runs.set(name, { result: result ?? "", at: r.endedAt, turn: r.seq });
+    }
+  }
+  return runs;
+}
 
-  const selected = tools.find((tool) => tool.id === selectedId) ?? tools[0];
+export function ToolkitPanel({
+  enablePowerShell,
+  records,
+  onClose,
+}: {
+  enablePowerShell: boolean;
+  records: TurnRecord[];
+  onClose: () => void;
+}) {
+  const [items, setItems] = useState<ToolkitItem[]>([]);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/toolkits`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((data: ToolkitItem[]) => setItems(data))
+      .catch(() => setFailed(true));
+  }, []);
+
+  const runs = useMemo(() => lastRuns(records), [records]);
+
+  const tools = items.map((t) => ({
+    ...t,
+    status: t.name === "powershell" && !enablePowerShell ? ("disabled" as const) : t.status,
+  }));
+  const selected = tools.find((t) => t.name === selectedName) ?? tools[0];
+  const run = selected ? runs.get(selected.name) : undefined;
 
   return (
     <ResizableAside side="left" title="Toolkit" onClose={onClose}>
@@ -70,20 +71,21 @@ export function ToolkitPanel({ enablePowerShell, onClose }: { enablePowerShell: 
         </div>
 
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3">
+          {failed && <p className="text-xs text-red-600 dark:text-red-400">Could not reach the Host.</p>}
           <ul className="space-y-2">
             {tools.map((tool) => (
-              <li key={tool.id}>
+              <li key={tool.name}>
                 <button
                   type="button"
-                  onClick={() => setSelectedId(tool.id)}
+                  onClick={() => setSelectedName(tool.name)}
                   className={`w-full rounded-xl border p-2 text-left transition ${
-                    selected.id === tool.id
+                    selected?.name === tool.name
                       ? "border-neutral-900 bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-900"
                       : "border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950 dark:hover:bg-neutral-900"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100">{tool.name}</span>
+                    <span className="text-sm font-medium capitalize text-neutral-800 dark:text-neutral-100">{tool.name}</span>
                     <span className="rounded-full border border-neutral-300 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">
                       {tool.status}
                     </span>
@@ -94,31 +96,30 @@ export function ToolkitPanel({ enablePowerShell, onClose }: { enablePowerShell: 
             ))}
           </ul>
 
-          <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">{selected.name}</h3>
-              <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] uppercase tracking-wide text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">
-                {selected.status}
-              </span>
+          {selected && (
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <h3 className="mb-2 text-sm font-semibold capitalize text-neutral-800 dark:text-neutral-100">{selected.name}</h3>
+              <p className="text-xs leading-5 text-neutral-600 dark:text-neutral-300">{selected.description}</p>
+              <dl className="mt-3 space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+                <div className="flex justify-between gap-4">
+                  <dt>Current status</dt>
+                  <dd className="font-medium text-neutral-800 dark:text-neutral-100">{selected.status}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Last run</dt>
+                  <dd className="font-medium text-neutral-800 dark:text-neutral-100">
+                    {run ? `${run.result} (turn ${run.turn})` : "not run yet"}
+                  </dd>
+                </div>
+                {run && (
+                  <div className="flex justify-between gap-4">
+                    <dt>Updated</dt>
+                    <dd className="font-medium text-neutral-800 dark:text-neutral-100">{new Date(run.at).toLocaleString()}</dd>
+                  </div>
+                )}
+              </dl>
             </div>
-
-            <p className="text-xs leading-5 text-neutral-600 dark:text-neutral-300">{selected.description}</p>
-
-            <dl className="mt-3 space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
-              <div className="flex justify-between gap-4">
-                <dt>Current status</dt>
-                <dd className="font-medium text-neutral-800 dark:text-neutral-100">{selected.status}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt>Last status</dt>
-                <dd className="font-medium text-neutral-800 dark:text-neutral-100">{selected.lastStatus}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt>Updated</dt>
-                <dd className="font-medium text-neutral-800 dark:text-neutral-100">{new Date(selected.updatedAt).toLocaleString()}</dd>
-              </div>
-            </dl>
-          </div>
+          )}
         </div>
       </div>
     </ResizableAside>

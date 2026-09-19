@@ -1,3 +1,4 @@
+using EciCas.Agents.Toolkit;
 using EciCas.Agents.Governance;
 using EciCas.Agents.Hindsight;
 using EciCas.Agents.Impulse;
@@ -78,6 +79,11 @@ public static class TurnProjection
         "Sight" => record with { Sight = envelope.Meta.Get<string>(SightAgent.AdviceKey) ?? record.Sight },
         "Recall" => record with { Reads = Describe(envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey)) },
         "Hindsight" => record with { Hindsight = envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey) ?? record.Hindsight },
+        "ToolkitManager" => record with
+        {
+            References = [.. record.References, .. (envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey) ?? []).Select(r => new TurnReference(r.Title, r.Url, r.Summary))],
+            Toolkits = [.. record.Toolkits, $"{envelope.Meta.Get<string>(ToolkitResult.NameKey)}: {(envelope.Meta.Get<bool>(ToolkitResult.SuccessKey) ? "ok" : "failed")}"],
+        },
         _ => record,
     };
 

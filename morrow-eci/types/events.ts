@@ -112,6 +112,10 @@ export interface TurnRecord {
    * before ids were carried — that row can be read but not corrected. */
   writeIds: string[];
   passages: string[];
+  /** Links a toolkit run found, on the turn that was told about them. */
+  references: { title: string; url: string; summary: string }[];
+  /** Toolkit runs reported on this turn: "name: ok" or "name: failed". */
+  toolkits: string[];
   idea: string | null;
   calls: SubstrateCall[];
   concluded: boolean;

@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace EciCas.Host.TurnLog;
 
+/// <summary>A link a toolkit found for a turn, with the one-line keynote it came with.</summary>
+public sealed record TurnReference(string Title, string Url, string Summary);
+
 /// <summary>One substrate call, as the log shows it. Cost and tokens are null when the provider does not report them — the mock tier reports neither, and a rendered $0.0000 would read as free rather than unmeasured.</summary>
 public sealed record SubstrateCall(
     string Agent,
@@ -75,6 +78,12 @@ public sealed record TurnRecord
     /// <summary>The archive id of each entry in <see cref="Writes"/>, same order. Empty for a turn logged before ids were carried; a surface must treat a missing id as "not correctable" rather than guess.</summary>
     public IReadOnlyList<string> WriteIds { get; init; } = [];
     public IReadOnlyList<string> Passages { get; init; } = [];
+
+    /// <summary>Links a toolkit run found, attached to the turn that was told about them (a run reports on the next live turn).</summary>
+    public IReadOnlyList<TurnReference> References { get; init; } = [];
+
+    /// <summary>Toolkit runs reported on this turn, as "name: ok" or "name: failed -- why".</summary>
+    public IReadOnlyList<string> Toolkits { get; init; } = [];
     public string? Idea { get; init; }
     public IReadOnlyList<SubstrateCall> Calls { get; init; } = [];
 

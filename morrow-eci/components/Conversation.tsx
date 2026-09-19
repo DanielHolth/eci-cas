@@ -6,6 +6,7 @@ import { SecurityIcon } from "@/components/SecurityIcon";
 import { Transcript } from "@/components/Transcript";
 import { EventLog } from "@/components/EventLog";
 import { ThoughtsPanel, reflectionCount } from "@/components/ThoughtsPanel";
+import { ReferencesPanel } from "@/components/ReferencesPanel";
 import { PowerShellPanel } from "@/components/PowerShellPanel";
 import { ToolkitPanel } from "@/components/ToolkitPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -51,7 +52,7 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  const [leftTab, setLeftTab] = useState<"thoughts" | "powershell" | "toolkit" | "settings" | null>(null);
+  const [leftTab, setLeftTab] = useState<"thoughts" | "references" | "powershell" | "toolkit" | "settings" | null>(null);
   const [enablePowerShell, setEnablePowerShell] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     const saved = window.localStorage.getItem("eci.enablePowerShell");
@@ -183,8 +184,9 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
       {leftTab === "thoughts" && (
         <ThoughtsPanel records={records} onClose={() => setLeftTab(null)} onOpen={openInLog} />
       )}
+      {leftTab === "references" && <ReferencesPanel records={records} onClose={() => setLeftTab(null)} />}
       {enablePowerShell && leftTab === "powershell" && <PowerShellPanel onClose={() => setLeftTab(null)} />}
-      {leftTab === "toolkit" && <ToolkitPanel enablePowerShell={enablePowerShell} onClose={() => setLeftTab(null)} />}
+      {leftTab === "toolkit" && <ToolkitPanel enablePowerShell={enablePowerShell} records={records} onClose={() => setLeftTab(null)} />}
       {leftTab === "settings" && (
         <SettingsPanel
           revision={records.length}
@@ -221,7 +223,7 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
               <select
                 value={leftTab ?? ""}
                 onChange={(e) => {
-                  const tab = e.target.value as "thoughts" | "powershell" | "toolkit" | "settings" | "";
+                  const tab = e.target.value as "thoughts" | "references" | "powershell" | "toolkit" | "settings" | "";
                   setLeftTab(tab === "" ? null : tab);
                   if (tab === "thoughts") {
                     setSeenReflections(reflectionCount(records));
@@ -232,6 +234,7 @@ export function Conversation({ account, onEdit, mute = false }: { account: Accou
               >
                 <option value="">Panels</option>
                 <option value="thoughts">Thoughts{unseenReflections > 0 ? ` (${unseenReflections})` : ""}</option>
+                <option value="references">References</option>
                 {enablePowerShell && <option value="powershell">PowerShell</option>}
                 <option value="toolkit">Toolkit</option>
                 <option value="settings">Settings</option>

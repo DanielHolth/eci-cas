@@ -22,7 +22,7 @@ Both keys can be changed in `appsettings.json` under `Shell` (`VoiceKey`, `Inter
 
 ### Header
 
-- **Panels** (dropdown, top left): opens one left-hand panel at a time. Choosing the empty option closes it. The options are Thoughts, PowerShell (only if enabled), Toolkit and Settings.
+- **Panels** (dropdown, top left): opens one left-hand panel at a time. Choosing the empty option closes it. The options are Thoughts, References, PowerShell (only if enabled), Toolkit and Settings.
 - **Title bar**: Morrow's name, connection state (Live / Disconnected), the current stage of the turn, and her impulse line.
 - **Debug** (top right): opens the Debug panel on the right edge.
 
@@ -51,7 +51,7 @@ Appears only when *Enable PowerShell [Preview]* is ticked in Settings. Shows the
 
 ### Toolkit
 
-Lists the toolkits Morrow can use: the tools she can *do* things with beyond talking (PowerShell, Discord, web search, and any JSON toolkits you have approved). Click one to see its description, current status, last status and when it was last updated. Ask Morrow "what can you do?" at any time for the same list in her own words.
+Lists the toolkits Morrow can use: the tools she can *do* things with beyond talking (PowerShell, Discord, web search, and any JSON toolkits you have approved). Click one to see its description, whether it is ready or disabled, and the result and turn of its last run. Ask Morrow "what can you do?" at any time for the same list in her own words.
 
 ### Settings
 
