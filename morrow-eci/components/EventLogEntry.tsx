@@ -125,7 +125,12 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
       {expanded && (
         <div className="px-3 pb-3 font-mono text-[11px] leading-relaxed">
           {record.perception && (
-            <Line agent={record.selfTriggered ? "Idea" : "Perception"}>{record.perception}</Line>
+            // A self-triggered turn's perception is Reflection's idea capped
+            // by PromptCap for the next hop's prompt, not for a reader — show
+            // the uncapped record.idea here instead when it is available.
+            <Line agent={record.selfTriggered ? "Idea" : "Perception"}>
+              {record.selfTriggered ? (record.idea ?? record.perception) : record.perception}
+            </Line>
           )}
           {/* Impulse: its word is worn on the face, and the sentence behind
               it says little the reply does not — the room here is better

@@ -252,56 +252,6 @@ export default function Overlay() {
       <style>{`
         html, body { background: transparent !important; }
 
-        /* A cloud, not a rounded rectangle: an oval body ringed by six
-           bump circles -- three along the top, three along the bottom, each
-           row drawn as one pseudo-element plus box-shadow clones of itself
-           -- so the outline is scalloped the whole way round like a cartoon
-           thought cloud instead of bulging once on each side. box-shadow
-           rather than a bitmap or an SVG path so the shape still stretches
-           to fit whatever text lands inside it, and one color drives the
-           whole thing since every bump is a shadow of the same element
-           rather than a separately colored layer. Cream on a fill, not the
-           app's indigo palette, on purpose: this is the one bubble that is
-           not part of the exchange -- see the "disconnected from both
-           directions" comment below -- and the classic cartoon thought-cloud
-           reads as cream-on-dark, not as another dark chat bubble. */
-        .cloud-bubble {
-          position: relative;
-          background: rgba(255, 251, 235, 0.96);
-          border-radius: 50% / 42%;
-        }
-        .cloud-bubble::before,
-        .cloud-bubble::after {
-          content: "";
-          position: absolute;
-          background: inherit;
-          border-radius: 50%;
-          /* Behind the parent's own fill, so a bump that laps over the body
-             never doubles up the translucent cream over the text. */
-          z-index: -1;
-        }
-        /* Top row: a big bump left of centre with two more clones walking
-           right, the middle one riding highest, so no two are level. */
-        .cloud-bubble::before {
-          width: 42%;
-          height: 52%;
-          top: -22%;
-          left: 4%;
-          box-shadow:
-            62% -10% 0 -3% rgba(255, 251, 235, 0.96),
-            125% 8% 0 -7% rgba(255, 251, 235, 0.96);
-        }
-        /* Bottom row: the same walk, offset so the bumps interleave with the
-           top ones rather than sitting directly under them. */
-        .cloud-bubble::after {
-          width: 38%;
-          height: 48%;
-          bottom: -20%;
-          left: 10%;
-          box-shadow:
-            65% 10% 0 -4% rgba(255, 251, 235, 0.96),
-            130% -8% 0 -8% rgba(255, 251, 235, 0.96);
-        }
       `}</style>
 
       <div className="flex h-screen w-screen select-none items-end justify-end overflow-hidden p-2">
@@ -349,12 +299,33 @@ export default function Overlay() {
                reads as a different kind of bubble on sight, not just a
                different position. */
             <div style={{ gridArea: "idea" }} className="flex items-center gap-1.5">
-              <p
+              <div
                 role="status"
-                className="cloud-bubble max-w-[13rem] px-4 py-3 text-center text-sm italic leading-snug text-indigo-950 shadow-lg"
+                className="relative max-w-[13rem] px-5 py-4 text-center text-sm italic leading-snug text-indigo-950"
               >
+                {/* One scalloped path, not overlapping circles: circles built
+                    from box-shadow or radial-gradient scale with the box's
+                    own width/height, so on the non-square box a wrapped
+                    sentence produces, they stretch into ellipses that don't
+                    line up into a clean outline. A single SVG path sized to
+                    fill the box with preserveAspectRatio="none" stretches as
+                    one piece instead, so the stroke stays continuous no
+                    matter what shape the text forces the bubble into. */}
+                <svg
+                  className="absolute inset-0 -z-10 h-full w-full"
+                  viewBox="0 0 200 140"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M185,70 A34,34 0 0 1 168.8,99.4 A34,34 0 0 1 126.3,117.55 A34,34 0 0 1 73.7,117.55 A34,34 0 0 1 31.2,99.4 A34,34 0 0 1 15,70 A34,34 0 0 1 31.2,40.6 A34,34 0 0 1 73.7,22.45 A34,34 0 0 1 126.3,22.45 A34,34 0 0 1 168.8,40.6 A34,34 0 0 1 185,70 Z"
+                    fill="rgba(255, 251, 235, 0.96)"
+                    stroke="rgba(23, 23, 23, 0.85)"
+                    strokeWidth="3"
+                  />
+                </svg>
                 {ideaText}
-              </p>
+              </div>
               {/* The trail, read from the avatar outwards: a small dot next
                   to her face growing into bigger ones as it approaches the
                   cloud, which is the direction a cartoon thought travels.

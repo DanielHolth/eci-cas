@@ -57,6 +57,12 @@ internal static class OptionsRegistration
             {
                 knobDefaults.Language = language;
             }
+
+            // Same reasoning as Language above: the disclaimer switch is
+            // consent, not a tier preset, so it lives at Shell:Screen:Enabled
+            // in the base file only. Missing key means false, not "unset" --
+            // GetValue defaults a bool to false, matching ScreenShotOptions.
+            knobDefaults.ScreenCaptureEnabled = configuration.GetValue("Shell:Screen:Enabled", false);
         });
 
         return services;

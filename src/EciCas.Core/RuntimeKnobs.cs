@@ -19,6 +19,7 @@ public sealed class RuntimeKnobs
     private int _contextTurns = 5;
     private Mood _mood = Mood.Neutral;
     private string _language = "en";
+    private bool _screenCaptureEnabled;
 
     /// <summary>The four languages this household actually speaks to it --
     /// see DictationOptions.Language. Shared by the tray's Language menu and
@@ -157,6 +158,18 @@ public sealed class RuntimeKnobs
             }
         }
     }
+
+    /// <summary>The disclaimer switch: whether the shell is allowed to take
+    /// a screenshot when the voice key arms. Off by default and on nobody's
+    /// tier file -- this is consent, not a preset, so it starts false the
+    /// same way ScreenShotOptions.Enabled and SightOptions.Enabled do, and
+    /// stays false until a person turns it on for themselves. See
+    /// ScreenShotOptions.Enabled for what "off" actually guarantees.</summary>
+    public bool ScreenCaptureEnabled
+    {
+        get => _screenCaptureEnabled;
+        set => _screenCaptureEnabled = value;
+    }
 }
 
 /// <summary>
@@ -196,5 +209,11 @@ public sealed class KnobDefaults
     /// opinion and lives at Shell:Dictation:Language instead. See
     /// OptionsRegistration's PostConfigure for how it gets here.</summary>
     public string Language { get; set; } = "en";
+
+    /// <summary>Same shape as <see cref="Language"/>: no per-tier opinion,
+    /// lives at Shell:Screen:Enabled, read the same way in OptionsRegistration's
+    /// PostConfigure. Defaults false so a tier file that never mentions it
+    /// still boots with capture off.</summary>
+    public bool ScreenCaptureEnabled { get; set; }
 }
 

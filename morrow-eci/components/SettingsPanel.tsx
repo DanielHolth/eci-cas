@@ -13,6 +13,7 @@ import {
   setMood,
   setTier,
   setLanguage,
+  setScreenCaptureEnabled,
 } from "@/lib/api";
 import { ResizableAside } from "@/components/ResizableAside";
 import { AccountChip } from "@/components/AccountChip";
@@ -112,7 +113,8 @@ export function SettingsPanel({
       knobs.perceptionChars !== knobs.savedPerceptionChars ||
       knobs.contextTurns !== knobs.savedContextTurns ||
       knobs.mood !== knobs.savedMood ||
-      knobs.language !== knobs.savedLanguage);
+      knobs.language !== knobs.savedLanguage ||
+      knobs.screenCaptureEnabled !== knobs.savedScreenCaptureEnabled);
 
   async function save() {
     if (!dirty || saving) return;
@@ -225,6 +227,20 @@ export function SettingsPanel({
             type="checkbox"
             checked={enablePowerShell}
             onChange={(e) => onTogglePowerShell(e.target.checked)}
+            className="h-4 w-4 accent-neutral-700 dark:accent-neutral-300"
+          />
+        </label>
+
+        <label
+          title="Off means no capture ever happens. On, the shell takes one screenshot each time the voice key arms, so a question can be about what's on screen. Nothing is sent to a model unless a tier's Sight is also enabled. Requires Save and a restart of the shell to take effect."
+          className="mb-3 flex items-center justify-between gap-2 rounded border border-neutral-200 px-2 py-1.5 text-xs text-neutral-700 dark:border-neutral-800 dark:text-neutral-200"
+        >
+          <span className="font-medium">Enable screen capture [disclaimer]</span>
+          <input
+            type="checkbox"
+            checked={knobs?.screenCaptureEnabled ?? false}
+            disabled={knobs === null}
+            onChange={(e) => apply("screenCaptureEnabled", e.target.checked, setScreenCaptureEnabled)}
             className="h-4 w-4 accent-neutral-700 dark:accent-neutral-300"
           />
         </label>

@@ -71,6 +71,11 @@ export interface Knobs {
   savedLanguage: string;
   language: string;
   languages: string[];
+  /** The disclaimer switch: whether the shell may take a screenshot when
+   * the voice key arms. Off by default; taking effect needs a shell
+   * restart, same as language, since neither lives past the process boot. */
+  savedScreenCaptureEnabled: boolean;
+  screenCaptureEnabled: boolean;
 }
 
 /**
@@ -112,7 +117,7 @@ export async function fetchKnobs(): Promise<Knobs> {
   return publish(await response.json());
 }
 
-async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "contextTurns" | "recallDepth" | "mood" | "tier" | "language", number | string>>): Promise<Knobs> {
+async function postKnobs(body: Partial<Record<"maxSentences" | "reflectionEvery" | "perceptionChars" | "contextTurns" | "recallDepth" | "mood" | "tier" | "language", number | string>> & Partial<Record<"screenCaptureEnabled", boolean>>): Promise<Knobs> {
   const response = await fetch(`${API_BASE}/api/knobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -134,6 +139,7 @@ export const setRecallDepth = (recallDepth: number) => postKnobs({ recallDepth }
 export const setMood = (mood: string) => postKnobs({ mood });
 export const setTier = (tier: string) => postKnobs({ tier });
 export const setLanguage = (language: string) => postKnobs({ language });
+export const setScreenCaptureEnabled = (screenCaptureEnabled: boolean) => postKnobs({ screenCaptureEnabled });
 
 /** Writes every live knob into the active tier's appsettings file -- both
  * the source tree's copy and the one the binary loads -- so a setting

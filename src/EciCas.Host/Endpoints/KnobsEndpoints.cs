@@ -97,6 +97,11 @@ internal static class KnobsEndpoints
                 knobs.Language = language;
             }
 
+            if (request.ScreenCaptureEnabled is { } screenCaptureEnabled)
+            {
+                knobs.ScreenCaptureEnabled = screenCaptureEnabled;
+            }
+
             return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
         });
 
@@ -170,6 +175,34 @@ internal static class KnobsEndpoints
 
             knobDefaults.Value.Language = knobs.Language;
 
+            // Same best-effort base-file write as Language, same reason: no
+            // tier has an opinion on consent, so there is nothing in the
+            // tier file's Knobs section to fail on if it's missing.
+            const string screenFile = "appsettings.json";
+            // The shell is the process that reads this key, and it loads its
+            // own build-output copy, so that copy is written too when the
+            // source tree is there to walk to.
+            var screenTargets = new List<string>
+            {
+                Path.Combine(AppContext.BaseDirectory, screenFile),
+                Path.Combine(SourceTierDirectory(), screenFile),
+            };
+            var shellBin = Path.Combine(SourceTierDirectory(), "..", "EciCas.Shell", "bin");
+            if (Directory.Exists(shellBin))
+            {
+                screenTargets.AddRange(Directory.EnumerateFiles(shellBin, screenFile, SearchOption.AllDirectories));
+            }
+
+            foreach (var path in screenTargets.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (File.Exists(path))
+                {
+                    await SaveScreenCaptureAsync([path], knobs.ScreenCaptureEnabled);
+                }
+            }
+
+            knobDefaults.Value.ScreenCaptureEnabled = knobs.ScreenCaptureEnabled;
+
             return Results.Json(ToKnobsPayload(knobs, tiers, knobDefaults.Value), jsonOptions);
         });
 
@@ -206,6 +239,8 @@ internal static class KnobsEndpoints
             savedLanguage = knobDefaults.Language,
             language = knobs.Language,
             languages = RuntimeKnobs.Languages,
+            savedScreenCaptureEnabled = knobDefaults.ScreenCaptureEnabled,
+            screenCaptureEnabled = knobs.ScreenCaptureEnabled,
         };
     }
 
@@ -258,6 +293,44 @@ internal static class KnobsEndpoints
             {
                 continue;
             }
+
+            JsonNode.Parse(text);
+            await WriteAtomicallyAsync(path, text);
+            return true;
+        }
+
+        return true;
+    }
+
+    /// <summary>Same trade as <see cref="SaveLanguageAsync"/>, for the
+    /// disclaimer switch at Shell:Screen:Enabled.</summary>
+    public static async Task<bool> SaveScreenCaptureAsync(IEnumerable<string> paths, bool enabled)
+    {
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var text = await File.ReadAllTextAsync(path);
+
+            // Not TryWriteBool(text, "Enabled", ...): Dictation, Sight and
+            // Toolkit each have their own "Enabled" key in this same file,
+            // so an unscoped match could flip the microphone instead of the
+            // camera. Screen's own object has no nested braces, so a
+            // non-greedy scan bounded by "Screen": { ... } is enough to
+            // reach the right one without a full JSON round-trip that would
+            // rewrite comments and formatting this file is hand-edited.
+            var pattern = new Regex(
+                @"(""Screen""\s*:\s*\{[^{}]*""Enabled""\s*:\s*)(?:true|false)",
+                RegexOptions.Singleline);
+            if (!pattern.IsMatch(text))
+            {
+                continue;
+            }
+
+            text = pattern.Replace(text, m => m.Groups[1].Value + (enabled ? "true" : "false"), 1);
 
             JsonNode.Parse(text);
             await WriteAtomicallyAsync(path, text);
@@ -325,4 +398,4 @@ internal static class KnobsEndpoints
     }
 }
 
-internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? ContextTurns = null, int? RecallDepth = null, string? Mood = null, string? Tier = null, string? Language = null);
+internal sealed record KnobsRequest(int? MaxSentences = null, int? ReflectionEvery = null, int? PerceptionChars = null, int? ContextTurns = null, int? RecallDepth = null, string? Mood = null, string? Tier = null, string? Language = null, bool? ScreenCaptureEnabled = null);
