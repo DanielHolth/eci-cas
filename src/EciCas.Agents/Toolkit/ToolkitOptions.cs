@@ -29,4 +29,14 @@ public sealed class ToolkitOptions
     /// reply Intent can revise.
     /// </summary>
     public double RouteFloor { get; set; } = 0.87;
+
+    /// <summary>
+    /// How far the best toolkit must lead the runner-up. A message that is
+    /// really about nothing scores within a hair of two toolkits at once
+    /// (measured: "How are you feeling today?" 0.863 search, 0.851 guide),
+    /// while a real ask leads by 0.05 or more. Ambiguity means no toolkit
+    /// runs -- Morrow answers from what she knows instead of sending an
+    /// unrelated toolkit's output back into the conversation.
+    /// </summary>
+    public double RouteMargin { get; set; } = 0.03;
 }

@@ -152,19 +152,29 @@ public sealed class ToolkitManagerAgent : AgentBase
 
             string? bestName = null;
             var bestScore = 0.0;
+            var runnerUp = 0.0;
             foreach (var (name, vectors) in exemplars)
             {
                 var score = vectors.Max(v => VectorMath.Cosine(asked[0], v));
                 if (score > bestScore)
                 {
+                    runnerUp = bestScore;
                     bestScore = score;
                     bestName = name;
                 }
+                else if (score > runnerUp)
+                {
+                    runnerUp = score;
+                }
             }
 
-            _logger.LogDebug("ToolkitManager route: best {Best} score {Score:F3}, floor {Floor:F3}", bestName, bestScore, _options.RouteFloor);
+            var margin = bestScore - runnerUp;
+            var routed = bestName is not null && bestScore >= _options.RouteFloor && margin >= _options.RouteMargin;
+            _logger.LogInformation(
+                "ToolkitManager route: best {Best} score {Score:F3} margin {Margin:F3} (floor {Floor:F3}, margin {MinMargin:F3}) -> {Outcome}",
+                bestName, bestScore, margin, _options.RouteFloor, _options.RouteMargin, routed ? "run" : "no toolkit");
 
-            if (bestName is null || bestScore < _options.RouteFloor)
+            if (!routed || bestName is null)
             {
                 return;
             }
