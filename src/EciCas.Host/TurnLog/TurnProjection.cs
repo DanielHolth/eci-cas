@@ -84,6 +84,11 @@ public static class TurnProjection
             References = [.. record.References, .. (envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey) ?? []).Select(r => new TurnReference(r.Title, r.Url, r.Summary))],
             Toolkits = [.. record.Toolkits, $"{envelope.Meta.Get<string>(ToolkitResult.NameKey)}: {(envelope.Meta.Get<bool>(ToolkitResult.SuccessKey) ? "ok" : "failed")}"],
         },
+        "ToolkitManager" => record with
+        {
+            References = [.. record.References, .. (envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey) ?? []).Select(r => new TurnReference(r.Title, r.Url, r.Summary))],
+            Toolkits = [.. record.Toolkits, $"{envelope.Meta.Get<string>(ToolkitResult.NameKey)}: {(envelope.Meta.Get<bool>(ToolkitResult.SuccessKey) ? "ok" : "failed")}"],
+        },
         _ => record,
     };
 

@@ -69,3 +69,7 @@ named for the agent that no longer exists.
 A review that lands as its own document is a worklist, not a changelog:
 delete an entry when fixed, move survivors into `docs/roadmap.md`, delete
 the document once empty.
+## Environment
+
+- Windows. Python 3.14 is installed as `python` (or `py`). `python3` is a broken Microsoft Store stub -- don't use it.
+- Never run bare `python -` or any command that waits on stdin; it blocks forever. Give it a script file or a heredoc.
