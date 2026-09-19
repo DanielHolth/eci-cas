@@ -32,7 +32,7 @@ internal static class ToolkitRegistration
         services.AddHttpClient("search", http =>
         {
             http.Timeout = TimeSpan.FromSeconds(20);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Morrow/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
         });
 
         // JSON toolkits -- see ManifestToolkit and ManifestToolkitLoader. A
@@ -127,13 +127,15 @@ internal static class ToolkitRegistration
                     "What's the latest news on this?",
                     "Search the web for that.",
                     "Look it up online.",
-                    "What's the weather like today?",
+                    "What is the weather in Oslo right now?",
                     "Who won the game last night?",
                     "What's the current price of Bitcoin?",
                     "Google that for me.",
                     "Find recent information about this.",
-                    "What happened in the news today?",
-                    "Is there anything new about it?",
+                    "What is in the news right now?",
+                    "Search online for the current king of Norway.",
+                    "Please use the toolkit to search the internet for this.",
+                    "Who is the current president of France?",
                 ]),
             new ToolkitDescriptor(
                 "discord",
