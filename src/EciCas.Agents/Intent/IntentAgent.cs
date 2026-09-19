@@ -126,14 +126,14 @@ public sealed class IntentAgent : CognitiveAgent<string>
         var advice = envelope.Meta.Get<string>(SightAgent.AdviceKey);
         if (!string.IsNullOrEmpty(advice))
         {
-            prompt.Append(" [On their screen just now: ").Append(PromptCap.Apply(advice))
+            prompt.Append(" [On their screen just now: ").Append(advice)
                 .Append(". Mention it only if it bears on what they said.]");
         }
 
         var words = envelope.Meta.Get<string>(SightAgent.WordsKey);
         if (!string.IsNullOrEmpty(words))
         {
-            prompt.Append(" [Text read off their screen: ").Append(PromptCap.Apply(words)).Append(']');
+            prompt.Append(" [Text read off their screen: ").Append(words).Append(']');
         }
     }
 
@@ -204,7 +204,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
             return;
         }
 
-        prompt.Append(" [Noted before: ").Append(string.Join("; ", notes.Select(PromptCap.Apply))).Append(']');
+        prompt.Append(" [Noted before: ").Append(string.Join("; ", notes)).Append(']');
     }
 
     private static void AppendAdvice(StringBuilder prompt, string source, string? advice)
@@ -212,7 +212,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
     {
         if (!string.IsNullOrEmpty(advice))
         {
-            prompt.Append(" [").Append(source).Append(": ").Append(PromptCap.Apply(advice)).Append(']');
+            prompt.Append(" [").Append(source).Append(": ").Append(advice).Append(']');
         }
     }
 
