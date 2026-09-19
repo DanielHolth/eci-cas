@@ -48,6 +48,9 @@ public sealed class PerceptionAgent : AgentBase
     /// note it already wrote. Hindsight wakes on it (HindsightAgent's first
     /// trigger) and the display layer draws it as an idea, not an utterance.
     /// </summary>
+    public static bool IsBackground(Envelope perception) =>
+        perception.Meta.Get<string>(ReflectionAgent.TriggeredByKey) is "self" or Toolkit.ToolkitManagerAgent.ToolkitTrigger;
+
     public void Perceive(string text, bool self = false)
     {
         var meta = MetaBag.Empty.With(TextKey, PromptCap.Apply(text, _knobs.PerceptionChars));

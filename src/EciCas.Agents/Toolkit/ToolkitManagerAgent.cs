@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using EciCas.Agents.Perception;
+using EciCas.Agents.Reflection;
 using EciCas.Bus;
 using EciCas.Core;
 using Microsoft.Extensions.Logging;
@@ -29,18 +29,21 @@ namespace EciCas.Agents.Toolkit;
 /// membership is what Governance uses to track a faculty as impaired when
 /// it doesn't answer. Silence here is the normal case, not a failure.
 ///
-/// Handles the async mismatch a multi-second script creates: a run started
-/// on turn N cannot report into turn N's bundle (Governance tears that
-/// bundle down once concluded, long before a slow script finishes). So a
-/// finished run is tracked in <see cref="_runs"/>, keyed by the
-/// ToolkitRequest's own CorrelationId, and reported as an advisory derived
-/// from whatever events.perception envelope arrives next -- the next live
-/// turn, which is guaranteed to have a fresh, real bundle waiting.
+/// A run is asynchronous to the turn that asked for it: turn N cannot wait
+/// on it, and Governance tears turn N's bundle down long before a slow script
+/// finishes. So a finished run comes back as a turn of its own -- a
+/// perception stamped <see cref="ToolkitTrigger"/> carrying the findings --
+/// which Intent answers like any other input. Same shape as Reflection's
+/// pushed ideas, and guarded the same way: the perception carries generation
+/// 1, and a toolkit-triggered turn is never itself routed to a toolkit.
 /// </summary>
 public sealed class ToolkitManagerAgent : AgentBase
 {
-    /// <summary>What ToolkitManager has to say about a finished run, when it has something to say.</summary>
-    public const string AdviceKey = "toolkit.advice";
+    /// <summary>Value of <see cref="ReflectionAgent.TriggeredByKey"/> on a perception that reports a finished toolkit run.</summary>
+    public const string ToolkitTrigger = "toolkit";
+
+    /// <summary>The findings block is longer than a person's input, so it is capped on its own terms rather than at the input-length knob.</summary>
+    private const int FindingsChars = 1200;
 
     private readonly IMessageBus _bus;
     private readonly IToolkitCatalog _catalog;
@@ -48,7 +51,6 @@ public sealed class ToolkitManagerAgent : AgentBase
     private readonly ToolkitOptions _options;
     private readonly ILogger<ToolkitManagerAgent> _logger;
 
-    private readonly ConcurrentDictionary<Guid, RunState> _runs = new();
     private readonly SemaphoreSlim _exemplarLock = new(1, 1);
     private (string Name, float[][] Vectors)[]? _exemplars;
 
@@ -84,51 +86,46 @@ public sealed class ToolkitManagerAgent : AgentBase
             return;
         }
 
-        ReportFinishedRuns(envelope);
+        // A run's own report is not a request. Routing it would let a
+        // search's findings ("...latest news...") ask for another search.
+        if (envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == ToolkitTrigger)
+        {
+            return;
+        }
+
         await TryRouteAsync(envelope, cancellationToken).ConfigureAwait(false);
     }
 
     private void OnResult(Envelope envelope)
     {
-        // Recorded, never published from here -- the run is only reported
-        // once a live turn arrives to carry it. See ReportFinishedRuns.
-        _runs[envelope.CorrelationId] = new RunState(
-            envelope.Meta.Get<string>(ToolkitResult.NameKey) ?? "toolkit",
-            envelope.Meta.Get<string>(ToolkitResult.OutputKey) ?? string.Empty,
-            envelope.Meta.Get<bool>(ToolkitResult.SuccessKey),
-            envelope.Meta.Get<string>(ToolkitResult.ErrorKey),
-            Finished: true,
-            envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey));
-    }
+        var name = envelope.Meta.Get<string>(ToolkitResult.NameKey) ?? "toolkit";
+        var command = envelope.Meta.Get<string>(ToolkitResult.CommandKey) ?? string.Empty;
+        var output = envelope.Meta.Get<string>(ToolkitResult.OutputKey) ?? string.Empty;
+        var success = envelope.Meta.Get<bool>(ToolkitResult.SuccessKey);
+        var error = envelope.Meta.Get<string>(ToolkitResult.ErrorKey);
 
-    private void ReportFinishedRuns(Envelope perception)
-    {
-        foreach (var (correlationId, run) in _runs)
-        {
-            if (!run.Finished)
-            {
-                continue;
-            }
+        var findings = success
+            ? string.IsNullOrWhiteSpace(output) ? "it completed with nothing to report." : $"it reported: {output}"
+            : $"it failed: {(string.IsNullOrWhiteSpace(error) ? output : error)}";
 
-            if (!_runs.TryRemove(correlationId, out _))
-            {
-                continue;
-            }
+        // Written as an instruction to Intent because Intent reads this as its
+        // input, and nothing else tells it a toolkit ran. The person's own
+        // words are quoted so the answer can be about what they asked.
+        var text = PromptCap.Apply(
+            $"I ran my {name} toolkit for the request \"{PromptCap.Apply(command, 200)}\" and {findings} " +
+            "Answer that request now from this, briefly and in my own voice" +
+            (success ? "." : ", and say plainly that it did not work."),
+            FindingsChars);
 
-            var text = string.IsNullOrWhiteSpace(run.Output)
-                ? run.Success ? $"{run.Name} completed successfully." : $"{run.Name} failed. {run.Error ?? "No output returned."}"
-                : run.Success ? $"{run.Name} reported: {run.Output}" : $"{run.Name} failed: {run.Error ?? run.Output}";
-
-            var advisory = perception.Derive(Topics.Advisories, Name, Severity.Neutral,
-                MetaBag.Empty
-                    .With(AdviceKey, text)
-                    .With(ToolkitResult.NameKey, run.Name)
-                    .With(ToolkitResult.OutputKey, run.Output)
-                    .With(ToolkitResult.SuccessKey, run.Success)
-                    .With(ToolkitResult.ReferencesKey, run.References ?? []));
-
-            _bus.Publish(Topics.Advisories, advisory);
-        }
+        var report = Envelope.Create(Topics.Perception, Name, Severity.Neutral,
+            MetaBag.Empty
+                .With(PerceptionAgent.TextKey, text)
+                .With(ReflectionAgent.TriggeredByKey, ToolkitTrigger)
+                .With(ToolkitResult.NameKey, name)
+                .With(ToolkitResult.SuccessKey, success)
+                .With(ToolkitResult.ReferencesKey, envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey) ?? []),
+            generation: 1);
+        _bus.Publish(Topics.Perception, report);
     }
 
     private async Task TryRouteAsync(Envelope perception, CancellationToken cancellationToken)
@@ -173,7 +170,6 @@ public sealed class ToolkitManagerAgent : AgentBase
             }
 
             var request = Envelope.Create(Topics.ToolkitRequest, Name, Severity.Neutral, ToolkitRequest.Build(bestName, text));
-            _runs[request.CorrelationId] = new RunState(bestName, string.Empty, false, null, Finished: false);
             _bus.Publish(Topics.ToolkitRequest, request);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -224,5 +220,4 @@ public sealed class ToolkitManagerAgent : AgentBase
         }
     }
 
-    private sealed record RunState(string Name, string Output, bool Success, string? Error, bool Finished, IReadOnlyList<ToolkitReference>? References = null);
 }

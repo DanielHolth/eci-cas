@@ -24,7 +24,7 @@ public sealed class GuideToolkit(IToolkitCatalog catalog) : IToolkit
 
         // Always both, not one or the other -- this is a background-routed
         // advisory Intent then composes a reply from (see
-        // ToolkitManagerAgent.AdviceKey), not text shown verbatim, so the
+        // ToolkitManager's report), not text shown verbatim, so the
         // fuller answer costs nothing when someone only asked "what can you
         // do" and matters a great deal when they asked "tell me about
         // yourself" and never see the keybindings otherwise.

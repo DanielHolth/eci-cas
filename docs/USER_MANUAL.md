@@ -88,7 +88,7 @@ The event log: everything the console prints about each turn, newest first. Each
 
 ## Toolkits
 
-- **Web search**: ask about current things (news, weather, prices, recent events) and Morrow searches the web. Results appear as links in the References panel. Available on Pro and Premium. The answer can arrive on your next message rather than the current one.
+- **Web search**: ask about current things (news, weather, prices, recent events) and Morrow searches the web. Results appear as links in the References panel. Available on Pro and Premium. Morrow first answers from what she knows, then follows up on her own with what the search found (a moment later, as a separate turn).
 - **Discord**: posts a message to Morrow's Discord channel.
 - **PowerShell**: see above. Off by default.
 - **JSON toolkits**: plain files in the `Toolkits` folder. A human has to mark one `Approved` before it runs, so dropping a file in never turns it on by itself.

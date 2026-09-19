@@ -56,7 +56,7 @@ public sealed class TurnWindowAgent : AgentBase
                 _turns.Add(new Turn(
                     envelope.CorrelationId,
                     envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty,
-                    envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self"));
+                    PerceptionAgent.IsBackground(envelope)));
 
                 if (_turns.Count > Capacity)
                 {

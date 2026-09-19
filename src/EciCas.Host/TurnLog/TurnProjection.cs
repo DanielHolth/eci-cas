@@ -61,7 +61,15 @@ public static class TurnProjection
         // A pushed idea rides the same topic as something a person typed.
         // Only this key tells them apart, and drawing one as the other puts
         // words in the person's mouth.
-        SelfTriggered = envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == "self" || record.SelfTriggered,
+        SelfTriggered = PerceptionAgent.IsBackground(envelope) || record.SelfTriggered,
+
+        // A toolkit run reporting back: the links and the "name: ok" line
+        // ride the perception itself, so they are filed under the turn that
+        // voices them.
+        References = [.. record.References, .. (envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey) ?? []).Select(r => new TurnReference(r.Title, r.Url, r.Summary))],
+        Toolkits = envelope.Meta.Get<string>(ToolkitResult.NameKey) is { } tool
+            ? [.. record.Toolkits, $"{tool}: {(envelope.Meta.Get<bool>(ToolkitResult.SuccessKey) ? "ok" : "failed")}"]
+            : record.Toolkits,
         StartedAt = envelope.Timestamp,
     };
 
@@ -79,11 +87,6 @@ public static class TurnProjection
         "Sight" => record with { Sight = envelope.Meta.Get<string>(SightAgent.AdviceKey) ?? record.Sight },
         "Recall" => record with { Reads = Describe(envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey)) },
         "Hindsight" => record with { Hindsight = envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey) ?? record.Hindsight },
-        "ToolkitManager" => record with
-        {
-            References = [.. record.References, .. (envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey) ?? []).Select(r => new TurnReference(r.Title, r.Url, r.Summary))],
-            Toolkits = [.. record.Toolkits, $"{envelope.Meta.Get<string>(ToolkitResult.NameKey)}: {(envelope.Meta.Get<bool>(ToolkitResult.SuccessKey) ? "ok" : "failed")}"],
-        },
         _ => record,
     };
 

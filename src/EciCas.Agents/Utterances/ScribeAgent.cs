@@ -235,6 +235,5 @@ public sealed class ScribeAgent : AgentBase
     /// stamps its own ideas on the way in; see the class remarks for why they
     /// stop here.
     /// </summary>
-    private static bool Self(Envelope envelope) =>
-        string.Equals(envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey), "self", StringComparison.Ordinal);
+    private static bool Self(Envelope envelope) => PerceptionAgent.IsBackground(envelope);
 }
