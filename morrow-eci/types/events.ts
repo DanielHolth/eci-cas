@@ -93,6 +93,8 @@ export interface TurnRecord {
   perception: string | null;
   selfTriggered: boolean;
   toolkitTriggered?: boolean;
+  /** What Intent was handed (reply target + advisories), debug only. */
+  intentInput?: string | null;
   impulse: string | null;
   /** What Sight made of the screenshot, as Intent was handed it. */
   sight: string | null;

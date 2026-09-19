@@ -114,6 +114,7 @@ public static class TurnProjection
         return record with
         {
             Intent = envelope.Meta.Get<string>(IntentAgent.ReplyKey) ?? record.Intent,
+            IntentInput = envelope.Meta.Get<string>(IntentAgent.ContextKey) ?? record.IntentInput,
             Verdict = verdict == Verdict.Green ? record.Verdict : verdict.ToString().ToLowerInvariant(),
 
             // A block nudges Impulse and Governance re-reads the face

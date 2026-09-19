@@ -51,6 +51,12 @@ public sealed partial class DuckDuckGoSearchProvider(IHttpClientFactory httpClie
                 continue;
             }
 
+            // Sponsored results are duckduckgo.com/y.js click-throughs, not sources.
+            if (uri.Host.EndsWith("duckduckgo.com", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var title = Clean(links[i].Groups[2].Value);
             var summary = i < snippets.Count ? Clean(snippets[i].Groups[1].Value) : string.Empty;
             hits.Add(new ToolkitReference(title, uri.ToString(), summary));

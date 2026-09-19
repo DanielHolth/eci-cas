@@ -46,6 +46,9 @@ public sealed record TurnRecord
     /// <summary>A toolkit run reporting back. Also <see cref="SelfTriggered"/>, but there is no thought to show or speak: Intent's answer is the whole output, and <see cref="Perception"/> is a one-line label.</summary>
     public bool ToolkitTriggered { get; init; }
 
+    /// <summary>What Intent was actually handed: the reply target plus every advisory, without the standing instructions. Debug only.</summary>
+    public string? IntentInput { get; init; }
+
     public string? Impulse { get; init; }
 
     /// <summary>What Sight made of the screenshot, as Intent was given it.</summary>

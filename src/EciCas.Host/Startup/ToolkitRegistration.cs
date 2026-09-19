@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using EciCas.Agents.Toolkit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace EciCas.Host.Startup;
 
@@ -34,6 +35,12 @@ internal static class ToolkitRegistration
             http.Timeout = TimeSpan.FromSeconds(20);
             http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
         });
+
+        services.AddSingleton<IPageReader, PageReader>();
+        services.AddHttpClient("reader", http =>
+        {
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
+        }).ConfigurePrimaryHttpMessageHandler(ReaderGuard.CreateHandler);
 
         // JSON toolkits -- see ManifestToolkit and ManifestToolkitLoader. A
         // manifest only ever reaches "approved" by a human hand-editing the
@@ -74,7 +81,17 @@ internal static class ToolkitRegistration
             }
         });
 
-        services.AddSingleton<IToolkitCatalog>(_ => new ToolkitCatalog(
+        // Filtered to the tier's Toolkit:Allowed here, once, so routing and the
+        // guide's "what can you do" both see only what this tier may run.
+        services.AddSingleton<IToolkitCatalog>(sp => new ToolkitCatalog(
+        [
+            .. All(manifestScan).Where(d => sp.GetRequiredService<IOptions<ToolkitOptions>>().Value.Allows(d.Name)),
+        ]));
+
+        return services;
+    }
+
+    private static IEnumerable<ToolkitDescriptor> All(ManifestScanResult manifestScan) =>
         [
             .. manifestScan.Approved.Select(m => new ToolkitDescriptor(m.Name, m.Description, m.Triggers)),
             new ToolkitDescriptor(
@@ -150,8 +167,5 @@ internal static class ToolkitRegistration
                     "Message the team on Discord.",
                     "Put that in our Discord chat.",
                 ]),
-        ]));
-
-        return services;
-    }
+        ];
 }

@@ -1,4 +1,5 @@
 using EciCas.Agents.Toolkit;
+using EciCas.Substrates;
 using Microsoft.Extensions.Options;
 
 namespace EciCas.Tests.Bus;
@@ -10,6 +11,11 @@ public class SearchToolkitTests
         public string Name => "duckduckgo";
         public Task<IReadOnlyList<ToolkitReference>> SearchAsync(string query, int maxResults, CancellationToken cancellationToken) =>
             Task.FromResult(hits());
+    }
+
+    private sealed class FakeReader(string? extract) : IPageReader
+    {
+        public Task<string?> ExtractAsync(string url, string question, CancellationToken cancellationToken) => Task.FromResult(extract);
     }
 
     [Fact]
@@ -32,15 +38,17 @@ public class SearchToolkitTests
     }
 
     [Fact]
-    public async Task Hits_come_back_as_prose_and_as_references()
+    public async Task Hits_come_back_terse_without_urls_with_the_page_extract_and_as_references()
     {
         var hit = new ToolkitReference("Title", "https://example.com", "What it says");
-        var toolkit = new SearchToolkit([new FakeProvider(() => [hit])], Options.Create(new SearchOptions()));
+        var toolkit = new SearchToolkit([new FakeProvider(() => [hit])], Options.Create(new SearchOptions()), new FakeReader("Passage from the page."), new NullEmbeddingProvider());
 
         var outcome = await toolkit.ExecuteAsync("latest news", CancellationToken.None);
 
         Assert.True(outcome.Success);
-        Assert.Contains("https://example.com", outcome.Output);
+        Assert.DoesNotContain("https://example.com", outcome.Output);
+        Assert.Contains("What it says", outcome.Output);
+        Assert.Contains("Passage from the page.", outcome.Output);
         Assert.Equal([hit], outcome.References);
     }
 
@@ -49,7 +57,7 @@ public class SearchToolkitTests
     {
         var toolkit = new SearchToolkit(
             [new FakeProvider(() => throw new SearchUnavailableException("challenge"))],
-            Options.Create(new SearchOptions()));
+            Options.Create(new SearchOptions()), new FakeReader("Passage from the page."), new NullEmbeddingProvider());
 
         var outcome = await toolkit.ExecuteAsync("anything", CancellationToken.None);
 
@@ -63,7 +71,7 @@ public class SearchToolkitTests
         var called = false;
         var toolkit = new SearchToolkit(
             [new FakeProvider(() => { called = true; return []; })],
-            Options.Create(new SearchOptions { Enabled = false }));
+            Options.Create(new SearchOptions { Enabled = false }), new FakeReader(null), new NullEmbeddingProvider());
 
         var outcome = await toolkit.ExecuteAsync("anything", CancellationToken.None);
 

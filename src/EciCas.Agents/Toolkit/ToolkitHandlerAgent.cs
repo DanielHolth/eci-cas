@@ -75,7 +75,7 @@ public sealed class ToolkitHandlerAgent : AgentBase
     private async Task<(string output, bool success, string? error, IReadOnlyList<ToolkitReference>? references, IReadOnlyList<ToolkitSubstrateCall>? usage)> RunToolAsync(
         string name, string command, CancellationToken cancellationToken)
     {
-        if (!_toolkits.TryGetValue(name, out var toolkit))
+        if (!_options.Allows(name) || !_toolkits.TryGetValue(name, out var toolkit))
         {
             return (string.Empty, false, $"Unsupported toolkit '{name}'.", null, null);
         }

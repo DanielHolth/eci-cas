@@ -146,6 +146,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
               {note}
             </Line>
           ))}
+          {record.intentInput && <Line agent="Intent input">{record.intentInput}</Line>}
           {record.intent && <Line agent="Intent">{record.intent}</Line>}
           {record.verdict && (
             <Line agent="Security">

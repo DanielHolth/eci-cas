@@ -22,6 +22,14 @@ public sealed class ToolkitOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Which toolkits this tier may use, by name. Empty means all. Lets a tier
+    /// that must not run PowerShell still search: Budget lists search and guide.
+    /// </summary>
+    public string[] Allowed { get; set; } = [];
+
+    public bool Allows(string name) => Allowed.Length == 0 || Allowed.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Minimum cosine similarity between a turn and a toolkit's best trigger
     /// exemplar before ToolkitManagerAgent will dispatch to it. Below this,
     /// silence is the correct answer far more often than a wrong toolkit
