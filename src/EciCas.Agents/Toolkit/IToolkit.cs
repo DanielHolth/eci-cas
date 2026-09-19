@@ -22,4 +22,4 @@ public interface IToolkit
 }
 
 /// <summary>A toolkit's result, independent of the bus's own envelope shape.</summary>
-public sealed record ToolkitOutcome(string Output, bool Success, string? Error);
+public sealed record ToolkitOutcome(string Output, bool Success, string? Error, IReadOnlyList<ToolkitReference>? References = null);

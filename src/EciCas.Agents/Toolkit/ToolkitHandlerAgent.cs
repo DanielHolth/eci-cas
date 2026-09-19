@@ -45,24 +45,24 @@ public sealed class ToolkitHandlerAgent : AgentBase
         var command = envelope.Meta.Get<string>("toolkit.command") ?? "echo hello world";
         var toolName = envelope.Meta.Get<string>("toolkit.name") ?? "powershell";
 
-        var (output, success, error) = await RunToolAsync(toolName, command, cancellationToken).ConfigureAwait(false);
+        var (output, success, error, references) = await RunToolAsync(toolName, command, cancellationToken).ConfigureAwait(false);
 
         var response = Envelope.Create(
             Topics.ToolkitResult,
             Name,
             envelope.Severity,
-            ToolkitResult.Build(toolName, command, output, success, error));
+            ToolkitResult.Build(toolName, command, output, success, error, references));
 
         response = response with { CorrelationId = envelope.CorrelationId };
         _bus.Publish(Topics.ToolkitResult, response);
     }
 
-    private async Task<(string output, bool success, string? error)> RunToolAsync(
+    private async Task<(string output, bool success, string? error, IReadOnlyList<ToolkitReference>? references)> RunToolAsync(
         string name, string command, CancellationToken cancellationToken)
     {
         if (!_toolkits.TryGetValue(name, out var toolkit))
         {
-            return (string.Empty, false, $"Unsupported toolkit '{name}'.");
+            return (string.Empty, false, $"Unsupported toolkit '{name}'.", null);
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -71,18 +71,18 @@ public sealed class ToolkitHandlerAgent : AgentBase
         try
         {
             var outcome = await toolkit.ExecuteAsync(command, timeout.Token).ConfigureAwait(false);
-            return (outcome.Output, outcome.Success, outcome.Error);
+            return (outcome.Output, outcome.Success, outcome.Error, outcome.References);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // The timeout fired, not the host shutting down -- a real,
             // reportable outcome, not an exception for ConsumeAsync's catch
             // block to log and move past.
-            return (string.Empty, false, $"Timed out after {_options.TimeoutSeconds}s.");
+            return (string.Empty, false, $"Timed out after {_options.TimeoutSeconds}s.", null);
         }
         catch (Exception ex)
         {
-            return (string.Empty, false, ex.Message);
+            return (string.Empty, false, ex.Message, null);
         }
     }
 }

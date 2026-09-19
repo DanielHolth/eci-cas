@@ -23,6 +23,17 @@ internal static class ToolkitRegistration
         services.AddSingleton<IToolkit, PowerShellToolkit>();
         services.AddSingleton<IToolkit, GuideToolkit>();
         services.AddSingleton<IToolkit, DiscordToolkit>();
+        services.AddSingleton<IToolkit, SearchToolkit>();
+
+        // Providers are all registered and Search:Provider picks one at call
+        // time, so switching engines is a config edit and not a rebuild.
+        services.AddSingleton<ISearchProvider, DuckDuckGoSearchProvider>();
+        services.AddSingleton<ISearchProvider, BraveSearchProvider>();
+        services.AddHttpClient("search", http =>
+        {
+            http.Timeout = TimeSpan.FromSeconds(20);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Morrow/1.0");
+        });
 
         // JSON toolkits -- see ManifestToolkit and ManifestToolkitLoader. A
         // manifest only ever reaches "approved" by a human hand-editing the
@@ -109,6 +120,21 @@ internal static class ToolkitRegistration
             // wrong voice. Registration, catalog entry, and the class itself
             // are gone until it's actually designed; SpeechOutput stays --
             // ManifestToolkit's speak_text verb still calls it.
+            new ToolkitDescriptor(
+                "search",
+                "Searches the web for current information and returns snippets with links -- news, weather, prices, recent events, anything after her training.",
+                [
+                    "What's the latest news on this?",
+                    "Search the web for that.",
+                    "Look it up online.",
+                    "What's the weather like today?",
+                    "Who won the game last night?",
+                    "What's the current price of Bitcoin?",
+                    "Google that for me.",
+                    "Find recent information about this.",
+                    "What happened in the news today?",
+                    "Is there anything new about it?",
+                ]),
             new ToolkitDescriptor(
                 "discord",
                 "Posts a message to Morrow's Discord channel through the bot Morrow is installed as.",
