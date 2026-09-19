@@ -1,3 +1,5 @@
+using EciCas.Core;
+
 namespace EciCas.Agents.Toolkit;
 
 /// <summary>
@@ -22,4 +24,18 @@ public interface IToolkit
 }
 
 /// <summary>A toolkit's result, independent of the bus's own envelope shape.</summary>
-public sealed record ToolkitOutcome(string Output, bool Success, string? Error, IReadOnlyList<ToolkitReference>? References = null);
+public sealed record ToolkitOutcome(
+    string Output,
+    bool Success,
+    string? Error,
+    IReadOnlyList<ToolkitReference>? References = null,
+    IReadOnlyList<ToolkitSubstrateCall>? Usage = null);
+
+/// <summary>
+/// One model call a toolkit made on its own account (PowerShell's translation
+/// step). The handler publishes each as a <see cref="EciCas.Bus.SubstrateTrace"/>
+/// so it lands in the turn's cost, latency and model columns like any agent's
+/// call. <paramref name="Result"/> is null for a call that failed, in which
+/// case <paramref name="Cause"/> says why.
+/// </summary>
+public sealed record ToolkitSubstrateCall(string Label, SubstrateResult? Result, double LatencyMs, string? Cause = null);

@@ -92,6 +92,7 @@ export interface TurnRecord {
   endedAt: string;
   perception: string | null;
   selfTriggered: boolean;
+  toolkitTriggered?: boolean;
   impulse: string | null;
   /** What Sight made of the screenshot, as Intent was handed it. */
   sight: string | null;

@@ -116,7 +116,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
       >
         <span className="font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
           Turn {String(record.seq).padStart(3, "0")} · {date} · {time}
-          {record.selfTriggered && " · self"}
+          {record.toolkitTriggered ? " · toolkit" : record.selfTriggered && " · self"}
           {stillArriving(record) && " · …"}
         </span>
         <span className="line-clamp-1 text-neutral-700 dark:text-neutral-300">{headline}</span>
@@ -128,7 +128,7 @@ export function EventLogEntry({ record, openSignal }: { record: TurnRecord; open
             // A self-triggered turn's perception is Reflection's idea capped
             // by PromptCap for the next hop's prompt, not for a reader — show
             // the uncapped record.idea here instead when it is available.
-            <Line agent={record.selfTriggered ? "Idea" : "Perception"}>
+            <Line agent={record.toolkitTriggered ? "Toolkit" : record.selfTriggered ? "Idea" : "Perception"}>
               {record.selfTriggered ? (record.idea ?? record.perception) : record.perception}
             </Line>
           )}

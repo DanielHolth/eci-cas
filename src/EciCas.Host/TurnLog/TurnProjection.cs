@@ -56,7 +56,10 @@ public static class TurnProjection
 
     private static TurnRecord ApplyPerception(TurnRecord record, Envelope envelope) => record with
     {
-        Perception = envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? record.Perception,
+        Perception = envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == ToolkitManagerAgent.ToolkitTrigger
+            ? $"{envelope.Meta.Get<string>(ToolkitResult.NameKey)} toolkit finished: \"{envelope.Meta.Get<string>(ToolkitResult.CommandKey)}\""
+            : envelope.Meta.Get<string>(PerceptionAgent.TextKey) ?? record.Perception,
+        ToolkitTriggered = envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == ToolkitManagerAgent.ToolkitTrigger || record.ToolkitTriggered,
 
         // A pushed idea rides the same topic as something a person typed.
         // Only this key tells them apart, and drawing one as the other puts

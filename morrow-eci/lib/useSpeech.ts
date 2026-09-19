@@ -273,6 +273,7 @@ export function useSpeech(
         // read past. Both go through the settle beat: `drain` only waits
         // before a `self` item, so queuing two in a row still gets one pause
         // before the pair starts, not one before each.
+        // A toolkit turn has no ideaText, so only the reply is queued.
         if (turn.ideaText) queue.current.push({ text: turn.ideaText, self: true });
         queue.current.push({ text, self: true });
       }

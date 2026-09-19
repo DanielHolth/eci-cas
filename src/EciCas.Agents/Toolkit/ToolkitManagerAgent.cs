@@ -24,10 +24,10 @@ namespace EciCas.Agents.Toolkit;
 /// NL-to-script step) does that heavy lifting itself, inside the toolkit,
 /// once routing has already picked it.
 ///
-/// Deliberately never added to GovernanceOptions.BundleRoster: this agent
-/// is silent on the large majority of turns by design, and roster
-/// membership is what Governance uses to track a faculty as impaired when
-/// it doesn't answer. Silence here is the normal case, not a failure.
+/// It is on the BundleRoster and publishes an advisory on every turn, empty
+/// unless a toolkit was routed. That is what lets Intent hear about a run
+/// before it answers: when one started, Intent acknowledges it in a line
+/// instead of guessing at the answer the toolkit is about to fetch.
 ///
 /// A run is asynchronous to the turn that asked for it: turn N cannot wait
 /// on it, and Governance tears turn N's bundle down long before a slow script
@@ -43,7 +43,13 @@ public sealed class ToolkitManagerAgent : AgentBase
     public const string ToolkitTrigger = "toolkit";
 
     /// <summary>The findings block is longer than a person's input, so it is capped on its own terms rather than at the input-length knob.</summary>
-    private const int FindingsChars = 1200;
+    private const int FindingsChars = 700;
+
+    /// <summary>Meta key on this agent's advisory: what Intent should say while a routed toolkit is still running.</summary>
+    public const string AdviceKey = "toolkit.advice";
+
+    private const string RunningAdvice =
+        "A toolkit has just started on their request and will report back on its own. Do not answer the request yourself. Say only one short sentence that you are looking into it now.";
 
     private readonly IMessageBus _bus;
     private readonly IToolkitCatalog _catalog;
@@ -75,25 +81,24 @@ public sealed class ToolkitManagerAgent : AgentBase
 
     public override async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        if (!_options.Enabled)
-        {
-            return;
-        }
-
         if (envelope.Topic == Topics.ToolkitResult)
         {
-            OnResult(envelope);
+            if (_options.Enabled)
+            {
+                OnResult(envelope);
+            }
+
             return;
         }
 
         // A run's own report is not a request. Routing it would let a
         // search's findings ("...latest news...") ask for another search.
-        if (envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) == ToolkitTrigger)
-        {
-            return;
-        }
+        var routed = _options.Enabled
+            && envelope.Meta.Get<string>(ReflectionAgent.TriggeredByKey) != ToolkitTrigger
+            && await TryRouteAsync(envelope, cancellationToken).ConfigureAwait(false);
 
-        await TryRouteAsync(envelope, cancellationToken).ConfigureAwait(false);
+        var meta = routed ? MetaBag.Empty.With(AdviceKey, RunningAdvice) : MetaBag.Empty;
+        _bus.Publish(Topics.Advisories, envelope.Derive(Topics.Advisories, Name, envelope.Severity, meta));
     }
 
     private void OnResult(Envelope envelope)
@@ -113,7 +118,7 @@ public sealed class ToolkitManagerAgent : AgentBase
         // words are quoted so the answer can be about what they asked.
         var text = PromptCap.Apply(
             $"I ran my {name} toolkit for the request \"{PromptCap.Apply(command, 200)}\" and {findings} " +
-            "Answer that request now from this, briefly and in my own voice" +
+            "Answer that request now from this in one or two short sentences, in my own voice" +
             (success ? "." : ", and say plainly that it did not work."),
             FindingsChars);
 
@@ -122,32 +127,33 @@ public sealed class ToolkitManagerAgent : AgentBase
                 .With(PerceptionAgent.TextKey, text)
                 .With(ReflectionAgent.TriggeredByKey, ToolkitTrigger)
                 .With(ToolkitResult.NameKey, name)
+                .With(ToolkitResult.CommandKey, command)
                 .With(ToolkitResult.SuccessKey, success)
                 .With(ToolkitResult.ReferencesKey, envelope.Meta.Get<IReadOnlyList<ToolkitReference>>(ToolkitResult.ReferencesKey) ?? []),
             generation: 1);
         _bus.Publish(Topics.Perception, report);
     }
 
-    private async Task TryRouteAsync(Envelope perception, CancellationToken cancellationToken)
+    private async Task<bool> TryRouteAsync(Envelope perception, CancellationToken cancellationToken)
     {
         try
         {
             var text = perception.Meta.Get<string>(PerceptionAgent.TextKey) ?? string.Empty;
             if (string.IsNullOrWhiteSpace(text) || !_embeddings.Available)
             {
-                return;
+                return false;
             }
 
             var exemplars = await EnsureExemplarsAsync(cancellationToken).ConfigureAwait(false);
             if (exemplars.Length == 0)
             {
-                return;
+                return false;
             }
 
             var asked = await _embeddings.EmbedAsync([text], EmbeddingKind.Query, cancellationToken).ConfigureAwait(false);
             if (asked.Count == 0)
             {
-                return;
+                return false;
             }
 
             string? bestName = null;
@@ -176,11 +182,12 @@ public sealed class ToolkitManagerAgent : AgentBase
 
             if (!routed || bestName is null)
             {
-                return;
+                return false;
             }
 
             var request = Envelope.Create(Topics.ToolkitRequest, Name, Severity.Neutral, ToolkitRequest.Build(bestName, text));
             _bus.Publish(Topics.ToolkitRequest, request);
+            return true;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -191,6 +198,7 @@ public sealed class ToolkitManagerAgent : AgentBase
             // Routing runs unattended on every turn; a bad match should
             // never take this agent off the bus for the rest of the session.
             _logger.LogWarning(ex, "ToolkitManager routing failed");
+            return false;
         }
     }
 

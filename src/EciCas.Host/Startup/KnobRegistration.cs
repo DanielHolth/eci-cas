@@ -44,6 +44,7 @@ internal static class KnobRegistration
             ContextTurns = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ContextTurns,
             Mood = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Mood,
             Language = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.Language,
+            ScreenCaptureEnabled = sp.GetRequiredService<IOptions<KnobDefaults>>().Value.ScreenCaptureEnabled,
         });
 
         return services;

@@ -26,13 +26,20 @@ public sealed class PowerShellToolkit(ISubstrateProvider substrate, IOptions<Pow
 
     public async Task<ToolkitOutcome> ExecuteAsync(string command, CancellationToken cancellationToken)
     {
+        var usage = new List<ToolkitSubstrateCall>();
+        var outcome = await RunAsync(command, usage, cancellationToken).ConfigureAwait(false);
+        return usage.Count == 0 ? outcome : outcome with { Usage = usage };
+    }
+
+    private async Task<ToolkitOutcome> RunAsync(string command, List<ToolkitSubstrateCall> usage, CancellationToken cancellationToken)
+    {
         if (!options.Value.Approved)
         {
             return new ToolkitOutcome(string.Empty, false,
                 "The PowerShell toolkit needs to be approved before it can run commands on this machine -- see PowerShell:Approved in configuration.");
         }
 
-        var script = await TranslateAsync(command, cancellationToken).ConfigureAwait(false);
+        var script = await TranslateAsync(command, usage, cancellationToken).ConfigureAwait(false);
 
         var start = new ProcessStartInfo
         {
@@ -84,8 +91,9 @@ public sealed class PowerShellToolkit(ISubstrateProvider substrate, IOptions<Pow
     /// already be a real script (Intent or the person themselves can paste
     /// one directly).
     /// </summary>
-    private async Task<string> TranslateAsync(string command, CancellationToken cancellationToken)
+    private async Task<string> TranslateAsync(string command, List<ToolkitSubstrateCall> usage, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var prompt =
@@ -97,6 +105,8 @@ public sealed class PowerShellToolkit(ISubstrateProvider substrate, IOptions<Pow
             var result = await substrate.CompleteAsync("Toolkit.PowerShell", prompt, cancellationToken)
                 .ConfigureAwait(false);
 
+            usage.Add(new ToolkitSubstrateCall("translate", result, result.Latency.TotalMilliseconds));
+
             var text = result.Text.Trim();
             return string.IsNullOrWhiteSpace(text) ? command : StripFences(text);
         }
@@ -104,8 +114,9 @@ public sealed class PowerShellToolkit(ISubstrateProvider substrate, IOptions<Pow
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            usage.Add(new ToolkitSubstrateCall("translate", null, Stopwatch.GetElapsedTime(started).TotalMilliseconds, SubstrateHealth.Classify(ex)));
             return command;
         }
     }

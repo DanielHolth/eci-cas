@@ -5,6 +5,7 @@ using EciCas.Agents.Governance;
 using EciCas.Agents.Impulse;
 using EciCas.Agents.Perception;
 using EciCas.Agents.Sight;
+using EciCas.Agents.Toolkit;
 using EciCas.Agents.TurnWindow;
 using EciCas.Agents.Utterances;
 using EciCas.Agents.Hindsight;
@@ -92,6 +93,7 @@ public sealed class IntentAgent : CognitiveAgent<string>
 
         AppendAdvice(prompt, "Impulse", envelope.Meta.Get<string>(ImpulseAgent.AdviceKey));
         AppendAdvice(prompt, "Identity", envelope.Meta.Get<string>(IdentityAgent.AdviceKey));
+        AppendAdvice(prompt, "Toolkit", envelope.Meta.Get<string>(ToolkitManagerAgent.AdviceKey));
         AppendSight(prompt, envelope);
         AppendRecalledFacts(prompt, envelope.Meta.Get<IReadOnlyList<ArchiveRecord>>(ConsultAgent.RecalledFactsKey));
         AppendNotes(prompt, envelope.Meta.Get<IReadOnlyList<string>>(HindsightAgent.NotesKey));

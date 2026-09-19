@@ -45,7 +45,22 @@ public sealed class ToolkitHandlerAgent : AgentBase
         var command = envelope.Meta.Get<string>("toolkit.command") ?? "echo hello world";
         var toolName = envelope.Meta.Get<string>("toolkit.name") ?? "powershell";
 
-        var (output, success, error, references) = await RunToolAsync(toolName, command, cancellationToken).ConfigureAwait(false);
+        var (output, success, error, references, usage) = await RunToolAsync(toolName, command, cancellationToken).ConfigureAwait(false);
+
+        // A toolkit that called a model paid for it: file each call like any
+        // agent's, tied to this request so the totals, latency and model
+        // columns see it.
+        foreach (var call in usage ?? [])
+        {
+            if (call.Result is { } result)
+            {
+                SubstrateTrace.Publish(_bus, envelope, $"Toolkit.{toolName}", result, call.Label);
+            }
+            else
+            {
+                SubstrateTrace.PublishFailure(_bus, envelope, $"Toolkit.{toolName}", call.LatencyMs, call.Cause ?? SubstrateHealth.Unreachable, call.Label);
+            }
+        }
 
         var response = Envelope.Create(
             Topics.ToolkitResult,
@@ -57,12 +72,12 @@ public sealed class ToolkitHandlerAgent : AgentBase
         _bus.Publish(Topics.ToolkitResult, response);
     }
 
-    private async Task<(string output, bool success, string? error, IReadOnlyList<ToolkitReference>? references)> RunToolAsync(
+    private async Task<(string output, bool success, string? error, IReadOnlyList<ToolkitReference>? references, IReadOnlyList<ToolkitSubstrateCall>? usage)> RunToolAsync(
         string name, string command, CancellationToken cancellationToken)
     {
         if (!_toolkits.TryGetValue(name, out var toolkit))
         {
-            return (string.Empty, false, $"Unsupported toolkit '{name}'.", null);
+            return (string.Empty, false, $"Unsupported toolkit '{name}'.", null, null);
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -71,18 +86,18 @@ public sealed class ToolkitHandlerAgent : AgentBase
         try
         {
             var outcome = await toolkit.ExecuteAsync(command, timeout.Token).ConfigureAwait(false);
-            return (outcome.Output, outcome.Success, outcome.Error, outcome.References);
+            return (outcome.Output, outcome.Success, outcome.Error, outcome.References, outcome.Usage);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // The timeout fired, not the host shutting down -- a real,
             // reportable outcome, not an exception for ConsumeAsync's catch
             // block to log and move past.
-            return (string.Empty, false, $"Timed out after {_options.TimeoutSeconds}s.", null);
+            return (string.Empty, false, $"Timed out after {_options.TimeoutSeconds}s.", null, null);
         }
         catch (Exception ex)
         {
-            return (string.Empty, false, ex.Message, null);
+            return (string.Empty, false, ex.Message, null, null);
         }
     }
 }

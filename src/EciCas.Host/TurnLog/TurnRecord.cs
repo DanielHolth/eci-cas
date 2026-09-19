@@ -43,6 +43,9 @@ public sealed record TurnRecord
     /// <summary>The persona talking to itself: a Reflection idea pushed back onto perception. Not a line the person typed, and must never be drawn as one.</summary>
     public bool SelfTriggered { get; init; }
 
+    /// <summary>A toolkit run reporting back. Also <see cref="SelfTriggered"/>, but there is no thought to show or speak: Intent's answer is the whole output, and <see cref="Perception"/> is a one-line label.</summary>
+    public bool ToolkitTriggered { get; init; }
+
     public string? Impulse { get; init; }
 
     /// <summary>What Sight made of the screenshot, as Intent was given it.</summary>
